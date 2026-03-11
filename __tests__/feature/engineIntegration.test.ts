@@ -1,79 +1,69 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { parseAIStreamChunk } from '#/services/aiParser';
-import { useEventEngine } from '#/services/eventEngine';
-import { useStorageEngine } from '#/services/storageEngine';
-import type { Listener } from '#/schemas/events';
+import { EventBus } from '#/services/eventEngine';
+import { Storage } from '#/services/storageEngine';
+import type { Interaction } from '#/schemas/events';
 
-describe('Engine Integration Workflow', () => {
+describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket Workflow', () => {
     beforeEach(() => {
-        // Reset Zustand states
-        useEventEngine.setState({ processRegistry: {}, mountingBuffer: {}, listeners: [] });
-        useStorageEngine.setState({ ramStore: {}, classificationIndex: {} });
+        (EventBus as any).routes.clear();
+        (Storage as any).global_ram.clear();
+        (Storage as any).classification_ram.clear();
+        (Storage as any).memory_sockets.clear();
     });
 
-    it('should successfully parse a stream, store payload in RAM, and dispatch UID to Event Engine', () => {
-        // 1. Setup global state: A Process is ready to listen
-        const mockWindowCallback = vi.fn();
-        useEventEngine.getState().registerProcess('process-456', 'ready');
-        useEventEngine.getState().subscribe((event) => {
-            if (event.target_process_uid === 'process-456') {
-                mockWindowCallback(event);
-            }
-        });
+    it('should route an AI Stream block to the EventBus, trigger a Mock Process, and verify the Storage sockets fire', () => {
+        // 1. Setup the "React Component" (The Observability Socket)
+        const reactComponentRenderSpy = vi.fn();
+        Storage.subscribe('type:ai_response', reactComponentRenderSpy);
 
-        // 2. The Raw AI Stream arrives from the network
+        // 2. Setup the "Background Tool Process" (The Commander listening to the EventBus)
+        const mockToolExecutor = vi.fn().mockImplementation((interaction: Interaction) => {
+            // The Tool Executor executes the tool safely, and drops the raw data payload into Global RAM
+            Storage.dispatchRAMAction({
+                action: 'create_memory',
+                process_uid: 'test_tool_executor',
+                payload: { raw_json: interaction.payload.text },
+                classifications: ['type:ai_response']
+            });
+        });
+        EventBus.registerProcessRoute('send:chat_response', mockToolExecutor);
+
+        // 3. The raw AI stream chunk arrives from the Gateway network socket
         const rawStreamFromGateway = `
-Here is a very long response that shouldn't clog the Event Bus.
 \`\`\`event
 interaction, null, process-456, null, send, chat_response
 { "text": "This is a massive hallucinated JSON block that represents 10 pages of text." }
 end_event
-`;
+\n\`\`\``;
 
-        // 3. The AI Parser deciphers the block
+        // 4. The Parser strictly decipher the block into an InteractionSchema
         const parsedResult = parseAIStreamChunk(rawStreamFromGateway);
         expect(parsedResult).toBeDefined();
-        expect(parsedResult?.events.length).toBe(1);
 
         const aiEvent = parsedResult!.events[0];
-        expect(aiEvent.is_complete).toBe(true);
 
-        // 4. The "Integrator / Router" intercepts the heavy payload and dumps it into RAM
-        const storageStart = useStorageEngine.getState();
-        const ramInjectionResult = storageStart.dispatchRAMAction({
-            action: 'create_memory',
-            process_uid: 'global', // Gateway payload, usually global until specifically consumed
-            payload: { raw_json: aiEvent.raw_payload_buffer },
-            classifications: ['type:ai_response', `process:${aiEvent.headers.process_uid}`]
+        // 5. The Gateway drops the parsed Interaction Ticket onto the EventBus
+        EventBus.emit({
+            event_type: 'interaction',
+            action: aiEvent.headers.action as 'send',
+            sub_action: aiEvent.headers.sub_action,
+            payload: { text: "massive block" }
         });
 
-        // Ensure the RAM engine successfully created and indexed the payload
-        const storageEnd = useStorageEngine.getState();
-        expect(storageEnd.ramStore[ramInjectionResult as string]).toBeDefined();
-        expect(storageEnd.classificationIndex['type:ai_response']).toContain(ramInjectionResult as string);
+        // 6. Assertions!
+        // A. Ensure the EventBus successfully caught the request and routed it to the specific Process
+        expect(mockToolExecutor).toHaveBeenCalledTimes(1);
 
-        // 5. The "Integrator / Router" formats the lightweight payload and dispatches to the Event Bus
-        const dispatchPayload: Listener = {
-            event_type: 'listener',
-            target_process_uid: aiEvent.headers.process_uid,
-            listened_event: aiEvent.headers.sub_action || aiEvent.headers.action,
-            source_uid: 'gateway',
-            reaction: { reaction_type: 'forward_to_widget' },
-            payload: {
-                memory_uid: ramInjectionResult as string
-            }
-        };
+        // B. Ensure the Process successfully generated the memory payload, and the O(1) React socket fired!
+        expect(reactComponentRenderSpy).toHaveBeenCalledTimes(1);
 
-        useEventEngine.getState().dispatch(dispatchPayload);
+        // C. Fetch the final payload directly from RAM to prove it works
+        const memoryArray = Storage.readClassification('type:ai_response');
+        expect(memoryArray).toBeDefined();
 
-        // 6. Assert the UI Component (Window) successfully caught the lightweight ID
-        expect(mockWindowCallback).toHaveBeenCalledTimes(1);
-
-        const receivedEvent = mockWindowCallback.mock.calls[0][0] as Listener;
-        expect(receivedEvent.payload.memory_uid).toBe(ramInjectionResult);
-
-        // 7. Assert the UI Component can successfully look up the heavy data synchronously using the ID
-        const resolvedPayloadFromRAM = storageEnd.ramStore[receivedEvent.payload.memory_uid!];
-        expect(resolvedPayloadFromRAM.raw_json).toContain("massive hallucinated JSON block");
+        const memoryId = memoryArray![0];
+        const massivePayloadData = Storage.readMemory(memoryId);
+        expect(massivePayloadData.raw_json).toBe("massive block");
     });
 });

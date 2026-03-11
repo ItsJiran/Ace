@@ -4,7 +4,7 @@
 - **Framework**: **Electron**. Chosen for its ability to create cross-platform desktop applications with deep access to the underlying operating system.
 - **Frontend (UI Engine)**: **React** (via **Vite** for fast HMR and build times).
 - **Styling**: **Tailwind CSS** + **Shadcn UI** for a clean, customizable, and headless design system supporting overlay themes and transparency.
-- **State Management**: **Zustand** (or Jotai) for lightweight, atomic global state that mirrors the AI Engine's truth state.
+- **State Management**: **Custom React 18 Sockets** (via `useSyncExternalStore`) for O(1) pinpoint reactivity, replacing bulky global state libraries.
 
 ## 🧱 Architectural Philosophy
 - **Modular Separation of Concerns**: The application hierarchy must strictly separate the **UI Engine** (handling user interfaces, overlays, and frontend interactions) from the **AI Processing Engine** (parsing AI responses, tool execution, and core business logic).

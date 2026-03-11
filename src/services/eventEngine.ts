@@ -1,102 +1,70 @@
-import { create } from 'zustand';
-import type { Listener } from '#/schemas/events';
+import type { Interaction } from '#/schemas/events';
 
-type ProcessStatus = 'booting' | 'ready' | 'closed';
+type ProcessCallback = (interaction: Interaction) => Promise<void>;
+type SyncProcessCallback = (interaction: Interaction) => void;
 
-export interface EventEngineState {
-    processRegistry: Record<string, ProcessStatus>;
-    mountingBuffer: Record<string, Listener[]>;
-    listeners: Array<(event: Listener) => void>;
+class EventEngineSingleton {
+    /**
+     * Sockets specifically for routing Interactions to background Processes.
+     * Maps an `action` (or `action:sub_action` combo) to an array of async handler functions.
+     */
+    private routes = new Map<string, Array<ProcessCallback | SyncProcessCallback>>();
 
-    registerProcess: (uid: string, status: ProcessStatus) => void;
-    setProcessStatus: (uid: string, status: ProcessStatus) => void;
-    subscribe: (callback: (event: Listener) => void) => () => void;
-    dispatch: (event: Listener) => void;
-}
-
-export const useEventEngine = create<EventEngineState>((set, get) => ({
-    processRegistry: {},
-    mountingBuffer: {},
-    listeners: [],
-
-    registerProcess: (uid: string, status: ProcessStatus) => {
-        set((state) => ({
-            processRegistry: { ...state.processRegistry, [uid]: status }
-        }));
-    },
-
-    setProcessStatus: (uid: string, status: ProcessStatus) => {
-        set((state) => {
-            const newRegistry = { ...state.processRegistry, [uid]: status };
-
-            // If the process is now ready, flush its buffer!
-            if (status === 'ready') {
-                const buffer = state.mountingBuffer[uid];
-                if (buffer && buffer.length > 0) {
-                    // We must dispatch these to the listeners
-                    // Wait, we can't synchronously dispatch while setting state easily without a loop here,
-                    // but we can just call get().dispatch() or fire listeners directly.
-                    // It's safer to just fire the listeners directly to avoid infinite loops
-                    const currentListeners = get().listeners;
-                    buffer.forEach(event => {
-                        currentListeners.forEach(listener => listener(event));
-                    });
-                }
-
-                // Delete the flushed buffer
-                const newBuffer = { ...state.mountingBuffer };
-                delete newBuffer[uid];
-
-                return { processRegistry: newRegistry, mountingBuffer: newBuffer };
-            }
-
-            return { processRegistry: newRegistry };
-        });
-    },
-
-    subscribe: (callback: (event: Listener) => void) => {
-        set((state) => ({
-            listeners: [...state.listeners, callback]
-        }));
-
-        // Return unsubscribe function
-        return () => {
-            set((state) => ({
-                listeners: state.listeners.filter(l => l !== callback)
-            }));
-        };
-    },
-
-    dispatch: (event: Listener) => {
-        const { target_process_uid } = event;
-        const state = get();
-
-        // 1. Is there a target process provided?
-        if (target_process_uid) {
-            const status = state.processRegistry[target_process_uid];
-
-            // 1a. If the process is explicitly 'booting', buffer it! (Ghost Town prevention)
-            if (status === 'booting') {
-                set((state) => {
-                    const currentBufferForProcess = state.mountingBuffer[target_process_uid] || [];
-                    return {
-                        mountingBuffer: {
-                            ...state.mountingBuffer,
-                            [target_process_uid]: [...currentBufferForProcess, event]
-                        }
-                    };
-                });
-                return; // DO NOT fire the listeners yet.
-            }
-
-            // 1b. If the process is 'closed', drop it into the void.
-            if (status === 'closed') {
-                return;
-            }
+    /**
+     * A background Process (The Chef) "mounts" itself to listen for a specific action.
+     * @param routeKey Can be an action like 'send' or a specific action:sub_action like 'send:send_gateway'.
+     * @returns A cleanup function to unregister the route.
+     */
+    registerProcessRoute(routeKey: string, handler: ProcessCallback | SyncProcessCallback) {
+        if (!this.routes.has(routeKey)) {
+            this.routes.set(routeKey, []);
         }
 
-        // 2. Either no target was specified (Broadcast), or the target is 'ready'. 
-        // Fire all listeners!
-        state.listeners.forEach(listener => listener(event));
+        this.routes.get(routeKey)!.push(handler);
+
+        return () => {
+            const handlers = this.routes.get(routeKey) || [];
+            this.routes.set(routeKey, handlers.filter(cb => cb !== handler));
+            if (this.routes.get(routeKey)!.length === 0) {
+                this.routes.delete(routeKey);
+            }
+        };
     }
-}));
+
+    /**
+     * A React Component (The Waiter) "emits" an interaction.
+     * This fires fire-and-forget async promises so the UI thread never blocks.
+     */
+    emit(interaction: Interaction) {
+        // 1. Try to find handlers for the highly specific 'action:sub_action' route
+        const specificRouteKey = `${interaction.action}:${interaction.sub_action}`;
+        const specificHandlers = this.routes.get(specificRouteKey) || [];
+
+        // 2. Try to find handlers for the broad 'action' route
+        const broadHandlers = this.routes.get(interaction.action) || [];
+
+        const allHandlers = [...specificHandlers, ...broadHandlers];
+
+        if (allHandlers.length === 0) {
+            console.warn(`[EventBus] No process is listening to action route: ${interaction.action} or ${specificRouteKey}`);
+            return;
+        }
+
+        // Fire and forget! (Async execution)
+        allHandlers.forEach(handler => {
+            try {
+                const result = handler(interaction);
+                // Gracefully catch rejections if it's a Promise (or ignore if void)
+                Promise.resolve(result).catch((err: any) =>
+                    console.error(`[EventBus] Process handler crashed on route ${interaction.action}:`, err)
+                );
+            } catch (err) {
+                // Catch any synchronous errors
+                console.error(`[EventBus] Sync Process handler crashed on route ${interaction.action}:`, err);
+            }
+        });
+    }
+}
+
+// Export as a pure Singleton
+export const EventBus = new EventEngineSingleton();

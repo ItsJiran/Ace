@@ -33,10 +33,10 @@ To support complex window management and inter-service communication, all intera
 
 *Note: The `events.ts` file exports a `StandardSubActions` array, but widgets can extend these strings with custom identifiers.*
 
-#### B. The Listener Schema (Reacting to External Payloads)
-Instead of initiating an action, components also need to react when they *receive* data (e.g., the Gateway pushes a streaming chat response, or a background OS hook triggers).
+#### B. Observing Data (Reacting to External Payloads)
+Instead of initiating an action, components also need to react when they *receive* data (e.g., the Gateway pushes a streaming chat response).
 
-This is governed by the `ListenerSchema`. It specifies exactly who sent the payload (`source_uid`), what the event is (`listened_event`), and targets a specific window to process the data payload.
+This is governed by the **Memory Bus** (Storage Sockets). Components use the `useStorage` hook to subscribe to a specific `memory_uid` or Classification string, achieving O(1) pinpoint reactivity without interacting with the Event Engine.
 
 **Crucial Context Rule**: Every single UI container is assigned a unique `window_uid`, and specific interactive elements inside them use a `widget_uid`. This ensures the AI Gateway always has exact context on the origin of an event and the precise destination when routing data via a `send` action.
 
@@ -59,6 +59,6 @@ Because of this schema-driven design, a downloaded "Module" package contains met
 2.  **`WidgetComponentSchema`**: Crucially, this defines the exact capabilities of the UI Component so the Engine knows how to route events to it. It declares:
     *   `data_requirements`: Keys it extracts from Global Storage.
     *   `emits_interactions`: An array of Interaction Sub-Actions it is capable of firing (e.g., `["send_gateway", "open_custom_modal"]`).
-    *   `listens_to`: An array of external event strings it wants the Engine to route into its `ListenerSchema` pipeline.
+    *   `listens_to`: An array of Classification or Memory UIDs it observes from the Storage Engine Memory Bus.
 3.  The **React UI Component** (`.tsx` file) mapped to a unique `type` ID.
 4.  The **Tool Definition** (`src/schemas/tooling.ts`) that the Client registers.

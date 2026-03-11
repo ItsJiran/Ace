@@ -9,7 +9,7 @@ The UI specifically concerns itself with three of the five core layers in the ar
 ### 1. The Event Engine (The UI Router)
 This is the bridge to the backend Process Engine.
 *   **Role**: The Dispatcher.
-*   **Responsibilities**: It routes `InteractionSchema` payloads from Components to the backend, and drops `ListenerSchema` payloads into the correct Component's buffer.
+*   **Responsibilities**: It routes `InteractionSchema` payloads from Components to the backend Processes. It operates strictly as a fire-and-forget router.
 *   **Rule**: It never touches the UI pixels.
 
 ### 2. The Window (The Dumb Frame)
@@ -30,13 +30,13 @@ This is the actual tool you build (e.g., `<ChatBubble />`, `<CommandBar />`, `<L
 2.  **The Transparent Canvas (Undetectable)**: The UI operates on a `transparent` Electron layer. using `mainWindow.setContentProtection(true)` prevents screen-sharing apps (Zoom, Meet) from capturing the AI overlay. It is only visible to the user.
 3.  **Spatial Freedom & Click-Through**: Utilizing `win.setIgnoreMouseEvents(true, { forward: true })`, the user clicks directly through the invisible canvas to their IDE. The UI only steals mouse focus when hovering directly over a rendered component (e.g., a Chat Bubble floating at specific X/Y coordinates).
 4.  **Plugin-Style Architecture (Downloadable Modules)**: New integrations or tools (e.g., an Obsidian widget, a Calendar widget) should be addable without rewriting the core application shell. In the future, a user can download a specific module and register it dynamically.
-5.  **Strict IPC (Inter-Process Communication) Boundaries**: All communication between the Components and the Process Engine happens through strictly typed `ListenerSchema` and `InteractionSchema` channels.
+5.  **Strict Boundaries**: All actions flow OUT via the `InteractionSchema` (Event Bus), and all data flows IN via the Memory Bus (Storage Sockets).
 
 ## 🛠️ Proposed Tech Stack
 
 *   **Framework**: React (using Vite for fast HMR). React's component model naturally enforces modularity.
 *   **Styling**: Tailwind CSS + Shadcn UI (or Headless UI). This allows for a clean, consistent design system (using CSS variables for theming) without tying the UI to heavy component libraries.
-*   **State Management**: Zustand or Jotai for lightweight, atomic global state. It will essentially mirror the "truth" state maintained by the Electron Main process.
+*   **State Management**: Pure JavaScript Maps synchronized with React 18 `useSyncExternalStore` for lightning-fast O(1) pinpoint memory observation.
 
 ## 📦 Directory Structure (Renderer layer)
 

@@ -17,7 +17,7 @@ We will use:
 Our test suite is strictly separated into three domains inside the `__tests__/` directory:
 
 ### 1. `__tests__/unit/` (Unit Tests)
-* **Purpose**: Tests pure functions, isolated schemas, and standalone logic (like the regex AI chunk parser or the isolated Zustand store functions).
+* **Purpose**: Tests pure functions, isolated schemas, and standalone logic (like the regex AI chunk parser or the Storage Engine map logic).
 * **Scope**: No external integrations. No side effects. If the parser is being tested, it should not be attached to the storage engine.
 
 ### 2. `__tests__/feature/` (Feature/Integration Tests)
@@ -47,8 +47,8 @@ For every new feature (e.g., The Event Engine Buffer, The Markdown Stream Parser
 *   **The Markdown Stream Parser**: Must be tested specifically against hallucinated text inputs, missing tags, malformed JSON, and split chunks to ensure the fault-tolerant regex never crashes the app.
 *   **The Event Engine Buffer**: Must be mocked against "Ghost Town" race conditions. Fire events targeting a Component while its Window's `status` is mocked to `booting`, assert the event is swallowed into the queue, fire a `ready` ping, and assert the queue is flushed.
 
-### 2. State & Memory (Zustand)
+### 2. State & Memory (Memory Bus)
 *   **Global RAM Indexing**: Tests must assert that when massive string payloads are inserted, the engine correctly swaps it for a `memory_uid` and successfully indexes it inside `GlobalClassificationRAMSchema`.
 
 ### 3. UI Components (React)
-*   **Widget Reactivity**: Tests should mount the React component, artificially inject a payload containing a `memory_uid` into its props hook, and assert that it correctly reaches out to the mocked Zustand store to render the actual text.
+*   **Widget Reactivity**: Tests should mount the React component, artificially inject a payload containing a `memory_uid` into its storage hook, and assert that it correctly reaches out to the mocked Memory Bus socket to render the actual text.

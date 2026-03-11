@@ -1,108 +1,153 @@
-import { create } from 'zustand';
 import type { RAMInteractivity } from '#/schemas/storage';
 
-export interface StorageEngineState {
-    ramStore: Record<string, any>;
-    classificationIndex: Record<string, string[]>;
-
-    /**
-     * Dispatches a RAM Interactivity event (Create, Read, Update, Delete)
-     * and performs the necessary index tracking.
-     */
-    dispatchRAMAction: (action: RAMInteractivity) => any | boolean | string | undefined;
-}
-
-// Generate a random ID securely
 const generateUid = () => 'mem-' + Math.random().toString(36).substring(2, 11);
 
-export const useStorageEngine = create<StorageEngineState>((set, get) => ({
-    ramStore: {},
-    classificationIndex: {},
+class StorageEngineSingleton {
+    // 1. Global RAM: memory_uid => payload
+    private global_ram = new Map<string, any>();
 
-    dispatchRAMAction: (request: RAMInteractivity) => {
+    // 2. Classification RAM: tag => [memory_uid, memory_uid]
+    private classification_ram = new Map<string, string[]>();
+
+    // 3. THE SOCKETS: key => [array of callback functions]
+    private memory_sockets = new Map<string, Function[]>();
+
+    // ==========================================
+    // 🔌 SOCKET METHODS (Listening to Data)
+    // ==========================================
+
+    /**
+     * Subscribes a React component (or Process) to a specific memory UID or Classification.
+     * @returns A cleanup function to unsubscribe.
+     */
+    subscribe(key: string, callback: (data: any) => void) {
+        if (!this.memory_sockets.has(key)) {
+            this.memory_sockets.set(key, []);
+        }
+
+        this.memory_sockets.get(key)!.push(callback);
+
+        return () => {
+            const listeners = this.memory_sockets.get(key) || [];
+            this.memory_sockets.set(key, listeners.filter(cb => cb !== callback));
+            if (this.memory_sockets.get(key)!.length === 0) {
+                this.memory_sockets.delete(key);
+            }
+        };
+    }
+
+    // ==========================================
+    // 💾 RAM METHODS (Reading Data)
+    // ==========================================
+
+    /**
+     * Reads a payload directly from RAM.
+     */
+    readMemory(uid: string) {
+        return this.global_ram.get(uid);
+    }
+
+    /**
+     * Reads an array of UIDs directly from the Classification Index.
+     */
+    readClassification(tag: string) {
+        return this.classification_ram.get(tag);
+    }
+
+    // ==========================================
+    // 💾 RAM METHODS (Writing Data)
+    // ==========================================
+
+    /**
+     * Processes an interaction request to mutate the Storage Engine.
+     */
+    dispatchRAMAction(request: RAMInteractivity) {
         const { action, memory_uid, payload, classifications } = request;
-        const currentStore = get().ramStore;
-        const currentIndex = get().classificationIndex;
 
         switch (action) {
             case 'create_memory': {
-                const newUid = generateUid();
-
-                // 1. Add strictly to flat RAM store
-                const newStore = { ...currentStore, [newUid]: payload ?? {} };
-
-                // 2. Append to all requested classifications
-                const newIndex = { ...currentIndex };
-                if (classifications && classifications.length > 0) {
-                    for (const tag of classifications) {
-                        if (!newIndex[tag]) {
-                            newIndex[tag] = [];
-                        }
-                        newIndex[tag] = [...newIndex[tag], newUid];
-                    }
-                }
-
-                set({ ramStore: newStore, classificationIndex: newIndex });
+                const newUid = memory_uid || generateUid();
+                this.writeMemory(newUid, payload, classifications);
                 return newUid;
             }
 
             case 'read_memory': {
                 if (!memory_uid) return undefined;
-                return currentStore[memory_uid];
+                return this.readMemory(memory_uid);
             }
 
             case 'update_memory': {
-                if (!memory_uid || !currentStore[memory_uid]) return false;
+                if (!memory_uid || !this.global_ram.has(memory_uid)) return false;
 
-                // 1. Update the payload in the RAM store
-                const newStore = {
-                    ...currentStore,
-                    [memory_uid]: { ...currentStore[memory_uid], ...payload }
-                };
+                const existingPayload = this.global_ram.get(memory_uid);
+                const mergedPayload = { ...existingPayload, ...payload };
 
-                // 2. Append ANY NEW classifications provided 
-                const newIndex = { ...currentIndex };
-                if (classifications && classifications.length > 0) {
-                    for (const tag of classifications) {
-                        if (!newIndex[tag]) {
-                            newIndex[tag] = [];
-                        }
-                        if (!newIndex[tag].includes(memory_uid)) {
-                            newIndex[tag] = [...newIndex[tag], memory_uid];
-                        }
-                    }
-                }
-
-                set({ ramStore: newStore, classificationIndex: newIndex });
+                this.writeMemory(memory_uid, mergedPayload, classifications);
                 return true;
             }
 
             case 'delete_memory': {
-                if (!memory_uid || !currentStore[memory_uid]) return false;
+                if (!memory_uid || !this.global_ram.has(memory_uid)) return false;
 
-                // 1. Remove from flat store
-                const newStore = { ...currentStore };
-                delete newStore[memory_uid];
+                // 1. Remove from Global RAM
+                this.global_ram.delete(memory_uid);
 
-                // 2. Wipe the UID from wherever it exists in the Classification Index
-                const newIndex = { ...currentIndex };
-                for (const [tag, uids] of Object.entries(newIndex)) {
+                // 2. Remove from Classification RAM
+                for (const [tag, uids] of this.classification_ram.entries()) {
                     if (uids.includes(memory_uid)) {
                         const filtered = uids.filter(id => id !== memory_uid);
                         if (filtered.length === 0) {
-                            delete newIndex[tag];
+                            this.classification_ram.delete(tag);
                         } else {
-                            newIndex[tag] = filtered;
+                            this.classification_ram.set(tag, filtered);
                         }
                     }
                 }
 
-                set({ ramStore: newStore, classificationIndex: newIndex });
+                // 3. Fire socket to let components know data was deleted
+                this.fireSockets(memory_uid, null);
                 return true;
             }
-
-            default:
-                return undefined;
         }
     }
-}));
+
+    /**
+     * Internal write function that instantly fires the reactive sockets.
+     */
+    private writeMemory(uid: string, payload: any, classifications: string[] = []) {
+        // 1. Update Global RAM
+        this.global_ram.set(uid, payload);
+
+        // 2. Update Classification RAM
+        classifications.forEach(tag => {
+            if (!this.classification_ram.has(tag)) {
+                this.classification_ram.set(tag, []);
+            }
+            if (!this.classification_ram.get(tag)!.includes(uid)) {
+                this.classification_ram.get(tag)!.push(uid);
+            }
+        });
+
+        // 3. FIRE THE SOCKETS!
+        this.fireSockets(uid, payload);
+
+        classifications.forEach(tag => {
+            this.fireSockets(tag, this.classification_ram.get(tag));
+        });
+    }
+
+    private fireSockets(key: string, data: any) {
+        if (this.memory_sockets.has(key)) {
+            this.memory_sockets.get(key)!.forEach(callback => {
+                try {
+                    callback(data);
+                } catch (err) {
+                    console.error(`Socket execution failed for key ${key}:`, err);
+                }
+            });
+        }
+    }
+}
+
+// Export as a pure Singleton
+export const Storage = new StorageEngineSingleton();
