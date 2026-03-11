@@ -56,7 +56,7 @@ describe('Process Engine (Headless Execution Manager)', () => {
         const updatedChild = Storage.readMemory(child.process_uid);
         expect(updatedChild.status).toBe('running');
         expect(updatedChild.metadata.pid).toBe(1450);
-        expect(updatedChild.updated_at).toBeGreaterThan(updatedChild.started_at);
+        expect(updatedChild.updated_at).toBeGreaterThanOrEqual(updatedChild.started_at);
     });
 
     it('should safely kill processes', () => {

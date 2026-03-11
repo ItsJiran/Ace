@@ -6,7 +6,7 @@ This project is an AI-powered personal assistant overlay designed for extreme mo
 ## 🧠 The 5-Layer Architecture
 The ecosystem operates on a strict 5-layer hierarchy:
 
-1. **The Transparent Layer**: The absolute base. A single, borderless Electron `BrowserWindow`. Using `setContentProtection(true)`, screen-sharing apps cannot capture the assistant, and users can click "through" it into their IDE.
+1. **The Transparent Layer**: The absolute base. A single, borderless Tauri `WebviewWindow`. Using OS-level content protection, screen-sharing apps cannot capture the assistant, and users can click "through" it into their IDE.
 2. **Global RAM**: Heavy payload data (like 10-page AI responses) stored in indexable memory, preventing the IPC Event IPC bus from bottlenecking.
 3. **The Window (Dumb Frame)**: Only handles X/Y coordinates, width/height, dragging, and focus. It fundamentally does not know what UI React components it contains.
 4. **The Component (Active UI)**: Small, downloadable React components (`<ChatBubble />`, `<CalendarWidget />`). They capture human inputs, emit requests, and re-render by observing the RAM.
@@ -17,7 +17,7 @@ The ecosystem operates on a strict 5-layer hierarchy:
 - **Tool Inversion**: Instead of the Client executing hardcoded prompts, the Client registers its available "Tools" (like an Obsidian Reader) with the Gateway. The Gateway dictates the logic and simply streams action commands back to the Client for physical execution.
 
 ## 🛠️ Tech Stack
-- **Framework**: **Electron** (for native OS tool execution and transparent overlays).
+- **Framework**: **Tauri v2** (Rust backend for native OS tool execution, transparent overlays, and true multi-window management).
 - **Frontend UI Engine**: **React** via **Vite**.
 - **Styling**: **Tailwind CSS** + **Shadcn UI** for a headless design system supporting glassmorphism overlay themes.
 - **State Management**: **Custom React 18 Sockets** (via `useSyncExternalStore`) leveraging lightning-fast native `Map` APIs, entirely replacing Zustand/Redux for O(1) pinpoint reactivity.
@@ -45,6 +45,12 @@ src/
 ├── windows/               # Dumb Frames to hold widgets
 ├── tools/                 # Native OS executables dictated by the Gateway
 └── processes/             # Background logic executing the tools
+src-tauri/
+├── src/
+│   ├── main.rs            # Tauri application entry, window creation, IPC handlers
+│   └── lib.rs             # Rust command definitions invokable from frontend
+├── Cargo.toml             # Rust dependencies
+└── tauri.conf.json        # Tauri window config, permissions, and build settings
 ```
 ---
 
@@ -53,9 +59,9 @@ src/
 To ensure absolute clarity across the architecture, this document strictly defines the core concepts and their responsibilities.
 
 ### 1. Transparent Layer
-*   **Definition**: The absolute base of the frontend. A single, fullscreen Electron `BrowserWindow`.
-*   **Properties**: It is visually transparent and physically "click-through" (`setIgnoreMouseEvents(true, { forward: true })`).
-*   **Responsibility**: To exist as an undetectable canvas over the user's OS, preventing screen-sharing software from capturing the AI overlay (`setContentProtection(true)`).
+*   **Definition**: The absolute base of the frontend. A single, fullscreen Tauri `WebviewWindow`.
+*   **Properties**: It is visually transparent and physically "click-through" (via Tauri's `set_ignore_cursor_events(true)`).
+*   **Responsibility**: To exist as an undetectable canvas over the user's OS, preventing screen-sharing software from capturing the AI overlay.
 
 ### 2. Global RAM
 *   **Definition**: The primary, flat data store for volatile payloads, managed by the `StorageEngine`.

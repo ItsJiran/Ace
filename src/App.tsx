@@ -1,53 +1,135 @@
 import { useEffect, useState } from 'react';
-import { BaseWindow } from './components/BaseWindow';
-import { DevOverlay } from './components/DevOverlay';
-import { useEventEngine } from '#/services/eventEngine';
+import { BaseWindow } from './components/layout/BaseWindow';
+import { useStorage } from '#/hooks/useStorage';
+import type { GlobalOverlayState, WindowConfig } from '#/schemas/window';
+import { Storage } from '#/services/storageEngine';
 
-// Generate random UIDs for fake processes
-const generateUid = () => 'proc-' + Math.random().toString(36).substring(2, 9);
+// 🚀 IMPORT TAURI API (Untuk memaksa ukuran window ke OS)
+import { getCurrentWindow, PhysicalSize, PhysicalPosition } from '@tauri-apps/api/window';
 
 function App() {
-  const [processes, setProcesses] = useState<string[]>([]);
-  const { subscribe } = useEventEngine();
+  const [localBoxPos, setLocalBoxPos] = useState({ x: 200, y: 360 });
 
+  // 🚀 TAURI OVERLAY SETUP: Memaksa OS menyesuaikan ukuran dengan layar
   useEffect(() => {
-    // Listen for the 'open_process' broadcast from the Event Engine (usually fired by Gateway or DevOverlay)
-    const unsubscribe = subscribe((event) => {
-      if (
-        event.listened_event === 'system_command' &&
-        event.payload?.action === 'open_process'
-      ) {
-        setProcesses((prev) => [...prev, generateUid()]);
+    const setupTauriOverlay = async () => {
+      try {
+        // Cek apakah kita benar-benar berjalan di dalam Tauri (bukan sekadar di browser biasa)
+        if (window.__TAURI_INTERNALS__ || window.__TAURI__) {
+          const appWindow = getCurrentWindow();
+          const monitor = await appWindow.monitor();
+
+          if (monitor) {
+            // 1. Sesuaikan ukuran window Tauri dengan resolusi piksel layar
+            await appWindow.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
+            // 2. Kunci posisi window di pojok kiri atas monitor
+            await appWindow.setPosition(new PhysicalPosition(0, 0));
+          }
+          // 3. Munculkan window (menghindari kedipan putih saat awal boot)
+          await appWindow.show();
+        }
+      } catch (err) {
+        console.error("Gagal melakukan setup overlay Tauri:", err);
+      }
+    };
+
+    setupTauriOverlay();
+  }, []);
+
+  // Listen for the 'Escape' key to globally panic back to Ambient Mode if stuck
+  useEffect(() => {
+    // Expose local state setter to window for DevMenu to trigger
+    (window as any).moveLocalBox = () => {
+      setLocalBoxPos(prev => ({ ...prev, x: prev.x + 50 }));
+    };
+
+    let initialized = false;
+
+    // Technically this should be IPC to electron/Tauri, but for the React dev layer:
+    import('./services/windowEngine').then(({ WindowEngine }) => {
+      // Spawn developer console once on mount in Dev
+      if (import.meta.env.DEV && !initialized) {
+        initialized = true;
+        // Just check if there's already any windows to prevent StrictMode double spawning
+        const windows = Storage.readMemory('system:windows');
+        if (Object.keys(windows || {}).length === 0) {
+          WindowEngine.spawnWindow({
+            component_name: 'dev_menu',
+            x: Math.floor(window.innerWidth / 2 - 130),
+            y: Math.floor(window.innerHeight / 2 - 155),
+            width: 260,
+            height: 310,
+            title: 'Dev Kit'
+          });
+        }
       }
     });
 
-    return unsubscribe;
-  }, [subscribe]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        import('./services/windowEngine').then(({ WindowEngine }) => {
+          WindowEngine.setOverlayMode('ambient');
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
 
-  const removeProcess = (uidToRemove: string) => {
-    setProcesses((prev) => prev.filter(uid => uid !== uidToRemove));
-  };
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      delete (window as any).moveLocalBox;
+    };
+  }, []);
+
+  // 1. O(1) Hooks watching the global WindowEngine Maps
+  const overlayState = useStorage('system:overlay_state') as GlobalOverlayState | undefined;
+  const windows = useStorage('system:windows') as Record<string, WindowConfig> | undefined;
+  const debugPos = useStorage('debug:box_pos') as { x: number, y: number } | undefined;
+
+  if (!overlayState || !windows) return null;
+
+  const isAmbient = overlayState.mode === 'ambient';
+  const isDebugBg = overlayState.debug_bg;
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-zinc-950 text-white font-sans relative">
-      {/* Background Grid for aesthetics */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-
-      {/* Render the core OS layout container or just floating windows for now */}
-      <div className="absolute inset-0 p-8 flex flex-col items-center justify-center pointer-events-none">
-        <h1 className="text-4xl font-extrabold tracking-tighter text-zinc-100 z-0">Engine Verification Sandbox</h1>
-        <p className="text-zinc-500 mt-2 max-w-lg text-center font-medium z-0">
-          This environment simulates the core headless Event and Storage engines. Use the Dev Overlay to spawn windows, inject RAM, and fire buffered 'Ghost Town' payloads.
-        </p>
-      </div>
-
-      {/* Spawned Processes */}
-      {processes.map((uid) => (
-        <BaseWindow key={uid} uid={uid} onClose={removeProcess} />
+    // 🚀 THE MAGIC WRAPPER
+    // Di Tauri, bg-transparent biasanya cukup, tapi 0.005 tetap aman digunakan
+    <div
+      className="absolute inset-0 w-screen h-screen overflow-hidden pointer-events-none"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.005)' }}
+    >
+      {/* Render semua window */}
+      {Object.values(windows).map(config => (
+        <BaseWindow key={config.window_uid} config={config} />
       ))}
 
-      {/* Render the Developer Engine Debugger Overlay if in Dev Mode */}
-      {import.meta.env.DEV && <DevOverlay />}
+      {/* Pure Redraw Debug Box (Global RAM/useSyncExternalStore) */}
+      {debugPos && (
+        <div
+          className="absolute w-32 h-32 bg-red-500 rounded-xl shadow-2xl transition-transform duration-200 flex items-center justify-center text-white text-xs font-bold text-center pointer-events-auto"
+          style={{ transform: `translate3d(${debugPos.x}px, ${debugPos.y}px, 0)` }}
+        >
+          Global RAM<br />(RED)
+        </div>
+      )}
+
+      {/* Pure Redraw Debug Box (React useState) */}
+      <div
+        className="absolute w-32 h-32 bg-emerald-500 rounded-xl shadow-2xl transition-transform duration-200 flex items-center justify-center text-white text-xs font-bold text-center pointer-events-auto"
+        style={{ transform: `translate3d(${localBoxPos.x}px, ${localBoxPos.y}px, 0)` }}
+      >
+        useState<br />(GREEN)
+      </div>
+
+      {/* Developer Feedback UI */}
+      {isAmbient ? (
+        <div className="absolute top-2 left-2 text-xs text-zinc-600 font-mono pointer-events-none">
+          [Ambient Mode] Click-Through enabled.
+        </div>
+      ) : (
+        <div className="absolute top-2 left-2 text-xs text-blue-400 font-mono pointer-events-none bg-black/50 px-2 py-1 rounded z-50">
+          [Interactive Mode] Capturing mouse. Hit ESC to release.
+        </div>
+      )}
     </div>
   );
 }

@@ -28,9 +28,11 @@ This section tracks the current development goals for the open-source community.
 
 ### 🧩 Phase 2: The Development UI Kit (Current Task)
 Before hooking up an AI Gateway, we must build a visual dashboard to physically *see* our invisible engines working:
-- [ ] **Basic Tooling & Window Generation**: Create the first Dumb Windows that can be dragged, expanded, and trigger size variations based on EventBus tickets.
-- [ ] **Developer Dashboard Menu**: A toggleable visual dev menu.
-- [ ] **The "RAM Viewer"**: A UI component that hooks into the Memory Bus to show real-time changes inside the Global Storage RAM Map.
+- [ ] **Config Keymapping**: Create configuration keymapping for the user.
+- [x] **Basic Tooling & Window Generation**: Create the first Dumb Windows that can be dragged, expanded, and trigger size variations based on EventBus tickets.
+- [x] **Developer Dashboard Menu**: A toggleable visual dev menu.
+- [x] **The "RAM Viewer"**: A UI component that hooks into the Memory Bus to show real-time changes inside the Global Storage RAM Map.
+- [ ] **Create Basic Window Animating Based On Event Bus"**: Make the window able to listen to the event bus and make the window engine know what to do and ensure it can do resizing, popup, minimize, maximize, and close and fluid animating.
 - [ ] **The "Event Viewer"**: A UI component that visually logs tickets flying across the EventBus.
 - [ ] **The "Process Monitor"**: A UI component reflecting the ProcessEngine booting, yielding, and killing background headless tasks.
 

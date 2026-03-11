@@ -115,8 +115,13 @@ class StorageEngineSingleton {
      * Internal write function that instantly fires the reactive sockets.
      */
     private writeMemory(uid: string, payload: any, classifications: string[] = []) {
+        // Clone the payload to guarantee a new memory reference for React's useSyncExternalStore Object.is() comparison
+        const immutablePayload = payload && typeof payload === 'object'
+            ? Array.isArray(payload) ? [...payload] : { ...payload }
+            : payload;
+
         // 1. Update Global RAM
-        this.global_ram.set(uid, payload);
+        this.global_ram.set(uid, immutablePayload);
 
         // 2. Update Classification RAM
         classifications.forEach(tag => {
@@ -129,10 +134,12 @@ class StorageEngineSingleton {
         });
 
         // 3. FIRE THE SOCKETS!
-        this.fireSockets(uid, payload);
+        this.fireSockets(uid, immutablePayload);
 
         classifications.forEach(tag => {
-            this.fireSockets(tag, this.classification_ram.get(tag));
+            // Clone the tag array for immutability as well
+            const tagArray = this.classification_ram.get(tag);
+            this.fireSockets(tag, tagArray ? [...tagArray] : []);
         });
     }
 

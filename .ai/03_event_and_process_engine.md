@@ -5,7 +5,7 @@ This layer acts as the invisible backend bridge handling execution chaos autonom
 ## 1. The EventBus (Command Pattern)
 The `EventBus` (`src/services/eventEngine.ts`) is a lightning-fast, pure Map singleton.
 *   **Role**: It is purely a message router.
-*   **Logic**: It receives `InteractionSchema` tickets from React Components and fires-and-forgets them to any backend Node process that registered a route listener.
+*   **Logic**: It receives `InteractionSchema` tickets from React Components and fires-and-forgets them to any backend process that registered a route listener.
 *   **Rule**: **Data never travels on the Event Bus.** Only lightweight instructional schemas travel here to prevent memory bloat.
 
 ## 2. The ProcessEngine (Headless Manager)
@@ -22,9 +22,9 @@ Because local LLMs hallucinate parameters, the Process Engine enforces a strict 
 3. Zod validates the parameters. If validation fails, the Process rejects the execution preventing catastrophic local crashes and automatically feeds the error back to the Gateway for an immediate self-correction loop.
 
 ## 4. Native Tool Capabilities
-The Process Engine natively executes shell commands via Node's `child_process`. Examples of executing native AI commands:
-- Reading files directly from an Obsidian directory via `fs`.
-- Running `ls` or `mkdir` via host OS bash shells.
+The Process Engine natively executes system commands via Tauri's Rust backend (`Command::new()` and `tauri::api::process`). Examples of executing native AI commands:
+- Reading files directly from an Obsidian directory via Rust's `std::fs`.
+- Running `ls` or `mkdir` via host OS shell commands.
 - Connecting to Google Calendar via OAuth API routes.
 
 ## 5. Background CRON Scheduling

@@ -54,7 +54,7 @@ export const GlobalClassificationRAMSchema = z.record(
 export const RAMInteractivitySchema = z.object({
     action: z.enum(['create_memory', 'read_memory', 'update_memory', 'delete_memory']),
     /** The originating process/widget requesting the memory action */
-    process_uid: z.string(),
+    process_uid: z.string().optional(),
     widget_uid: z.string().optional(),
 
     /** The specific ID of the memory block being modified. (Generated securely on 'create_memory') */

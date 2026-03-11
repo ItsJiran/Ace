@@ -1,0 +1,35 @@
+import { RAMViewer } from '../dev/RAMViewer';
+import { DevMenu } from '#/components/dev/DevMenu';
+
+const REGISTRY: Record<string, React.FC<any>> = {
+    'ram_viewer': RAMViewer,
+    'dev_menu': DevMenu,
+    // Add more components here in the future
+};
+
+interface RegistryProps {
+    componentName: string;
+    windowUid: string;
+    payloadMemoryUid?: string;
+}
+
+/**
+ * The ComponentRegistry is responsible for taking a string from the EventBus/WindowEngine
+ * and mapping it to the actual React logic component. This decouples the core UI Shell
+ * from the specific tooling interactions.
+ */
+export function ComponentRegistry({ componentName, windowUid, payloadMemoryUid }: RegistryProps) {
+    const Component = REGISTRY[componentName];
+
+    if (!Component) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
+                <p>Unregistered Component Schema:</p>
+                <span className="text-red-400 font-bold mt-1 text-sm">{componentName}</span>
+                <p className="mt-4 text-zinc-600">Please register this name in src/features/registry/ComponentRegistry.tsx</p>
+            </div>
+        );
+    }
+
+    return <Component windowUid={windowUid} payloadMemoryUid={payloadMemoryUid} />;
+}

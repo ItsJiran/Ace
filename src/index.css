@@ -53,8 +53,19 @@
   * {
     @apply border-border;
   }
-  body, html {
-    @apply bg-transparent text-foreground h-full w-full overflow-hidden;
-    background-color: transparent !important; /* Forces Electron overlay transparency */
-  }
+
+
+}
+
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: transparent;
+  /* Di Tauri, transparent biasanya sudah cukup tanpa hack 0.005 */
+  overflow: hidden;
 }

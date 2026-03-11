@@ -19,15 +19,15 @@ export function useStorage(key: string) {
     );
 
     // 2. Define how React reads the current instant value from RAM
-    const getSnapshot = () => {
+    const getSnapshot = useCallback(() => {
         // If it returns undefined for a memory, try to find it as a classification tag
         const memoryPayload = Storage.readMemory(key);
         if (memoryPayload !== undefined) return memoryPayload;
 
         const classificationPayload = Storage.readClassification(key);
         return classificationPayload;
-    };
+    }, [key]);
 
     // 3. React 18 completely handles the pinpoint O(1) rendering for us
-    return useSyncExternalStore(subscribe, getSnapshot);
+    return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

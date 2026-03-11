@@ -9,8 +9,11 @@ We utilize a **Key-Based Observability Mesh** leveraging native `Map` singletons
 2. **Classification Index**: A secondary index grouping `memory_uid`s under recognizable string tags (e.g., `"type:chat_history": ["mem-1", "mem-2"]`).
 3. **The Sockets**: The `StorageEngine` holds lightning-fast observable Sets routing straight into the `useStorage()` React Hook.
 
+> [!IMPORTANT]
+> **Strict Rendering Law**: If any React Component deals with listening to the Global RAM, it MUST utilize React 18's `useSyncExternalStore` API (via the `useStorage` hook). Using standard `useState` or Redux loops will cause desynchronized tearing, especially during high-speed 60fps mutative events like Window Dragging.
+
 ## 🔄 The "Ghost Town" Solution (Why we did this)
-In early designs, what happened if an AI sent a chat message 10 milliseconds *before* Electron finished physically creating the visual UI window? The event drifted over the EventBus and was lost forever in the void (The Ghost Town race condition).
+In early designs, what happened if an AI sent a chat message 10 milliseconds *before* Tauri finished physically creating the visual UI webview? The event drifted over the EventBus and was lost forever in the void (The Ghost Town race condition).
 
 **The Architectural Fix**:
 1. **Segregation**: The AI Process skips the EventBus entirely. It writes the massive 10-page text response directly into the **Global RAM Storage Engine**.
