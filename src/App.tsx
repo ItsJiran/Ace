@@ -3,29 +3,29 @@ import { BaseWindow } from './components/BaseWindow';
 import { DevOverlay } from './components/DevOverlay';
 import { useEventEngine } from '#/services/eventEngine';
 
-// Generate random UIDs for fake windows
-const generateUid = () => 'win-' + Math.random().toString(36).substring(2, 9);
+// Generate random UIDs for fake processes
+const generateUid = () => 'proc-' + Math.random().toString(36).substring(2, 9);
 
 function App() {
-  const [windows, setWindows] = useState<string[]>([]);
+  const [processes, setProcesses] = useState<string[]>([]);
   const { subscribe } = useEventEngine();
 
   useEffect(() => {
-    // Listen for the 'open_window' broadcast from the Event Engine (usually fired by Gateway or DevOverlay)
+    // Listen for the 'open_process' broadcast from the Event Engine (usually fired by Gateway or DevOverlay)
     const unsubscribe = subscribe((event) => {
       if (
         event.listened_event === 'system_command' &&
-        event.payload?.action === 'open_window'
+        event.payload?.action === 'open_process'
       ) {
-        setWindows((prev) => [...prev, generateUid()]);
+        setProcesses((prev) => [...prev, generateUid()]);
       }
     });
 
     return unsubscribe;
   }, [subscribe]);
 
-  const removeWindow = (uidToRemove: string) => {
-    setWindows((prev) => prev.filter(uid => uid !== uidToRemove));
+  const removeProcess = (uidToRemove: string) => {
+    setProcesses((prev) => prev.filter(uid => uid !== uidToRemove));
   };
 
   return (
@@ -41,9 +41,9 @@ function App() {
         </p>
       </div>
 
-      {/* Spawned Windows */}
-      {windows.map((uid) => (
-        <BaseWindow key={uid} uid={uid} onClose={removeWindow} />
+      {/* Spawned Processes */}
+      {processes.map((uid) => (
+        <BaseWindow key={uid} uid={uid} onClose={removeProcess} />
       ))}
 
       {/* Render the Developer Engine Debugger Overlay if in Dev Mode */}

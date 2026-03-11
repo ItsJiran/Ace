@@ -4,12 +4,12 @@ import { useStorageEngine } from '#/services/storageEngine';
 import type { Listener } from '#/schemas/events';
 
 export const DevOverlay: React.FC = () => {
-    const { windowRegistry, dispatch, subscribe } = useEventEngine();
+    const { processRegistry, dispatch, subscribe } = useEventEngine();
     const { ramStore, classificationIndex, dispatchRAMAction } = useStorageEngine();
 
     const [eventLog, setEventLog] = useState<Listener[]>([]);
     const [selectedTab, setSelectedTab] = useState<'registry' | 'ram' | 'events'>('registry');
-    const [selectedWindow, setSelectedWindow] = useState<string | null>(null);
+    const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
 
     // Global listener to keep a history of all events dispatched through the engine
     useEffect(() => {
@@ -17,23 +17,23 @@ export const DevOverlay: React.FC = () => {
         return () => unsub();
     }, [subscribe]);
 
-    const spawnWindow = () => {
+    const spawnProcess = () => {
         dispatch({
             event_type: 'listener',
             listened_event: 'system_command',
             source_uid: 'dev-overlay',
             reaction: { reaction_type: 'custom' },
-            payload: { action: 'open_window' }
+            payload: { action: 'open_process' }
         });
     };
 
     const spawnGhostTownEvent = () => {
-        if (!selectedWindow) return alert('Select a window UID from the registry tab first!');
+        if (!selectedProcess) return alert('Select a process UID from the registry tab first!');
 
-        // This fires instantly. If the target window is still 'booting', it hits the mounting buffer!
+        // This fires instantly. If the target process is still 'booting', it hits the mounting buffer!
         dispatch({
             event_type: 'listener',
-            target_window_uid: selectedWindow,
+            target_process_uid: selectedProcess,
             listened_event: 'ghost_town_test',
             source_uid: 'dev-overlay',
             reaction: { reaction_type: 'custom' },
@@ -44,7 +44,7 @@ export const DevOverlay: React.FC = () => {
     const injectRAM = () => {
         dispatchRAMAction({
             action: 'create_memory',
-            window_uid: 'dev-overlay',
+            process_uid: 'dev-overlay',
             payload: { timestamp: Date.now(), source: 'Dev UI Injection' },
             classifications: ['type:debug']
         });
@@ -63,8 +63,8 @@ export const DevOverlay: React.FC = () => {
 
             {/* Toolbar */}
             <div className="p-2 gap-2 flex bg-zinc-900/50 border-b border-zinc-800 overflow-x-auto hide-scrollbar">
-                <button onClick={spawnWindow} className="whitespace-nowrap bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors">
-                    + Window
+                <button onClick={spawnProcess} className="whitespace-nowrap bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors">
+                    + Process
                 </button>
                 <button onClick={spawnGhostTownEvent} className="whitespace-nowrap bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors">
                     Fire Target Event
@@ -91,11 +91,11 @@ export const DevOverlay: React.FC = () => {
             <div className="p-0 overflow-y-auto flex-1 bg-black/20 text-xs font-mono">
                 {selectedTab === 'registry' && (
                     <div className="p-3">
-                        {Object.entries(windowRegistry).map(([uid, status]) => (
+                        {Object.entries(processRegistry).map(([uid, status]) => (
                             <div
                                 key={uid}
-                                onClick={() => setSelectedWindow(uid)}
-                                className={`p-2 mb-2 rounded border cursor-pointer transition-colors ${selectedWindow === uid ? 'border-indigo-500 bg-indigo-500/10' : 'border-zinc-800 hover:border-zinc-600'}`}
+                                onClick={() => setSelectedProcess(uid)}
+                                className={`p-2 mb-2 rounded border cursor-pointer transition-colors ${selectedProcess === uid ? 'border-indigo-500 bg-indigo-500/10' : 'border-zinc-800 hover:border-zinc-600'}`}
                             >
                                 <div className="flex justify-between items-center text-zinc-300">
                                     <span>{uid}</span>
@@ -130,7 +130,7 @@ export const DevOverlay: React.FC = () => {
                         {eventLog.map((ev, i) => (
                             <div key={i} className="bg-zinc-900 p-2 rounded border border-zinc-800 text-zinc-300">
                                 <div className="text-indigo-400 font-bold mb-1">{ev.listened_event} <span className="text-zinc-600 font-normal">from {ev.source_uid}</span></div>
-                                <div className="text-zinc-500">Target: {ev.target_window_uid || 'Broadcast'}</div>
+                                <div className="text-zinc-500">Target: {ev.target_process_uid || 'Broadcast'}</div>
                                 <pre className="mt-2 text-zinc-400 overflow-x-auto">
                                     {JSON.stringify(ev.payload, null, 2)}
                                 </pre>

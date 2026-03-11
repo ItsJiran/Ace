@@ -6,7 +6,7 @@ describe('AI Stream Parser (Fault-Tolerant)', () => {
         const streamChunk = `
 Here is a message for you.
 \`\`\`event
-interaction, main_window, null, open, open_tab
+interaction, null, main_window, null, open, open_tab
 { "tab_id": "search_view" }
 end_event
 `;
@@ -29,7 +29,7 @@ end_event
     it('should buffer an incomplete event and return is_complete: false', () => {
         const partialChunk = `
 \`\`\`event
-interaction, main_window, null, send, chat_response
+interaction, null, main_window, null, send, chat_response
 { "text": "This is half a`;
 
         const result = parseAIStreamChunk(partialChunk);
@@ -59,7 +59,7 @@ end_event
     it('should gracefully handle hallucinated json string tag instead of event tag', () => {
         const hallucinatedChunk = `
 \`\`\`json
-interaction, main_window, null, close, close_tab
+interaction, null, main_window, null, close, close_tab
 { "force": true }
 end_event
 `;

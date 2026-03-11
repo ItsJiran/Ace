@@ -40,10 +40,11 @@ This is governed by the `ListenerSchema`. It specifies exactly who sent the payl
 
 **Crucial Context Rule**: Every single UI container is assigned a unique `window_uid`, and specific interactive elements inside them use a `widget_uid`. This ensures the AI Gateway always has exact context on the origin of an event and the precise destination when routing data via a `send` action.
 
-### 2. State Management: Global vs. Local Storage
-Because the UI will handle multiple independent widgets/windows simultaneously, State Management is split into two tiers:
-1. **Window-Local State**: Transient interaction data isolated strictly to a specific `window_uid` (e.g., the current unsubmitted text in a specific widget's search bar).
-2. **Global Storage**: A shared data layer (managed via Zustand in the React shell, or an internal local DB) accessible by all windows. Information that must be synchronized seamlessly across multiple isolated widgets must be pushed to this global state, allowing any rendered window to read the shared context simultaneously.
+### 2. State Management: The 5-Layer Storage Rules
+Because the Transparent Layer will hold multiple independent Dumb Windows and Components simultaneously, State Management is handled via **Layer 2: Global Storage RAM & Classification**.
+1. **Global Storage**: A shared data layer (managed via `useStorageEngine`). Information that must be synchronized seamlessly across multiple isolated Components (like a 10-page AI response) is stored here under a `memory_uid`.
+2. **RAM Classification**: Instead of Components re-rendering constantly, they observe specific *Classifications* in the RAM (e.g., `type:chat_history`).
+3. **Component-Local State**: Transient interaction data isolated strictly to a specific React Component (e.g., the current unsubmitted text in a specific Component's search bar). Components NEVER store massive data or complex logic locally.
 
 ### 3. Heartbeat & State Messages (Background Synching)
 The client continuously listens for asynchronous updates from the Gateway over WebSockets or long-polling.

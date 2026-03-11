@@ -8,18 +8,18 @@ interface BaseWindowProps {
 }
 
 export const BaseWindow: React.FC<BaseWindowProps> = ({ uid, onClose }) => {
-    const { registerWindow, setWindowStatus, subscribe } = useEventEngine();
+    const { registerProcess, setProcessStatus, subscribe } = useEventEngine();
     const [events, setEvents] = useState<Listener[]>([]);
     const [status, setStatus] = useState<'booting' | 'ready'>('booting');
 
     useEffect(() => {
-        // 1. Register as booting (simulating Electron window creation latency)
-        registerWindow(uid, 'booting');
+        // 1. Register as booting (simulating Electron process creation latency)
+        registerProcess(uid, 'booting');
 
         // 2. Subscribe to the event engine
         const unsubscribe = subscribe((event) => {
             // Only care about events targeting us, or broadcasts
-            if (!event.target_window_uid || event.target_window_uid === uid) {
+            if (!event.target_process_uid || event.target_process_uid === uid) {
                 setEvents((prev) => [...prev, event]);
             }
         });
@@ -28,19 +28,19 @@ export const BaseWindow: React.FC<BaseWindowProps> = ({ uid, onClose }) => {
         // This is where "Ghost Town" payloads get buffered, then flushed when this timeout hits!
         const timer = setTimeout(() => {
             setStatus('ready');
-            setWindowStatus(uid, 'ready');
+            setProcessStatus(uid, 'ready');
         }, 1000); // 1 entire second of fake latency!
 
         return () => {
             clearTimeout(timer);
             unsubscribe();
             // When unmounting, we typically mark as closed
-            setWindowStatus(uid, 'closed');
+            setProcessStatus(uid, 'closed');
         };
-    }, [uid, registerWindow, setWindowStatus, subscribe]);
+    }, [uid, registerProcess, setProcessStatus, subscribe]);
 
     const handleClose = () => {
-        setWindowStatus(uid, 'closed');
+        setProcessStatus(uid, 'closed');
         onClose(uid);
     };
 

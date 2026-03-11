@@ -1,35 +1,35 @@
 import { create } from 'zustand';
 import type { Listener } from '#/schemas/events';
 
-type WindowStatus = 'booting' | 'ready' | 'closed';
+type ProcessStatus = 'booting' | 'ready' | 'closed';
 
 export interface EventEngineState {
-    windowRegistry: Record<string, WindowStatus>;
+    processRegistry: Record<string, ProcessStatus>;
     mountingBuffer: Record<string, Listener[]>;
     listeners: Array<(event: Listener) => void>;
 
-    registerWindow: (uid: string, status: WindowStatus) => void;
-    setWindowStatus: (uid: string, status: WindowStatus) => void;
+    registerProcess: (uid: string, status: ProcessStatus) => void;
+    setProcessStatus: (uid: string, status: ProcessStatus) => void;
     subscribe: (callback: (event: Listener) => void) => () => void;
     dispatch: (event: Listener) => void;
 }
 
 export const useEventEngine = create<EventEngineState>((set, get) => ({
-    windowRegistry: {},
+    processRegistry: {},
     mountingBuffer: {},
     listeners: [],
 
-    registerWindow: (uid: string, status: WindowStatus) => {
+    registerProcess: (uid: string, status: ProcessStatus) => {
         set((state) => ({
-            windowRegistry: { ...state.windowRegistry, [uid]: status }
+            processRegistry: { ...state.processRegistry, [uid]: status }
         }));
     },
 
-    setWindowStatus: (uid: string, status: WindowStatus) => {
+    setProcessStatus: (uid: string, status: ProcessStatus) => {
         set((state) => {
-            const newRegistry = { ...state.windowRegistry, [uid]: status };
+            const newRegistry = { ...state.processRegistry, [uid]: status };
 
-            // If the window is now ready, flush its buffer!
+            // If the process is now ready, flush its buffer!
             if (status === 'ready') {
                 const buffer = state.mountingBuffer[uid];
                 if (buffer && buffer.length > 0) {
@@ -47,10 +47,10 @@ export const useEventEngine = create<EventEngineState>((set, get) => ({
                 const newBuffer = { ...state.mountingBuffer };
                 delete newBuffer[uid];
 
-                return { windowRegistry: newRegistry, mountingBuffer: newBuffer };
+                return { processRegistry: newRegistry, mountingBuffer: newBuffer };
             }
 
-            return { windowRegistry: newRegistry };
+            return { processRegistry: newRegistry };
         });
     },
 
@@ -68,28 +68,28 @@ export const useEventEngine = create<EventEngineState>((set, get) => ({
     },
 
     dispatch: (event: Listener) => {
-        const { target_window_uid } = event;
+        const { target_process_uid } = event;
         const state = get();
 
-        // 1. Is there a target window provided?
-        if (target_window_uid) {
-            const status = state.windowRegistry[target_window_uid];
+        // 1. Is there a target process provided?
+        if (target_process_uid) {
+            const status = state.processRegistry[target_process_uid];
 
-            // 1a. If the window is explicitly 'booting', buffer it! (Ghost Town prevention)
+            // 1a. If the process is explicitly 'booting', buffer it! (Ghost Town prevention)
             if (status === 'booting') {
                 set((state) => {
-                    const currentBufferForWindow = state.mountingBuffer[target_window_uid] || [];
+                    const currentBufferForProcess = state.mountingBuffer[target_process_uid] || [];
                     return {
                         mountingBuffer: {
                             ...state.mountingBuffer,
-                            [target_window_uid]: [...currentBufferForWindow, event]
+                            [target_process_uid]: [...currentBufferForProcess, event]
                         }
                     };
                 });
                 return; // DO NOT fire the listeners yet.
             }
 
-            // 1b. If the window is 'closed', drop it into the void.
+            // 1b. If the process is 'closed', drop it into the void.
             if (status === 'closed') {
                 return;
             }

@@ -13,12 +13,15 @@ import { z } from 'zod';
  */
 export const StandardSubActions = [
     'open_window',
+    'open_process',
     'open_tab',
     'open_widget',
     'send_window',
+    'send_process',
     'send_gateway',
     'send_terminal',
     'close_window',
+    'close_process',
     'close_tab',
     'run_shell',
     'read_file'
@@ -31,9 +34,11 @@ export const StandardSubActions = [
 
 export const InteractionSchema = z.object({
     event_type: z.literal('interaction'),
-    /** The globally unique instance ID of the window originating the event */
-    window_uid: z.string(),
-    /** The globally unique instance ID of the specific widget within the window */
+    /** The globally unique instance ID of the window (Waiter) originating the event */
+    window_uid: z.string().optional(),
+    /** The globally unique instance ID of the process (Chef) originating the event */
+    process_uid: z.string().optional(),
+    /** The globally unique instance ID of the specific widget within the window/process */
     widget_uid: z.string().optional(),
 
     /** The core advanced routing terminology */
@@ -79,14 +84,16 @@ export type EventReaction = z.infer<typeof EventReactionSchema>;
 export const ListenerSchema = z.object({
     event_type: z.literal('listener'),
 
-    /** The globally unique instance ID of the window receiving the payload. Optional for broadcasts. */
+    /** The globally unique instance ID of the window (Waiter) receiving the payload. */
     target_window_uid: z.string().optional(),
+    /** The globally unique instance ID of the process (Chef) receiving the payload. */
+    target_process_uid: z.string().optional(),
     target_widget_uid: z.string().optional(),
 
     /** The specific event name or classification being listened to */
     listened_event: z.string(),
 
-    /** The origin UID of the incoming payload (e.g. 'gateway', or a specific window_uid) */
+    /** The origin UID of the incoming payload (e.g. 'gateway', or a specific window/process UID) */
     source_uid: z.string(),
 
     /** What to do now that this event has been received */

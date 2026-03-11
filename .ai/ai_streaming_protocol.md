@@ -11,7 +11,7 @@ Instead, the Assistant mandates a specialized, custom **Markdown-style Event Blo
 The system prompts the AI Gateway to output a sequence of instructions in the following exact format:
 
 ```event
-<event_type>, <window_uid>, <widget_uid>, <action>, <sub_action>
+<event_type>, <window_uid>, <process_uid>, <widget_uid>, <action>, <sub_action>
 ... arbitrary payload text, markdown, or JSON string buffer goes here ...
 ... it builds up asynchronously line by line ...
 end_event
@@ -22,7 +22,7 @@ end_event
 I am going to open the search tab for you now.
 
 ```event
-interaction, main_window, null, open, open_tab
+interaction, main_window, null, null, open, open_tab
 {
   "tab_id": "search_view",
   "focus": true
@@ -32,7 +32,7 @@ end_event
 I will now send the query to it:
 
 ```event
-interaction, main_window, search_tab, send, send_widget
+interaction, main_window, null, search_tab, send, send_widget
 {
   "query": "React Zod documentation"
 }
@@ -46,9 +46,9 @@ end_event
 3.  **Payload Buffering**: It stops printing text to the UI. Instead, all subsequent streamed tokens are buffered into a `payload_buffer` string in memory.
 4.  **Event Firing**: The exact millisecond the Engine receives `end_event`, it:
     *   Constructs a formal `InteractionSchema` JSON object from the headers.
-    *   Parses the `payload_buffer` (as JSON if required by the widget, or raw markdown text).
+    *   Parses the `payload_buffer` (as JSON if required by the Component, or raw markdown text).
     *   Fires the event into the central Event Bus.
-5.  **Simultaneity**: The AI continues generating the second event, while the UI instantly reacts to the first one (e.g., opening the tab instantly while the AI is still typing out the payload for the *next* event).
+5.  **Simultaneity**: The AI continuous generating the second event, while the UI instantly reacts to the first one (e.g., opening the window instantly while the AI is still typing out the payload for the *next* Component).
 
 ## Parsing Schemas
 While the transmission format is raw text/markdown, the Engine parses and maps this string block back into our strict `InteractionSchema` using definitions found in `src/schemas/ai_protocol.ts`.

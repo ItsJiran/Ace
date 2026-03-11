@@ -2,12 +2,35 @@
 
 This document describes the proposed architecture for the UI Engine, focusing on extreme modularity, extensibility, and separation of concerns from the core AI processing logic.
 
+## 🧱 UI Relevance in the 5-Layer Architecture
+
+The UI specifically concerns itself with three of the five core layers in the architecture:
+
+### 1. The Event Engine (The UI Router)
+This is the bridge to the backend Process Engine.
+*   **Role**: The Dispatcher.
+*   **Responsibilities**: It routes `InteractionSchema` payloads from Components to the backend, and drops `ListenerSchema` payloads into the correct Component's buffer.
+*   **Rule**: It never touches the UI pixels.
+
+### 2. The Window (The Dumb Frame)
+This is the physical "glass" on the screen. It is a reusable, generic wrapper.
+*   **Role**: The Spatial Container.
+*   **Responsibilities**: Handles X/Y coordinates, width/height, z-index, dragging animations, and telling Electron when to capture mouse clicks vs. letting them pass through.
+*   **Rule**: It never touches the AI or business logic. It has no idea if it is holding a calendar, a chat, or a loading bar.
+
+### 3. The Component (The Active UI)
+This is the actual tool you build (e.g., `<ChatBubble />`, `<CommandBar />`, `<LiveTranscript />`). One Window can hold multiple independent Components.
+*   **Role**: The Interactor.
+*   **Responsibilities**: Renders text and buttons by observing Global RAM Classifications. Emits events to the Engine (e.g., "User clicked summarize").
+*   **Rule**: Components do not talk directly to the Window, nor do they talk directly to each other. They strictly emit and listen to the Event Engine.
+
 ## 🧱 Core Principles
 
-1.  **Dumb UI, Smart Backend**: The UI Engine should hold extremely little business logic. Its primary jobs are to capture user intent (text, clicks) and render state provided by the underlying AI/Processing Engine.
-2.  **Plugin-Style Architecture (Downloadable Modules)**: New integrations or tools (e.g., an Obsidian widget, a Calendar widget) should be addable without rewriting the core application shell. In the future, a user can download a specific component and register it dynamically.
-3.  **Strict IPC (Inter-Process Communication) Boundaries**: All communication between the UI Engine (Renderer process) and the AI Engine (Main process) happens through strictly typed, defined channels.
-4.  **Gateway Driven**: The UI reacts to "Render Schemas" sent down by an external AI Gateway, and emits "Interaction Schemas" back up when buttons are clicked or forms are submitted.
+1.  **Dumb UI**: The UI Engine should hold zero business logic. Its primary job is to act as a reactive display: capture user intent (clicks, text) as an `InteractionSchema`, hand it to the Event Engine, and observe whatever payload returns to Global Storage RAM. It never talks to the AI directly.
+2.  **The Transparent Canvas (Undetectable)**: The UI operates on a `transparent` Electron layer. using `mainWindow.setContentProtection(true)` prevents screen-sharing apps (Zoom, Meet) from capturing the AI overlay. It is only visible to the user.
+3.  **Spatial Freedom & Click-Through**: Utilizing `win.setIgnoreMouseEvents(true, { forward: true })`, the user clicks directly through the invisible canvas to their IDE. The UI only steals mouse focus when hovering directly over a rendered component (e.g., a Chat Bubble floating at specific X/Y coordinates).
+4.  **Plugin-Style Architecture (Downloadable Modules)**: New integrations or tools (e.g., an Obsidian widget, a Calendar widget) should be addable without rewriting the core application shell. In the future, a user can download a specific module and register it dynamically.
+5.  **Strict IPC (Inter-Process Communication) Boundaries**: All communication between the Components and the Process Engine happens through strictly typed `ListenerSchema` and `InteractionSchema` channels.
 
 ## 🛠️ Proposed Tech Stack
 

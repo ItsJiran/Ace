@@ -45,7 +45,7 @@ For every new feature (e.g., The Event Engine Buffer, The Markdown Stream Parser
 
 ### 1. The Core Engines (Headless Node/TypeScript)
 *   **The Markdown Stream Parser**: Must be tested specifically against hallucinated text inputs, missing tags, malformed JSON, and split chunks to ensure the fault-tolerant regex never crashes the app.
-*   **The Event Engine Buffer**: Must be mocked against "Ghost Town" race conditions. Fire events targeting a window while its `status` is mocked to `booting`, assert the event is swallowed into the queue, fire a `ready` ping, and assert the queue is flushed.
+*   **The Event Engine Buffer**: Must be mocked against "Ghost Town" race conditions. Fire events targeting a Component while its Window's `status` is mocked to `booting`, assert the event is swallowed into the queue, fire a `ready` ping, and assert the queue is flushed.
 
 ### 2. State & Memory (Zustand)
 *   **Global RAM Indexing**: Tests must assert that when massive string payloads are inserted, the engine correctly swaps it for a `memory_uid` and successfully indexes it inside `GlobalClassificationRAMSchema`.

@@ -5,7 +5,7 @@ Because local LLMs (and even cloud APIs) exhibit inconsistent outputs, relying o
 ## 🧱 Core Philosophy
 
 1.  **Strict Contracts**: Every "Tool" or "Module" that the AI interacts with must define a strict, machine-readable JSON Schema (e.g., using Zod or JSON Schema).
-2.  **Validation at the Boundary**: The UI Engine and the Tooling System *never* accept raw text from the AI when expecting a command. All outputs must pass through a strict validation layer before execution or rendering.
+2.  **Validation at the Boundary**: The Components and the Tooling System *never* accept raw text from the AI when expecting a command. All outputs must pass through a strict validation layer before execution or rendering.
 3.  **Self-Correction Loop**: If the AI hallucinates a parameter or breaks the schema, the execution layer intercepts the error and feeds it back to the AI for immediate self-correction.
 
 ## 🛠️ The Architecture
@@ -39,7 +39,7 @@ When the AI generates a response, it is always instructed to format it as a JSON
 
 This approach is the glue that makes the modular architecture actually work.
 
-*   **For the UI Engine**: As discussed in the `ui_architecture.md`, the UI has a "Tool Registry" (`<ObsidianCard />`, `<CalendarEvent />`). By enforcing schemas, we guarantee that when the AI decides to trigger the UI to show an event, the React component *always* receives the exact props it expects. It never crashes due to a hallucinatory missing parameter.
+*   **For the Components**: As discussed in the `ui_architecture.md`, the UI has a "Tool Registry" (`<ObsidianCard />`, `<CalendarEvent />`). By enforcing schemas, we guarantee that when the AI decides to trigger a Component to show an event, the React Component *always* receives the exact props it expects. It never crashes due to a hallucinatory missing parameter.
 *   **For the Main Process Tools**: When the AI commands the system to `execute_shell_script(command)`, the strict schema ensures it never accidentally injects malicious syntax if the schema explicitly restricts the input characters.
 
 ## 🤖 Leverage "Structured Outputs"

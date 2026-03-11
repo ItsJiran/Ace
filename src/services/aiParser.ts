@@ -50,13 +50,14 @@ export function parseAIStreamChunk(chunk: string): AIParseResult {
             continue;
         }
 
-        const [event_type, window_uid, widget_uid_raw, action, sub_action] = headerValidation.data;
+        const [event_type, window_uid, process_uid_raw, widget_uid_raw, action, sub_action] = headerValidation.data;
 
         // 4. Construct the Intermediate Buffered Event
         const event: BufferedAIEvent = {
             headers: {
                 event_type,
                 window_uid,
+                process_uid: (process_uid_raw === 'null' || process_uid_raw === null) ? undefined : process_uid_raw,
                 widget_uid: (widget_uid_raw === 'null' || widget_uid_raw === null) ? undefined : widget_uid_raw,
                 action,
                 sub_action
