@@ -1,7 +1,25 @@
 use tauri::Manager;
 
-/// Toggle mouse click-through for the overlay window.
-/// When `ignore` is true, mouse events pass through the window to the desktop.
+// Helper untuk macOS agar tidak memicu "Exclusive Fullscreen"
+#[cfg(target_os = "macos")]
+pub fn setup_mac_overlay(window: &tauri::WebviewWindow) {
+    use cocoa::appkit::{NSWindow, NSWindowCollectionBehavior};
+    use cocoa::base::id;
+    use objc::{msg_send, sel, sel_impl};
+
+    unsafe {
+        let ns_window = window.ns_window().unwrap() as id;
+
+        // 1. Biarkan window muncul di semua Spaces dan jangan sembunyikan Dock
+        let mut collection_behavior = NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces;
+        collection_behavior |= NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary;
+        let _: () = msg_send![ns_window, setCollectionBehavior: collection_behavior];
+
+        // 2. Set level ke Status Window (di atas aplikasi normal, di bawah/sejajar Dock)
+        let _: () = msg_send![ns_window, setLevel: 25]; // NSStatusWindowLevel
+    }
+}
+
 #[tauri::command]
 fn set_ignore_cursor_events(window: tauri::Window, ignore: bool) -> Result<(), String> {
     window
@@ -14,9 +32,14 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![set_ignore_cursor_events])
         .setup(|app| {
+            let window = app.get_webview_window("main").unwrap();
+
+            // 🚀 EKSEKUSI FIX DOCK (macOS Only)
+            #[cfg(target_os = "macos")]
+            setup_mac_overlay(&window);
+
             // Open devtools automatically in debug builds
             if cfg!(debug_assertions) {
-                let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
             Ok(())

@@ -1,5 +1,4 @@
-# Personal Assistant App
-
+# ACE-Agentic-Client-Environment
 A local-first, overlay-based personal assistant powered by Electron and AI, designed to streamline your daily workflow.
 
 ## 🤖 AI Instructions

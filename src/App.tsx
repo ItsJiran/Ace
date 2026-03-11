@@ -21,7 +21,7 @@ function App() {
 
           if (monitor) {
             // 1. Sesuaikan ukuran window Tauri dengan resolusi piksel layar
-            await appWindow.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
+            await appWindow.setSize(new PhysicalSize(monitor.size.width, monitor.size.height - 1));
             // 2. Kunci posisi window di pojok kiri atas monitor
             await appWindow.setPosition(new PhysicalPosition(0, 0));
           }
