@@ -25,14 +25,23 @@ This section tracks the current development goals for the open-source community.
 - [x] Implement strictly typed EventBus and ProcessEngine.
 - [x] Complete Vitest coverage for all standalone Core Engines.
 
+### 🛡️ Architectural Validation (Ongoing)
+- [x] **Event Bus Governance**: Define who/what can listen and emit (e.g., UI vs. Gateway vs. Background).
+- [x] **Event Flow Documentation**: Map out the interaction-to-listener and tool-execution lifecycles.
+- [x] **Component & Window Architecture**: Define how UI components listen to external processes and how events drive window state changes (resize, visibility, etc.).
+- [x] **Schema Enforcement**: Ensure all system-wide tickets follow the Tooling and UI schemas without exceptions.
+- [x] **Audit Strategy**: Refine how asynchronous audits are logged to SQLite without blocking the UI thread.
+
 ### 🧩 Phase 2: The Development UI Kit (Current Task)
+
 Before hooking up an AI Gateway, we must build a visual dashboard to physically *see* our invisible engines working:
-- [ ] **Config dan Keybinds Json**: Create database integration for the config and keybinds.
-- [ ] **Database Integration (SQLite)**: Create database integration for the user.
+- [x] **Config dan Keybinds Json**: Create database integration for the config and keybinds.
+- [x] **Database Integration (SQLite)**: Create database integration for the user.
 - [x] **Basic Tooling & Window Generation**: Create the first Dumb Windows that can be dragged, expanded, and trigger size variations based on EventBus tickets.
 - [x] **Developer Dashboard Menu**: A toggleable visual dev menu.
 - [x] **The "RAM Viewer"**: A UI component that hooks into the Memory Bus to show real-time changes inside the Global Storage RAM Map.
-- [ ] **Create Basic Window Animating Based On Event Bus"**: Make the window able to listen to the event bus and make the window engine know what to do and ensure it can do resizing, popup, minimize, maximize, and close and fluid animating.
+- [x] **Create Basic Window Animating Based On Event Bus"**: Make the window able to listen to the event bus and make the window engine know what to do and ensure it can do resizing, popup, minimize, maximize, and close and fluid animating.
+
 - [ ] **The "Event Viewer"**: A UI component that visually logs tickets flying across the EventBus.
 - [ ] **The "Process Monitor"**: A UI component reflecting the ProcessEngine booting, yielding, and killing background headless tasks.
 

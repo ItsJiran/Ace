@@ -1,117 +1,102 @@
-### Event & Process Engine Execution Layer
+# ACE Event Lifecycle & Use Case Flows (Robust Edition)
 
-This layer acts as the invisible backend bridge and orchestrator. It handles execution chaos autonomously, ensuring the UI thread never blocks, and provides a strict sandbox for the AI to interact with the host OS.
+This document outlines the step-by-step lifecycle of data and events across the ACE (Autonomous Cognitive Entity) architecture. All flows strictly adhere to the **CQRS (Command Query Responsibility Segregation)** and **Event-Driven** principles.
 
-1. The Omni-Channel EventBus (Unified Command Pipeline)
+## 🏛️ The Golden Rules of the Flow
+Before reading the cases, developers must understand the two unbreachable laws of this architecture:
 
-The EventBus (src/services/eventEngine.ts) is a lightning-fast, pure Map singleton acting as the central nervous system, every action is through the event bus and validated by the event bus, and only just for simple ui state change that didn't deal with external data that is not through the event bus.
-
-Our events handle interaction between our engine, window, and widget. and has the predefined listener that handle the logic on what should be done when the event is triggered.
-
-    Role: It is a universal message broker. It does not care if a command comes from a User clicking a React button (source: 'ui_component'), the AI Gateway streaming a tool call (source: 'ai_socket'), or a background task (source: 'system_core').
-
-    Logic: It receives standardized EventTicket objects (src/schemas/events.ts), validates them against the Tool Registry (src/services/toolRegistry.ts), and dispatches them to the Process Engine (src/services/processEngine.ts).
-
-    Rule: Data never travels aimlessly. The EventBus guarantees strict provenance (knowing exactly who triggered the action) to maintain security and provides a single choke-point for SQLite audit logging.
-
-2. Process Registry & Engine (The State Machine)
-
-When the EventBus validates a ticket, it hands it off to the Process Engine (src/services/processEngine.ts) and tracks its lifecycle in the Process Registry, process only handle for external data that is not through the event bus and complex logic process.
-
-    Role: The Execution Environment. It tracks the process_uid, tool name, and state (booting, running, yielding, completed, error) in a centralized RAM Map, syncing to the React UI in O(1) time via useSyncExternalStore.
-
-    Compound Execution & Hierarchy (group_pid): Processes can infinitely spawn sub-processes.
-
-    Example: The AI emits a ticket to summarize a project. The Engine spawns a parent process. This process needs to read 3 files, so it enters a yielding state and emits 3 child tickets. All share a group_pid. If the user clicks "Kill", the Engine recursively terminates the entire execution tree instantly.
-
-3. Co-located Tool Definitions (Schema + Handler)
-
-To prevent "Environment Bleeding" (crashing the React bundler with Node/Rust code), capabilities are defined using the Tool Definition Pattern (src/schemas/tooling.ts).
-
-    The Schema: Every tool exposes a strict Zod schema (e.g., ObsidianReadToolSchema). The EventBus uses this to validate AI hallucinations before execution.
-
-    The Handler: The actual execution logic (e.g., async executeHandler(args)) lives right next to the schema but is kept isolated.
-
-    Self-Correction: If Zod validation fails, the Process Engine rejects the execution, prevents a local crash, and automatically feeds the schema error back to the AI Gateway for an immediate self-correction loop.
-
-4. Native Execution & The Autonomous Loop (ReAct)
-
-The Process Engine natively executes system commands via Tauri's Rust backend, but it also powers the AI's ability to "think and act" autonomously.
-
-    Host Capabilities: Safe execution of Rust std::fs (reading Obsidian files), running shell commands, or utilizing OAuth APIs.
-
-    The Feedback Loop: When a tool handler finishes, the EventBus does not just show the result to the user. It routes the payload back to the AI Gateway's context window as a "Tool Observation". This allows the AI to read a file, analyze it, and automatically emit its next tool ticket without user intervention.
-
-5. Background CRON & System Triggers
-
-Unlike standard cron, this Assistant runs an internal autonomous event loop treated as a first-class citizen.
-
-    It can wake up dynamically triggered processes (e.g., indexing new Obsidian logs in the background).
-
-    The Engine can generate proactive EventTickets directly without user input, route them to the EventBus, and instantly push React Widget Notifications to the screen, treating the system itself as an active agent.
-
-
-### 🔄 The ACE Unified Lifecycle: End-to-End
-
-Phase 1: Inception & Dispatch (The Origin)
-
-Everything begins with a Trigger. The system does not care who pulls the trigger, only that it produces a properly formatted JSON Ticket.
-- The Trigger: * AI Gateway (Socket): The AI decides to act and streams a command via WebSocket.
-- React UI (Component): The User clicks a button in the overlay (e.g., "Scan Folder").
-- Process Engine (Child): A running tool realizes it needs help and emits a sub-task.
-- The Dispatch: The Ticket is injected into the Event Bus. It includes its source, action, payload, and optionally a parent_process_id.
-
-Phase 2: Ingestion & Validation (The Gatekeeper)
-
-The Event Bus catches the Ticket and acts as the strict bouncer.
-- Action Registry Lookup: The Event Bus asks the Action Registry: "Do we have a definition for this action?"
-
-- Sanity Check: If the action exists, the Event Bus validates the payload against the Action Registry's schema (e.g., Did the AI provide a file path as a string?).
-
-- Security/Middleware Check: (Optional) The system verifies if the source has permission to execute this action.
-
-Action is the one that defined in the src/schemas/events.ts actions is a list of our predefined interactions between our engine, window, and widget.
-
-The differences between from tooling isthat tooling is the one that defined in the src/schemas/tooling.ts and it is the one that defined in the src/services/toolRegistry.ts and it is extendable by the user and only dealing with our predefined interactions between our engine, window, and widget.
-
-The actions are the one that if the actions is execute tool, running command, opening window, open process, send_ram, close_widget, etc.
-
-And when it reach the event bus, the event bus will check the listener if there is any listener that match the action, if there is, it will execute the listener. and if there is no listener that match the action, it will do nothing.
+1. **The Pre-Allocation Protocol (UI Data Loop):** React components **never** listen to the Event Bus for data. If a component wants data back, it must generate a correlation ID (RAM Key), start listening to that RAM location (`useAceMemory`), and then include that key in the `Interaction` payload. The backend will write the result directly to that pre-allocated key.
+2. **The High-Frequency Bypass:** The `eventEngine` is for macro-commands (intents) only. High-frequency data streams (LLM tokens, audio frequencies, file bytes) **must bypass the Event Bus** and write directly to the `storageEngine` (RAM) to preserve O(1) performance.
 
 
 
-<!-- 
-Phase 2.5: Tool Registry Lookup (if the action is executing tool)
+---
 
-The Event Bus asks the Tool Registry: "Do we have a definition for this tool?"
+## Case 1: Standard Prompting & LLM Stream (TCP/Parser Flow)
+*Scenario: The user types a message. The system establishes a TCP connection to the LLM, parses the incoming buffer, and streams text to the UI without choking the Event Bus.*
 
-Phase 3: Allocation & State Broadcasting (The Memory)
-
-Before any heavy lifting happens, the system prepares the environment so the User (via the UI) is immediately aware.
-- Process Registration: The Event Bus generates a unique process_id and registers it in the Process Registry with a status: 'pending'.
-- O(1) RAM Sync: The Process Registry immediately syncs this new state to the Storage Engine (your Global RAM Map).
-- UI Reacts: Because of useSyncExternalStore, your React components instantly render a new loading indicator or progress bar in the overlay. Zero latency.
-
-Phase 4: Execution & Orchestration (The Engine) (if the action is executiing tool)
-
-The Event Bus hands the validated Ticket and its process_id over to the Process Engine.
-- Execution Begins: The Process Engine updates the state to status: 'running' and begins executing the logic (either purely in TS or via Tauri invoke to Rust).
-- The Bifurcation (Branching Logic):
-- Path A (Direct Compute): The tool does its job (e.g., reads a file), updates its progress periodically to the RAM, and finishes.
-- Path B (Compound Tooling): The tool needs another tool. It updates its state to status: 'yielding', emits a new Ticket to the Event Bus (tagging itself as the parent_process_id), and goes to sleep. The system loops back to Phase 1 for the child tool. Once the child finishes, the parent wakes up and resumes.
-
-Phase 5: Resolution & Persistence (The Archive)
-
-The Process Engine completes its final line of code.
-- Final Payload Delivery: The Process Engine returns the final result or error message back to the Event Bus.
-- State Cleanup: The Process Registry updates the process state to status: 'completed' (or failed) and pushes the final UI update to the RAM.
-- Data Routing: If the tool fetched data (e.g., a list of Obsidian notes), the Event Bus routes that data to the appropriate static location in the Storage Engine so other components can use it.
-- Audit Trail (SQLite): The Event Bus sends an asynchronous fire-and-forget command to the Tauri Rust backend: "Save this exact Ticket, its execution time, and its result into the audit_logs database table." -->
+1. **Pre-Allocate RAM:** The `<ChatInput />` component generates a unique `message_uid` (e.g., `msg-123`).
+2. **Listen First:** The `<ChatBubble />` component mounts and begins observing `storageEngine` at the key `msg-123`.
+3. **Emit Intent:** `<ChatInput />` emits -> `{ action: 'send_gateway', payload: { text: 'Hello', reply_to_ram_key: 'msg-123' } }`.
+4. **Route:** The `eventEngine` validates the payload and routes it to the `processEngine` (which manages the lifecycle of the request).
+5. **Delegate to Worker:** The `processEngine` triggers the `aiGatewayEngine`, passing the payload and the target RAM key.
+6. **TCP & Parse:** The `aiGatewayEngine` opens a TCP socket to the remote LLM. As the raw buffer streams in, it routes through the internal AI Parser.
+7. **Direct RAM Write (The Bypass):** The parser directly updates the `storageEngine` at `msg-123` with token chunks. **The Event Bus remains completely empty and unblocked.**
+8. **React:** The `<ChatBubble />` observes the continuous RAM updates and types out the text on screen seamlessly.
+9. **Resolution:** The TCP stream closes. `aiGatewayEngine` notifies `processEngine`, which marks the process as `completed`.
 
 
-### When to define a tool or a simple event action
 
-If an action need to interact with the OS or perform complex logic, define it as a tool. Otherwise, use a simple event action either if UI maybe useState
-or if it is a simple action that does not need to be logged or audited can be just through defined the process in the event engine.
+---
 
-If an action just need to chagne a window triggering animating and etc, define it as a simple event action for example sending state to the window or react component.
+## Case 2: Prompting that triggers an OS Tool (Observing Progress)
+*Scenario: During a chat, the AI decides to look at the user's project folder via the File System tool.*
+
+1. **AI Decision:** During the TCP stream parsing (Case 1), the `aiGatewayEngine` detects a tool-call JSON instead of standard text.
+2. **Pre-Allocate RAM:** The `aiGatewayEngine` generates a `process_uid` (e.g., `proc-999`) to act as the correlation ID for the tool's result.
+3. **Emit Command:** It pauses the text stream and emits -> `{ action: 'execute_tool', payload: { tool_name: 'read_directory', path: './src', reply_to_ram_key: 'proc-999' } }`.
+4. **Validate & Orchestrate:** The `eventEngine` strictly validates the AI's payload against the schema in `toolsEngine`. Once safe, it hands the ticket to the `processEngine`.
+5. **State Update:** The `processEngine` updates `storageEngine` at `proc-999` with `{ status: 'running' }`. 
+6. **UI Reacts:** A `<SystemMonitor />` widget (which globally watches process states) sees `proc-999` is running and renders a loading bar.
+7. **Execute:** The `processEngine` delegates the physical work to the `fsEngine` (Tauri Rust).
+8. **Resolution & Sync:** The `fsEngine` reads the folder. The `processEngine` writes the final array data into `proc-999` and marks the state `completed`.
+9. **Feedback Loop:** The `aiGatewayEngine` (listening to `proc-999`) catches the folder data, sends it back over the TCP connection as a "Tool Observation", and resumes the LLM stream.
+
+---
+
+## Case 3: Compound Tooling (A Tool opening another Tool)
+*Scenario: The AI runs a "Research" tool, which internally requires both a "Web Search" tool AND a "Read File" tool to run in parallel.*
+
+1. **Initial Trigger:** The `aiGatewayEngine` emits `{ action: 'execute_tool', payload: { tool_name: 'research_topic' } }`.
+2. **Process Spawn:** `processEngine` creates Parent Process `PID_1` (status: `running`).
+3. **Yielding:** The `research_topic` TypeScript handler realizes it needs more data. It updates its state to `yielding`.
+4. **Sub-Process Emit:** Parent `PID_1` emits two new `execute_tool` tickets (`web_search` and `read_file`), explicitly tagging them with `group_pid: PID_1`.
+5. **Parallel Work:** The `eventEngine` routes these back to the `processEngine`, spinning up child tasks `PID_2` and `PID_3`. The UI renders nested loading bars automatically.
+6. **Re-awakening:** `PID_2` and `PID_3` finish and write to their respective RAM keys. The `processEngine` detects the children are done, wakes up `PID_1`, injects the results, and completes the master task.
+
+
+
+---
+
+## Case 4: Prompting that opens a New Window or UI Widget
+*Scenario: The user types "Show me my calendar", and the AI triggers the UI to open.*
+
+1. **AI Decision:** The LLM streams an intent to trigger UI. The `aiGatewayEngine` parses it and emits -> `{ action: 'open_window', payload: { window_type: 'calendar_widget' } }`.
+2. **Route:** The `eventEngine` matches this command to the `windowEngine`'s listener.
+3. **Spatial/OS Update:** The `windowEngine` takes over. 
+    * *If native OS window:* It commands Tauri via IPC to spawn a new physical window.
+    * *If overlay widget:* It updates the `storageEngine`'s active window layout registry.
+4. **React:** The root `App.tsx` (Window Shell) observes the RAM layout change and immediately mounts the `<CalendarWindow />` dumb frame onto the screen.
+
+---
+
+## Case 5: A Process triggers a UI Animation (Transient Event)
+*Scenario: A background process fails (e.g., Invalid API Key) and wants to "shake" the Settings panel to alert the user.*
+
+1. **Failure Catch:** The `processEngine` catches an error during a tool's execution.
+2. **Emit Transient Event:** It emits `{ action: 'trigger_animation', target_widget: 'settings_panel', anim: 'shake' }`.
+3. **Bypass RAM (Crucial):** This is a *Transient UI Event*. It is **NOT** saved to the `storageEngine`. Saving `{ isShaking: true }` would create a nightmare of having to manually reset it to `false` later.
+4. **Direct Listen:** The `<SettingsPanel />` React component currently has an active `useAceListener('trigger_animation')` hook.
+5. **React & Cleanup:** The hook catches the event, verifies the `target_widget` ID, and applies a CSS class to shake the DOM element. The hook's `unsubscribe` function guarantees no memory leaks if the panel is closed.
+
+---
+
+## Case 6: Prompting that needs to Wait (Context Building)
+*Scenario: The user asks a highly complex question. Gathering the system context and chat history takes a few seconds before the AI can even start thinking.*
+
+1. **Emit Intent:** User submits the prompt.
+2. **Pre-Flight:** Before opening the TCP socket, the `aiGatewayEngine` asks the `processEngine` to build the context prompt.
+3. **Loading State:** The `processEngine` writes to `storageEngine`: `{ ai_status: 'thinking', current_step: 'Gathering context...' }`.
+4. **UI Observation:** `<ChatInput />` observes `ai_status`. It automatically disables the input field and renders a "Thinking..." animation.
+5. **Execution:** The `processEngine` delegates to the `contextPromptEngine`, which reads relevant files, retrieves history, calculates token limits, and builds the final prompt string.
+6. **Resolution:** The string is handed back to the `aiGatewayEngine`, which initiates **Case 1** (TCP Stream). The RAM is updated to `{ ai_status: 'idle' }`, re-enabling the UI input.
+
+---
+
+## Case 7: High-Frequency Component Listening (Audio/Visualizer Focus)
+*Scenario: The system plays an AI voice response, and the UI must render a 60 FPS audio visualizer.*
+
+1. **Rule Check:** Can this be stored in RAM via `useState`? *No. Triggering React state updates at 60 FPS will choke the browser thread and freeze the app.*
+2. **The Flow:** The background audio engine (Tauri Rust) emits high-frequency IPC events containing byte arrays.
+3. **Direct Canvas Listen:** The `<AudioVisualizer />` component uses the `useAceListener` hook to intercept these specific high-frequency events.
+4. **DOM Bypass Render:** Inside the hook's callback, instead of setting React state, the code directly manipulates an HTML5 `<canvas>` `ref` (e.g., `canvasContext.fillRect(...)`). This bypasses the React Virtual DOM entirely, ensuring perfectly smooth 60 FPS rendering.
