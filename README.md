@@ -27,7 +27,8 @@ This section tracks the current development goals for the open-source community.
 
 ### 🧩 Phase 2: The Development UI Kit (Current Task)
 Before hooking up an AI Gateway, we must build a visual dashboard to physically *see* our invisible engines working:
-- [ ] **Config Keymapping**: Create configuration keymapping for the user.
+- [ ] **Config dan Keybinds Json**: Create database integration for the config and keybinds.
+- [ ] **Database Integration (SQLite)**: Create database integration for the user.
 - [x] **Basic Tooling & Window Generation**: Create the first Dumb Windows that can be dragged, expanded, and trigger size variations based on EventBus tickets.
 - [x] **Developer Dashboard Menu**: A toggleable visual dev menu.
 - [x] **The "RAM Viewer"**: A UI component that hooks into the Memory Bus to show real-time changes inside the Global Storage RAM Map.

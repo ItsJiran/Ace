@@ -11,8 +11,10 @@ pub fn setup_mac_overlay(window: &tauri::WebviewWindow) {
         let ns_window = window.ns_window().unwrap() as id;
 
         // 1. Biarkan window muncul di semua Spaces dan jangan sembunyikan Dock
-        let mut collection_behavior = NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces;
-        collection_behavior |= NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary;
+        let mut collection_behavior =
+            NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces;
+        collection_behavior |=
+            NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary;
         let _: () = msg_send![ns_window, setCollectionBehavior: collection_behavior];
 
         // 2. Set level ke Status Window (di atas aplikasi normal, di bawah/sejajar Dock)
@@ -30,6 +32,10 @@ fn set_ignore_cursor_events(window: tauri::Window, ignore: bool) -> Result<(), S
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_sql::Builder::new().build())
+        .plugin(tauri_plugin_fs::init())
+
+
         .invoke_handler(tauri::generate_handler![set_ignore_cursor_events])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();

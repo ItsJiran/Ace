@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "ACE Assistant",
+  "productName": "ACE",
   "version": "0.1.0",
   "identifier": "com.ace.assistant",
   "build": {
