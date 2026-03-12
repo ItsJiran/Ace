@@ -6,12 +6,15 @@ A local-first, overlay-based personal assistant powered by Electron and AI, desi
 **CRITICAL FOR AI ASSISTANTS:**
 Before writing code, proposing architectural changes, or executing commands, you **MUST** read the context files located in the `.ai/` directory. These files contain the core identity, tech stack, and goals of the project.
 
-Please read the **5 Architecture Pillars**:
-1. `.ai/01_project_overview.md` - Core idea, 5-layer architecture, TDD, and Terminology.
+Please read the **8 Architecture Pillars**:
+1. `.ai/01_project_overview.md` - Core idea, 5-layer architecture, and Terminology.
 2. `.ai/02_ui_and_registry.md` - Dual-Mode UI, Windows, and React Component routing.
-3. `.ai/03_event_and_process_engine.md` - Command EventBus, Process tracking, and Background scheduling.
+3. `.ai/03_event_lifecycle.md` - Interaction-to-Listener and the End-to-End unified flow.
 4. `.ai/04_storage_and_memory.md` - O(1) Data Sockets and "Ghost Town" mitigation.
-5. `.ai/05_ai_streaming_protocol.md` - The Async markdown stream buffer.
+5. `.ai/05_ai_streaming_protocol.md` - The Async markdown stream buffer (` ```event `).
+6. `.ai/06_ui_and_window_lifecycle.md` - External-to-UI reactive bridge and window spatial state.
+7. `.ai/09_app_bootup_lifecycle.md` - The 6-Phase sequential ACE bootup sequence.
+8. `.ai/10_pipeline_pattern.md` - The Pipeline Engine: Linear Execution with observability.
 
 ---
 
