@@ -54,6 +54,7 @@ Please read the **8 Architecture Pillars**:
 - [ ] **Base Dumb Components**: Build the UI primitives (e.g., `<CommandInput />`, `<ChatBubble />`, `<WindowFrame />`) using Shadcn & Tailwind.
 - [ ] **Widget Dragger & Window Manager**: Implement spatial logic (X/Y coordinates, Z-index) driven purely by `windowEngine` RAM state.
 - [ ] **The "Mock Brain" Test**: Create a dummy local executor that fakes an AI response to prove the *Pre-Allocation Protocol* (UI -> EventBus -> Process -> RAM -> UI) works flawlessly end-to-end.
+- [ ] **Settings Window**: Create a settings window for keybinds and configuration and tools list, and widget list.
 
 ### 🧠 Phase 5: The AI Gateway & Autonomous Tooling (The Brain)
 *Goal: Connect the local Client to the remote LLM and establish the autonomous ReAct loop.*
