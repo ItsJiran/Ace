@@ -41,10 +41,24 @@ Please read the **8 Architecture Pillars**:
 - [x] Basic "Dumb Window" generation & animation.
 - [x] **RAM Viewer**: Visual monitoring of the Memory Bus.
 - [ ] **Event Viewer**: Visual logging of tickets flying across the EventBus.
+- [ ] **Event Registry List**: Real-time status of running background tasks.
 - [ ] **Process Monitor**: Real-time status of running background tasks.
+- [ ] **Tools Registry List**: Real-time status of running background tasks.
+- [ ] **Pipeline Registry List**: Real-time status of running background tasks.
+- [ ] **Window Registry List**: Real-time status of running background tasks.
 
-### 🧠 Phase 4: AI Gateway & Tooling
-- [ ] AI Gateway Client (WebSocket/Stream) implementation.
-- [ ] ` ```event ` tag parser & sub-process dispatch.
-- [ ] Implement core tools (Obsidian, Shell, Google Calendar).
-- [ ] Build React Component Registry for dynamic tool rendering.
+### 🖥️ Phase 4: The Core UI Shell & Local Loop (Human-System Integration)
+*Goal: Build the user-facing transparent overlay, the core Shadcn components, and prove the UI-to-Engine CQRS loop works without an AI.*
+- [ ] **Tauri Transparent Layer**: Configure the borderless, click-through fullscreen window (Layer 1).
+- [ ] **React Hook Factory**: Implement `useAceMemory(uid)` and `useAceListener(event)` hooks for strict O(1) Component reactivity.
+- [ ] **Base Dumb Components**: Build the UI primitives (e.g., `<CommandInput />`, `<ChatBubble />`, `<WindowFrame />`) using Shadcn & Tailwind.
+- [ ] **Widget Dragger & Window Manager**: Implement spatial logic (X/Y coordinates, Z-index) driven purely by `windowEngine` RAM state.
+- [ ] **The "Mock Brain" Test**: Create a dummy local executor that fakes an AI response to prove the *Pre-Allocation Protocol* (UI -> EventBus -> Process -> RAM -> UI) works flawlessly end-to-end.
+
+### 🧠 Phase 5: The AI Gateway & Autonomous Tooling (The Brain)
+*Goal: Connect the local Client to the remote LLM and establish the autonomous ReAct loop.*
+- [ ] **AI Gateway Engine**: Implement TCP/WebSocket connection to the remote LLM (e.g., OpenClaw).
+- [ ] **The Stream Bypass**: Implement direct RAM writing for high-frequency token streaming (bypassing the Event Bus).
+- [ ] **Tool/Event Parser**: Build the logic to intercept tool-call JSONs from the LLM stream and emit them to the `eventEngine`.
+- [ ] **Native OS Tools**: Implement the actual Rust/TypeScript logic for core tools (Obsidian Reader, Shell Executor, File System).
+- [ ] **Context Builder Pipeline**: Implement the `contextPromptEngine` to gather chat history and active screen context before sending prompts.
