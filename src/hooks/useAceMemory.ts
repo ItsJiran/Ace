@@ -8,7 +8,7 @@ import { Storage } from '../services/storageEngine';
  * 
  * @param key The specific `memory_uid` or classification string to listen to.
  */
-export function useStorage(key: string) {
+export function useAceMemory<T = any>(key: string): T | undefined {
     // 1. Define how React subscribes to the Storage Engine's socket
     const subscribe = useCallback(
         (onStoreChange: () => void) => {
@@ -22,10 +22,10 @@ export function useStorage(key: string) {
     const getSnapshot = useCallback(() => {
         // If it returns undefined for a memory, try to find it as a classification tag
         const memoryPayload = Storage.readMemory(key);
-        if (memoryPayload !== undefined) return memoryPayload;
+        if (memoryPayload !== undefined) return memoryPayload as T;
 
         const classificationPayload = Storage.readClassification(key);
-        return classificationPayload;
+        return classificationPayload as T;
     }, [key]);
 
     // 3. React 18 completely handles the pinpoint O(1) rendering for us

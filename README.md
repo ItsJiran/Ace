@@ -29,6 +29,7 @@ Please read the **8 Architecture Pillars**:
 - [x] Document Unified Event Lifecycle & Bootup sequence (8 Pillars).
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor (CURRENT)
+- [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format.
 - [ ] **Formalize Schemas**: Interaction, Listener, Window & Widget config schemas.
 - [ ] **Align Event Engine**: Enforce "Workers Never Listen" (Subordination) rule.
 - [ ] **Align Process Engine**: Integrate PipelineEngine for tool execution steps.
@@ -53,6 +54,8 @@ Goal: Prove the full CQRS loop (UI -> EventBus -> Process -> RAM -> UI) works wi
 🧪 The "Mock Brain" Integration Tests
 
 - [ ] **FPS Counter**: Create a FPS counter that updates every 50ms.
+- [ ] **RAM Counter**: Create a RAM counter that updates every 50ms.
+- [ ] **Hover Debugging Icon Located Ontop Header**: A Window that when hovering other window it will show the window uid and z-index and other data.
 - [x] **The "Mock Brain" Test**: Create a dummy local executor that fakes an AI response to prove the Pre-Allocation Protocol works flawlessly end-to-end.
 - [x] **The Event Tester Button**: Create a developer panel with buttons to manually emit Interaction tickets to the eventEngine.
 - [ ] **Simulated Token Streamer**: Build a mock worker that writes random words to a specific RAM key at 50ms intervals. This proves the High-Frequency Bypass works and the UI doesn't stutter.

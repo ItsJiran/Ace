@@ -1,12 +1,12 @@
 import { WindowEngine } from '#/services/windowEngine';
 import { Storage } from '#/services/storageEngine';
 import { Layers, HardDrive, Share2, PaintBucket, MoveRight, Power } from 'lucide-react';
-import { useStorage } from '#/hooks/useStorage';
+import { useAceMemory } from '#/hooks/useAceMemory';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 
 export function DevMenu() {
-    const overlayState = useStorage('system:overlay_state') as GlobalOverlayState | undefined;
+    const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
 
     // Fallbacks just in case the engine isn't ready
     const isAmbient = overlayState?.mode === 'ambient';

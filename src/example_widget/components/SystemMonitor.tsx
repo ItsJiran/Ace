@@ -1,30 +1,25 @@
-// This represents the Active UI Component (The Interactor). 
-// One Dumb Window can hold multiple components like this.
 import React from 'react';
-import { useStorageEngine } from '../../services/storageEngine';
-import { useEventEngine } from '../../services/eventEngine';
-import type { Listener } from '../../schemas/events';
+import { useAceMemory } from '#/hooks/useAceMemory';
+import { EventBus } from '#/services/eventEngine';
 
 export const SystemMonitorWidget: React.FC = () => {
     // 1. Subscribe to Global RAM (Where the Headless Process dumped the data)
-    const { ramStore } = useStorageEngine();
-
-    // 2. The Interaction Emitter (To tell the Chef what to do)
-    const { dispatch } = useEventEngine();
+    const metricsPayload = useAceMemory<any>('sys_metric_buffer');
 
     // Pull the raw data out of RAM using a known key, or safely fall back
-    const metricsPayload = ramStore['sys_metric_buffer']?.raw_json;
-    const metrics = metricsPayload ? JSON.parse(metricsPayload) : null;
+    const metrics = metricsPayload?.raw_json ? JSON.parse(metricsPayload.raw_json) : null;
 
     const requestRefresh = () => {
         // Emit an order ticket up to the Event Engine.
         // The Component does NOT execute shell commands itself!
-        dispatch({
+        EventBus.emit({
             event_type: 'interaction',
             process_uid: 'global', // We don't care who executes it
             action: 'execute_tool',
-            sub_action: 'get_os_process_list',
-            payload: {}
+            payload: {
+                tool_name: 'get_os_process_list',
+                parameters: {}
+            }
         });
     };
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BaseWindow } from './components/layout/BaseWindow';
-import { useStorage } from '#/hooks/useStorage';
+import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState, WindowConfig } from '#/schemas/window';
 import { Storage } from '#/services/storageEngine';
 
@@ -81,9 +81,9 @@ function App() {
   }, []);
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
-  const overlayState = useStorage('system:overlay_state') as GlobalOverlayState | undefined;
-  const windows = useStorage('system:windows') as Record<string, WindowConfig> | undefined;
-  const debugPos = useStorage('debug:box_pos') as { x: number, y: number } | undefined;
+  const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
+  const windows = useAceMemory<Record<string, WindowConfig>>('system:windows');
+  const debugPos = useAceMemory<{ x: number, y: number }>('debug:box_pos');
 
   if (!overlayState || !windows) return null;
 

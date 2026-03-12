@@ -32,7 +32,7 @@ export function BaseWindow({ config }: { config: WindowConfig }) {
             const dy = moveEvent.clientY - startY;
 
             // Send coordinates straight to Global RAM.
-            // App.tsx's useStorage('system:windows') will natively trigger a fast re-render.
+            // App.tsx's useAceMemory('system:windows') will natively trigger a fast re-render.
             WindowEngine.updateWindowBounds(
                 config.window_uid,
                 initialX + dx,
