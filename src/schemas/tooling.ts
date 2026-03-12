@@ -1,34 +1,59 @@
 import { z } from 'zod';
+import { invoke } from '@tauri-apps/api/core';
 
 // ----------------------------------------------------------------------
-// Tool Execution Schemas
-// These define the structure of requests the Gateway makes to the Client
-// to execute OS-level actions (The "Backend" of the Client).
+// 1. THE BASE TYPES (Safe for UI and Backend)
 // ----------------------------------------------------------------------
 
-export const ToolCallBaseSchema = z.object({
-    /** The unique name of the registered tool */
-    tool_name: z.string(),
-    /** The parameters required to execute the tool */
-    parameters: z.record(z.string(), z.any()),
+/**
+ * Unique identifier for a process instance.
+ */
+export type ProcessId = string;
+
+/**
+ * Core handler signature for all tools.
+ * Tools receive their validated parameters and the current process ID.
+ */
+export type ToolHandler<T> = (args: T, processId: ProcessId) => Promise<any>;
+
+/**
+ * Unified Tool Definition Bundle.
+ * Combines metadata, schema validation, and execution logic.
+ */
+export interface ToolDefinition<T extends z.ZodObject<any>> {
+    name: string;
+    description: string;
+    schema: T;
+    handler: ToolHandler<z.infer<T>>;
+}
+
+// ----------------------------------------------------------------------
+// 2. EXAMPLE TOOLS (Obsidian & Shell)
+// ----------------------------------------------------------------------
+
+// --- Shell Command Tool ---
+
+export const ShellCommandParameters = z.object({
+    command: z.string().describe('The strict bash command to run'),
+    cwd: z.string().optional().describe('The working directory to run inside'),
+    timeout_ms: z.number().default(5000),
 });
 
-export type ToolCallBase = z.infer<typeof ToolCallBaseSchema>;
+export type ShellArgs = z.infer<typeof ShellCommandParameters>;
 
-// Example: A strict shell command tool definition
-export const ShellCommandToolSchema = ToolCallBaseSchema.extend({
-    tool_name: z.literal('execute_shell_command'),
-    parameters: z.object({
-        command: z.string().describe('The strict bash command to run'),
-        cwd: z.string().optional().describe('The working directory to run inside'),
-        timeout_ms: z.number().default(5000),
-    }),
-});
+const executeShellCommand = async (args: ShellArgs, processId: string) => {
+    console.log(`[Process ${processId}] Executing shell: ${args.command}`);
+    return await invoke('execute_shell_command', {
+        command: args.command,
+        cwd: args.cwd,
+        timeout: args.timeout_ms
+    });
+};
 
-// Example: Obsidian Native Integration tool definition
-export const ObsidianReadToolSchema = ToolCallBaseSchema.extend({
-    tool_name: z.literal('read_obsidian_note'),
-    parameters: z.object({
-        relative_path: z.string().describe('Path inside the vault, e.g., "Daily/2026-03-10.md"'),
-    }),
-});
+export const ShellCommandTool: ToolDefinition<typeof ShellCommandParameters> = {
+    name: 'execute_shell_command',
+    description: 'Executes a strict shell command on the host system.',
+    schema: ShellCommandParameters,
+    handler: executeShellCommand,
+};
+

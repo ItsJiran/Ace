@@ -32,17 +32,22 @@ class EventEngineSingleton {
     }
 
     /**
-     * A React Component (The Waiter) "emits" an interaction.
-     * This fires fire-and-forget async promises so the UI thread never blocks.
+     * A React Component (The Waiter) or Gateway "emits" an interaction.
+     * This follows the Unified Lifecycle: Ingestion -> Validation -> Allocation.
      */
     emit(interaction: Interaction) {
-        // 1. Try to find handlers for the highly specific 'action:sub_action' route
-        const specificRouteKey = `${interaction.action}:${interaction.sub_action}`;
+        // --- PHASE 2: INGESTION & VALIDATION ---
+
+        // Handle specialized tool execution route
+        if (interaction.action === 'execute_tool') {
+            this.handleToolExecution(interaction);
+            return;
+        }
+
+        // Standard routing logic for other actions
+        const specificRouteKey = `${interaction.action}`;
         const specificHandlers = this.routes.get(specificRouteKey) || [];
-
-        // 2. Try to find handlers for the broad 'action' route
         const broadHandlers = this.routes.get(interaction.action) || [];
-
         const allHandlers = [...specificHandlers, ...broadHandlers];
 
         if (allHandlers.length === 0) {
@@ -54,17 +59,79 @@ class EventEngineSingleton {
         allHandlers.forEach(handler => {
             try {
                 const result = handler(interaction);
-                // Gracefully catch rejections if it's a Promise (or ignore if void)
                 Promise.resolve(result).catch((err: any) =>
                     console.error(`[EventBus] Process handler crashed on route ${interaction.action}:`, err)
                 );
             } catch (err) {
-                // Catch any synchronous errors
                 console.error(`[EventBus] Sync Process handler crashed on route ${interaction.action}:`, err);
             }
         });
     }
+
+    /**
+     * Helper to handle the 'execute_tool' action specifically.
+     * Integrates with ToolRegistry and ProcessEngine.
+     */
+    private async handleToolExecution(interaction: Interaction) {
+        const { ToolRegistry } = await import('./toolRegistry');
+        const { ProcessEngine } = await import('./processEngine');
+        const { DBEngine } = await import('./dbEngine');
+
+        const toolName = interaction.payload.tool_name as string;
+        const parameters = interaction.payload.parameters;
+
+        try {
+            // 1. Tool Registry Lookup & Sanity Check (Validation)
+            const validatedParams = ToolRegistry.validate(toolName, parameters);
+
+            // 2. Allocation & State Broadcasting
+            const record = ProcessEngine.spawnProcess(
+                'tool_executor',
+                { tool_name: toolName, parameters: validatedParams },
+                interaction.process_uid // Parent PID if exists
+            );
+
+            // 3. Execution & Orchestration (Hand off to Process Engine)
+            // This is fire-and-forget from the EventBus perspective
+            ProcessEngine.executeTool(toolName, validatedParams, record.process_uid)
+                .then(result => {
+                    // Success Audit
+                    DBEngine.logEventAudit({
+                        interaction_uid: interaction.process_uid,
+                        event_type: 'interaction',
+                        action: 'execute_tool',
+                        sub_action: toolName,
+                        status: 'success',
+                        payload: result
+                    });
+                })
+                .catch(err => {
+                    // Error Audit
+                    DBEngine.logEventAudit({
+                        interaction_uid: interaction.process_uid,
+                        event_type: 'interaction',
+                        action: 'execute_tool',
+                        sub_action: toolName,
+                        status: 'error',
+                        error: err.message
+                    });
+                });
+
+        } catch (error: any) {
+            console.error(`[EventBus] Tool Ingestion Failed: ${error.message}`);
+            // Audit the failure
+            DBEngine.logEventAudit({
+                interaction_uid: interaction.process_uid,
+                event_type: 'interaction',
+                action: 'execute_tool',
+                sub_action: toolName,
+                status: 'error',
+                error: error.message
+            });
+        }
+    }
 }
+
 
 // Export as a pure Singleton
 export const EventBus = new EventEngineSingleton();

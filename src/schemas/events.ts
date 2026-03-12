@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { string, z } from 'zod';
 
 // ============================================================================
 // CORE EVENT SYSTEM
@@ -11,18 +11,16 @@ import { z } from 'zod';
  * Note: Widgets can extend and provide their own custom strings in the future,
  * but these form the core routing backbone.
  */
-export const StandardSubActions = [
+export const Actions = [
     'open_window',
-    'open_process',
-    'open_tab',
+    'close_window',
     'open_widget',
+    'close_widget',
     'send_window',
     'send_process',
     'send_gateway',
     'send_terminal',
-    'close_window',
-    'close_process',
-    'close_tab',
+    'execute_tool',
     'run_shell',
     'read_file'
 ] as const;
@@ -31,76 +29,39 @@ export const StandardSubActions = [
 // 1. INTERACTION SCHEMA (Initiating Actions)
 // How an entity (UI Widget, Gateway, OS) initiates an action or routes data.
 // ----------------------------------------------------------------------
-
 export const InteractionSchema = z.object({
     event_type: z.literal('interaction'),
-    /** The globally unique instance ID of the window (Waiter) originating the event */
     window_uid: z.string().optional(),
-    /** The globally unique instance ID of the process (Chef) originating the event */
     process_uid: z.string().optional(),
-    /** The globally unique instance ID of the specific widget within the window/process */
     widget_uid: z.string().optional(),
+    component_uid: z.string().optional(),
 
-    /** The core advanced routing terminology */
-    action: z.enum(['lookup', 'open', 'send', 'close', 'execute_tool']),
-    /** 
-     * Explicit sub-routing detailing the exact mechanism.
-     * Can be one of the StandardSubActions or a custom string defined by a widget.
-     */
-    sub_action: z.union([z.enum(StandardSubActions), z.string()]).optional(),
-
-    /** The arbitrary payload data from the interaction or routing context */
+    // Validasi bahwa action adalah salah satu dari const Actions, ATAU string custom
+    action: z.union([z.enum(Actions), z.string()]),
     payload: z.record(z.string(), z.any()),
 });
 
 export type Interaction = z.infer<typeof InteractionSchema>;
 
 // ----------------------------------------------------------------------
-// 2. EVENT REACTION SCHEMA
-// Defines what should be done when an event is listened to.
+// 2. LISTENER INTERFACE (Perbaikan)
 // ----------------------------------------------------------------------
 
-export const EventReactionSchema = z.object({
-    /** The specific behavior to execute when the event is received */
-    reaction_type: z.enum([
-        'forward_to_widget',   // Pass it directly to the React component's props/state
-        'store_in_ram',        // Automatically dump the payload into Global RAM
-        'trigger_tool',        // Automatically execute a local tool/script
-        'emit_interaction',    // Immediately bounce back another interaction event
-        'custom'               // Allow the widget's internal JS to decide
-    ]),
-    /** Optional specific identifier if the reaction needs further instructions */
-    reaction_identifier: z.string().optional(),
-});
+// Tambahkan dukungan untuk void jika reaksinya sinkron (tidak butuh await)
+export type ListenerHandler<T> = (args: T) => Promise<any> | void;
 
-export type EventReaction = z.infer<typeof EventReactionSchema>;
+// Ubah nama menjadi 'Listener' langsung (bukan ListenerSchema) karena ini murni TS Type
+export interface Listener<T extends z.ZodType<any, any, any>> {
+    event_type: 'listener';
 
-// ----------------------------------------------------------------------
-// 3. LISTENER SCHEMA (Receiving Actions)
-// How an entity reacts after receiving an external payload from another 
-// service, gateway, or window.
-// ----------------------------------------------------------------------
+    // Event apa yang didengarkan?
+    listened_event: typeof Actions[number] | string;
 
-export const ListenerSchema = z.object({
-    event_type: z.literal('listener'),
+    // (Opsional) Simpan Zod schema di sini agar EventBus bisa memvalidasi 
+    // payload sebelum melemparkannya ke fungsi reaction
+    validation_schema?: T;
 
-    /** The globally unique instance ID of the window (Waiter) receiving the payload. */
-    target_window_uid: z.string().optional(),
-    /** The globally unique instance ID of the process (Chef) receiving the payload. */
-    target_process_uid: z.string().optional(),
-    target_widget_uid: z.string().optional(),
+    // Fungsi yang akan dieksekusi saat event cocok
+    reaction: ListenerHandler<z.infer<T>>;
+}
 
-    /** The specific event name or classification being listened to */
-    listened_event: z.string(),
-
-    /** The origin UID of the incoming payload (e.g. 'gateway', or a specific window/process UID) */
-    source_uid: z.string(),
-
-    /** What to do now that this event has been received */
-    reaction: EventReactionSchema,
-
-    /** The external payload being received */
-    payload: z.record(z.string(), z.any()),
-});
-
-export type Listener = z.infer<typeof ListenerSchema>;
