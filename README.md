@@ -20,6 +20,17 @@ Please read the **8 Architecture Pillars**:
 
 ## 🚀 Development Roadmap
 
+### ✅ Completed Recently (March 2026)
+- [x] Boot pipeline refactor to ordered 3-phase startup (Core Runtime -> Config/Global State -> Window Layer).
+- [x] Introduce `globalStateManager` to track cursor/focus/runtime state, active config, and active/running keybinds.
+- [x] Add config-driven mouse focus behavior (`window.mouse_focus_enabled`) and wire it into window interaction mode.
+- [x] Implement `keybindEngine` with EventBus routing and runtime state synchronization.
+- [x] Upgrade keybind handling to OS-level global listening via `tauri-plugin-global-shortcut`.
+- [x] Harden keybind matching and migration (normalize malformed bindings, add fallback shortcuts, dedupe triggers).
+- [x] Fix Tauri capability permissions for window operations (`set-size`, `set-position`, `show`, `close`, `always-on-top`).
+- [x] Fix Tauri FS capability scope for AppConfig read/write and add graceful persistence failure handling.
+- [x] Sync architecture markdown docs (`.ai/*`, `ARCHITECTURE.md`, `README.md`) with latest manager/engine structure.
+
 ### 🏗️ Phase 1: Architecture & Foundations (CONSOLIDATED)
 - [x] Define 5-Layer Architecture & Core Pillars.
 - [x] Implement Global RAM (Storage Engine) with O(1) reactivity.
