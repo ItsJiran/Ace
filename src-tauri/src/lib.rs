@@ -29,6 +29,30 @@ fn set_ignore_cursor_events(window: tauri::Window, ignore: bool) -> Result<(), S
         .map_err(|e| e.to_string())
 }
 
+/// Returns physical process memory (RSS) and virtual memory in bytes.
+/// On Linux reads /proc/self/status. On other platforms returns 0.
+#[tauri::command]
+fn get_process_memory() -> (u64, u64) {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(status) = std::fs::read_to_string("/proc/self/status") else {
+            return (0, 0);
+        };
+        let mut rss_kb: u64 = 0;
+        let mut vm_size_kb: u64 = 0;
+        for line in status.lines() {
+            if line.starts_with("VmRSS:") {
+                rss_kb = line.split_whitespace().nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+            } else if line.starts_with("VmSize:") {
+                vm_size_kb = line.split_whitespace().nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+            }
+        }
+        return (rss_kb * 1024, vm_size_kb * 1024);
+    }
+    #[cfg(not(target_os = "linux"))]
+    (0, 0)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -37,7 +61,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
 
 
-        .invoke_handler(tauri::generate_handler![set_ignore_cursor_events])
+        .invoke_handler(tauri::generate_handler![set_ignore_cursor_events, get_process_memory])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
 

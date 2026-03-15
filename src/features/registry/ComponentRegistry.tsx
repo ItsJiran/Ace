@@ -9,6 +9,9 @@ import { FPSWidget } from '../dev/FPSWidget';
 import { StressTestMenu } from '../dev/StressTestMenu';
 import { StressTestUIAnimationFPS } from '../dev/StressTestUIAnimationFPS';
 import { StressTestPromptResponseLoad } from '../dev/StressTestPromptResponseLoad';
+import { StressTestChatMessageFlow } from '../dev/StressTestChatMessageFlow';
+import { StressTestWindowMotion } from '../dev/StressTestWindowMotion';
+import { StressTestWindowSwarm } from '../dev/StressTestWindowSwarm';
 import { RAMUsageAnalyzer } from '../dev/RAMUsageAnalyzer';
 import { DevMenu } from '#/components/dev/DevMenu';
 import { LoadingWidget } from '#/components/widgets/LoadingWidget';
@@ -27,6 +30,9 @@ const REGISTRY: Record<string, React.FC<any>> = {
     'stress_test_menu': StressTestMenu,
     'stress_test_ui_animation_fps': StressTestUIAnimationFPS,
     'stress_test_prompt_response_load': StressTestPromptResponseLoad,
+    'stress_test_chat_message_flow': StressTestChatMessageFlow,
+    'stress_test_window_motion': StressTestWindowMotion,
+    'stress_test_window_swarm': StressTestWindowSwarm,
     'dev_menu': DevMenu,
     'loading_widget': LoadingWidget,
     'system_console': SystemConsole,
