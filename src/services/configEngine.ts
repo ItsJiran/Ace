@@ -37,8 +37,14 @@ class ConfigEngineSingleton {
             const keybindItems = this.normalizeKeybindItems(keybindsData?.items);
             this.syncKeybindsToRAM(keybindItems);
 
-            // If persisted file is empty/invalid, rewrite with safe defaults.
-            if (!Array.isArray(keybindsData?.items) || keybindsData.items.length === 0) {
+            const rawItems = Array.isArray(keybindsData?.items) ? keybindsData.items : [];
+
+            // Rewrite when persisted file is empty/invalid OR requires migration.
+            if (
+                !Array.isArray(keybindsData?.items) ||
+                keybindsData.items.length === 0 ||
+                this.needsKeybindRewrite(rawItems, keybindItems)
+            ) {
                 await FSEngine.saveFile(this.keybinds_file, { items: keybindItems });
             }
 
@@ -84,7 +90,55 @@ class ConfigEngineSingleton {
             return bind;
         });
 
-        return migrated.length > 0 ? migrated : [...BASE_KEYBINDS];
+        const baseByUid = new Map(BASE_KEYBINDS.map((bind) => [bind.keybind_uid, bind] as const));
+        const merged: Keybind[] = migrated.map((bind) => {
+            const base = baseByUid.get(bind.keybind_uid);
+            if (!base) return bind;
+
+            const shortcut = String(bind.shortcut ?? '').trim();
+            const isMalformed = shortcut.length < 3 || !shortcut.includes('+');
+            if (isMalformed) {
+                return {
+                    ...bind,
+                    shortcut: base.shortcut,
+                };
+            }
+
+            return bind;
+        });
+
+        for (const [uid, base] of baseByUid) {
+            const exists = merged.some((bind) => bind.keybind_uid === uid);
+            if (!exists) {
+                merged.push({ ...base });
+            }
+        }
+
+        return merged.length > 0 ? merged : [...BASE_KEYBINDS];
+    }
+
+    private needsKeybindRewrite(rawItems: any[], normalizedItems: Keybind[]) {
+        if (rawItems.length !== normalizedItems.length) {
+            return true;
+        }
+
+        const rawByUid = new Map<string, any>();
+        for (const item of rawItems) {
+            if (item && typeof item.keybind_uid === 'string') {
+                rawByUid.set(item.keybind_uid, item);
+            }
+        }
+
+        for (const normalized of normalizedItems) {
+            const raw = rawByUid.get(normalized.keybind_uid);
+            if (!raw) return true;
+
+            if ((raw.shortcut ?? '') !== normalized.shortcut) return true;
+            if (Boolean(raw.enabled) !== Boolean(normalized.enabled)) return true;
+            if ((raw.intent?.sub_action ?? '') !== (normalized.intent?.sub_action ?? '')) return true;
+        }
+
+        return false;
     }
 
     private syncConfigToRAM(items: ConfigItem[]) {

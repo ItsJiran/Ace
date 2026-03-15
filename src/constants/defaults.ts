@@ -57,7 +57,7 @@ export const BASE_KEYBINDS: Keybind[] = [
     },
     {
         keybind_uid: 'window.toggle_mouse_focus',
-        shortcut: 'CommandOrControl+Alt+Shift+M',
+        shortcut: 'CommandOrControl+Alt+M',
         description: 'Toggle mouse focus on/off for overlay windows.',
         enabled: true,
         intent: {
@@ -82,9 +82,37 @@ export const BASE_KEYBINDS: Keybind[] = [
         }
     },
     {
+        keybind_uid: 'window.enable_mouse_focus_fallback',
+        shortcut: 'CommandOrControl+Alt+2',
+        description: 'Fallback: Enable mouse focus (for environments where Shift-combos are reserved).',
+        enabled: true,
+        intent: {
+            event_type: 'interaction',
+            action: 'lookup',
+            sub_action: 'set_window_mouse_focus',
+            payload: {
+                enabled: true
+            }
+        }
+    },
+    {
         keybind_uid: 'window.disable_mouse_focus',
         shortcut: 'CommandOrControl+Alt+Shift+H',
         description: 'Disable mouse focus so overlay windows stay transparent and clicks pass through.',
+        enabled: true,
+        intent: {
+            event_type: 'interaction',
+            action: 'lookup',
+            sub_action: 'set_window_mouse_focus',
+            payload: {
+                enabled: false
+            }
+        }
+    },
+    {
+        keybind_uid: 'window.disable_mouse_focus_fallback',
+        shortcut: 'CommandOrControl+Alt+1',
+        description: 'Fallback: Disable mouse focus (for environments where Shift-combos are reserved).',
         enabled: true,
         intent: {
             event_type: 'interaction',

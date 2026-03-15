@@ -105,17 +105,22 @@ class KeybindEngineSingleton {
 
             for (const shortcut of shortcuts) {
                 try {
-                    await register(shortcut, (event) => {
+                    const pluginShortcut = this.toPluginShortcut(shortcut);
+                    const canonicalRegistered = this.canonicalizeShortcut(pluginShortcut);
+
+                    await register(pluginShortcut, (event) => {
                         if (event.state !== 'Pressed') return;
 
-                        const matched = this.activeKeybinds.find(
-                            (bind) => this.normalizeShortcut(bind.shortcut) === this.normalizeShortcut(event.shortcut)
-                        );
+                        // Do not trust `event.shortcut` textual format across platforms.
+                        // We already know which shortcut this callback belongs to.
+                        const matched = this.activeKeybinds.find((bind) => {
+                            return this.canonicalizeShortcut(bind.shortcut) === canonicalRegistered;
+                        });
 
                         if (!matched) return;
                         this.triggerKeybind(matched, 'global');
                     });
-                    registered.push(shortcut);
+                    registered.push(pluginShortcut);
                 } catch (error) {
                     console.warn(`[KeybindEngine] Global shortcut rejected by OS: ${shortcut}`, error);
                 }
@@ -162,8 +167,33 @@ class KeybindEngineSingleton {
         return Boolean(runtimeWindow.__TAURI_INTERNALS__ || runtimeWindow.__TAURI__);
     }
 
-    private normalizeShortcut(shortcut: string) {
-        return shortcut.replace(/\s+/g, '').toLowerCase();
+    private toPluginShortcut(shortcut: string) {
+        // Keep a stable token for plugin registration.
+        return shortcut
+            .replace(/cmdorcontrol/gi, 'CommandOrControl')
+            .replace(/command\s*\+\s*or\s*\+\s*control/gi, 'CommandOrControl');
+    }
+
+    private canonicalizeShortcut(shortcut: string) {
+        const tokens = shortcut
+            .split('+')
+            .map((token) => token.trim().toLowerCase())
+            .filter(Boolean)
+            .map((token) => {
+                if (token === 'cmdorcontrol' || token === 'commandorcontrol' || token === 'ctrl' || token === 'control' || token === 'meta' || token === 'command') {
+                    return 'mod';
+                }
+                if (token === 'option') return 'alt';
+                if (token === 'escape') return 'esc';
+                if (token.startsWith('key') && token.length === 4) return token.slice(3);
+                if (token.startsWith('digit') && token.length === 6) return token.slice(5);
+                return token;
+            });
+
+        const mods = ['mod', 'alt', 'shift'].filter((mod) => tokens.includes(mod));
+        const key = tokens.find((token) => token !== 'mod' && token !== 'alt' && token !== 'shift') ?? '';
+
+        return [...mods, key].join('+');
     }
 
     private registerEventRoutes() {
@@ -207,23 +237,70 @@ class KeybindEngineSingleton {
 
     private matchesShortcut(event: KeyboardEvent, shortcut: string) {
         const tokens = shortcut.split('+').map((token) => token.trim().toLowerCase());
-        const keyToken = tokens[tokens.length - 1];
+        const keyToken = this.normalizeShortcutKeyToken(tokens[tokens.length - 1]);
 
         const wantsCtrl = tokens.includes('commandorcontrol') || tokens.includes('control') || tokens.includes('ctrl');
         const wantsAlt = tokens.includes('alt') || tokens.includes('option');
         const wantsShift = tokens.includes('shift');
         const wantsMeta = tokens.includes('command') || tokens.includes('meta');
 
-        const normalizedEventKey = event.key.length === 1 ? event.key.toLowerCase() : event.key.toLowerCase();
-        const normalizedShortcutKey = keyToken === 'space' ? ' ' : keyToken;
+        const eventKeyCandidates = this.getEventKeyCandidates(event);
 
         return Boolean(
             event.ctrlKey === wantsCtrl &&
             event.altKey === wantsAlt &&
             event.shiftKey === wantsShift &&
             event.metaKey === wantsMeta &&
-            normalizedEventKey === normalizedShortcutKey
+            eventKeyCandidates.has(keyToken)
         );
+    }
+
+    private normalizeShortcutKeyToken(token: string) {
+        const raw = String(token || '').trim().toLowerCase();
+        if (raw === 'space') return 'space';
+        if (raw === 'esc' || raw === 'escape') return 'esc';
+        if (raw.startsWith('key') && raw.length === 4) return raw.slice(3);
+        if (raw.startsWith('digit') && raw.length === 6) return raw.slice(5);
+        return raw;
+    }
+
+    private getEventKeyCandidates(event: KeyboardEvent) {
+        const candidates = new Set<string>();
+
+        const key = String(event.key || '').toLowerCase();
+        const code = String(event.code || '').toLowerCase();
+
+        if (key) {
+            if (key === ' ') {
+                candidates.add('space');
+            } else if (key === 'escape') {
+                candidates.add('esc');
+            } else {
+                candidates.add(key);
+            }
+        }
+
+        if (code.startsWith('key') && code.length === 4) {
+            candidates.add(code.slice(3));
+        }
+        if (code.startsWith('digit') && code.length === 6) {
+            candidates.add(code.slice(5));
+        }
+        if (code.startsWith('numpad')) {
+            const tail = code.slice('numpad'.length);
+            if (tail) {
+                candidates.add(tail);
+                candidates.add(`numpad${tail}`);
+            }
+        }
+        if (code === 'space') {
+            candidates.add('space');
+        }
+        if (code === 'escape') {
+            candidates.add('esc');
+        }
+
+        return candidates;
     }
 }
 
