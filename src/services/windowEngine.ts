@@ -1,7 +1,10 @@
 import { Storage } from './storageEngine';
 import { EventBus } from './eventEngine';
+import { GlobalStateManager } from './globalStateManager';
 import { invoke } from '@tauri-apps/api/core';
+import { cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import type { WindowConfig, GlobalOverlayState } from '#/schemas/window';
+import type { GlobalState } from '#/schemas/globalState';
 
 /**
  * The WindowEngine is responsible for managing the logical boundaries, focus, and state
@@ -11,6 +14,13 @@ import type { WindowConfig, GlobalOverlayState } from '#/schemas/window';
  */
 class WindowEngineSingleton {
     private highest_z_index = 100;
+    private cursorBridgeIntervalId?: number;
+    private alwaysOnTopIntervalId?: number;
+
+    private getMouseFocusEnabled() {
+        const globalState = Storage.readMemory('system:global_state') as GlobalState | undefined;
+        return globalState?.focus.mouse_focus_enabled ?? true;
+    }
 
     constructor() {
         // 1. Initialize the root Overlay State into accessible Global RAM
@@ -54,6 +64,87 @@ class WindowEngineSingleton {
                 this.closeWindow(interaction.window_uid);
             }
         });
+
+        this.startCursorBridge();
+        this.startAlwaysOnTopBridge();
+    }
+
+    private startAlwaysOnTopBridge() {
+        if (this.alwaysOnTopIntervalId) return;
+
+        const appWindow = getCurrentWindow();
+        appWindow.setAlwaysOnTop(true).catch(() => {});
+
+        appWindow.onFocusChanged(({ payload: focused }) => {
+            if (!focused) {
+                appWindow.setAlwaysOnTop(true).catch(() => {});
+            }
+        }).catch(() => {});
+
+        // Some Linux window managers may still reshuffle z-order; re-assert periodically.
+        this.alwaysOnTopIntervalId = window.setInterval(() => {
+            appWindow.setAlwaysOnTop(true).catch(() => {});
+        }, 2000);
+    }
+
+    private startCursorBridge() {
+        if (this.cursorBridgeIntervalId) return;
+
+        const appWindow = getCurrentWindow();
+
+        this.cursorBridgeIntervalId = window.setInterval(async () => {
+            const state = GlobalStateManager.readState();
+
+            // If mouse-focus behavior is disabled, always enforce ambient pass-through.
+            if (!state.focus.mouse_focus_enabled) {
+                const overlayState = Storage.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                if (overlayState?.mode !== 'ambient') {
+                    this.setOverlayMode('ambient');
+                }
+                return;
+            }
+
+            const windows = (Storage.readMemory('system:windows') as Record<string, WindowConfig> | undefined) || {};
+            const windowList = Object.values(windows).filter((win) => !win.is_minimized);
+
+            if (windowList.length === 0) {
+                return;
+            }
+
+            try {
+                const cursor = await cursorPosition();
+                const innerPos = await appWindow.innerPosition();
+                const scale = await appWindow.scaleFactor();
+
+                // Convert global physical cursor to the overlay's logical coordinate space.
+                const logicalCursorX = (cursor.x - innerPos.x) / scale;
+                const logicalCursorY = (cursor.y - innerPos.y) / scale;
+
+                const isCursorInsideAnyWindow = windowList.some((win) => {
+                    return logicalCursorX >= win.x &&
+                        logicalCursorX <= win.x + win.width &&
+                        logicalCursorY >= win.y &&
+                        logicalCursorY <= win.y + win.height;
+                });
+
+                const overlayState = Storage.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                const currentMode = overlayState?.mode ?? 'ambient';
+
+                // Re-enable interaction when cursor enters any overlay window bounds.
+                if (isCursorInsideAnyWindow && currentMode !== 'interactive') {
+                    this.setOverlayMode('interactive');
+                    return;
+                }
+
+                // Release back to pass-through when cursor leaves windows and user is not dragging.
+                const isDragging = state.cursor.is_pointer_down;
+                if (!isCursorInsideAnyWindow && !isDragging && currentMode !== 'ambient') {
+                    this.setOverlayMode('ambient');
+                }
+            } catch {
+                // Ignore cursor polling failures silently (e.g., unsupported platform edge case).
+            }
+        }, 24);
     }
 
     /**
@@ -62,11 +153,12 @@ class WindowEngineSingleton {
      * Interactive: Catching pointer events (e.g. Chat box clicked).
      */
     setOverlayMode(mode: 'ambient' | 'interactive') {
-        Storage.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: 'system:overlay_state',
-            payload: { mode }
-        });
+        const overlayState = Storage.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+        if (overlayState?.mode === mode) {
+            return;
+        }
+
+        GlobalStateManager.setOverlayMode(mode);
 
         // Send IPC ping to Tauri backend to physically toggle click-through
         invoke('set_ignore_cursor_events', { ignore: mode === 'ambient' }).catch(console.error);
@@ -84,11 +176,7 @@ class WindowEngineSingleton {
     }
 
     setMousePosition(x: number, y: number) {
-        Storage.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: 'system:overlay_state',
-            payload: { mouse_x: x, mouse_y: y }
-        });
+        GlobalStateManager.setCursorPosition(x, y);
     }
 
     /**
@@ -130,16 +218,23 @@ class WindowEngineSingleton {
     closeWindow(window_uid: string) {
         const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
         if (currentWindows[window_uid]) {
+            const wasFocused = currentWindows[window_uid].is_focused;
             delete currentWindows[window_uid];
             Storage.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: 'system:windows',
                 payload: currentWindows
             });
+
+            if (wasFocused) {
+                GlobalStateManager.setFocusedWindow(null);
+            }
         }
     }
 
     focusWindow(window_uid: string) {
+        if (!this.getMouseFocusEnabled()) return;
+
         const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
         if (!currentWindows[window_uid]) return;
 
@@ -156,13 +251,33 @@ class WindowEngineSingleton {
             payload: currentWindows
         });
 
-        Storage.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: 'system:overlay_state',
-            payload: { focused_window_uid: window_uid, mode: 'interactive' }
-        });
+        GlobalStateManager.setFocusedWindow(window_uid);
+        GlobalStateManager.setOverlayMode('interactive');
 
         invoke('set_ignore_cursor_events', { ignore: false }).catch(console.error);
+    }
+
+    enterWindowSurface(window_uid: string) {
+        if (!this.getMouseFocusEnabled()) {
+            this.setOverlayMode('ambient');
+            return;
+        }
+
+        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        if (!currentWindows[window_uid]) return;
+
+        invoke('set_ignore_cursor_events', { ignore: false }).catch(console.error);
+    }
+
+    leaveWindowSurface(window_uid: string) {
+        if (!this.getMouseFocusEnabled()) {
+            this.setOverlayMode('ambient');
+            return;
+        }
+
+        // Cursor bridge controls ambient/interactive transitions globally.
+        // Keep this hook lightweight to avoid racing with the polling logic.
+        void window_uid;
     }
 
     updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number) {

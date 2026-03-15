@@ -1,6 +1,6 @@
 import { WindowEngine } from '#/services/windowEngine';
 import { Storage } from '#/services/storageEngine';
-import { Layers, HardDrive, Share2, PaintBucket, MoveRight, Power } from 'lucide-react';
+import { Layers, HardDrive, Share2, PaintBucket, MoveRight, Power, Terminal } from 'lucide-react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';

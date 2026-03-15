@@ -2,36 +2,40 @@
 
 Because ACE relies on a strict decoupling of state, routing, and UI, the application cannot simply "render React" on load. The bootup sequence must be meticulously ordered to prevent race conditions, ghost events, or UI crashes. 
 
-The bootup sequence operates in **6 Strict Phases**, executed inside the main frontend entry point (e.g., `main.tsx` or an `init()` bootstrapper) *before* the React Tree is mounted.
+The bootup sequence operates in **3 Strict Phases**, executed through the boot pipeline before post-boot UI effects are allowed to run.
 
-### Phase 1: Core Singletons Initialization (The Groundwork)
-* **Action:** Instantiate the purely synchronous, state-holding singletons.
-* **Execution:** 1. Boot `storageEngine` (Global RAM Map is created).
-  2. Boot `eventEngine` (The Event Bus Map is created).
-* **Rule:** Zero asynchronous OS calls or React code are allowed here. 
-
-### Phase 2: Engine Registration (Wiring the Switchboard)
-* **Action:** The Core Managers register their existence and capabilities to the `eventEngine`.
+### Phase 1: Core Runtime Bed
+* **Action:** Bring up the absolute runtime foundation first.
 * **Execution:**
-  1. `processEngine` registers its `execute_tool` listener.
-  2. `windowEngine` registers its `open_window` and `close_window` listeners.
-  3. `toolsEngine` loads the static dictionary of all available OS Tools and their Zod schemas into memory.
+  1. Boot `storageEngine` (Global RAM Map).
+  2. Boot `dbEngine` (SQLite / audit storage).
+  3. Boot `eventEngine` (Event Bus routing table).
+  4. Boot `loggerService` after RAM exists.
+* **Rule:** The rest of the system must treat this layer as the prerequisite bedrock.
 
-### Phase 3: Hydration (Waking up the Memory)
-* **Action:** Load persistent data from the OS (via Tauri Rust) into the Global RAM.
-* **Execution:** The system asynchronously reads the SQLite database or local config files (User Settings, Theme, Chat History) and writes them directly into the `storageEngine`.
-* **Why:** So that when React finally mounts, it instantly reads the user's preferred theme (e.g., Dark Mode) instead of flashing a white screen.
+### Phase 2: User Runtime State
+* **Action:** Load the user-facing runtime state before any window behavior starts.
+* **Execution:**
+  1. Boot `globalStateManager`.
+  2. Boot `configEngine`.
+  3. Sync active config and active keybinds into RAM and into `system:global_state`.
+* **Why:** Window and overlay behavior depend on config such as `window.mouse_focus_enabled`.
 
-### Phase 4: Network & Daemon Spin-up
-* **Action:** Establish background connections.
-* **Execution:** 1. `aiGatewayEngine` warms up (e.g., checking if the OpenClaw API key is valid or establishing a background WebSocket).
-  2. Local OS watchers (if any, like clipboard listeners via Tauri) are started.
+### Phase 3: Window Layer & Transparent Overlay
+* **Action:** Start the visual shell only after core state and config are ready.
+* **Execution:**
+  1. Boot `windowEngine`.
+  2. Size and position the Tauri overlay window.
+  3. Apply click-through ambient mode on startup.
+* **Result:** The transparent layer is ready, but still governed by the already-loaded runtime config.
 
-### Phase 5: UI Mount (The Glass Frame)
-* **Action:** Hand control over to React.
-* **Execution:** `ReactDOM.createRoot().render(<App />)` is finally called. 
-* **Result:** The `<App />` and its child components immediately hook into `storageEngine` via `useSyncExternalStore`. Because the RAM was hydrated in Phase 3, the UI renders in its correct, final state instantly.
+## What Does Not Boot Upfront
 
-### Phase 6: The "System Ready" Ping
-* **Action:** Announce to the ecosystem that ACE is fully operational.
-* **Execution:** The root `<App />` or bootstrapper emits `{ action: 'system_ready' }` to the `eventEngine`. This can trigger the AI to say "Good morning" or trigger the `windowEngine` to fade in the transparent overlay smoothly.
+- `processEngine` is intentionally not booted as a permanent startup phase.
+- Worker engines under `processEngine` are also not eagerly started.
+- These engines are triggered on demand by intents flowing through the `eventEngine`.
+
+## Practical Rule
+
+If a service is required for base memory, config, focus tracking, or transparent window behavior, it belongs in boot.
+If a service is required only when a task is requested, it should remain on-demand under `processEngine`.

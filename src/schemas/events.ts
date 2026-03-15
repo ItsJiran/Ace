@@ -38,6 +38,7 @@ export const InteractionSchema = z.object({
 
     // Validasi bahwa action adalah salah satu dari const Actions, ATAU string custom
     action: z.union([z.enum(Actions), z.string()]),
+    sub_action: z.string().optional(),
     payload: z.record(z.string(), z.any()),
 });
 

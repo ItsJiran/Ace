@@ -1,9 +1,13 @@
 import { RAMViewer } from '../dev/RAMViewer';
 import { DevMenu } from '#/components/dev/DevMenu';
+import { LoadingWidget } from '#/components/widgets/LoadingWidget';
+import { SystemConsole } from '#/components/widgets/SystemConsole';
 
 const REGISTRY: Record<string, React.FC<any>> = {
     'ram_viewer': RAMViewer,
     'dev_menu': DevMenu,
+    'loading_widget': LoadingWidget,
+    'system_console': SystemConsole,
     // Add more components here in the future
 };
 

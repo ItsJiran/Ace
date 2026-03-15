@@ -1,5 +1,5 @@
 # ACE-Agentic-Client-Environment
-A local-first, overlay-based personal assistant powered by Electron and AI, designed to streamline your daily workflow.
+A local-first, overlay-based personal assistant powered by Tauri and AI, designed to streamline your daily workflow.
 
 ## 🤖 AI Instructions
 
@@ -13,7 +13,7 @@ Please read the **8 Architecture Pillars**:
 4. `.ai/04_storage_and_memory.md` - O(1) Data Sockets and "Ghost Town" mitigation.
 5. `.ai/05_ai_streaming_protocol.md` - The Async markdown stream buffer (` ```event `).
 6. `.ai/06_ui_and_window_lifecycle.md` - External-to-UI reactive bridge and window spatial state.
-7. `.ai/07_app_bootup_lifecycle.md` - The 6-Phase sequential ACE bootup sequence.
+7. `.ai/07_app_bootup_lifecycle.md` - The current ACE boot pipeline sequence.
 8. `.ai/08_pipeline_pattern.md` - The Pipeline Engine: Linear Execution with observability.
 
 ---
@@ -29,14 +29,14 @@ Please read the **8 Architecture Pillars**:
 - [x] Document Unified Event Lifecycle & Bootup sequence (8 Pillars).
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor (CURRENT)
-- [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format.
+- [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (pospone for now since we need a robust event and ui and correct gateway so we can get the corrct feeedback)
 - [ ] **Formalize Schemas**: Interaction, Listener, Window & Widget config schemas.
 - [ ] **Align Event Engine**: Enforce "Workers Never Listen" (Subordination) rule.
 - [ ] **Align Process Engine**: Integrate PipelineEngine for tool execution steps.
 - [ ] **Align Storage Engine**: Enforce Pre-Allocation Protocol for all results.
 - [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results.
 - [ ] **Align Window Engine**: Strict RAM-driven spatial state.
-- [ ] **Implement Bootup Sequence**: Refactor app entry for the 6-Phase sequence.
+- [x] **Implement Bootup Sequence**: Refactor app entry for the current ordered boot pipeline.
 
 ### 🧩 Phase 3: The Development UI Kit
 - [x] Basic "Dumb Window" generation & animation.
@@ -106,4 +106,4 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 - [ ] **The Stream Bypass**: Implement direct RAM writing for high-frequency token streaming (bypassing the Event Bus).
 - [ ] **Tool/Event Parser**: Build the logic to intercept tool-call JSONs from the LLM stream and emit them to the `eventEngine`.
 - [ ] **Native OS Tools**: Implement the actual Rust/TypeScript logic for core tools (Obsidian Reader, Shell Executor, File System).
-- [ ] **Context Builder Pipeline**: Implement the `contextPromptEngine` to gather chat history and active screen context before sending prompts.
+- [ ] **Context Builder Pipeline**: Implement the process-engine context-building pipeline to gather chat history and active screen context before sending prompts.

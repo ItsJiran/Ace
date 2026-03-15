@@ -4,40 +4,26 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState, WindowConfig } from '#/schemas/window';
 import { Storage } from '#/services/storageEngine';
 
-// 🚀 IMPORT TAURI API (Untuk memaksa ukuran window ke OS)
-import { getCurrentWindow, PhysicalSize, PhysicalPosition } from '@tauri-apps/api/window';
 
 function App() {
-  const [localBoxPos, setLocalBoxPos] = useState({ x: 200, y: 360 });
+  const [, setLocalBoxPos] = useState({ x: 200, y: 360 });
+  const [isBootReady, setIsBootReady] = useState(false);
 
-  // 🚀 TAURI OVERLAY SETUP: Memaksa OS menyesuaikan ukuran dengan layar
+  // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
   useEffect(() => {
-    const setupTauriOverlay = async () => {
-      try {
-        // Cek apakah kita benar-benar berjalan di dalam Tauri (bukan sekadar di browser biasa)
-        if (window.__TAURI_INTERNALS__ || window.__TAURI__) {
-          const appWindow = getCurrentWindow();
-          const monitor = await appWindow.monitor();
-
-          if (monitor) {
-            // 1. Sesuaikan ukuran window Tauri dengan resolusi piksel layar
-            await appWindow.setSize(new PhysicalSize(monitor.size.width, monitor.size.height - 1));
-            // 2. Kunci posisi window di pojok kiri atas monitor
-            await appWindow.setPosition(new PhysicalPosition(0, 0));
-          }
-          // 3. Munculkan window (menghindari kedipan putih saat awal boot)
-          await appWindow.show();
-        }
-      } catch (err) {
-        console.error("Gagal melakukan setup overlay Tauri:", err);
-      }
-    };
-
-    setupTauriOverlay();
+    import('./boot').then(({ bootACE }) => {
+      bootACE().then(() => {
+        setIsBootReady(true);
+      }).catch(() => {
+        setIsBootReady(false);
+      });
+    });
   }, []);
 
   // Listen for the 'Escape' key to globally panic back to Ambient Mode if stuck
   useEffect(() => {
+    if (!isBootReady) return;
+
     // Expose local state setter to window for DevMenu to trigger
     (window as any).moveLocalBox = () => {
       setLocalBoxPos(prev => ({ ...prev, x: prev.x + 50 }));
@@ -47,6 +33,11 @@ function App() {
 
     // Technically this should be IPC to electron/Tauri, but for the React dev layer:
     import('./services/windowEngine').then(({ WindowEngine }) => {
+      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
+        GlobalStateManager.setPointerInside(true);
+        GlobalStateManager.setActiveElement(document.activeElement);
+      });
+
       // Spawn developer console once on mount in Dev
       if (import.meta.env.DEV && !initialized) {
         initialized = true;
@@ -72,23 +63,76 @@ function App() {
         });
       }
     };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
+        GlobalStateManager.setCursorPosition(e.clientX, e.clientY);
+        GlobalStateManager.setPointerInside(true);
+      });
+    };
+
+    const handlePointerDown = () => {
+      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
+        GlobalStateManager.setPointerDown(true);
+        GlobalStateManager.setActiveElement(document.activeElement);
+      });
+    };
+
+    const handlePointerUp = () => {
+      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
+        GlobalStateManager.setPointerDown(false);
+      });
+    };
+
+    const handleFocusIn = (e: FocusEvent) => {
+      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
+        GlobalStateManager.setPointerInside(true);
+        GlobalStateManager.setActiveElement((e.target as Element) ?? document.activeElement);
+      });
+    };
+
+    const handleWindowBlur = () => {
+      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
+        GlobalStateManager.setPointerInside(false);
+        GlobalStateManager.setPointerDown(false);
+      });
+    };
+
+    const handleWindowFocus = () => {
+      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
+        GlobalStateManager.setPointerInside(true);
+        GlobalStateManager.setActiveElement(document.activeElement);
+      });
+    };
+
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
       delete (window as any).moveLocalBox;
     };
-  }, []);
+  }, [isBootReady]);
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
   const windows = useAceMemory<Record<string, WindowConfig>>('system:windows');
   const debugPos = useAceMemory<{ x: number, y: number }>('debug:box_pos');
 
-  if (!overlayState || !windows) return null;
+  if (!isBootReady || !overlayState || !windows) return null;
 
   const isAmbient = overlayState.mode === 'ambient';
-  const isDebugBg = overlayState.debug_bg;
 
   return (
     // 🚀 THE MAGIC WRAPPER
@@ -111,14 +155,6 @@ function App() {
           Global RAM<br />(RED)
         </div>
       )}
-
-      {/* Pure Redraw Debug Box (React useState) */}
-      <div
-        className="absolute w-32 h-32 bg-emerald-500 rounded-xl shadow-2xl transition-transform duration-200 flex items-center justify-center text-white text-xs font-bold text-center pointer-events-auto"
-        style={{ transform: `translate3d(${localBoxPos.x}px, ${localBoxPos.y}px, 0)` }}
-      >
-        useState<br />(GREEN)
-      </div>
 
       {/* Developer Feedback UI */}
       {isAmbient ? (

@@ -88,7 +88,7 @@ Before reading the cases, developers must understand the two unbreachable laws o
 2. **Pre-Flight:** Before opening the TCP socket, the `aiGatewayEngine` asks the `processEngine` to build the context prompt.
 3. **Loading State:** The `processEngine` writes to `storageEngine`: `{ ai_status: 'thinking', current_step: 'Gathering context...' }`.
 4. **UI Observation:** `<ChatInput />` observes `ai_status`. It automatically disables the input field and renders a "Thinking..." animation.
-5. **Execution:** The `processEngine` delegates to the `contextPromptEngine`, which reads relevant files, retrieves history, calculates token limits, and builds the final prompt string.
+5. **Execution:** The `processEngine` delegates to its context-building pipeline, which reads relevant files, retrieves history, calculates token limits, and builds the final prompt string.
 6. **Resolution:** The string is handed back to the `aiGatewayEngine`, which initiates **Case 1** (TCP Stream). The RAM is updated to `{ ai_status: 'idle' }`, re-enabling the UI input.
 
 ---

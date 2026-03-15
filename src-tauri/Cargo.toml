@@ -22,5 +22,6 @@ log = "0.4"
 tauri = { version = "2.10.3", features = ["devtools"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-fs = "2"
+tauri-plugin-global-shortcut = "2"
 
 

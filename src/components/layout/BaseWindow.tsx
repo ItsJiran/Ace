@@ -3,12 +3,22 @@ import type { WindowConfig } from '#/schemas/window';
 import { WindowEngine } from '#/services/windowEngine';
 import { GripHorizontal, X, Minus } from 'lucide-react';
 import { ComponentRegistry } from '#/features/registry/ComponentRegistry';
+import { useAceMemory } from '#/hooks/useAceMemory';
+import type { GlobalState } from '#/schemas/globalState';
 
 export function BaseWindow({ config }: { config: WindowConfig }) {
     const isFocused = config.is_focused;
+    const globalState = useAceMemory<GlobalState>('system:global_state');
+    const mouseFocusEnabled = globalState?.focus.mouse_focus_enabled ?? true;
+    const canCapturePointer = mouseFocusEnabled;
 
     const handleFocus = () => {
-        if (!isFocused) WindowEngine.focusWindow(config.window_uid);
+        if (!canCapturePointer) return;
+
+        // Always re-assert focus on click when mouse focus is enabled.
+        // A window can stay marked `is_focused` in RAM while native focus/capture
+        // has been released after interacting with external windows.
+        WindowEngine.focusWindow(config.window_uid);
     };
 
     const handleClose = (e: React.MouseEvent) => {
@@ -17,6 +27,8 @@ export function BaseWindow({ config }: { config: WindowConfig }) {
     };
 
     const handleDragStart = (e: React.MouseEvent) => {
+        if (!canCapturePointer) return;
+
         // Only drag from the header area, prevent text selection
         e.preventDefault();
         e.stopPropagation();
@@ -55,7 +67,9 @@ export function BaseWindow({ config }: { config: WindowConfig }) {
         <div
             id={`window-${config.window_uid}`}
             onMouseDown={handleFocus}
-            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden pointer-events-auto shadow-2xl transition-[box-shadow,background-color] ${isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10'}`}
+            onMouseEnter={() => WindowEngine.enterWindowSurface(config.window_uid)}
+            onMouseLeave={() => WindowEngine.leaveWindowSurface(config.window_uid)}
+            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[box-shadow,background-color] ${canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none'} ${isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10'}`}
             style={{
                 transform: `translate3d(${config.x}px, ${config.y}px, 0)`,
                 width: config.width,

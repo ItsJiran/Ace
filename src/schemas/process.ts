@@ -3,9 +3,14 @@ import { z } from 'zod';
 export const ProcessTypeSchema = z.enum([
     'ai_gateway_stream',
     'ai_parser',
+    'fs_task',
+    'shell_task',
     'tool_executor',
+    'context_prompt',
+    'pipeline_run',
     'system_monitor',
-    'background_cron'
+    'background_cron',
+    'other'
 ]);
 
 export const ProcessStatusSchema = z.enum([

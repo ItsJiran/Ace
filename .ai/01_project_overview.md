@@ -96,21 +96,25 @@ The Core Managers (Always Active)
 
     windowEngine (System Core): The spatial orchestrator. It manages the lifecycle, positioning, transparency, and state of Tauri WebviewWindows and UI dumb frames.
 
-    aiGatewayEngine (System Core): The LLM communicator. It manages the WebSocket/HTTP connection to the remote AI, parses tool calls from the LLM stream, and drives the autonomous React loop.
+    globalStateManager (System Core): The global interaction tracker. It monitors cursor position, pointer state, active focus, the user's current attention target across the overlay, and the runtime snapshot of active config plus active/running keybinds.
 
-    toolsEngine (The Library/Registry): The static dictionary of system capabilities. It maintains the registry of all available OS-level tools, providing the exact Zod schemas for the EventEngine to use during validation, and the mapped TypeScript handlers for the ProcessEngine to execute.
+    Note: Mouse-focus behavior is configuration-driven. If `window.mouse_focus_enabled` is false, the overlay should remain transparent to mouse interaction and clicks should continue through to the external target application.
 
-    pipelineEngine (The Pipeline): The linear execution engine. It orchestrates complex sequences of steps (bootup, context building, tool execution) in a step-by-step manner.
+The Engines Under ProcessEngine
 
-The Specialist Workers (Logic Plugins)
+These engines do not listen to the Event Bus directly. They are subordinate executors, parsers, registries, or linear runners invoked and supervised strictly by the ProcessEngine.
 
-These engines do not listen to the Event Bus directly. They are "dumb workers" invoked and supervised strictly by the ProcessEngine.
+  aiParserEngine: Parses streamed AI output, extracts structured event blocks, and converts them into safe executable payloads.
 
-    fsEngine: Handles safe file system reading, writing, and directory scanning via Tauri Rust.
+  fsEngine: Handles safe file system reading, writing, and directory scanning via Tauri Rust.
 
-    shellEngine: Executes secure background terminal scripts and native binaries.
+  shellEngine: Executes secure background terminal scripts and native binaries.
 
-    contextPromptEngine: The active logic compiler that retrieves raw history and files, calculates token limits, and assembles the final prompt string before sending it to the AI Gateway.
+  toolsEngine (The Library/Registry): The static dictionary of system capabilities. It maintains the registry of all available OS-level tools, providing the exact Zod schemas for the EventEngine to use during validation, and the mapped TypeScript handlers for the ProcessEngine to execute.
+
+  aiGatewayEngine: The LLM communicator. It manages the WebSocket/HTTP connection to the remote AI, coordinates streamed responses, and escalates executable work back through the ProcessEngine flow.
+
+  pipelineEngine (The Pipeline): The linear execution engine. It orchestrates complex sequences of steps under ProcessEngine supervision in a step-by-step manner.
 
 📡 System Communication & Data Flow
 
@@ -151,7 +155,7 @@ If an interaction only matters to the component itself and happens at a high fre
 
 Pathway D: The Worker Engine Protocol (How background tasks communicate)
 
-To maintain the strict separation of concerns and prevent Event Bus bottlenecking, all Specialist Workers (fsEngine, shellEngine, aiGatewayEngine, etc.) operating under the processEngine MUST adhere to the following three absolute rules of communication:
+To maintain the strict separation of concerns and prevent Event Bus bottlenecking, all subordinate engines (aiParserEngine, fsEngine, shellEngine, toolsEngine, aiGatewayEngine, pipelineEngine) operating under the processEngine MUST adhere to the following three absolute rules of communication:
 Rule 1: Workers Never Listen (The Subordination Rule)
 
     The Rule: Worker engines must never register as Listeners on the Event Bus.
@@ -212,7 +216,7 @@ Located in the entry point. Ensures RAM is hydrated before the UI mounts.
 
 2. The Context Prompt Pipeline
 
-Located in contextPromptEngine. Orchestrates raw data gathering for the LLM.
+Located under processEngine. Orchestrates raw data gathering for the LLM.
 
     Step 1: Gather Chat History from RAM.
 

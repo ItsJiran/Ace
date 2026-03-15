@@ -7,7 +7,18 @@
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-show",
+    "core:window:allow-set-always-on-top",
+    "global-shortcut:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-register-all",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-unregister-all",
     "sql:default",
-    "fs:default"
+    "fs:default",
+    "fs:allow-appconfig-read",
+    "fs:allow-appconfig-write"
   ]
 }

@@ -25,13 +25,13 @@ Every complex sequence in ACE (Bootup, Context Building, Tool Execution) must us
 ## 🎯 Primary Use Cases
 
 ### 1. The Bootup Pipeline
-Located in the entry point. Ensures RAM is hydrated before the UI mounts.
-- **Step 1**: Init RAM Bed.
-- **Step 2**: Global Engine Registration.
-- **Step 3**: Database/Config Hydration.
+Located in the entry point. Establishes the runtime bed before post-boot UI effects run.
+- **Step 1**: Init Global RAM, DB storage, Event Bus, and logging.
+- **Step 2**: Init Config Engine and Global State Manager.
+- **Step 3**: Init Window Engine and transparent overlay shell.
 
 ### 2. The Context Prompt Pipeline
-Located in `contextPromptEngine`. Orchestrates raw data gathering for the LLM.
+Located under `processEngine`. Orchestrates raw data gathering for the LLM.
 - **Step 1**: Gather Chat History from RAM.
 - **Step 2**: Read active files via `fsEngine`.
 - **Step 3**: Truncate/Enforce Token Limits.

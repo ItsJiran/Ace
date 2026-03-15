@@ -25,6 +25,12 @@ export const BASE_CONFIG_ITEMS: ConfigItem[] = [
         description: 'Whether the assistant stays above all other windows.'
     },
     {
+        key: 'window.mouse_focus_enabled',
+        value: true,
+        category: 'Window',
+        description: 'Whether mouse presence/click on a window is allowed to focus and activate that window. If disabled, windows remain transparent to mouse focus behavior.'
+    },
+    {
         key: 'core.debug_mode',
         value: false,
         category: 'Developer',
@@ -47,6 +53,46 @@ export const BASE_KEYBINDS: Keybind[] = [
             action: 'lookup',
             sub_action: 'toggle_overlay_mode',
             payload: {}
+        }
+    },
+    {
+        keybind_uid: 'window.toggle_mouse_focus',
+        shortcut: 'CommandOrControl+Alt+Shift+M',
+        description: 'Toggle mouse focus on/off for overlay windows.',
+        enabled: true,
+        intent: {
+            event_type: 'interaction',
+            action: 'lookup',
+            sub_action: 'toggle_window_mouse_focus',
+            payload: {}
+        }
+    },
+    {
+        keybind_uid: 'window.enable_mouse_focus',
+        shortcut: 'CommandOrControl+Alt+Shift+F',
+        description: 'Enable mouse focus so overlay windows can capture clicks and focus.',
+        enabled: true,
+        intent: {
+            event_type: 'interaction',
+            action: 'lookup',
+            sub_action: 'set_window_mouse_focus',
+            payload: {
+                enabled: true
+            }
+        }
+    },
+    {
+        keybind_uid: 'window.disable_mouse_focus',
+        shortcut: 'CommandOrControl+Alt+Shift+H',
+        description: 'Disable mouse focus so overlay windows stay transparent and clicks pass through.',
+        enabled: true,
+        intent: {
+            event_type: 'interaction',
+            action: 'lookup',
+            sub_action: 'set_window_mouse_focus',
+            payload: {
+                enabled: false
+            }
         }
     }
 ];

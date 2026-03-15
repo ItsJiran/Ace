@@ -3,7 +3,7 @@
 The application is structured into **5 distinct layers** to ensure maximum decoupling, high performance, and complete separation between UI and AI logic.
 
 ## 1. Global Transparent Layer
-The absolute base of the application. It is a single, fullscreen Electron window configured to be transparent and unclickable by default (`win.setIgnoreMouseEvents(true, { forward: true })`). It utilizes `mainWindow.setContentProtection(true)` to remain completely undetectable to screen-sharing software like Zoom or Google Meet.
+The absolute base of the application. It is a single, fullscreen Tauri window configured to be transparent and click-through by default. The transparent layer is governed by runtime config, especially `window.mouse_focus_enabled`, so the overlay can remain pass-through unless mouse capture is explicitly allowed.
 
 ## 2. Global Storage RAM & Classification
 The single source of truth for all heavy data (managed by `useStorageEngine`). 
@@ -23,7 +23,15 @@ The reactive UI tools inside the Windows (e.g., `<ChatBubble />`, `<SystemMonito
 ## 5. Event Engine & Process Engine (The Backend)
 The intelligent routers and executors.
 *   **Event Engine**: The message broker. It receives `InteractionSchema` payloads from Components and routes them to the correct Process. It receives `ListenerSchema` payloads from Processes and drops them into the listening Component's buffer.
-*   **Process Engine**: The headless task manager. It executes complex actions (calling the AI Gateway, reading files, executing shell commands). Processes have a `group_pid` (to track who spawned whom) and can dynamically spawn sub-processes.
+*   **Process Engine**: The headless task manager. It executes complex actions on demand and supervises subordinate engines such as `aiParserEngine`, `fsEngine`, `shellEngine`, `toolsEngine`, `aiGatewayEngine`, and `pipelineEngine`. Processes have a `group_pid` (to track who spawned whom) and can dynamically spawn sub-processes.
+
+## Core Managers
+
+- `storageEngine`: Global RAM and classification memory.
+- `eventEngine`: System-wide intent router.
+- `processEngine`: On-demand task orchestrator.
+- `windowEngine`: Window and transparent layer orchestrator.
+- `globalStateManager`: Cursor, focus, active config, and active/running keybind tracker.
 
 ```mermaid
 graph TD

@@ -5,6 +5,8 @@ This document details how external events and internal interactions drive the vi
 ## 🪟 The Dumb Window Lifecycle
 *Purpose: Controlling the spatial containers on the Transparent Layer.*
 
+The window layer is governed by runtime config and global state, especially `window.mouse_focus_enabled` from the config engine and its mirrored value in `globalStateManager.focus.mouse_focus_enabled`.
+
 ### 1. Window Creation (Spawn)
 1. **Trigger**: An `Interaction` with `action: 'open'`, `sub_action: 'open_window'` is emitted.
 2. **Routing**: The `EventBus` routes it to the `WindowEngine`.
@@ -16,6 +18,12 @@ This document details how external events and internal interactions drive the vi
 1. **Direct Manipulation**: User drags a window.
 2. **Local Update**: The `WindowEngine.updateWindowBounds` is called.
 3. **Broadcasting**: The updated bounds are written to RAM. All components observing that window (e.g., handles/frames) re-render immediately via `useSyncExternalStore`.
+
+### 3. Mouse Focus Governance
+1. **Ambient Default**: The transparent layer starts in click-through mode so the user can still click the external target app.
+2. **Config Check**: If `window.mouse_focus_enabled` is `false`, overlay windows must remain transparent to mouse interaction.
+3. **Interactive Exception**: If `window.mouse_focus_enabled` is `true`, the overlay may capture pointer interaction when the window layer is intentionally activated.
+4. **State Authority**: The current preference is mirrored in `globalStateManager`, so components and engines can read one canonical boolean.
 
 ---
 
@@ -45,3 +53,4 @@ The system avoids long-lived props or deep nesting. Instead, it uses **Dependenc
 - **No Direct Props for Data**: Never pass heavy data objects as props to windows. Only pass `memory_uid` strings.
 - **Window Blindness**: A window must never contain logic that depends on the specific widget it is holding.
 - **Single Source of Truth**: The visual state (X/Y, focused) lives ONLY in RAM, never in local React state (except for transient animation frames).
+- **Mouse Transparency First**: The overlay should assume click-through behavior by default unless runtime config explicitly allows mouse capture for windows.
