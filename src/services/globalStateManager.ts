@@ -29,6 +29,8 @@ const DEFAULT_GLOBAL_STATE: GlobalState = {
     },
 };
 
+const MOUSE_FOCUS_MEMORY_UID = 'system:mouse_focus_enabled';
+
 class GlobalStateManagerSingleton {
     constructor() {
         const existing = Storage.readMemory('system:global_state');
@@ -40,6 +42,16 @@ class GlobalStateManagerSingleton {
                 classifications: ['system:core'],
             });
         }
+
+        const mouseFocusExisting = Storage.readMemory(MOUSE_FOCUS_MEMORY_UID);
+        if (typeof mouseFocusExisting !== 'boolean') {
+            Storage.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: MOUSE_FOCUS_MEMORY_UID,
+                payload: true,
+                classifications: ['system:core'],
+            });
+        }
     }
 
     readState() {
@@ -47,6 +59,11 @@ class GlobalStateManagerSingleton {
     }
 
     setCursorPosition(x: number, y: number) {
+        const state = this.readState();
+        if (state.cursor.x === x && state.cursor.y === y) {
+            return;
+        }
+
         this.updateState((state) => ({
             ...state,
             cursor: {
@@ -56,11 +73,14 @@ class GlobalStateManagerSingleton {
                 last_updated_at: Date.now(),
             },
         }));
-
-        this.syncOverlayState({ mouse_x: x, mouse_y: y });
     }
 
     setPointerDown(is_pointer_down: boolean) {
+        const state = this.readState();
+        if (state.cursor.is_pointer_down === is_pointer_down) {
+            return;
+        }
+
         this.updateState((state) => ({
             ...state,
             cursor: {
@@ -72,6 +92,11 @@ class GlobalStateManagerSingleton {
     }
 
     setPointerInside(is_inside_app: boolean) {
+        const state = this.readState();
+        if (state.cursor.is_inside_app === is_inside_app) {
+            return;
+        }
+
         this.updateState((state) => ({
             ...state,
             cursor: {
@@ -83,6 +108,11 @@ class GlobalStateManagerSingleton {
     }
 
     setOverlayMode(overlay_mode: GlobalState['focus']['overlay_mode']) {
+        const state = this.readState();
+        if (state.focus.overlay_mode === overlay_mode) {
+            return;
+        }
+
         this.updateState((state) => ({
             ...state,
             focus: {
@@ -95,6 +125,11 @@ class GlobalStateManagerSingleton {
     }
 
     setFocusedWindow(focused_window_uid: string | null) {
+        const state = this.readState();
+        if (state.focus.focused_window_uid === focused_window_uid) {
+            return;
+        }
+
         this.updateState((state) => ({
             ...state,
             focus: {
@@ -119,6 +154,14 @@ class GlobalStateManagerSingleton {
     setActiveElement(element: Element | null) {
         const active_element_tag = element?.tagName?.toLowerCase() ?? null;
         const active_element_role = element?.getAttribute('role') ?? null;
+
+        const state = this.readState();
+        if (
+            state.focus.active_element_tag === active_element_tag &&
+            state.focus.active_element_role === active_element_role
+        ) {
+            return;
+        }
 
         this.updateState((state) => ({
             ...state,
@@ -148,9 +191,24 @@ class GlobalStateManagerSingleton {
                 updated_at: Date.now(),
             },
         }));
+
+        const existing = Storage.readMemory(MOUSE_FOCUS_MEMORY_UID);
+        if (existing !== mouse_focus_enabled) {
+            Storage.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: MOUSE_FOCUS_MEMORY_UID,
+                payload: mouse_focus_enabled,
+                classifications: ['system:core'],
+            });
+        }
     }
 
     setMouseFocusEnabled(mouse_focus_enabled: boolean) {
+        const state = this.readState();
+        if (state.focus.mouse_focus_enabled === mouse_focus_enabled) {
+            return;
+        }
+
         this.updateState((state) => ({
             ...state,
             focus: {
@@ -158,6 +216,16 @@ class GlobalStateManagerSingleton {
                 mouse_focus_enabled,
             },
         }));
+
+        const existing = Storage.readMemory(MOUSE_FOCUS_MEMORY_UID);
+        if (existing !== mouse_focus_enabled) {
+            Storage.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: MOUSE_FOCUS_MEMORY_UID,
+                payload: mouse_focus_enabled,
+                classifications: ['system:core'],
+            });
+        }
     }
 
     setActiveKeybinds(keybinds: Keybind[]) {
@@ -226,6 +294,13 @@ class GlobalStateManagerSingleton {
     private syncOverlayState(patch: Partial<GlobalOverlayState>) {
         const currentOverlay = Storage.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
         if (!currentOverlay) return;
+
+        const hasActualChange = Object.entries(patch).some(([key, value]) => {
+            return (currentOverlay as any)[key] !== value;
+        });
+        if (!hasActualChange) {
+            return;
+        }
 
         Storage.dispatchRAMAction({
             action: 'create_memory',

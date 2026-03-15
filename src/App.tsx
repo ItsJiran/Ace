@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BaseWindow } from './components/layout/BaseWindow';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState, WindowConfig } from '#/schemas/window';
 import { Storage as StorageEngine } from '#/services/storageEngine';
 import { FPSCounter } from './features/dev/FPSCounter';
+import { WindowEngine } from '#/services/windowEngine';
+import { GlobalStateManager } from '#/services/globalStateManager';
 
 
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
+  const pointerRafRef = useRef<number | null>(null);
+  const pendingPointerRef = useRef<{ x: number; y: number } | null>(null);
 
   // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
   useEffect(() => {
@@ -26,78 +30,70 @@ function App() {
 
     let initialized = false;
 
-    // Technically this should be IPC to electron/Tauri, but for the React dev layer:
-    import('./services/windowEngine').then(({ WindowEngine }) => {
-      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
-        GlobalStateManager.setPointerInside(true);
-        GlobalStateManager.setActiveElement(document.activeElement);
-      });
+    GlobalStateManager.setPointerInside(true);
+    GlobalStateManager.setActiveElement(document.activeElement);
 
-      // Spawn developer console once on mount in Dev
-      if (import.meta.env.DEV && !initialized) {
-        initialized = true;
-        // Just check if there's already any windows to prevent StrictMode double spawning
-        const windows = StorageEngine.readMemory('system:windows');
-        if (Object.keys(windows || {}).length === 0) {
-          WindowEngine.spawnWindow({
-            component_name: 'dev_menu',
-            x: Math.floor(window.innerWidth / 2 - 170),
-            y: Math.floor(window.innerHeight / 2 - 230),
-            width: 340,
-            height: 460,
-            title: 'Dev Kit'
-          });
-        }
+    // Spawn developer console once on mount in Dev
+    if (import.meta.env.DEV && !initialized) {
+      initialized = true;
+      // Just check if there's already any windows to prevent StrictMode double spawning
+      const windows = StorageEngine.readMemory('system:windows');
+      if (Object.keys(windows || {}).length === 0) {
+        WindowEngine.spawnWindow({
+          component_name: 'dev_menu',
+          x: Math.floor(window.innerWidth / 2 - 170),
+          y: Math.floor(window.innerHeight / 2 - 230),
+          width: 340,
+          height: 460,
+          title: 'Dev Kit'
+        });
       }
-    });
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        import('./services/windowEngine').then(({ WindowEngine }) => {
-          WindowEngine.setOverlayMode('ambient');
-        });
+        WindowEngine.setOverlayMode('ambient');
       }
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
-        GlobalStateManager.setCursorPosition(e.clientX, e.clientY);
+      pendingPointerRef.current = { x: e.clientX, y: e.clientY };
+
+      // Cap pointer updates to one write per animation frame.
+      if (pointerRafRef.current !== null) return;
+
+      pointerRafRef.current = window.requestAnimationFrame(() => {
+        pointerRafRef.current = null;
+        const pending = pendingPointerRef.current;
+        if (!pending) return;
+
+        GlobalStateManager.setCursorPosition(pending.x, pending.y);
         GlobalStateManager.setPointerInside(true);
       });
     };
 
     const handlePointerDown = () => {
-      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
-        GlobalStateManager.setPointerDown(true);
-        GlobalStateManager.setActiveElement(document.activeElement);
-      });
+      GlobalStateManager.setPointerDown(true);
+      GlobalStateManager.setActiveElement(document.activeElement);
     };
 
     const handlePointerUp = () => {
-      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
-        GlobalStateManager.setPointerDown(false);
-      });
+      GlobalStateManager.setPointerDown(false);
     };
 
     const handleFocusIn = (e: FocusEvent) => {
-      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
-        GlobalStateManager.setPointerInside(true);
-        GlobalStateManager.setActiveElement((e.target as Element) ?? document.activeElement);
-      });
+      GlobalStateManager.setPointerInside(true);
+      GlobalStateManager.setActiveElement((e.target as Element) ?? document.activeElement);
     };
 
     const handleWindowBlur = () => {
-      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
-        GlobalStateManager.setPointerInside(false);
-        GlobalStateManager.setPointerDown(false);
-      });
+      GlobalStateManager.setPointerInside(false);
+      GlobalStateManager.setPointerDown(false);
     };
 
     const handleWindowFocus = () => {
-      import('./services/globalStateManager').then(({ GlobalStateManager }) => {
-        GlobalStateManager.setPointerInside(true);
-        GlobalStateManager.setActiveElement(document.activeElement);
-      });
+      GlobalStateManager.setPointerInside(true);
+      GlobalStateManager.setActiveElement(document.activeElement);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -109,6 +105,11 @@ function App() {
     window.addEventListener('focus', handleWindowFocus);
 
     return () => {
+      if (pointerRafRef.current !== null) {
+        window.cancelAnimationFrame(pointerRafRef.current);
+        pointerRafRef.current = null;
+      }
+
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerdown', handlePointerDown);

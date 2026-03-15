@@ -1,5 +1,5 @@
 import { WindowEngine } from '#/services/windowEngine';
-import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge } from 'lucide-react';
+import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge, Flame } from 'lucide-react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
@@ -98,6 +98,14 @@ export function DevMenu() {
             >
                 <Gauge size={14} className="text-lime-400" />
                 Open FPS Counter
+            </button>
+
+            <button
+                onClick={() => openDevWindow('stress_test_menu', 'Stress Test Menu', 460, 100, 440, 300)}
+                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+            >
+                <Flame size={14} className="text-fuchsia-400" />
+                Open Stress Test Menu
             </button>
 
             <button

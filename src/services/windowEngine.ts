@@ -18,6 +18,11 @@ class WindowEngineSingleton {
     private alwaysOnTopIntervalId?: number;
 
     private getMouseFocusEnabled() {
+        const mouseFocusMemory = Storage.readMemory('system:mouse_focus_enabled');
+        if (typeof mouseFocusMemory === 'boolean') {
+            return mouseFocusMemory;
+        }
+
         const globalState = Storage.readMemory('system:global_state') as GlobalState | undefined;
         return globalState?.focus.mouse_focus_enabled ?? true;
     }
@@ -91,6 +96,9 @@ class WindowEngineSingleton {
         if (this.cursorBridgeIntervalId) return;
 
         const appWindow = getCurrentWindow();
+        let cachedInnerPos: { x: number; y: number } | null = null;
+        let cachedScale = 1;
+        let lastMetricsAt = 0;
 
         this.cursorBridgeIntervalId = window.setInterval(async () => {
             const state = GlobalStateManager.readState();
@@ -113,12 +121,24 @@ class WindowEngineSingleton {
 
             try {
                 const cursor = await cursorPosition();
-                const innerPos = await appWindow.innerPosition();
-                const scale = await appWindow.scaleFactor();
+                const now = performance.now();
+
+                // Window position/scale usually changes less frequently than cursor position.
+                if (!cachedInnerPos || now - lastMetricsAt > 500) {
+                    const innerPos = await appWindow.innerPosition();
+                    const scale = await appWindow.scaleFactor();
+                    cachedInnerPos = { x: innerPos.x, y: innerPos.y };
+                    cachedScale = scale;
+                    lastMetricsAt = now;
+                }
+
+                if (!cachedInnerPos) {
+                    return;
+                }
 
                 // Convert global physical cursor to the overlay's logical coordinate space.
-                const logicalCursorX = (cursor.x - innerPos.x) / scale;
-                const logicalCursorY = (cursor.y - innerPos.y) / scale;
+                const logicalCursorX = (cursor.x - cachedInnerPos.x) / cachedScale;
+                const logicalCursorY = (cursor.y - cachedInnerPos.y) / cachedScale;
 
                 const isCursorInsideAnyWindow = windowList.some((win) => {
                     return logicalCursorX >= win.x &&
@@ -144,7 +164,7 @@ class WindowEngineSingleton {
             } catch {
                 // Ignore cursor polling failures silently (e.g., unsupported platform edge case).
             }
-        }, 24);
+        }, 48);
     }
 
     /**
@@ -283,6 +303,16 @@ class WindowEngineSingleton {
     updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number) {
         const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
         if (!currentWindows[window_uid]) return;
+
+        const current = currentWindows[window_uid];
+        if (
+            current.x === x &&
+            current.y === y &&
+            current.width === width &&
+            current.height === height
+        ) {
+            return;
+        }
 
         currentWindows[window_uid] = { ...currentWindows[window_uid], x, y, width, height };
 

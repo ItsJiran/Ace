@@ -6,6 +6,8 @@ import { ToolsRegistryList } from '../dev/ToolsRegistryList';
 import { PipelineRegistryList } from '../dev/PipelineRegistryList';
 import { WindowRegistryList } from '../dev/WindowRegistryList';
 import { FPSWidget } from '../dev/FPSWidget';
+import { StressTestMenu } from '../dev/StressTestMenu';
+import { StressTestUIAnimationFPS } from '../dev/StressTestUIAnimationFPS';
 import { DevMenu } from '#/components/dev/DevMenu';
 import { LoadingWidget } from '#/components/widgets/LoadingWidget';
 import { SystemConsole } from '#/components/widgets/SystemConsole';
@@ -19,6 +21,8 @@ const REGISTRY: Record<string, React.FC<any>> = {
     'pipeline_registry_list': PipelineRegistryList,
     'window_registry_list': WindowRegistryList,
     'fps_widget': FPSWidget,
+    'stress_test_menu': StressTestMenu,
+    'stress_test_ui_animation_fps': StressTestUIAnimationFPS,
     'dev_menu': DevMenu,
     'loading_widget': LoadingWidget,
     'system_console': SystemConsole,
