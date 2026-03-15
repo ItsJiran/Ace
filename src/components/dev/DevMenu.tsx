@@ -1,6 +1,5 @@
 import { WindowEngine } from '#/services/windowEngine';
-import { Storage } from '#/services/storageEngine';
-import { Layers, HardDrive, Share2, PaintBucket, MoveRight, Power, Terminal } from 'lucide-react';
+import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge } from 'lucide-react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
@@ -12,15 +11,8 @@ export function DevMenu() {
     const isAmbient = overlayState?.mode === 'ambient';
     const isDebugBg = overlayState?.debug_bg ?? false;
 
-    const spawnTestWindow = () => {
-        WindowEngine.spawnWindow({
-            component_name: 'test_widget',
-            x: Math.random() * 200 + 100,
-            y: Math.random() * 200 + 100,
-            width: 320,
-            height: 240,
-            title: 'Test Component Widget'
-        });
+    const openDevWindow = (component_name: string, title: string, x: number, y: number, width: number, height: number) => {
+        WindowEngine.spawnWindow({ component_name, title, x, y, width, height });
     };
 
     const toggleOverlayMode = () => {
@@ -42,25 +34,14 @@ export function DevMenu() {
         });
     };
 
-    const moveDebugBox = () => {
-        const currentPos = Storage.readMemory('debug:box_pos') as { x: number, y: number };
-        if (currentPos) {
-            Storage.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: 'debug:box_pos',
-                payload: { x: currentPos.x + 50 }
-            });
-        }
-    };
-
     return (
-        <div className="flex flex-col gap-2 w-full h-full text-zinc-300">
+        <div className="flex flex-col gap-2 w-full h-full text-zinc-300 overflow-y-auto pr-1">
             <button
-                onClick={spawnTestWindow}
+                onClick={() => openDevWindow('event_viewer', 'Event Viewer', 60, 60, 620, 420)}
                 className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
             >
-                <Layers size={14} className="text-blue-400" />
-                Spawn Dummy Window
+                <Activity size={14} className="text-cyan-400" />
+                Open Event Viewer
             </button>
 
             <button
@@ -72,19 +53,59 @@ export function DevMenu() {
             </button>
 
             <button
-                onClick={moveDebugBox}
-                className="flex items-center gap-2 bg-red-900/40 hover:bg-red-800/50 active:bg-red-700/50 px-3 py-2 rounded text-sm transition-colors border border-red-700/50 text-red-200"
+                onClick={() => openDevWindow('event_registry_list', 'Event Registry', 110, 90, 520, 420)}
+                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
             >
-                <MoveRight size={14} className="text-red-400" />
-                Move RAM Box (+50px)
+                <ListTree size={14} className="text-purple-400" />
+                Open Event Registry List
             </button>
 
             <button
-                onClick={() => { (window as any).moveLocalBox?.(); }}
-                className="flex items-center gap-2 bg-emerald-900/40 hover:bg-emerald-800/50 active:bg-emerald-700/50 px-3 py-2 rounded text-sm transition-colors border border-emerald-700/50 text-emerald-200"
+                onClick={() => openDevWindow('process_monitor', 'Process Monitor', 160, 120, 560, 420)}
+                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
             >
-                <MoveRight size={14} className="text-emerald-400" />
-                Move State Box (+50px)
+                <Workflow size={14} className="text-emerald-400" />
+                Open Process Monitor
+            </button>
+
+            <button
+                onClick={() => openDevWindow('tools_registry_list', 'Tools Registry', 210, 150, 520, 380)}
+                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+            >
+                <Wrench size={14} className="text-amber-400" />
+                Open Tools Registry List
+            </button>
+
+            <button
+                onClick={() => openDevWindow('pipeline_registry_list', 'Pipeline Registry', 260, 180, 560, 400)}
+                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+            >
+                <Layers size={14} className="text-sky-400" />
+                Open Pipeline Registry List
+            </button>
+
+            <button
+                onClick={() => openDevWindow('window_registry_list', 'Window Registry', 310, 210, 520, 380)}
+                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+            >
+                <PanelTop size={14} className="text-rose-400" />
+                Open Window Registry List
+            </button>
+
+            <button
+                onClick={() => openDevWindow('fps_widget', 'FPS Counter', 420, 120, 280, 170)}
+                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+            >
+                <Gauge size={14} className="text-lime-400" />
+                Open FPS Counter
+            </button>
+
+            <button
+                onClick={() => openDevWindow('system_console', 'System Console', 360, 240, 620, 400)}
+                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+            >
+                <HardDrive size={14} className="text-indigo-400" />
+                Open System Console
             </button>
 
             <button

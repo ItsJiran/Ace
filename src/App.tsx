@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { BaseWindow } from './components/layout/BaseWindow';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState, WindowConfig } from '#/schemas/window';
-import { Storage } from '#/services/storageEngine';
+import { Storage as StorageEngine } from '#/services/storageEngine';
+import { FPSCounter } from './features/dev/FPSCounter';
 
 
 function App() {
-  const [, setLocalBoxPos] = useState({ x: 200, y: 360 });
   const [isBootReady, setIsBootReady] = useState(false);
 
   // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
@@ -24,11 +24,6 @@ function App() {
   useEffect(() => {
     if (!isBootReady) return;
 
-    // Expose local state setter to window for DevMenu to trigger
-    (window as any).moveLocalBox = () => {
-      setLocalBoxPos(prev => ({ ...prev, x: prev.x + 50 }));
-    };
-
     let initialized = false;
 
     // Technically this should be IPC to electron/Tauri, but for the React dev layer:
@@ -42,14 +37,14 @@ function App() {
       if (import.meta.env.DEV && !initialized) {
         initialized = true;
         // Just check if there's already any windows to prevent StrictMode double spawning
-        const windows = Storage.readMemory('system:windows');
+        const windows = StorageEngine.readMemory('system:windows');
         if (Object.keys(windows || {}).length === 0) {
           WindowEngine.spawnWindow({
             component_name: 'dev_menu',
-            x: Math.floor(window.innerWidth / 2 - 130),
-            y: Math.floor(window.innerHeight / 2 - 155),
-            width: 260,
-            height: 310,
+            x: Math.floor(window.innerWidth / 2 - 170),
+            y: Math.floor(window.innerHeight / 2 - 230),
+            width: 340,
+            height: 460,
             title: 'Dev Kit'
           });
         }
@@ -121,15 +116,12 @@ function App() {
       window.removeEventListener('focusin', handleFocusIn);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('focus', handleWindowFocus);
-      delete (window as any).moveLocalBox;
     };
   }, [isBootReady]);
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
   const windows = useAceMemory<Record<string, WindowConfig>>('system:windows');
-  const debugPos = useAceMemory<{ x: number, y: number }>('debug:box_pos');
-
   if (!isBootReady || !overlayState || !windows) return null;
 
   const isAmbient = overlayState.mode === 'ambient';
@@ -146,15 +138,7 @@ function App() {
         <BaseWindow key={config.window_uid} config={config} />
       ))}
 
-      {/* Pure Redraw Debug Box (Global RAM/useSyncExternalStore) */}
-      {debugPos && (
-        <div
-          className="absolute w-32 h-32 bg-red-500 rounded-xl shadow-2xl transition-transform duration-200 flex items-center justify-center text-white text-xs font-bold text-center pointer-events-auto"
-          style={{ transform: `translate3d(${debugPos.x}px, ${debugPos.y}px, 0)` }}
-        >
-          Global RAM<br />(RED)
-        </div>
-      )}
+      {import.meta.env.DEV && <FPSCounter />}
 
       {/* Developer Feedback UI */}
       {isAmbient ? (

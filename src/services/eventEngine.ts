@@ -1,4 +1,5 @@
 import type { Interaction } from '#/schemas/events';
+import { Storage } from './storageEngine';
 
 type ProcessCallback = (interaction: Interaction) => Promise<void>;
 type SyncProcessCallback = (interaction: Interaction) => void;
@@ -9,6 +10,7 @@ class EventEngineSingleton {
      * Maps an `action` (or `action:sub_action` combo) to an array of async handler functions.
      */
     private routes = new Map<string, Array<ProcessCallback | SyncProcessCallback>>();
+    private readonly maxEventLogs = 300;
 
     /**
      * A background Process (The Chef) "mounts" itself to listen for a specific action.
@@ -36,6 +38,8 @@ class EventEngineSingleton {
      * This follows the Unified Lifecycle: Ingestion -> Validation -> Allocation.
      */
     emit(interaction: Interaction) {
+        this.logEvent(interaction, 'emitted');
+
         // --- PHASE 2: INGESTION & VALIDATION ---
 
         // Handle specialized tool execution route
@@ -52,8 +56,11 @@ class EventEngineSingleton {
 
         if (allHandlers.length === 0) {
             console.warn(`[EventBus] No process is listening to action route: ${interaction.action} or ${specificRouteKey}`);
+            this.logEvent(interaction, 'dropped');
             return;
         }
+
+        this.logEvent(interaction, 'routed');
 
         // Fire and forget! (Async execution)
         allHandlers.forEach(handler => {
@@ -65,6 +72,28 @@ class EventEngineSingleton {
             } catch (err) {
                 console.error(`[EventBus] Sync Process handler crashed on route ${interaction.action}:`, err);
             }
+        });
+    }
+
+    private logEvent(interaction: Interaction, status: 'emitted' | 'routed' | 'dropped') {
+        const entry = {
+            id: `evt-${crypto.randomUUID()}`,
+            at: Date.now(),
+            status,
+            action: interaction.action,
+            sub_action: interaction.sub_action ?? null,
+            process_uid: interaction.process_uid ?? null,
+            payload: interaction.payload,
+        };
+
+        const current = (Storage.readMemory('system:event_stream') as any[] | undefined) || [];
+        const next = [...current, entry].slice(-this.maxEventLogs);
+
+        Storage.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:event_stream',
+            payload: next,
+            classifications: ['system:core'],
         });
     }
 

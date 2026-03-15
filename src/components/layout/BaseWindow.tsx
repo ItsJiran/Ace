@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { WindowConfig } from '#/schemas/window';
 import { WindowEngine } from '#/services/windowEngine';
 import { GripHorizontal, X, Minus } from 'lucide-react';
@@ -11,6 +11,15 @@ export function BaseWindow({ config }: { config: WindowConfig }) {
     const globalState = useAceMemory<GlobalState>('system:global_state');
     const mouseFocusEnabled = globalState?.focus.mouse_focus_enabled ?? true;
     const canCapturePointer = mouseFocusEnabled;
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        const id = window.setTimeout(() => setIsMounted(true), 10);
+        return () => window.clearTimeout(id);
+    }, []);
+
+    // Keep drag fluid: disable transform transition while dragging focused window.
+    const isDraggingFocusedWindow = Boolean(globalState?.cursor.is_pointer_down && isFocused);
 
     const handleFocus = () => {
         if (!canCapturePointer) return;
@@ -69,7 +78,7 @@ export function BaseWindow({ config }: { config: WindowConfig }) {
             onMouseDown={handleFocus}
             onMouseEnter={() => WindowEngine.enterWindowSurface(config.window_uid)}
             onMouseLeave={() => WindowEngine.leaveWindowSurface(config.window_uid)}
-            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[box-shadow,background-color] ${canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none'} ${isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10'}`}
+            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${isDraggingFocusedWindow ? 'duration-0' : 'duration-150'} ${canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none'} ${isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10'} ${isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'}`}
             style={{
                 transform: `translate3d(${config.x}px, ${config.y}px, 0)`,
                 width: config.width,
