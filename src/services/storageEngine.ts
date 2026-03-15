@@ -12,6 +12,9 @@ class StorageEngineSingleton {
     // 3. THE SOCKETS: key => [array of callback functions]
     private memory_sockets = new Map<string, Function[]>();
 
+    // Lightweight cache for UTF-8 encoder used by memory size estimation.
+    private textEncoder = new TextEncoder();
+
     // ==========================================
     // 🔌 SOCKET METHODS (Listening to Data)
     // ==========================================
@@ -152,6 +155,64 @@ class StorageEngineSingleton {
                     console.error(`Socket execution failed for key ${key}:`, err);
                 }
             });
+        }
+    }
+
+    /**
+     * Returns approximate memory usage of the in-process RAM store.
+     * Note: this is an estimate based on UTF-8 byte size of serialized payloads.
+     */
+    getRAMStats() {
+        const byKey: Array<{ memory_uid: string; approx_bytes: number; type: string }> = [];
+        let approxTotalBytes = 0;
+
+        for (const [memory_uid, payload] of this.global_ram.entries()) {
+            const approx_bytes = this.estimatePayloadBytes(payload);
+            approxTotalBytes += approx_bytes;
+            byKey.push({
+                memory_uid,
+                approx_bytes,
+                type: Array.isArray(payload) ? 'array' : typeof payload,
+            });
+        }
+
+        byKey.sort((a, b) => b.approx_bytes - a.approx_bytes);
+
+        const listenerSummary = Array.from(this.memory_sockets.entries())
+            .map(([key, listeners]) => ({ key, listeners: listeners.length }))
+            .sort((a, b) => b.listeners - a.listeners);
+
+        return {
+            memory_entries: this.global_ram.size,
+            classification_entries: this.classification_ram.size,
+            socket_keys: this.memory_sockets.size,
+            socket_listener_total: listenerSummary.reduce((sum, item) => sum + item.listeners, 0),
+            approx_total_bytes: approxTotalBytes,
+            approx_total_kb: approxTotalBytes / 1024,
+            approx_total_mb: approxTotalBytes / (1024 * 1024),
+            largest_memories: byKey,
+            listeners_by_key: listenerSummary,
+            sampled_at: Date.now(),
+        };
+    }
+
+    private estimatePayloadBytes(payload: unknown) {
+        if (payload == null) return 0;
+
+        if (typeof payload === 'string') {
+            return this.textEncoder.encode(payload).length;
+        }
+
+        if (typeof payload === 'number' || typeof payload === 'boolean' || typeof payload === 'bigint') {
+            return this.textEncoder.encode(String(payload)).length;
+        }
+
+        try {
+            const serialized = JSON.stringify(payload);
+            if (!serialized) return 0;
+            return this.textEncoder.encode(serialized).length;
+        } catch {
+            return 0;
         }
     }
 }

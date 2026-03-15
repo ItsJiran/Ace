@@ -12,6 +12,17 @@ export function StressTestMenu() {
         });
     };
 
+    const openPromptResponseLoadTest = () => {
+        WindowEngine.spawnWindow({
+            component_name: 'stress_test_prompt_response_load',
+            title: 'Stress Test: Prompt + AI Response Load',
+            x: 200,
+            y: 120,
+            width: 900,
+            height: 620,
+        });
+    };
+
     return (
         <div className="h-full w-full rounded-xl border border-zinc-800 bg-zinc-950/90 p-3 flex flex-col gap-3">
             <div>
@@ -25,6 +36,14 @@ export function StressTestMenu() {
             >
                 <p className="text-sm text-zinc-200">UI Animation FPS</p>
                 <p className="text-[11px] text-zinc-500">Spawn many animated nodes and monitor frame pacing.</p>
+            </button>
+
+            <button
+                onClick={openPromptResponseLoadTest}
+                className="w-full text-left rounded border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
+            >
+                <p className="text-sm text-zinc-200">Prompt + AI Response Load</p>
+                <p className="text-[11px] text-zinc-500">Simulate multi-chat prompt flow and heavy AI token streaming with optional RAM writes.</p>
             </button>
         </div>
     );

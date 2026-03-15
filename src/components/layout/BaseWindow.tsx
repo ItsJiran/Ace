@@ -118,7 +118,7 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
                 zIndex: config.z_index,
                 // The Dual-Mode Container Logic
                 backgroundColor: isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)',
-                backdropFilter: isDraggingFocusedWindow ? 'none' : (isFocused ? 'blur(10px)' : 'blur(6px)'),
+                backdropFilter: isDraggingFocusedWindow ? 'none' : (isFocused ? 'none' : 'blur(4px)'),
                 boxShadow: isDraggingFocusedWindow ? 'none' : undefined,
                 willChange: 'transform'
             }}

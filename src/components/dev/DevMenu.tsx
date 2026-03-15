@@ -34,11 +34,13 @@ export function DevMenu() {
         });
     };
 
+    const buttonClass = 'flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 duration-75';
+
     return (
         <div className="flex flex-col gap-2 w-full h-full text-zinc-300 overflow-y-auto pr-1">
             <button
                 onClick={() => openDevWindow('event_viewer', 'Event Viewer', 60, 60, 620, 420)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <Activity size={14} className="text-cyan-400" />
                 Open Event Viewer
@@ -46,15 +48,23 @@ export function DevMenu() {
 
             <button
                 onClick={spawnRAMViewer}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <HardDrive size={14} className="text-emerald-400" />
                 Open RAM Viewer
             </button>
 
             <button
+                onClick={() => openDevWindow('ram_usage_analyzer', 'RAM Usage Analyzer', 90, 80, 700, 460)}
+                className={buttonClass}
+            >
+                <HardDrive size={14} className="text-cyan-400" />
+                Open RAM Usage Analyzer
+            </button>
+
+            <button
                 onClick={() => openDevWindow('event_registry_list', 'Event Registry', 110, 90, 520, 420)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <ListTree size={14} className="text-purple-400" />
                 Open Event Registry List
@@ -62,7 +72,7 @@ export function DevMenu() {
 
             <button
                 onClick={() => openDevWindow('process_monitor', 'Process Monitor', 160, 120, 560, 420)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <Workflow size={14} className="text-emerald-400" />
                 Open Process Monitor
@@ -70,7 +80,7 @@ export function DevMenu() {
 
             <button
                 onClick={() => openDevWindow('tools_registry_list', 'Tools Registry', 210, 150, 520, 380)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <Wrench size={14} className="text-amber-400" />
                 Open Tools Registry List
@@ -78,7 +88,7 @@ export function DevMenu() {
 
             <button
                 onClick={() => openDevWindow('pipeline_registry_list', 'Pipeline Registry', 260, 180, 560, 400)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <Layers size={14} className="text-sky-400" />
                 Open Pipeline Registry List
@@ -86,7 +96,7 @@ export function DevMenu() {
 
             <button
                 onClick={() => openDevWindow('window_registry_list', 'Window Registry', 310, 210, 520, 380)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <PanelTop size={14} className="text-rose-400" />
                 Open Window Registry List
@@ -94,7 +104,7 @@ export function DevMenu() {
 
             <button
                 onClick={() => openDevWindow('fps_widget', 'FPS Counter', 420, 120, 280, 170)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <Gauge size={14} className="text-lime-400" />
                 Open FPS Counter
@@ -102,7 +112,7 @@ export function DevMenu() {
 
             <button
                 onClick={() => openDevWindow('stress_test_menu', 'Stress Test Menu', 460, 100, 440, 300)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <Flame size={14} className="text-fuchsia-400" />
                 Open Stress Test Menu
@@ -110,7 +120,7 @@ export function DevMenu() {
 
             <button
                 onClick={() => openDevWindow('system_console', 'System Console', 360, 240, 620, 400)}
-                className="flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm transition-colors border border-zinc-700/50"
+                className={buttonClass}
             >
                 <HardDrive size={14} className="text-indigo-400" />
                 Open System Console
