@@ -6,7 +6,7 @@ A local-first, overlay-based personal assistant powered by Tauri and AI, designe
 **CRITICAL FOR AI ASSISTANTS:**
 Before writing code, proposing architectural changes, or executing commands, you **MUST** read the context files located in the `.ai/` directory. These files contain the core identity, tech stack, and goals of the project.
 
-Please read the **10 Architecture Pillars**:
+Please read the **12 Architecture Pillars**:
 1. `.ai/01_project_overview.md` - Core idea, 5-layer architecture, and Terminology.
 2. `.ai/02_ui_and_registry.md` - Dual-Mode UI, Windows, and React Component routing.
 3. `.ai/03_event_lifecycle.md` - Interaction-to-Listener and the End-to-End unified flow.
@@ -17,6 +17,8 @@ Please read the **10 Architecture Pillars**:
 8. `.ai/08_pipeline_pattern.md` - The Pipeline Engine: Linear Execution with observability.
 9. `.ai/09_window_customization_and_layout.md` - Custom Window Strategy and Layout State.
 10. `.ai/10_fluid_animation_continuity.md` - Continuity-first animation system, spring motion, and stateful vs relative animation IDs.
+11. `.ai/11_widget_ecosystem_and_submission.md` - Widget-as-package model for built-in and user-contributed widgets.
+12. `.ai/12_multi_registry_contract.md` - Formal contracts for widget/tool/feature/component/process/pipeline registries.
 
 ---
 
@@ -63,7 +65,7 @@ Please read the **10 Architecture Pillars**:
 - [x] Implement Event Bus (Event Engine) & Process Engine basic routing.
 - [x] Implement Database (SQLite) for audit logging & Config/Keybinds.
 - [x] Implement **Pipeline Engine** for linear execution sequences.
-- [x] Document Unified Event Lifecycle, Bootup sequence, and Fluid Animation standards (10 Pillars).
+- [x] Document Unified Event Lifecycle, Bootup sequence, Fluid Animation standards, and Widget Ecosystem contracts (12 Pillars).
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor (CURRENT)
 - [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (pospone for now since we need a robust event and ui and correct gateway so we can get the corrct feeedback)
