@@ -6,7 +6,7 @@ A local-first, overlay-based personal assistant powered by Tauri and AI, designe
 **CRITICAL FOR AI ASSISTANTS:**
 Before writing code, proposing architectural changes, or executing commands, you **MUST** read the context files located in the `.ai/` directory. These files contain the core identity, tech stack, and goals of the project.
 
-Please read the **12 Architecture Pillars**:
+Please read the **13 Architecture Pillars**:
 1. `.ai/01_project_overview.md` - Core idea, 5-layer architecture, and Terminology.
 2. `.ai/02_ui_and_registry.md` - Dual-Mode UI, Windows, and React Component routing.
 3. `.ai/03_event_lifecycle.md` - Interaction-to-Listener and the End-to-End unified flow.
@@ -19,6 +19,7 @@ Please read the **12 Architecture Pillars**:
 10. `.ai/10_fluid_animation_continuity.md` - Continuity-first animation system, spring motion, and stateful vs relative animation IDs.
 11. `.ai/11_widget_ecosystem_and_submission.md` - Widget (components + windows) and package ecosystem submission model.
 12. `.ai/12_multi_registry_contract.md` - Formal contracts for widget and cross-domain package ecosystem registries.
+13. `.ai/13_core_widget_design_language.md` - Core widget visual language for light/dark mode, component style, and motion tone.
 
 ---
 
