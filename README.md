@@ -6,7 +6,7 @@ A local-first, overlay-based personal assistant powered by Tauri and AI, designe
 **CRITICAL FOR AI ASSISTANTS:**
 Before writing code, proposing architectural changes, or executing commands, you **MUST** read the context files located in the `.ai/` directory. These files contain the core identity, tech stack, and goals of the project.
 
-Please read the **9 Architecture Pillars**:
+Please read the **10 Architecture Pillars**:
 1. `.ai/01_project_overview.md` - Core idea, 5-layer architecture, and Terminology.
 2. `.ai/02_ui_and_registry.md` - Dual-Mode UI, Windows, and React Component routing.
 3. `.ai/03_event_lifecycle.md` - Interaction-to-Listener and the End-to-End unified flow.
@@ -16,6 +16,7 @@ Please read the **9 Architecture Pillars**:
 7. `.ai/07_app_bootup_lifecycle.md` - The current ACE boot pipeline sequence.
 8. `.ai/08_pipeline_pattern.md` - The Pipeline Engine: Linear Execution with observability.
 9. `.ai/09_window_customization_and_layout.md` - Custom Window Strategy and Layout State.
+10. `.ai/10_fluid_animation_continuity.md` - Continuity-first animation system, spring motion, and stateful vs relative animation IDs.
 
 ---
 
@@ -53,6 +54,8 @@ Please read the **9 Architecture Pillars**:
 	- `Stress Test: Chat Message Flow`
 	- `Stress Test: Window Motion`
 	- `Stress Test: Window Swarm`
+  - `Stress Test: Prompt Bar Animation`
+  - `Stress Test: Prompt Bar Real Window`
 
 ### 🏗️ Phase 1: Architecture & Foundations (CONSOLIDATED)
 - [x] Define 5-Layer Architecture & Core Pillars.
@@ -60,7 +63,7 @@ Please read the **9 Architecture Pillars**:
 - [x] Implement Event Bus (Event Engine) & Process Engine basic routing.
 - [x] Implement Database (SQLite) for audit logging & Config/Keybinds.
 - [x] Implement **Pipeline Engine** for linear execution sequences.
-- [x] Document Unified Event Lifecycle & Bootup sequence (9 Pillars).
+- [x] Document Unified Event Lifecycle, Bootup sequence, and Fluid Animation standards (10 Pillars).
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor (CURRENT)
 - [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (pospone for now since we need a robust event and ui and correct gateway so we can get the corrct feeedback)
@@ -84,7 +87,7 @@ Please read the **9 Architecture Pillars**:
 - [x] **Window Registry List**: Real-time status of running background tasks.
 - [~] **Window Customization Strategy**:
   - [x] Extend `BaseWindow` into a hybrid shell supporting `standard` chrome and `borderless` presentation.
-  - [ ] Implement `useWindowContext` to expose window actions (drag, close, resize) to widgets.
+  - [x] Keep window actions centralized in `windowEngine` (no mandatory `useWindowContext` layer for current architecture).
   - [ ] Migrate production widgets to own their chrome/frame styling.
   - [x] **Advanced Drag & Interaction**:
     - [x] Support drag mode metadata (`header` vs `full`) for different widget interaction surfaces.

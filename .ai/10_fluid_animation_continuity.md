@@ -73,6 +73,50 @@ Implementation guidance for ACE:
 4. Keep motion interruption-safe: replay, cancel, retarget, and close should not produce jumps.
 5. Profile FPS during stress scenarios and optimize before adding visual complexity.
 
+## Animation Pattern IDs (Stateful vs Relative)
+
+To avoid ambiguity, every animation pattern must declare a `pattern_id` and a `positioning_mode`.
+
+### Positioning Modes
+
+1. `stateful_fixed`
+Definition: Animation is anchored to a fixed, system-defined location (for example lower-center to center).
+Behavior: User drag is disabled or ignored for the duration of the sequence.
+Use cases: Global prompt bar summon, onboarding hero transitions, system-level alerts.
+
+2. `relative_runtime`
+Definition: Animation is anchored relative to the current runtime window position.
+Behavior: User can drag while animation is active; animation retargets continuously from live bounds.
+Use cases: Widget-local effects, draggable utility windows, interactive contextual prompts.
+
+### ID Convention
+
+Use this format:
+`anim:<domain>:<name>:<positioning_mode>:v<version>`
+
+Examples:
+1. `anim:prompt_bar:expand_search:stateful_fixed:v1`
+2. `anim:window_card:morph_focus:relative_runtime:v1`
+
+### Runtime Contract
+
+Each animation definition should include at least:
+1. `pattern_id`
+2. `positioning_mode` (`stateful_fixed` or `relative_runtime`)
+3. `interrupt_policy` (`lock`, `retarget`, or `cancel`)
+4. `anchor_spec`:
+stateful mode: semantic anchor (`bottom_center`, `center`, etc.)
+relative mode: live origin (`current_window_bounds`) and retarget rule
+
+### Drag Behavior Rules
+
+1. For `stateful_fixed`:
+drag should be locked during critical morph phases unless explicitly overridden.
+2. For `relative_runtime`:
+drag should remain enabled; animation must sample current bounds and continue without reset.
+3. If mode changes mid-sequence:
+convert from current sampled geometry, never jump back to phase-0 bounds.
+
 ## Prompt Bar Real Window Pattern (ACE)
 
 Canonical sequence for prompt bar mockup:
