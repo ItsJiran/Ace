@@ -56,6 +56,17 @@ export function StressTestMenu() {
         });
     };
 
+    const openRAMIsolationTest = () => {
+        WindowEngine.spawnWindow({
+            component_name: 'stress_test_ram_isolation',
+            title: 'Stress Test: RAM Isolation',
+            x: 440,
+            y: 160,
+            width: 520,
+            height: 640,
+        });
+    };
+
     return (
         <div className="h-full w-full rounded-xl border border-zinc-800 bg-zinc-950/90 p-3 flex flex-col gap-3">
             <div>
@@ -105,6 +116,18 @@ export function StressTestMenu() {
             >
                 <p className="text-sm text-zinc-200">Window Swarm</p>
                 <p className="text-[11px] text-zinc-500">Spawn & animasikan beberapa window secara concurrent — orbital, bounce grid, scatter spring.</p>
+            </button>
+
+            <div className="border-t border-zinc-800 pt-2">
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Reactivity</p>
+            </div>
+
+            <button
+                onClick={openRAMIsolationTest}
+                className="w-full text-left rounded border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
+            >
+                <p className="text-sm text-zinc-200">RAM Isolation</p>
+                <p className="text-[11px] text-zinc-500">Flood global RAM dengan key asing sambil animasi jalan — buktikan FPS tidak turun karena O(1) socket isolation.</p>
             </button>
         </div>
     );

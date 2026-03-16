@@ -31,6 +31,21 @@ Please read the **8 Architecture Pillars**:
 - [x] Fix Tauri FS capability scope for AppConfig read/write and add graceful persistence failure handling.
 - [x] Sync architecture markdown docs (`.ai/*`, `ARCHITECTURE.md`, `README.md`) with latest manager/engine structure.
 
+#### ✅ Performance & Diagnostics Updates (March 2026)
+- [x] Optimize drag interaction with local drag state + commit-on-mouseup to avoid RAM write floods per frame.
+- [x] Add RAF throttling for high-frequency pointer updates and remove dynamic imports from hot interaction paths.
+- [x] Add short-circuit guards for unchanged writes in global/window state synchronization.
+- [x] Decouple cursor focus bridge from heavy overlay state (`system:mouse_focus_enabled`) to reduce broad re-renders.
+- [x] Improve `BaseWindow` runtime behavior with `React.memo`, drag-mode visual fallback (disable heavy effects while dragging), and smoother focused-window interactions.
+- [x] Add `Storage.getRAMStats()` and ship **RAM Usage Analyzer** for Storage Engine payload diagnostics.
+- [x] Add OS-level process memory telemetry via Tauri command `get_process_memory` (Linux `/proc/self/status`: `VmRSS`, `VmSize`) and integrate it in the RAM analyzer UI.
+- [x] Add stress testing suite for performance profiling:
+	- `Stress Test: UI Animation FPS`
+	- `Stress Test: Prompt + AI Response Load`
+	- `Stress Test: Chat Message Flow`
+	- `Stress Test: Window Motion`
+	- `Stress Test: Window Swarm`
+
 ### 🏗️ Phase 1: Architecture & Foundations (CONSOLIDATED)
 - [x] Define 5-Layer Architecture & Core Pillars.
 - [x] Implement Global RAM (Storage Engine) with O(1) reactivity.
@@ -41,7 +56,8 @@ Please read the **8 Architecture Pillars**:
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor (CURRENT)
 - [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (pospone for now since we need a robust event and ui and correct gateway so we can get the corrct feeedback)
-- [ ] **Formalize Schemas**: Interaction, Listener, Window & Widget config schemas.
+- [x] **Formalize Schemas (Core Done)**: Event, Window, and Storage schemas are formalized.
+- [ ] **Formalize Schemas (Remaining)**: Interaction, Listener, and Widget config schemas.
 - [ ] **Align Event Engine**: Enforce "Workers Never Listen" (Subordination) rule.
 - [ ] **Align Process Engine**: Integrate PipelineEngine for tool execution steps.
 - [ ] **Align Storage Engine**: Enforce Pre-Allocation Protocol for all results.
@@ -52,33 +68,33 @@ Please read the **8 Architecture Pillars**:
 ### 🧩 Phase 3: The Development UI Kit
 - [x] Basic "Dumb Window" generation & animation.
 - [x] **RAM Viewer**: Visual monitoring of the Memory Bus.
-- [ ] **Event Viewer**: Visual logging of tickets flying across the EventBus.
-- [ ] **Event Registry List**: Real-time status of running background tasks.
-- [ ] **Process Monitor**: Real-time status of running background tasks.
-- [ ] **Tools Registry List**: Real-time status of running background tasks.
-- [ ] **Pipeline Registry List**: Real-time status of running background tasks.
-- [ ] **Window Registry List**: Real-time status of running background tasks.
+- [x] **Event Viewer**: Visual logging of tickets flying across the EventBus.
+- [x] **Event Registry List**: Real-time status of running background tasks.
+- [x] **Process Monitor**: Real-time status of running background tasks.
+- [x] **Tools Registry List**: Real-time status of running background tasks.
+- [x] **Pipeline Registry List**: Real-time status of running background tasks.
+- [x] **Window Registry List**: Real-time status of running background tasks.
 
 ### 🖥️ Phase 4: The Core UI Shell & Local Loop (Integration Testing)
 
 Goal: Prove the full CQRS loop (UI -> EventBus -> Process -> RAM -> UI) works with simulated high-frequency data.
 🧪 The "Mock Brain" Integration Tests
 
-- [ ] **FPS Counter**: Create a FPS counter that updates every 50ms.
-- [ ] **RAM Counter**: Create a RAM counter that updates every 50ms.
-- [ ] **Hover Debugging Icon Located Ontop Header**: A Window that when hovering other window it will show the window uid and z-index and other data.
+- [x] **FPS Counter**: Create a FPS counter that updates every 50ms.
+- [x] **RAM Counter**: Create a RAM counter that updates every 50ms.
+- [x] **Hover Debugging Icon Located Ontop Header**: A Window that when hovering other window it will show the window uid and z-index and other data.
 - [x] **The "Mock Brain" Test**: Create a dummy local executor that fakes an AI response to prove the Pre-Allocation Protocol works flawlessly end-to-end.
 - [x] **The Event Tester Button**: Create a developer panel with buttons to manually emit Interaction tickets to the eventEngine.
-- [ ] **Simulated Token Streamer**: Build a mock worker that writes random words to a specific RAM key at 50ms intervals. This proves the High-Frequency Bypass works and the UI doesn't stutter.
+- [x] **Simulated Token Streamer**: Build a mock worker that writes random words to a specific RAM key at 50ms intervals. This proves the High-Frequency Bypass works and the UI doesn't stutter.
 - [ ] **Simulated Tool Call**: Create a mock process that triggers a "sub-event" (e.g., AI "calls" a tool to open a window) to test the Process Engine's ability to manage nested lifecycles.
 - [ ] **The "Shake" Stress Test**: A button that emits 100 trigger_animation events to test the useAceListener hook’s memory cleanup.
 
 🏗️ The Reactive UI Foundation (The Sockets)
 
-- [ ] **useAceMemory<T> Hook**: Implement the React 18 useSyncExternalStore hook that connects components directly to the storageEngine.
-- [ ] **useAceListener Hook**: Implement the transient event hook with a mandatory unsubscribe cleanup to prevent memory leaks in the eventEngine.
-- [ ] **The "Glass Shell" Window**: Build the master Tauri window wrapper that reads its X/Y/W/H from the windowEngine state in RAM.
-- [ ] **Component Registry**: A system to dynamically mount React components (like the Chat Bubble or System Monitor) based on the Classification RAM index.
+- [x] **useAceMemory<T> Hook**: Implement the React 18 useSyncExternalStore hook that connects components directly to the storageEngine.
+- [x] **useAceListener Hook**: Implement the transient event hook with a mandatory unsubscribe cleanup to prevent memory leaks in the eventEngine.
+- [x] **The "Glass Shell" Window**: Build the master Tauri window wrapper that reads its X/Y/W/H from the windowEngine state in RAM.
+- [x] **Component Registry**: A system to dynamically mount React components (like the Chat Bubble or System Monitor) based on the Classification RAM index.
 
 💾 Persistence & Audit Testing
 
@@ -106,9 +122,9 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 ### 🖥️ Phase 5: The Core UI Shell & Local Loop (Human-System Integration)
 *Goal: Build the user-facing transparent overlay, the core Shadcn components, and prove the UI-to-Engine CQRS loop works without an AI.*
 - [ ] **Tauri Transparent Layer**: Configure the borderless, click-through fullscreen window (Layer 1).
-- [ ] **React Hook Factory**: Implement `useAceMemory(uid)` and `useAceListener(event)` hooks for strict O(1) Component reactivity.
+- [x] **React Hook Factory**: Implement `useAceMemory(uid)` and `useAceListener(event)` hooks for strict O(1) Component reactivity.
 - [ ] **Base Dumb Components**: Build the UI primitives (e.g., `<CommandInput />`, `<ChatBubble />`, `<WindowFrame />`) using Shadcn & Tailwind.
-- [ ] **Widget Dragger & Window Manager**: Implement spatial logic (X/Y coordinates, Z-index) driven purely by `windowEngine` RAM state.
+- [x] **Widget Dragger & Window Manager**: Implement spatial logic (X/Y coordinates, Z-index) driven purely by `windowEngine` RAM state.
 - [ ] **Settings Window**: Create a settings window for keybinds and configuration and tools list, and widget list.
 
 ### 🧠 Phase 6: The AI Gateway & Autonomous Tooling (The Brain)

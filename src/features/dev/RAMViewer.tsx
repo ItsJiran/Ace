@@ -14,9 +14,33 @@ export function RAMViewer() {
         const globalRam = (Storage as any).global_ram as Map<string, any>;
         const classRam = (Storage as any).classification_ram as Map<string, string[]>;
 
+        // Truncate large string values before stringify to avoid blocking the main
+        // thread when stress tests or flood scenarios have written large payloads.
+        const MAX_STR_LEN = 300;
+        const sanitize = (val: any): any => {
+            if (typeof val === 'string') {
+                return val.length > MAX_STR_LEN
+                    ? `[truncated — ${val.length} chars]`
+                    : val;
+            }
+            if (val && typeof val === 'object' && !Array.isArray(val)) {
+                const out: Record<string, any> = {};
+                for (const k of Object.keys(val)) {
+                    out[k] = sanitize(val[k]);
+                }
+                return out;
+            }
+            return val;
+        };
+
+        const sanitizedGlobal: Record<string, any> = {};
+        for (const [k, v] of globalRam.entries()) {
+            sanitizedGlobal[k] = sanitize(v);
+        }
+
         const data = {
-            GLOBAL_RAM: Object.fromEntries(globalRam.entries()),
-            CLASSIFICATION_INDEX: Object.fromEntries(classRam.entries())
+            GLOBAL_RAM: sanitizedGlobal,
+            CLASSIFICATION_INDEX: Object.fromEntries(classRam.entries()),
         };
 
         setSnapshot(JSON.stringify(data, null, 2));
