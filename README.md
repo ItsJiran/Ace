@@ -58,6 +58,14 @@ Please read the **12 Architecture Pillars**:
 	- `Stress Test: Window Swarm`
   - `Stress Test: Prompt Bar Animation`
   - `Stress Test: Prompt Bar Real Window`
+  - `Stress Test: Animation Interrupt Drag`
+  - `Stress Test: Relative Modifier Animation`
+- [x] Implement WindowEngine animation runtime contract (`playAnimation`, `cancelAnimation`, `retargetAnimation`) with per-window RAF orchestration and RAM observability at `system:window_animations`.
+- [x] Wire drag interruption policy in `BaseWindow` using runtime animation state:
+  - `lock`: drag ignored while animation is running.
+  - `cancel`: drag start cancels active animation.
+  - `retarget`: active animation retargets continuously during drag.
+- [x] Add relative/modifier-based continuity stress test where bounce motion persists while the base target is dragged.
 
 ### 🏗️ Phase 1: Architecture & Foundations (CONSOLIDATED)
 - [x] Define 5-Layer Architecture & Core Pillars.

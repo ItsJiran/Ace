@@ -81,6 +81,35 @@ export function StressTestMenu() {
         });
     };
 
+    const openAnimationInterruptDragTest = () => {
+        WindowEngine.spawnWindow({
+            component_name: 'stress_test_animation_interrupt_drag',
+            title: 'Stress Test: Animation Interrupt Drag',
+            x: 300,
+            y: 420,
+            width: 460,
+            height: 90,
+            chrome_style: 'borderless',
+            drag_surface: 'full',
+            is_locked: false,
+        });
+    };
+
+    const openRelativeModifierAnimationTest = () => {
+        WindowEngine.spawnWindow({
+            component_name: 'stress_test_relative_modifier_animation',
+            title: 'Stress Test: Relative Modifier Animation',
+            x: 320,
+            y: 340,
+            width: 460,
+            height: 96,
+            chrome_style: 'borderless',
+            drag_surface: 'full',
+            is_locked: true,
+            hide_ring: true,
+        });
+    };
+
     const openRAMIsolationTest = () => {
         WindowEngine.spawnWindow({
             component_name: 'stress_test_ram_isolation',
@@ -161,6 +190,22 @@ export function StressTestMenu() {
             >
                 <p className="text-sm text-zinc-200">Prompt Bar Real Window</p>
                 <p className="text-[11px] text-zinc-500">Animate actual window bounds via WindowEngine: bottom-center, morph, search, shrink, exit.</p>
+            </button>
+
+            <button
+                onClick={openAnimationInterruptDragTest}
+                className="w-full text-left rounded border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
+            >
+                <p className="text-sm text-zinc-200">Animation Interrupt Drag</p>
+                <p className="text-[11px] text-zinc-500">Uji gangguan drag saat animasi berjalan: lock menolak drag, cancel menghentikan, retarget mengikuti drag.</p>
+            </button>
+
+            <button
+                onClick={openRelativeModifierAnimationTest}
+                className="w-full text-left rounded border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
+            >
+                <p className="text-sm text-zinc-200">Relative Modifier Animation</p>
+                <p className="text-[11px] text-zinc-500">Drag base target sambil window tetap "lompat" (modifier offset) untuk uji relative animation continuity.</p>
             </button>
 
             <div className="border-t border-zinc-800 pt-2">

@@ -196,7 +196,7 @@ Semantic strings are resolved by WindowEngine at the moment each segment activat
 | Policy | On playAnimation called mid-run | Drag behavior |
 |---|---|---|
 | `lock` | New call ignored | Drag blocked (isAnimationLocked = true) |
-| `retarget` | Snaps from → live bounds, continues toward new target | Drag accepted, retargets on pointer-up |
+| `retarget` | Snaps from → live bounds, continues toward new target | Drag accepted, retargets continuously during pointer move |
 | `cancel` | Cancels immediately, new sequence starts | Drag cancels sequence |
 
 ### Observability (DevKit)
@@ -244,3 +244,16 @@ Examples:
 - `anim:prompt_bar:expand_search:stateful_fixed:v1`
 - `anim:window_card:morph_focus:relative_runtime:v1`
 - `anim:widget:slide_in:stateful_fixed:v1`
+
+## Current Stress-Test Progress
+
+Implemented animation continuity stress tests in Dev Kit:
+1. `Stress Test: Prompt Bar Animation` (CSS morphology reference)
+2. `Stress Test: Prompt Bar Real Window` (WindowEngine geometry sequence)
+3. `Stress Test: Animation Interrupt Drag` (policy validation: `lock` / `cancel` / `retarget`)
+4. `Stress Test: Relative Modifier Animation` (relative base target drag + persistent bounce modifier)
+
+Relative modifier scenario verifies that motion layers can stack safely:
+1. Base target follows drag input (`relative_runtime` semantics).
+2. Modifier layer keeps spring/bounce offset active.
+3. Retarget loop preserves continuity without snapping back to phase-0 bounds.

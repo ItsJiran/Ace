@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { WindowConfig } from '#/schemas/window';
+import type { AnimationRuntimeState } from '#/schemas/animation';
 import { WindowEngine } from '#/services/windowEngine';
+import { Storage } from '#/services/storageEngine';
 import { GripHorizontal, X, Minus, Lock, Unlock, BringToFront, Layers } from 'lucide-react';
 import { ComponentRegistry } from '#/features/registry/ComponentRegistry';
 import { useAceMemory } from '#/hooks/useAceMemory';
@@ -74,6 +76,20 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
         if (!canCapturePointer || config.is_locked) return;
         if (e.button !== 0) return;
 
+        const allAnimations = Storage.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined;
+        const animState = allAnimations?.[config.window_uid];
+        const interruptPolicy = animState?.is_running ? animState.interrupt_policy as 'lock' | 'retarget' | 'cancel' | undefined : undefined;
+
+        // lock: drag is ignored while sequence is running.
+        if (interruptPolicy === 'lock') {
+            return;
+        }
+
+        // cancel: dragging immediately stops current sequence.
+        if (interruptPolicy === 'cancel') {
+            WindowEngine.cancelAnimation(config.window_uid);
+        }
+
         e.preventDefault();
         e.stopPropagation();
 
@@ -101,6 +117,16 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
             const dy = moveEvent.clientY - startY;
             nextX = initialX + dx;
             nextY = initialY + dy;
+
+            // retarget: animation remains alive but follows drag destination.
+            if (interruptPolicy === 'retarget') {
+                WindowEngine.retargetAnimation(config.window_uid, {
+                    x: nextX,
+                    y: nextY,
+                    width: config.width,
+                    height: config.height,
+                });
+            }
 
             // Keep drag smooth while avoiding write floods.
             if (rafId !== null) return;

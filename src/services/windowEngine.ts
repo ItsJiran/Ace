@@ -59,17 +59,9 @@ class WindowEngineSingleton {
             classifications: ['system:core']
         });
 
-        // Debug: Pure Div Position
-        Storage.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'debug:box_pos',
-            payload: { x: 200, y: 200 },
-            classifications: ['system:debug']
-        });
-
         // 3. Register a command listener on the EventBus for generic window commands
         const coreHandler = async (interaction: any) => {
-            const { action, sub_action, payload } = interaction;
+            const { action, payload } = interaction;
 
              if (action === 'open_window') {
                 this.spawnWindow(payload as any);
@@ -218,7 +210,7 @@ class WindowEngineSingleton {
     /**
      * Spawns a physical Dumb Window UI block onto the screen.
      */
-    spawnWindow(config: Omit<WindowConfig, 'window_uid' | 'z_index' | 'is_focused' | 'is_minimized' | 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface'> & Partial<Pick<WindowConfig, 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface'>>) {
+    spawnWindow(config: Omit<WindowConfig, 'window_uid' | 'z_index' | 'is_focused' | 'is_minimized' | 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface' | 'hide_ring'> & Partial<Pick<WindowConfig, 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface' | 'hide_ring'>>) {
         const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
         this.highest_z_index += 1;
 
@@ -229,6 +221,7 @@ class WindowEngineSingleton {
             always_on_top: config.always_on_top ?? false,
             chrome_style: config.chrome_style ?? 'standard',
             drag_surface: config.drag_surface ?? 'header',
+            hide_ring: config.hide_ring ?? false,
             window_uid,
             z_index: this.highest_z_index,
             is_focused: true,
@@ -505,7 +498,12 @@ class WindowEngineSingleton {
                     if (sequence.on_complete === 'close_window') {
                         this.closeWindow(window_uid);
                     } else if (typeof sequence.on_complete === 'object' && 'emit_event' in sequence.on_complete) {
-                        EventBus.dispatch({ action: sequence.on_complete.emit_event, source: { window_uid }, payload: {} });
+                        EventBus.emit({
+                            event_type: 'interaction',
+                            action: sequence.on_complete.emit_event,
+                            window_uid,
+                            payload: {},
+                        });
                     }
                     return;
                 }
