@@ -207,6 +207,19 @@ export const WidgetRegistryEntrySchema = BaseRegistryEntrySchema.extend({
 
 export type WidgetRegistryEntry = z.infer<typeof WidgetRegistryEntrySchema>;
 
+/**
+ * A Widget is a simple UI bundle that pairs a component with a window behavior.
+ * This keeps widget terminology lightweight and focused on visual runtime entities.
+ */
+export const WidgetBindingSchema = z.object({
+    widget_name: z.string(),
+    component_name: z.string(),
+    window_name: z.string(),
+    entry_file: z.string().optional(),
+});
+
+export type WidgetBinding = z.infer<typeof WidgetBindingSchema>;
+
 export const AnyRegistryEntrySchema = z.discriminatedUnion('registry_type', [
     WidgetRegistryEntrySchema,
     ComponentRegistryEntrySchema,
@@ -221,10 +234,12 @@ export const AnyRegistryEntrySchema = z.discriminatedUnion('registry_type', [
 export type AnyRegistryEntry = z.infer<typeof AnyRegistryEntrySchema>;
 
 // ----------------------------------------------------------------------
-// 6. Backward-Compatible Widget Module Registry Schema
+// 6. Widget Package Registry (Simple Terminology)
 // ----------------------------------------------------------------------
 
 export const WidgetRegistrySchema = z.object({
+    /** Canonical package name. */
+    package_name: z.string(),
     /** Version of the downloaded widget package */
     version: z.string(),
     /** URL or reference to the source repository */
@@ -240,17 +255,41 @@ export const WidgetRegistrySchema = z.object({
     /** Scope ownership and filesystem location */
     owner_scope: RegistryOwnerScopeSchema.optional(),
     source_scope: FilesystemWidgetScopeSchema.optional(),
+    /**
+     * Simple widget definitions: each widget binds a component to a window behavior.
+     * Folder `widgets/` should primarily contain TSX entry files for these bindings.
+     */
+    widgets: z.array(WidgetBindingSchema).default([]),
     /** List of UI components provided by this registry module */
     components: z.array(WidgetComponentSchema).default([]),
-    /** Independent registry domains may be provided standalone or together */
-    tools: z.array(ToolRegistryEntrySchema).default([]),
-    features: z.array(FeatureRegistryEntrySchema).default([]),
-    processes: z.array(ProcessRegistryEntrySchema).default([]),
-    pipelines: z.array(PipelineRegistryEntrySchema).default([]),
+    /** Window behavior presets used by widgets */
     windows: z.array(WindowRegistryEntrySchema).default([]),
-    registries: z.array(RegistryRegistryEntrySchema).default([]),
     dependency_refs: z.array(RegistryDependencyRefSchema).default([]),
     capability_requirements: z.array(CapabilityRequirementSchema).default([]),
+}).superRefine((pkg, ctx) => {
+    if (pkg.widgets.length === 0) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Widget package must include at least one widget binding (component + window).',
+            path: ['widgets'],
+        });
+    }
+
+    if (pkg.components.length === 0) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Widget package must include at least one component definition.',
+            path: ['components'],
+        });
+    }
+
+    if (pkg.windows.length === 0) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Widget package must include at least one window definition.',
+            path: ['windows'],
+        });
+    }
 });
 
 export type WidgetRegistry = z.infer<typeof WidgetRegistrySchema>;
@@ -287,3 +326,31 @@ export const MultiRegistryManifestSchema = z.object({
 });
 
 export type MultiRegistryManifest = z.infer<typeof MultiRegistryManifestSchema>;
+
+// ----------------------------------------------------------------------
+// 8. Package Ecosystem Wrapper
+// ----------------------------------------------------------------------
+
+/**
+ * Package Ecosystem is the full wrapper contract for all registry domains.
+ * Unlike WidgetRegistrySchema (focused on widget UI bundles), this schema can
+ * include tools/components/windows/pipelines/features/processes/registries.
+ */
+export const PackageEcosystemSchema = z.object({
+    package_name: z.string(),
+    version: z.string(),
+    owner_scope: RegistryOwnerScopeSchema.default('user'),
+    source_scope: FilesystemWidgetScopeSchema.default('local'),
+    widgets: z.array(WidgetRegistrySchema).default([]),
+    tools: z.array(ToolRegistryEntrySchema).default([]),
+    components: z.array(ComponentRegistryEntrySchema).default([]),
+    windows: z.array(WindowRegistryEntrySchema).default([]),
+    pipelines: z.array(PipelineRegistryEntrySchema).default([]),
+    features: z.array(FeatureRegistryEntrySchema).default([]),
+    processes: z.array(ProcessRegistryEntrySchema).default([]),
+    registries: z.array(RegistryRegistryEntrySchema).default([]),
+    dependency_refs: z.array(RegistryDependencyRefSchema).default([]),
+    capability_requirements: z.array(CapabilityRequirementSchema).default([]),
+});
+
+export type PackageEcosystem = z.infer<typeof PackageEcosystemSchema>;

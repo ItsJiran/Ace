@@ -2,18 +2,15 @@
 
 This document formalizes how ACE treats widgets as first-class modular products.
 
-A widget is not only a visual component. A widget can include:
-1. UI components
-2. Features (application-level behaviors)
-3. Tools (executable capabilities)
-4. Optional process/pipeline logic
-5. Optional window presets and layout defaults
+Terminology (final):
+1. `widget` = gabungan `components` + `windows` (UI composition only).
+2. `package ecosystem` = wrapper package identity that can include all domains (`tools`, `components`, `windows`, `pipelines`, `features`, `processes`, `registry`).
 
 ## Core Principles
 
-1. Widget-as-Package: A widget is a cohesive capability bundle, not just a single React file.
+1. Widget-as-UI Composition: A widget is a visual/runtime pairing between component and window behavior.
 2. Local-First Safety: Widget execution must respect ACE permission and validation gates.
-3. Registry-Driven Runtime: Widgets become active only after passing registration contracts.
+3. Registry-Driven Runtime: Widgets and package ecosystem domains become active only after passing registration contracts.
 4. Isolation by Default: Widget state and outputs must be addressable by deterministic IDs.
 5. Extensible by Users: End users can contribute and register their own widgets.
 
@@ -34,13 +31,13 @@ Built-in widgets are owned by ACE core and are not user-removable.
 Their source of truth lives under:
 
 ```text
-src/core/widgets/
+src/core/packages/
 ```
 
-Inside that folder, ACE should mirror the same registry-oriented package structure used elsewhere, for example:
+Inside that folder, ACE should mirror the same package ecosystem structure used elsewhere, for example:
 
 ```text
-src/core/widgets/
+src/core/packages/
 ├── tools/
 ├── components/
 ├── windows/
@@ -71,12 +68,13 @@ widgets/
 ```
 
 Important rule:
-the package may provide the full ecosystem, but it is not required to. Because ACE is multi-registry, a user package may submit only `tools`, only `components`, only `windows`, or any other valid subset.
+`widget` means UI composition (`components` + `windows`) under one package identity.
 
-This rule also applies to the directory model itself:
-`tools`, `components`, `windows`, `pipelines`, `features`, `processes`, and `registry` are independent domains.
-They are not merely subfolders of a mandatory widget bundle.
-Each one must be allowed to exist, be loaded, be validated, and be versioned on its own.
+If a submission contains broader domains (`tools`, `pipelines`, `features`, `processes`, `registry`) it should be treated as a **package ecosystem**, not a widget-only package.
+
+Directory model note:
+`tools`, `components`, `windows`, `pipelines`, `features`, `processes`, and `registry` are independent domains at loader/registry level.
+When grouped under one package identity, the complete wrapper is called `package ecosystem`.
 
 ## Widget Package Contract (Conceptual)
 
@@ -104,7 +102,7 @@ ACE should treat widget assets as three mirrored scopes:
 Non-removable first-party widgets provided by ACE itself.
 
 ```text
-src/core/widgets/
+src/core/packages/
 ```
 
 ### 2. Local Package Scope
@@ -140,12 +138,12 @@ config/widgets/
 
 Important clarification:
 the mirrored folder names do not imply that all folders must always exist together.
-They represent independent registry domains that share a consistent naming convention across scopes.
-For example, ACE must allow:
-1. a tools-only local submission
-2. a components-only local submission
-3. a windows-only core package
-4. a pipelines-only config declaration
+They represent independent registry domains with consistent naming across scopes.
+
+Classification rule:
+1. If package only defines UI pairing (`components` + `windows`), it is a `widget` package.
+2. If package wraps multiple cross-domain registries, it is a `package ecosystem`.
+3. Single-domain submissions remain standalone domain packages.
 
 ## Suggested ID Convention
 
@@ -193,9 +191,9 @@ Widgets should use public registry contracts, not direct mutation of private eng
 4. Versioned Compatibility
 Breaking changes should be controlled through versioned IDs and migration hooks.
 
-5. Standalone Domain Validity
-Each registry domain must remain valid even when loaded independently from the others.
-ACE should not require a `tool` contribution to also ship a `component`, nor a `window` contribution to also ship a full widget package.
+5. Package Identity Clarity
+Widget installations must carry a single package identity/name and version.
+Cross-domain submissions must be labeled as package ecosystem packages.
 
 ## Runtime Behavior Model
 

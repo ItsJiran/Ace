@@ -4,6 +4,10 @@ This document formalizes ACE runtime registries beyond component mapping.
 
 ACE supports separate registries per domain so the system stays modular, observable, and safe.
 
+Terminology (final):
+1. `widget` = UI composition (`components` + `windows`).
+2. `package ecosystem` = one package identity that can wrap all registry domains.
+
 ## Why Multi-Registry
 
 Single registries become overloaded and fragile as the ecosystem scales.
@@ -23,13 +27,12 @@ Each registry has a different responsibility and lifecycle.
 ### 1. Widget Registry
 
 Purpose:
-Maps `widget_id` to widget package metadata, defaults, and capability declarations.
+Maps `widget_id` to widget metadata and UI composition bindings.
 
 Stores:
 1. Identity and version
-2. Entry component linkage
-3. Declared tool/feature dependencies
-4. Activation status and owner scope (core/user)
+2. Component + window linkage
+3. Activation status and owner scope (core/user)
 
 ### 2. Component Registry
 
@@ -96,7 +99,7 @@ ACE should maintain three mirrored scopes:
 ### 1. Core Built-In Scope
 
 ```text
-src/core/widgets/
+src/core/packages/
 ├── tools/
 ├── components/
 ├── windows/
@@ -126,11 +129,16 @@ Purpose:
 user/local submissions and workspace-owned packages.
 
 Important:
-because registries are independent, a package inside `widgets/` may contain only one domain (`tools` only, `components` only, etc.) and still be valid.
+registries are independent, but terminology must stay strict:
+1. `widget package` = UI package focused on `components` + `windows`.
+2. `package ecosystem` = one package identity that can bundle cross-domain registries.
+3. `standalone domain package` = a single-domain submission (for example only `tools` or only `components`).
+Both are valid, but they are not the same classification.
 
 This is the key contract:
 `tools`, `components`, `windows`, `pipelines`, `features`, `processes`, and `registry` are standalone registry domains.
-They may be shipped together, but they do not depend on one another for filesystem validity.
+They may be shipped together in one package ecosystem identity, or shipped independently as standalone domain packages.
+Filesystem validity does not require every sibling domain to exist.
 
 ### 3. Config Scope
 
@@ -151,7 +159,7 @@ manifest state, enable/disable flags, policy, future installation metadata, and 
 ## Scope Resolution Rules
 
 At runtime, precedence should remain:
-1. `src/core/widgets` (ACE built-in)
+1. `src/core/packages` (ACE built-in)
 2. `widgets` (local/user submissions)
 3. `config/widgets` as configuration and policy input, not as an execution override by default
 
@@ -164,6 +172,8 @@ Config may disable or annotate registry entries, but it should not silently repl
 3. A filesystem scope may provide only `windows/`, `pipelines/`, `features/`, `processes/`, or `registry/` and still remain valid.
 4. Loaders and validators must treat missing sibling folders as normal, not as an error.
 5. The mirrored topology is a naming contract, not a requirement that all domains be present at once.
+6. A widget package must declare one package identity/name that groups its included domains.
+7. If package includes non-UI domains, classify it as package ecosystem.
 
 ## Cross-Registry Linking
 

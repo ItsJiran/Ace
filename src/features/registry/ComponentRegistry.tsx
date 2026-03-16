@@ -20,8 +20,9 @@ import { StressTestRelativeModifierAnimation } from '../dev/StressTestRelativeMo
 import { RAMUsageAnalyzer } from '../dev/RAMUsageAnalyzer';
 import { HeadlessDragSurfaceDemo } from '../dev/HeadlessDragSurfaceDemo';
 import { DevMenu } from '#/components/dev/DevMenu';
-import { LoadingWidget } from '#/components/widgets/LoadingWidget';
-import { SystemConsole } from '#/components/widgets/SystemConsole';
+import { LoadingWidget } from '#/core/packages/system/components/LoadingWidget';
+import { SystemConsole } from '#/core/packages/system/components/SystemConsole';
+import { SystemWidget } from '#/core/packages/system/components/SystemWidget';
 
 const REGISTRY: Record<string, React.FC<any>> = {
     'ram_viewer': RAMViewer,
@@ -48,6 +49,7 @@ const REGISTRY: Record<string, React.FC<any>> = {
     'dev_menu': DevMenu,
     'loading_widget': LoadingWidget,
     'system_console': SystemConsole,
+    'system_widget': SystemWidget,
     // Add more components here in the future
 };
 

@@ -1,4 +1,4 @@
-import { string, z } from 'zod';
+import { z } from 'zod';
 
 // ============================================================================
 // CORE EVENT SYSTEM
@@ -91,4 +91,18 @@ export interface Listener<T extends z.ZodType<any, any, any>> {
     // Fungsi yang akan dieksekusi saat event cocok
     reaction: ListenerHandler<z.infer<T>>;
 }
+
+// ----------------------------------------------------------------------
+// 4. EVENT REACTION CONTRACT
+// Used by widget/registry metadata to declare reaction intent mappings.
+// ----------------------------------------------------------------------
+
+export const EventReactionSchema = z.object({
+    reaction_type: z.string(),
+    action: z.string().optional(),
+    sub_action: z.string().optional(),
+    payload_template: z.record(z.string(), z.any()).optional(),
+});
+
+export type EventReaction = z.infer<typeof EventReactionSchema>;
 

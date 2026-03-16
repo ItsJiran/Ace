@@ -39,6 +39,14 @@ export function DevMenu() {
     return (
         <div className="flex flex-col gap-2 w-full h-full text-zinc-300 overflow-y-auto pr-1">
             <button
+                onClick={() => openDevWindow('system_widget', 'System Center', 120, 70, 980, 700)}
+                className={buttonClass}
+            >
+                <HardDrive size={14} className="text-sky-300" />
+                Open System Widget
+            </button>
+
+            <button
                 onClick={() => openDevWindow('event_viewer', 'Event Viewer', 60, 60, 620, 420)}
                 className={buttonClass}
             >

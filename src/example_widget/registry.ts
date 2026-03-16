@@ -1,10 +1,19 @@
 import type { WidgetRegistry } from '../../schemas/registry';
 
 export const ExampleSystemMonitorRegistry: WidgetRegistry = {
+    package_name: "example_system_monitor",
     version: "1.0.0",
     repository_path: "github.com/example/system-monitor",
     file_location: "/home/user/.ace/plugins/system-monitor",
     author: "ExampleDeveloper",
+    widgets: [
+        {
+            widget_name: "system_monitor_widget",
+            component_name: "SystemMonitorComponent",
+            window_name: "system_monitor_window",
+            entry_file: "src/example_widget/components/SystemMonitor.tsx"
+        }
+    ],
     components: [
         {
             name: "SystemMonitorComponent",
@@ -43,5 +52,29 @@ export const ExampleSystemMonitorRegistry: WidgetRegistry = {
                 }
             ]
         }
-    ]
+    ],
+    windows: [
+        {
+            id: "window:example:system_monitor:v1",
+            version: "1.0.0",
+            registry_type: "window",
+            display_name: "System Monitor Window",
+            owner_scope: "user",
+            source_scope: "local",
+            is_enabled: true,
+            dependency_refs: [],
+            capability_requirements: [],
+            tags: [],
+            window_name: "system_monitor_window",
+            component_name: "SystemMonitorComponent",
+            default_window_preset: {
+                component_name: "SystemMonitorComponent",
+                width: 560,
+                height: 360,
+                title: "System Monitor"
+            }
+        }
+    ],
+    dependency_refs: [],
+    capability_requirements: []
 };

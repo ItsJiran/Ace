@@ -17,8 +17,8 @@ Please read the **12 Architecture Pillars**:
 8. `.ai/08_pipeline_pattern.md` - The Pipeline Engine: Linear Execution with observability.
 9. `.ai/09_window_customization_and_layout.md` - Custom Window Strategy and Layout State.
 10. `.ai/10_fluid_animation_continuity.md` - Continuity-first animation system, spring motion, and stateful vs relative animation IDs.
-11. `.ai/11_widget_ecosystem_and_submission.md` - Widget-as-package model for built-in and user-contributed widgets.
-12. `.ai/12_multi_registry_contract.md` - Formal contracts for widget/tool/feature/component/process/pipeline registries.
+11. `.ai/11_widget_ecosystem_and_submission.md` - Widget (components + windows) and package ecosystem submission model.
+12. `.ai/12_multi_registry_contract.md` - Formal contracts for widget and cross-domain package ecosystem registries.
 
 ---
 
@@ -85,8 +85,8 @@ Please read the **12 Architecture Pillars**:
 - [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results.
 - [x] **Align Window Engine**: RAM-driven spatial state with focus, lock, opacity, always-on-top, and chrome metadata.
 - [x] **Implement Bootup Sequence**: Refactor app entry for the current ordered boot pipeline.
-- [ ] **Formalize Widget Filesystem Scopes**: Mirror the multi-registry directory structure across `src/core/widgets`, `widgets`, and `config/widgets`.
-- [ ] **Define Built-In vs User Widget Ownership**: Core widgets live in `src/core/widgets` and are non-removable; local/user-submitted packages live in `widgets`; each registry domain (`tools`, `components`, `windows`, `pipelines`, `features`, `processes`, `registry`) must be allowed to stand alone and be submitted independently.
+- [ ] **Formalize Widget Filesystem Scopes**: Mirror the multi-registry directory structure across `src/core/packages`, `widgets`, and `config/widgets`.
+- [ ] **Define Built-In vs User Package Ownership**: Core packages live in `src/core/packages` and are non-removable; local/user submissions live in `widgets` with one package identity/name; widget contracts stay focused on `components` + `windows`, while cross-domain bundles are classified as package ecosystem packages.
 
 ### 🧩 Phase 3: The Development UI Kit
 - [x] Basic "Dumb Window" generation & animation.
