@@ -20,7 +20,7 @@ describe('Process Engine (Headless Execution Manager)', () => {
         const mockSocket = vi.fn();
         Storage.subscribe('system:process_registry', mockSocket);
 
-        const record = ProcessEngine.spawnProcess('ai_gateway_stream', { model: 'llama3' });
+        const record = ProcessEngine.registerProcess('ai_gateway_stream', { model: 'llama3' });
 
         expect(record.process_uid).toMatch(/^proc-/);
         expect(record.status).toBe('booting');
@@ -38,10 +38,10 @@ describe('Process Engine (Headless Execution Manager)', () => {
 
     it('should link processes together via group_pid and update statuses safely', () => {
         // Spawn Parent
-        const parent = ProcessEngine.spawnProcess('ai_gateway_stream');
+        const parent = ProcessEngine.registerProcess('ai_gateway_stream');
 
         // Spawn Child (Task spawned during Gateway Stream)
-        const child = ProcessEngine.spawnProcess('tool_executor', {}, parent.process_uid);
+        const child = ProcessEngine.registerProcess('tool_executor', {}, {}, [], parent.process_uid);
 
         expect(child.group_pid).toBe(parent.process_uid);
 
@@ -60,7 +60,7 @@ describe('Process Engine (Headless Execution Manager)', () => {
     });
 
     it('should safely kill processes', () => {
-        const proc = ProcessEngine.spawnProcess('system_monitor');
+        const proc = ProcessEngine.registerProcess('system_monitor');
         expect(Storage.readMemory(proc.process_uid).status).toBe('booting');
 
         ProcessEngine.killProcess(proc.process_uid);

@@ -2,56 +2,117 @@ import { Storage } from './storageEngine';
 import { EventBus } from './eventEngine';
 import { parseAIStreamChunk } from './aiParser';
 import type { Interaction } from '../schemas/events';
+import type { AIProvider } from '../schemas/ai_registry';
 
-/**
- * Configuration for the AI Gateway connection.
- */
-export interface GatewayConfig {
-    provider: 'openai' | 'anthropic' | 'custom';
-    apiKey: string;
-    endpoint?: string;
+export interface AISession {
+    sessionId: string;
+    providerId: string;
+    
+    // The specific RAM key this session is currently streaming into
+    activeOutputRamKey?: string; 
+    
+    // Parser State (Per-Session Buffer)
+    activeEventBuffer: string;
+    isInsideEventBlock: boolean;
+    
+    status: 'idle' | 'connected' | 'streaming' | 'error';
+    
+    // Future: WebSocket instance
+    // socket?: WebSocket;
 }
 
 /**
  * AIGatewayEngineSingleton
  * Role: The primary communicator between the local environment and the AI "Brain".
  * It handles the incoming stream, parses it for events, and writes text to RAM.
+ * 
+ * Functions as a "Provider Registry" managing multiple AI endpoints (OpenClaw, etc.).
+ * Manages multiple concurrent AISessions for multi-agentic capabilities.
  */
 class AIGatewayEngineSingleton {
-    private isConnected = false;
-    private config?: GatewayConfig;
+    // Registry of configured AI providers
+    private providers = new Map<string, AIProvider>();
 
-    // The persistent buffer for incomplete event blocks
-    private activeEventBuffer: string = '';
-    private isInsideEventBlock: boolean = false;
+    // Active Sessions Map (sessionId -> AISession)
+    private sessions = new Map<string, AISession>();
 
     /**
-     * Connect to the AI Gateway provider.
+     * Register a new AI Provider configuration.
+     * Starts listening for connections on this provider (future logic).
      */
-    async connect(config: GatewayConfig) {
-        console.log(`[AIGatewayEngine] Connecting to ${config.provider}... using API Key: ${config.apiKey.substring(0, 4)}***`);
-        this.config = config;
-
-        // Phase 4: Simulated connection latency
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        this.isConnected = true;
-        console.log(`[AIGatewayEngine] Connected successfully.`);
+    registerProvider(provider: AIProvider) {
+        this.providers.set(provider.id, provider);
+        console.log(`[AIGatewayEngine] Registered provider: ${provider.name} (${provider.type})`);
     }
 
     /**
-     * Process a chunk of incoming AI stream data.
-     * Separates the conversational text from the ```event blocks using a stateful approach.
+     * Get a specific provider configuration by ID.
      */
-    handleStreamChunk(chunk: string, ramKey: string, processUid?: string) {
-        // We append the new chunk to our processing stream
-        const fullStream = this.activeEventBuffer + chunk;
-        this.activeEventBuffer = ''; // Reset buffer as we are now processing it
+    getProvider(providerId: string) {
+        return this.providers.get(providerId);
+    }
+
+    /**
+     * List all registered providers.
+     */
+    getAllProviders() {
+        return Array.from(this.providers.values());
+    }
+
+    /**
+     * Create a new isolated session connected to a specific provider.
+     * This allows multiple tabs/agents to have independent conversation streams.
+     * 
+     * @param providerId - The ID of the registered provider to use
+     * @returns sessionId - The unique ID for this new session
+     */
+    async createSession(providerId: string): Promise<string> {
+        const provider = this.providers.get(providerId);
+        if (!provider) {
+            throw new Error(`[AIGatewayEngine] Provider ${providerId} not found.`);
+        }
+
+        const sessionId = `sess-${crypto.randomUUID()}`;
+        
+        const session: AISession = {
+            sessionId,
+            providerId,
+            activeEventBuffer: '',
+            isInsideEventBlock: false,
+            status: 'connected', // Simulating instant connection for now
+        };
+
+        this.sessions.set(sessionId, session);
+        console.log(`[AIGatewayEngine] Session ${sessionId} created on provider ${provider.name}.`);
+        
+        return sessionId;
+    }
+
+    /**
+     * Close and cleanup a session.
+     */
+    closeSession(sessionId: string) {
+        if (this.sessions.has(sessionId)) {
+            this.sessions.delete(sessionId);
+            console.log(`[AIGatewayEngine] Session ${sessionId} closed.`);
+        }
+    }
+
+    /**
+     * Process a chunk of incoming AI stream data for a SPECIFIC session.
+     * Separates the conversational text from the ```event blocks using session-local state.
+     */
+    private handleSessionStreamChunk(sessionId: string, chunk: string, ramKey: string, processUid?: string) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return;
+
+        // Append to session-specific buffer
+        const fullStream = session.activeEventBuffer + chunk;
+        session.activeEventBuffer = ''; 
 
         const { events, textToPrint } = parseAIStreamChunk(fullStream);
 
         // 1. PATHWAY A: Append Conversational Text to RAM
-        // Only print if there's text outside of event blocks.
         if (textToPrint) {
             const currentText = Storage.readMemory(ramKey) || '';
             Storage.dispatchRAMAction({
@@ -61,61 +122,65 @@ class AIGatewayEngineSingleton {
             });
         }
 
-        // 2. PATHWAY B: Handle Events (Completed vs Incomplete)
+        // 2. PATHWAY B: Handle Events
         events.forEach(event => {
             if (event.is_complete) {
-                // Buffer management: If this was the last incomplete event, we are out.
-                this.isInsideEventBlock = false;
-                console.log(`[AIGatewayEngine] Stream status: InsideBlock=${this.isInsideEventBlock}`);
-
-                // Convert buffered protocol event to a system-wide Interaction ticket
+                session.isInsideEventBlock = false;
+                
+                // Interaction Emission
                 const interaction: Interaction = {
                     event_type: 'interaction',
                     window_uid: event.headers.window_uid,
                     process_uid: event.headers.process_uid || processUid,
                     widget_uid: event.headers.widget_uid,
                     action: event.headers.action,
-                    payload: JSON.parse(event.raw_payload_buffer || '{}')
+                    sub_action: event.headers.sub_action,
+                    payload: JSON.parse(event.raw_payload_buffer || '{}'),
+                    
+                    // Crucial: Pass session context so the handler knows where to reply!
+                    preallocated_memory: {
+                        session_id: sessionId,
+                        provider_id: session.providerId
+                    }
                 };
 
-                console.log(`[AIGatewayEngine] Completed event detected: ${interaction.action}. Emitting...`);
+                console.log(`[AIGatewayEngine] [${sessionId}] Event Detected: ${interaction.action}`);
                 EventBus.emit(interaction);
             } else {
-                // If it's incomplete, we put it back in the buffer for the next chunk
-                // We reconstruct the block so the Regex can find it again
-                this.isInsideEventBlock = true;
-
-                // Construct the header line
+                session.isInsideEventBlock = true;
+                
+                // Reconstruct buffer for next chunk
                 const h = event.headers;
                 const headerLine = `${h.event_type}, ${h.window_uid}, ${h.process_uid || 'null'}, ${h.widget_uid || 'null'}, ${h.action}, ${h.sub_action}`;
-
-                this.activeEventBuffer = `\n\`\`\`event\n${headerLine}\n${event.raw_payload_buffer}`;
+                session.activeEventBuffer = `\n\`\`\`event\n${headerLine}\n${event.raw_payload_buffer}`;
             }
         });
     }
 
     /**
-     * Send a prompt to the AI.
+     * Send a prompt to a specific session.
      * In Phase 4, this simulates a streaming response for testing.
      */
-    async sendPrompt(prompt: string, reply_to_ram_key: string) {
-        if (!this.isConnected) {
-            throw new Error('AIGatewayEngine not connected. Please call connect() first.');
+    async sendToSession(sessionId: string, prompt: string, reply_to_ram_key: string) {
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} not found.`);
         }
 
-        console.log(`[AIGatewayEngine] Sending prompt: "${prompt}"`);
+        console.log(`[AIGatewayEngine] [${sessionId}] Sending: "${prompt}"`);
+        session.status = 'streaming';
+        session.activeOutputRamKey = reply_to_ram_key;
 
-        // PRE-ALLOCATION: Ensure the RAM key exists
+        // PRE-ALLOCATION
         Storage.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: reply_to_ram_key,
-            payload: { text: '', status: 'streaming' }
+            payload: { text: '', status: 'streaming', session_id: sessionId }
         });
 
         // SIMULATION MODE (Phase 4 Mock)
-        // We simulate several chunks arriving over time.
         const chunks = [
-            "Hello! I am reading your request.",
+            "Hello! I am reading your request via session " + sessionId + ".",
             " I will help you with that.\n\n",
             "```event\ninteraction, main_window, null, null, open, open_widget\n",
             "{\n  \"widget_name\": \"calendar_view\"\n}\nend_event\n```\n",
@@ -124,15 +189,21 @@ class AIGatewayEngineSingleton {
 
         for (const chunk of chunks) {
             await new Promise(resolve => setTimeout(resolve, 300));
-            this.handleStreamChunk(chunk, reply_to_ram_key);
+            this.handleSessionStreamChunk(sessionId, chunk, reply_to_ram_key);
         }
 
         // Finalize state
+        session.status = 'connected';
         Storage.dispatchRAMAction({
             action: 'update_memory',
             memory_uid: reply_to_ram_key,
             payload: { status: 'completed' }
         });
+    }
+    
+    // Legacy support alias (deprecated)
+    async connect(providerId: string) {
+        return this.createSession(providerId);
     }
 }
 

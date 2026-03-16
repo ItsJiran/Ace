@@ -12,47 +12,46 @@ Before reading the cases, developers must understand the two unbreachable laws o
 
 ---
 
-## Case 1: Standard Prompting & LLM Stream (TCP/Parser Flow)
-*Scenario: The user types a message. The system establishes a TCP connection to the LLM, parses the incoming buffer, and streams text to the UI without choking the Event Bus.*
+## Case 1: Standard Prompting & LLM Stream (Session-Based Flow)
+*Scenario: The user types a message in Session A. The system streams the response specifically to that session's buffer.*
 
-1. **Pre-Allocate RAM:** The `<ChatInput />` component generates a unique `message_uid` (e.g., `msg-123`).
+1. **Pre-Allocate RAM:** The `<ChatInput />` component generates a unique `message_uid` (e.g., `msg-123`) and knows its active `session_id` (e.g., `sess-A`).
 2. **Listen First:** The `<ChatBubble />` component mounts and begins observing `storageEngine` at the key `msg-123`.
-3. **Emit Intent:** `<ChatInput />` emits -> `{ action: 'send_gateway', payload: { text: 'Hello', reply_to_ram_key: 'msg-123' } }`.
-4. **Route:** The `eventEngine` validates the payload and routes it to the `aiGatewayEngine`'s registered listener.
-5. **Process Opt-In (Optional):** The `aiGatewayEngine` decides this is a long-running operation; it opts into the `processEngine` registry to create a tracked PID for UI observability.
-6. **TCP & Parse:** The `aiGatewayEngine` opens a TCP socket to the remote LLM. As the raw buffer streams in, it routes through the internal AI Parser.
-7. **Direct RAM Write (The Bypass):** The parser directly updates the `storageEngine` at `msg-123` with token chunks. **The Event Bus remains completely empty and unblocked.**
-8. **React:** The `<ChatBubble />` observes the continuous RAM updates and types out the text on screen seamlessly.
+3. **Emit Intent:** `<ChatInput />` emits -> `{ action: 'send_gateway', payload: { text: 'Hello' }, preallocated_memory: { message_uid: 'msg-123', session_id: 'sess-A' } }`.
+4. **Route:** The `eventEngine` validates the payload and routes a standardized `CoreEngineHandlerArgs` object to the `aiGatewayEngine`.
+5. **Session Lookup:** `aiGatewayEngine` reads `preallocated_memory.event_session_id`. It locates the correct `AISession` object (which holds the connection to `OpenClaw` or `OpenAI`).
+6. **Streaming & Parsing:** The provider streams chunks back. The engine appends these chunks to **Session A's private buffer** (preventing crosstalk if Session B is also streaming).
+7. **Direct RAM Write:** The parser updates `storageEngine` at `msg-123`.
+8. **React:** The UI updates in real-time.
 9. **Resolution:** The TCP stream closes. The `aiGatewayEngine` marks its own PID as `completed` in the `processEngine` registry.
 
 
 
 ---
 
-## Case 2: Prompting that triggers an OS Tool (Observing Progress)
-*Scenario: During a chat, the AI decides to look at the user's project folder via the File System tool.*
+## Case 2: Prompting that triggers an OS Tool (Context Passing)
+*Scenario: During a chat in Session B, the AI calls a tool. The tool must know to reply to Session B.*
 
-1. **AI Decision:** During the TCP stream parsing (Case 1), the `aiGatewayEngine` detects a tool-call JSON instead of standard text.
-2. **Pre-Allocate RAM:** The `aiGatewayEngine` generates a `process_uid` (e.g., `proc-999`) to act as the correlation ID for the tool's result.
-3. **Emit Command:** It pauses the text stream and emits -> `{ action: 'execute_tool', payload: { tool_name: 'read_directory', path: './src', reply_to_ram_key: 'proc-999' } }`.
-4. **Validate & Route:** The `eventEngine` strictly validates the AI's payload against the schema in `toolsEngine`. Once safe, it routes the ticket to the `fsEngine`'s registered listener.
-5. **Process Opt-In:** The `fsEngine` decides this operation needs observability. It registers a PID in the `processEngine` registry and updates `storageEngine` at `proc-999` with `{ status: 'running' }`.
-6. **UI Reacts:** A `<SystemMonitor />` widget (which globally watches process states) sees `proc-999` is running and renders a loading bar.
-7. **Execute:** The `fsEngine` runs the Tauri Rust command directly.
-8. **Resolution & Sync:** The `fsEngine` writes the final array data into `proc-999` and marks its own PID as `completed` in the registry.
-9. **Feedback Loop:** The `aiGatewayEngine` (listening to `proc-999`) catches the folder data, sends it back over the TCP connection as a "Tool Observation", and resumes the LLM stream.
+1. **AI Decision:** `aiGatewayEngine` (processing Session B's stream) detects a tool callback in its private buffer.
+2. **Pre-Allocate RAM:** It creates a `process_uid` and prepares the memory.
+3. **Emit Command:** It emits `{ action: 'execute_tool', payload: { tool_name: 'read_file' }, preallocated_memory: { session_id: 'sess-B', original_prompt_id: 'msg-999' } }`.
+4. **Execution:** The `fsEngine` receives the command. It executes `read_file`.
+5. **Session Feedback:** When `fsEngine` finishes, it checks `preallocated_memory`. It sees `session_id: 'sess-B'`.
+6. **Route Back:** It emits a completion event or writes to RAM targeted precisely for Session B.
+7. **Resume Stream:** The `aiGatewayEngine` injects the file content into Session B's context window and resumes generation. Session A remains unaffected.
 
 ---
 
 ## Case 3: Compound Tooling (A Tool opening another Tool)
 *Scenario: The AI runs a "Research" tool, which internally requires both a "Web Search" tool AND a "Read File" tool to run in parallel.*
 
-1. **Initial Trigger:** The `aiGatewayEngine` emits `{ action: 'execute_tool', payload: { tool_name: 'research_topic' } }`.
+1. **Initial Trigger:** The `aiGatewayEngine` emits `{ action: 'execute_tool', payload: { tool_name: 'research_topic' }, preallocated_memory: { thread_id: 't-1' } }`.
 2. **Process Opt-In:** The `aiGatewayEngine` determines this is a complex, observable operation. It registers `PID_1` in the `processEngine` registry (status: `running`).
 3. **Yielding:** The `research_topic` TypeScript handler realizes it needs more data. It updates its state to `yielding`.
 4. **Sub-Process Emit:** Parent `PID_1` emits two new `execute_tool` tickets (`web_search` and `read_file`), explicitly tagging them with `group_pid: PID_1`.
-5. **Parallel Work:** The `eventEngine` routes these tickets to each domain engine's listener (`fsEngine`, `webSearchEngine`), each of which opts into the `processEngine` registry to create their own child PIDs (`PID_2`, `PID_3`). The UI renders nested loading bars automatically.
-6. **Re-awakening:** `PID_2` and `PID_3` finish and write to their respective RAM keys. The `aiGatewayEngine` (observing those keys) detects completion, injects the results into the parent task, and closes `PID_1`.
+5. **Parallel Work:** The `eventEngine` routes these tickets to each domain engine's listener (`fsEngine`, `webSearchEngine`), each of which opts into the `processEngine` registry (`PID_2`, `PID_3`).
+6. **Explicit Waiting (New):** The parent `PID_1` updates its own registry entry with `{ waiting_for_processes: ['PID_2', 'PID_3'] }`. The `processEngine` registry now acts as a passive dependency graph.
+7. **Re-awakening:** `PID_2` and `PID_3` finish and write to their RAM keys. The `aiGatewayEngine` (observing those keys AND/OR the process registry state) detects the dependency resolution, wakes `PID_1`, aggregates results, and closes `PID_1`.
 
 
 

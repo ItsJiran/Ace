@@ -197,16 +197,16 @@ class KeybindEngineSingleton {
     }
 
     private registerEventRoutes() {
-        EventBus.registerProcessRoute('lookup', async (interaction) => {
-            if (interaction.sub_action === 'toggle_overlay_mode') {
+        EventBus.registerProcessRoute('lookup', async (args) => {
+            if (args.sub_action === 'toggle_overlay_mode') {
                 const currentMode = GlobalStateManager.readState().focus.overlay_mode;
                 WindowEngine.setOverlayMode(currentMode === 'ambient' ? 'interactive' : 'ambient');
                 return;
             }
 
-            if (interaction.sub_action === 'set_window_mouse_focus' || interaction.sub_action === 'toggle_window_mouse_focus') {
+            if (args.sub_action === 'set_window_mouse_focus' || args.sub_action === 'toggle_window_mouse_focus') {
                 const currentEnabled = GlobalStateManager.readState().focus.mouse_focus_enabled;
-                const rawEnabled = interaction.payload?.enabled;
+                const rawEnabled = args.payload?.enabled;
 
                 // Behavior contract:
                 // - `toggle_window_mouse_focus` always flips state.
@@ -214,7 +214,7 @@ class KeybindEngineSingleton {
                 //   but pressing the same set value again will flip (true toggle UX).
                 // - missing/invalid `enabled` falls back to toggle.
                 let enabled: boolean;
-                if (interaction.sub_action === 'toggle_window_mouse_focus') {
+                if (args.sub_action === 'toggle_window_mouse_focus') {
                     enabled = !currentEnabled;
                 } else if (typeof rawEnabled === 'boolean') {
                     enabled = rawEnabled === currentEnabled ? !currentEnabled : rawEnabled;

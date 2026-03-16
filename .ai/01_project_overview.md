@@ -10,11 +10,15 @@ The ecosystem operates on a strict 5-layer hierarchy:
 2. **Global RAM (Storage Engine)**: Heavy payload data stored in indexable memory. This acts as the *Single Source of Truth* for the UI, preventing the IPC Event bus from bottlenecking.
 3. **The Window (Dumb Frame)**: Only handles X/Y coordinates, width/height, dragging, and focus. It fundamentally does not know what UI React components it contains.
 4. **The Component (Active UI)**: Small, downloadable React components (`<ChatBubble />`, `<CalendarWidget />`). They capture human inputs, emit requests, and re-render purely by observing the RAM.
-5. **The Event & Process Engines**: The headless background orchestrators. The Event Engine routes traffic, while the Process Engine executes heavy native OS tools securely.
+5. **The Domain Engines & Process Registry**: 
+   - **Self-Sovereign Engines**: Domain-specific logic (`fsEngine`, `aiGatewayEngine`) that listens directly to the Event Bus. They own their execution pipelines.
+   - **Process Registry**: A passive, optional ledger (`processEngine`) where engines *choose* to register long-running tasks for UI observability (loading bars, status updates). It does not supervise execution.
 
-## 🤖 AI Strategy (Client-Gateway Model)
-- **Gateway Syncing**: The application acts as a standalone **Client Engine**. It connects to a remote **AI Gateway** (e.g., OpenClaw).
+## 🤖 AI Strategy (Hybrid Session-Based Gateway)
+- **Session-Based Architecture**: The application is not inherently tied to one conversation. It instantiates isolated **Sessions** (e.g., `sess-abc`, `sess-xyz`). This allows for true multi-agent workflows where Tab A talks to OpenClaw (Local) while Tab B talks to GPT-4 separately.
+- **Provider Registry**: The Gateway is provider-agnostic. It maintains a registry of configured endpoints allowing hot-swapping between models.
 - **Tool Inversion**: Instead of the Client executing hardcoded prompts, the Client registers its available "Tools" (like an Obsidian Reader) with the Gateway. The Gateway dictates the logic and simply streams action commands back to the Client for physical execution.
+- **Context Traceability**: Every interaction carries a `preallocated_memory` context object (`{ session_id, provider_id }`) ensuring tool execution results are routed back to the correct originating session.
 
 ## 🛠️ Tech Stack
 - **Framework**: **Tauri v2** (Rust backend for native OS tool execution, transparent overlays, and true multi-window management).
@@ -358,3 +362,33 @@ export class AcePipeline<TInitial, TFinal> {
     return currentData as TFinal;
   }
 }
+## 📝 Coding Standards & Documentation
+
+To maintain long-term maintainability and clarity across the codebase, every function, method, and class must include **Robust Documentation Blocks**.
+
+### The "Explain-It-Like-I'm-5" Rule
+Do not just repeat the function name in the comment. Explain **WHY** it exists, **WHAT** it solves, and **HOW** it fits into the larger architecture.
+
+**Required Format:**
+```typescript
+/**
+ * [Short Summary]
+ * [Detailed Description of the "Why" and "How"]
+ * 
+ * @param [paramName] - [Description of the parameter and its constraints]
+ * @returns [Description of the return value and any side effects]
+ */
+public myImportantFunction(data: string) { ... }
+```
+
+**Example:**
+```typescript
+/**
+ * Spawns a new headless process and immediately registers it in the StorageEngine
+ * so that the UI can observe its status in O(1) time.
+ * 
+ * This treats the RAM as the source of truth for all active background work,
+ * allowing components like <SystemMonitor /> to render without polling.
+ */
+public registerProcess(...) { ... }
+```

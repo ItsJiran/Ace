@@ -1,14 +1,21 @@
 import { Storage } from './storageEngine';
-import type { ProcessType, ProcessStatus, ProcessRecord } from '#/schemas/process';
+import type { ProcessStatus, ProcessRecord } from '#/schemas/process';
 
 class ProcessEngineSingleton {
     /**
      * Spawns a new headless process and immediately registers it in the StorageEngine
      * so that the UI can observe its status in O(1) time.
      */
-    spawnProcess(
-        type: ProcessType,
+    registerProcess(
+        type: string,
         metadata?: Record<string, any>,
+        // The shared context from the interaction chain
+        preallocated_memory: Record<string, any> = {},
+        
+        // Optional dependency tracking
+        waiting_for_processes: string[] = [],
+
+        // Origin tracking
         group_pid?: string,
         origin_window_uid?: string,
         origin_widget_uid?: string
@@ -24,7 +31,9 @@ class ProcessEngineSingleton {
             updated_at: Date.now(),
             origin_window_uid,
             origin_widget_uid,
-            metadata
+            metadata,
+            waiting_for_processes,
+            preallocated_memory
         };
 
         Storage.dispatchRAMAction({
@@ -81,43 +90,8 @@ class ProcessEngineSingleton {
     killProcess(process_uid: string) {
         return this.updateStatus(process_uid, 'killed');
     }
-
-    /**
-     * Phase 4: Execution & Orchestration
-     * Executes the actual logic of a tool and manages its lifecycle.
-     */
-    async executeTool(toolName: string, parameters: any, process_uid: string) {
-        const { ToolRegistry } = await import('./toolRegistry');
-        const { DBEngine } = await import('./dbEngine');
-
-        const tool = ToolRegistry.getTool(toolName);
-        if (!tool) {
-            this.updateStatus(process_uid, 'error', { error: `Tool ${toolName} not found at execution time.` });
-            return;
-        }
-
-        try {
-            // 1. Status -> Running
-            this.updateStatus(process_uid, 'running');
-
-            // 2. Execute Handler
-            const result = await tool.handler(parameters, process_uid);
-
-            // 3. Status -> Completed
-            this.updateStatus(process_uid, 'completed', { result });
-
-            return result;
-        } catch (error: any) {
-            // 4. Status -> Error
-            this.updateStatus(process_uid, 'error', { error: error.message });
-
-            // Log to Audit DB
-            await DBEngine.logProcessError(process_uid, error.message, error.stack, 'tool_executor');
-
-            throw error;
-        }
-    }
 }
 
 
 export const ProcessEngine = new ProcessEngineSingleton();
+

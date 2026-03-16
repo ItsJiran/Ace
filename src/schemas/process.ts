@@ -1,17 +1,6 @@
 import { z } from 'zod';
 
-export const ProcessTypeSchema = z.enum([
-    'ai_gateway_stream',
-    'ai_parser',
-    'fs_task',
-    'shell_task',
-    'tool_executor',
-    'context_prompt',
-    'pipeline_run',
-    'system_monitor',
-    'background_cron',
-    'other'
-]);
+export const ProcessTypeSchema = z.string().describe('Process type identifier defined by core engine.');
 
 export const ProcessStatusSchema = z.enum([
     'booting',
@@ -33,6 +22,10 @@ export const ProcessRecordSchema = z.object({
 
     started_at: z.number().describe('Unix timestamp of when the process began.'),
     updated_at: z.number().describe('Unix timestamp of the last status change.'),
+
+    waiting_for_processes: z.array(z.string()).optional().describe('List of process UIDs this process depends on/waits for before execution or completion.'),
+    preallocated_memory: z.record(z.string(), z.any()).optional().describe('Shared memory context passed from origin interaction.'),
+
 
     // The specific component or window that initiated the chain, if applicable.
     origin_window_uid: z.string().optional(),
