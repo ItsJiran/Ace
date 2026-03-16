@@ -87,6 +87,84 @@ Conflict rules:
 2. User package cannot silently override core IDs.
 3. Override requires explicit policy or alias mapping.
 
+## Filesystem Topology Contract
+
+The multi-registry contract should also exist at the directory level, not only in memory.
+
+ACE should maintain three mirrored scopes:
+
+### 1. Core Built-In Scope
+
+```text
+src/core/widgets/
+├── tools/
+├── components/
+├── windows/
+├── pipelines/
+├── features/
+├── processes/
+└── registry/
+```
+
+Purpose:
+non-removable built-in widgets and registry-owned defaults shipped by ACE.
+
+### 2. Local Widget Scope
+
+```text
+widgets/
+├── tools/
+├── components/
+├── windows/
+├── pipelines/
+├── features/
+├── processes/
+└── registry/
+```
+
+Purpose:
+user/local submissions and workspace-owned packages.
+
+Important:
+because registries are independent, a package inside `widgets/` may contain only one domain (`tools` only, `components` only, etc.) and still be valid.
+
+This is the key contract:
+`tools`, `components`, `windows`, `pipelines`, `features`, `processes`, and `registry` are standalone registry domains.
+They may be shipped together, but they do not depend on one another for filesystem validity.
+
+### 3. Config Scope
+
+```text
+config/widgets/
+├── tools/
+├── components/
+├── windows/
+├── pipelines/
+├── features/
+├── processes/
+└── registry/
+```
+
+Purpose:
+manifest state, enable/disable flags, policy, future installation metadata, and per-scope overrides.
+
+## Scope Resolution Rules
+
+At runtime, precedence should remain:
+1. `src/core/widgets` (ACE built-in)
+2. `widgets` (local/user submissions)
+3. `config/widgets` as configuration and policy input, not as an execution override by default
+
+Config may disable or annotate registry entries, but it should not silently replace core handlers without explicit policy.
+
+## Standalone Domain Rules
+
+1. A filesystem scope may provide only `tools/` and omit every other domain.
+2. A filesystem scope may provide only `components/` and omit every other domain.
+3. A filesystem scope may provide only `windows/`, `pipelines/`, `features/`, `processes/`, or `registry/` and still remain valid.
+4. Loaders and validators must treat missing sibling folders as normal, not as an error.
+5. The mirrored topology is a naming contract, not a requirement that all domains be present at once.
+
 ## Cross-Registry Linking
 
 A single widget can reference multiple registries:

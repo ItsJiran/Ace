@@ -30,12 +30,53 @@ Examples:
 
 Default widgets set the baseline UX and act as reference implementations for submission standards.
 
+Built-in widgets are owned by ACE core and are not user-removable.
+Their source of truth lives under:
+
+```text
+src/core/widgets/
+```
+
+Inside that folder, ACE should mirror the same registry-oriented package structure used elsewhere, for example:
+
+```text
+src/core/widgets/
+├── tools/
+├── components/
+├── windows/
+├── pipelines/
+├── features/
+├── processes/
+└── registry/
+```
+
 ### 2. User-Contributed Widgets
 
 User widgets are externally supplied bundles that can be imported and registered at runtime.
 
 User widgets must be treated as untrusted until validated.
 They can be enabled, disabled, versioned, and removed without modifying core engine code.
+
+Local/user widget packages should live in a parallel workspace-level folder:
+
+```text
+widgets/
+├── tools/
+├── components/
+├── windows/
+├── pipelines/
+├── features/
+├── processes/
+└── registry/
+```
+
+Important rule:
+the package may provide the full ecosystem, but it is not required to. Because ACE is multi-registry, a user package may submit only `tools`, only `components`, only `windows`, or any other valid subset.
+
+This rule also applies to the directory model itself:
+`tools`, `components`, `windows`, `pipelines`, `features`, `processes`, and `registry` are independent domains.
+They are not merely subfolders of a mandatory widget bundle.
+Each one must be allowed to exist, be loaded, be validated, and be versioned on its own.
 
 ## Widget Package Contract (Conceptual)
 
@@ -53,6 +94,58 @@ Optional fields:
 2. `layout_hints`
 3. `snapshot_handlers`
 4. `migration_handlers`
+
+## Filesystem Scopes
+
+ACE should treat widget assets as three mirrored scopes:
+
+### 1. Core Scope
+
+Non-removable first-party widgets provided by ACE itself.
+
+```text
+src/core/widgets/
+```
+
+### 2. Local Package Scope
+
+User/local widget packages discovered from the workspace-level widget folder.
+
+```text
+widgets/
+```
+
+### 3. Config Scope
+
+Configuration, manifests, enable/disable flags, per-package settings, and future install metadata.
+
+```text
+config/widgets/
+```
+
+The config scope should mirror the same high-level package topology when needed, so ACE can reason about widget ownership, registry declarations, and user overrides consistently.
+
+Example target shape:
+
+```text
+config/widgets/
+├── tools/
+├── components/
+├── windows/
+├── pipelines/
+├── features/
+├── processes/
+└── registry/
+```
+
+Important clarification:
+the mirrored folder names do not imply that all folders must always exist together.
+They represent independent registry domains that share a consistent naming convention across scopes.
+For example, ACE must allow:
+1. a tools-only local submission
+2. a components-only local submission
+3. a windows-only core package
+4. a pipelines-only config declaration
 
 ## Suggested ID Convention
 
@@ -100,6 +193,10 @@ Widgets should use public registry contracts, not direct mutation of private eng
 4. Versioned Compatibility
 Breaking changes should be controlled through versioned IDs and migration hooks.
 
+5. Standalone Domain Validity
+Each registry domain must remain valid even when loaded independently from the others.
+ACE should not require a `tool` contribution to also ship a `component`, nor a `window` contribution to also ship a full widget package.
+
 ## Runtime Behavior Model
 
 1. Window layer remains dumb and generic.
@@ -113,3 +210,4 @@ Breaking changes should be controlled through versioned IDs and migration hooks.
 2. Built-in default widgets for baseline product UX.
 3. A user extension ecosystem without coupling to core rendering logic.
 4. Clear governance for performance, security, and maintainability.
+5. A mirrored directory model across source, local packages, and config state.
