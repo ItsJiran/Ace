@@ -31,14 +31,14 @@ Located in the entry point. Establishes the runtime bed before post-boot UI effe
 - **Step 3**: Init Window Engine and transparent overlay shell.
 
 ### 2. The Context Prompt Pipeline
-Located under `processEngine`. Orchestrates raw data gathering for the LLM.
+Used directly by `aiGatewayEngine`. Orchestrates raw data gathering for the LLM.
 - **Step 1**: Gather Chat History from RAM.
 - **Step 2**: Read active files via `fsEngine`.
 - **Step 3**: Truncate/Enforce Token Limits.
 - **Step 4**: Format into `<system>` XML/Markdown blocks.
 
 ### 3. The Tool Execution Pipeline
-Located in `processEngine`. Ensures security and validation before OS execution.
+Used by the owning domain engine (e.g., `fsEngine`, `shellEngine`). Ensures security and validation before OS execution.
 - **Step 1**: Zod Validation (AI Hallucination Check).
 - **Step 2**: Permission/HITL Check.
 - **Step 3**: Native OS Execution (Tauri Rust).

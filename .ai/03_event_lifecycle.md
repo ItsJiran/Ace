@@ -18,12 +18,12 @@ Before reading the cases, developers must understand the two unbreachable laws o
 1. **Pre-Allocate RAM:** The `<ChatInput />` component generates a unique `message_uid` (e.g., `msg-123`).
 2. **Listen First:** The `<ChatBubble />` component mounts and begins observing `storageEngine` at the key `msg-123`.
 3. **Emit Intent:** `<ChatInput />` emits -> `{ action: 'send_gateway', payload: { text: 'Hello', reply_to_ram_key: 'msg-123' } }`.
-4. **Route:** The `eventEngine` validates the payload and routes it to the `processEngine` (which manages the lifecycle of the request).
-5. **Delegate to Worker:** The `processEngine` triggers the `aiGatewayEngine`, passing the payload and the target RAM key.
+4. **Route:** The `eventEngine` validates the payload and routes it to the `aiGatewayEngine`'s registered listener.
+5. **Process Opt-In (Optional):** The `aiGatewayEngine` decides this is a long-running operation; it opts into the `processEngine` registry to create a tracked PID for UI observability.
 6. **TCP & Parse:** The `aiGatewayEngine` opens a TCP socket to the remote LLM. As the raw buffer streams in, it routes through the internal AI Parser.
 7. **Direct RAM Write (The Bypass):** The parser directly updates the `storageEngine` at `msg-123` with token chunks. **The Event Bus remains completely empty and unblocked.**
 8. **React:** The `<ChatBubble />` observes the continuous RAM updates and types out the text on screen seamlessly.
-9. **Resolution:** The TCP stream closes. `aiGatewayEngine` notifies `processEngine`, which marks the process as `completed`.
+9. **Resolution:** The TCP stream closes. The `aiGatewayEngine` marks its own PID as `completed` in the `processEngine` registry.
 
 
 
@@ -35,11 +35,11 @@ Before reading the cases, developers must understand the two unbreachable laws o
 1. **AI Decision:** During the TCP stream parsing (Case 1), the `aiGatewayEngine` detects a tool-call JSON instead of standard text.
 2. **Pre-Allocate RAM:** The `aiGatewayEngine` generates a `process_uid` (e.g., `proc-999`) to act as the correlation ID for the tool's result.
 3. **Emit Command:** It pauses the text stream and emits -> `{ action: 'execute_tool', payload: { tool_name: 'read_directory', path: './src', reply_to_ram_key: 'proc-999' } }`.
-4. **Validate & Orchestrate:** The `eventEngine` strictly validates the AI's payload against the schema in `toolsEngine`. Once safe, it hands the ticket to the `processEngine`.
-5. **State Update:** The `processEngine` updates `storageEngine` at `proc-999` with `{ status: 'running' }`. 
+4. **Validate & Route:** The `eventEngine` strictly validates the AI's payload against the schema in `toolsEngine`. Once safe, it routes the ticket to the `fsEngine`'s registered listener.
+5. **Process Opt-In:** The `fsEngine` decides this operation needs observability. It registers a PID in the `processEngine` registry and updates `storageEngine` at `proc-999` with `{ status: 'running' }`.
 6. **UI Reacts:** A `<SystemMonitor />` widget (which globally watches process states) sees `proc-999` is running and renders a loading bar.
-7. **Execute:** The `processEngine` delegates the physical work to the `fsEngine` (Tauri Rust).
-8. **Resolution & Sync:** The `fsEngine` reads the folder. The `processEngine` writes the final array data into `proc-999` and marks the state `completed`.
+7. **Execute:** The `fsEngine` runs the Tauri Rust command directly.
+8. **Resolution & Sync:** The `fsEngine` writes the final array data into `proc-999` and marks its own PID as `completed` in the registry.
 9. **Feedback Loop:** The `aiGatewayEngine` (listening to `proc-999`) catches the folder data, sends it back over the TCP connection as a "Tool Observation", and resumes the LLM stream.
 
 ---
@@ -48,11 +48,11 @@ Before reading the cases, developers must understand the two unbreachable laws o
 *Scenario: The AI runs a "Research" tool, which internally requires both a "Web Search" tool AND a "Read File" tool to run in parallel.*
 
 1. **Initial Trigger:** The `aiGatewayEngine` emits `{ action: 'execute_tool', payload: { tool_name: 'research_topic' } }`.
-2. **Process Spawn:** `processEngine` creates Parent Process `PID_1` (status: `running`).
+2. **Process Opt-In:** The `aiGatewayEngine` determines this is a complex, observable operation. It registers `PID_1` in the `processEngine` registry (status: `running`).
 3. **Yielding:** The `research_topic` TypeScript handler realizes it needs more data. It updates its state to `yielding`.
 4. **Sub-Process Emit:** Parent `PID_1` emits two new `execute_tool` tickets (`web_search` and `read_file`), explicitly tagging them with `group_pid: PID_1`.
-5. **Parallel Work:** The `eventEngine` routes these back to the `processEngine`, spinning up child tasks `PID_2` and `PID_3`. The UI renders nested loading bars automatically.
-6. **Re-awakening:** `PID_2` and `PID_3` finish and write to their respective RAM keys. The `processEngine` detects the children are done, wakes up `PID_1`, injects the results, and completes the master task.
+5. **Parallel Work:** The `eventEngine` routes these tickets to each domain engine's listener (`fsEngine`, `webSearchEngine`), each of which opts into the `processEngine` registry to create their own child PIDs (`PID_2`, `PID_3`). The UI renders nested loading bars automatically.
+6. **Re-awakening:** `PID_2` and `PID_3` finish and write to their respective RAM keys. The `aiGatewayEngine` (observing those keys) detects completion, injects the results into the parent task, and closes `PID_1`.
 
 
 
@@ -73,7 +73,7 @@ Before reading the cases, developers must understand the two unbreachable laws o
 ## Case 5: A Process triggers a UI Animation (Transient Event)
 *Scenario: A background process fails (e.g., Invalid API Key) and wants to "shake" the Settings panel to alert the user.*
 
-1. **Failure Catch:** The `processEngine` catches an error during a tool's execution.
+1. **Failure Catch:** The executing engine (e.g., `fsEngine` or `shellEngine`) catches an error during its own execution.
 2. **Emit Transient Event:** It emits `{ action: 'trigger_animation', target_widget: 'settings_panel', anim: 'shake' }`.
 3. **Bypass RAM (Crucial):** This is a *Transient UI Event*. It is **NOT** saved to the `storageEngine`. Saving `{ isShaking: true }` would create a nightmare of having to manually reset it to `false` later.
 4. **Direct Listen:** The `<SettingsPanel />` React component currently has an active `useAceListener('trigger_animation')` hook.
@@ -85,11 +85,11 @@ Before reading the cases, developers must understand the two unbreachable laws o
 *Scenario: The user asks a highly complex question. Gathering the system context and chat history takes a few seconds before the AI can even start thinking.*
 
 1. **Emit Intent:** User submits the prompt.
-2. **Pre-Flight:** Before opening the TCP socket, the `aiGatewayEngine` asks the `processEngine` to build the context prompt.
-3. **Loading State:** The `processEngine` writes to `storageEngine`: `{ ai_status: 'thinking', current_step: 'Gathering context...' }`.
+2. **Pre-Flight:** Before opening the TCP socket, the `aiGatewayEngine` runs the context-building pipeline directly.
+3. **Loading State:** The `aiGatewayEngine` writes to `storageEngine`: `{ ai_status: 'thinking', current_step: 'Gathering context...' }`.
 4. **UI Observation:** `<ChatInput />` observes `ai_status`. It automatically disables the input field and renders a "Thinking..." animation.
-5. **Execution:** The `processEngine` delegates to its context-building pipeline, which reads relevant files, retrieves history, calculates token limits, and builds the final prompt string.
-6. **Resolution:** The string is handed back to the `aiGatewayEngine`, which initiates **Case 1** (TCP Stream). The RAM is updated to `{ ai_status: 'idle' }`, re-enabling the UI input.
+5. **Execution:** The `aiGatewayEngine` runs the context-building `AcePipeline` directly — reads relevant files, retrieves history, calculates token limits, and builds the final prompt string.
+6. **Resolution:** Context is ready. The `aiGatewayEngine` initiates **Case 1** (TCP Stream) and updates RAM to `{ ai_status: 'idle' }`, re-enabling the UI input.
 
 ---
 

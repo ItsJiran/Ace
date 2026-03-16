@@ -86,13 +86,13 @@ To ensure absolute clarity across the architecture, this document strictly defin
 ⚙️ The Core Engines (System Pillars)
 
 The backend execution is powered by a strict separation of "Managers" and "Workers."
-The Core Managers (Always Active)
+The Core Engines (Always Active)
 
     eventEngine (System Core): The unified command pipeline. Validates Zod schemas and matches intents to registered listeners.
 
     storageEngine (System Core): The global RAM state manager. Syncs data changes directly to the React UI layer in O(1) time.
 
-    processEngine (System Core): The task orchestrator. It manages the lifecycle of heavy OS tasks and delegates physical work to the logic plugins below.
+    processEngine (System Core): The Process Lifecycle Registry. A shared utility any engine can opt into when its operation needs observable, cancellable lifecycle tracking (PID, status, AbortSignal). It is not a mandatory supervisor — each engine decides for itself whether its work warrants a tracked process.
 
     windowEngine (System Core): The spatial orchestrator. It manages the lifecycle, positioning, transparency, and state of Tauri WebviewWindows and UI dumb frames.
 
@@ -100,9 +100,9 @@ The Core Managers (Always Active)
 
     Note: Mouse-focus behavior is configuration-driven. If `window.mouse_focus_enabled` is false, the overlay should remain transparent to mouse interaction and clicks should continue through to the external target application.
 
-The Engines Under ProcessEngine
+Domain Engines (Self-Sovereign)
 
-These engines do not listen to the Event Bus directly. They are subordinate executors, parsers, registries, or linear runners invoked and supervised strictly by the ProcessEngine.
+Each domain engine is autonomous. It registers its own Event Bus listeners for the actions within its domain, executes its logic directly, and self-determines whether an operation warrants process lifecycle tracking. Engines opt into the processEngine registry when they need PID tracking, cancellability, or UI observability — otherwise they execute as plain async calls.
 
   aiParserEngine: Parses streamed AI output, extracts structured event blocks, and converts them into safe executable payloads.
 
@@ -110,11 +110,11 @@ These engines do not listen to the Event Bus directly. They are subordinate exec
 
   shellEngine: Executes secure background terminal scripts and native binaries.
 
-  toolsEngine (The Library/Registry): The static dictionary of system capabilities. It maintains the registry of all available OS-level tools, providing the exact Zod schemas for the EventEngine to use during validation, and the mapped TypeScript handlers for the ProcessEngine to execute.
+  toolsEngine (The Library/Registry): The static dictionary of system capabilities. It maintains the registry of all available OS-level tools, providing the exact Zod schemas for the EventEngine to use during validation, and the mapped TypeScript handlers for the executing engine.
 
-  aiGatewayEngine: The LLM communicator. It manages the WebSocket/HTTP connection to the remote AI, coordinates streamed responses, and escalates executable work back through the ProcessEngine flow.
+  aiGatewayEngine: The LLM communicator. It manages the WebSocket/HTTP connection to the remote AI, coordinates streamed responses, and escalates executable work back to the Event Bus.
 
-  pipelineEngine (The Pipeline): The linear execution engine. It orchestrates complex sequences of steps under ProcessEngine supervision in a step-by-step manner.
+  pipelineEngine (The Pipeline): The linear execution engine. Any engine can use it directly to orchestrate a complex step-by-step sequence with built-in observability and cancellation.
 
 📡 System Communication & Data Flow
 
@@ -129,7 +129,7 @@ The Pre-Allocation Protocol:
 
     Emit: The component captures a user action and emits an Interaction to the EventBus, explicitly including the RAM key in the payload ({ action: 'execute_tool', reply_to_ram_key: task_uid, ... }). The component then immediately forgets about the event.
 
-    Route: The EventBus validates the payload and triggers the Process Engine's Listener.
+    Route: The EventBus validates the payload and triggers the registered listener for that action (owned by the relevant domain engine).
 
     Execute & Targeted Sync: The Process Engine runs the native Rust logic. Once finished, it explicitly writes the result into Global RAM at the exact task_uid location requested by the component.
 
@@ -153,16 +153,16 @@ If an interaction only matters to the component itself and happens at a high fre
 
     Execution: Handled entirely by React's internal useState or useRef. Only the final intent (e.g., pressing "Enter" after typing) is emitted to the Event Bus.
 
-Pathway D: The Worker Engine Protocol (How background tasks communicate)
+Pathway D: The Domain Engine Protocol (How background tasks communicate)
 
-To maintain the strict separation of concerns and prevent Event Bus bottlenecking, all subordinate engines (aiParserEngine, fsEngine, shellEngine, toolsEngine, aiGatewayEngine, pipelineEngine) operating under the processEngine MUST adhere to the following three absolute rules of communication:
-Rule 1: Workers Never Listen (The Subordination Rule)
+Each domain engine is self-sovereign and registers its own Event Bus listeners. Three rules govern cross-engine communication to prevent bottlenecks and tangled dependencies:
+Rule 1: Own Your Domain (The Autonomy Rule)
 
-    The Rule: Worker engines must never register as Listeners on the Event Bus.
+    The Rule: Each engine registers listeners only for the actions within its own domain. It does not need a supervisor to intercept on its behalf.
 
-    The Reason: They are not autonomous managers; they are strictly delegated logic executors.
+    The Reason: Keeping listener ownership explicit prevents coupling — aiGatewayEngine owns `send_gateway`, fsEngine owns `execute_tool:fs_*`, etc.
 
-    The Execution: The processEngine acts as the sole listener for OS-level tasks. It catches the Event Bus ticket, validates it, spins up the lifecycle state (PID), and then directly invokes the worker's standard TypeScript function (e.g., await fsEngine.readFile(path)).
+    The Execution: An engine registers its listener directly on the Event Bus. If the operation needs lifecycle tracking (PID, status, cancellability), the engine opts into the processEngine registry — but this is a deliberate choice, not a mandatory layer.
 
 Rule 2: Heavy Data Bypasses the Bus (The Data Bypass Rule)
 
@@ -170,7 +170,7 @@ Rule 2: Heavy Data Bypasses the Bus (The Data Bypass Rule)
 
     The Reason: Pushing large payloads or high-frequency data through the Event Bus will choke the Zod validation pipeline and destroy the O(1) React rendering performance.
 
-    The Execution: Workers must use the Pre-Allocation Protocol. They write their final results or data streams directly into the storageEngine (Global RAM) using the reply_to_ram_key provided to them by the processEngine.
+    The Execution: Engines must use the Pre-Allocation Protocol. They write their final results or data streams directly into the storageEngine (Global RAM) using the reply_to_ram_key from the original interaction payload.
 
 Rule 3: New Intents Flow Through the Bus (The Escalation Rule)
 
