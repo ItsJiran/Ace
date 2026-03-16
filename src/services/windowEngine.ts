@@ -59,16 +59,23 @@ class WindowEngineSingleton {
         });
 
         // 3. Register a command listener on the EventBus for generic window commands
-        EventBus.registerProcessRoute('window_engine_core', async (interaction) => {
+        const coreHandler = async (interaction: any) => {
             const { action, sub_action, payload } = interaction;
 
-            if (action === 'open' && sub_action === 'open_window') {
+             if (action === 'open_window') {
                 this.spawnWindow(payload as any);
             }
-            if (action === 'close' && sub_action === 'close_window' && interaction.window_uid) {
-                this.closeWindow(interaction.window_uid);
+             if (action === 'close_window') {
+                // Determine target: Payload (External command) or Source (Self-close)
+                const targetUid = payload?.window_uid || interaction.source?.window_uid || interaction.window_uid;
+                if (targetUid) {
+                    this.closeWindow(targetUid);
+                }
             }
-        });
+        };
+
+        EventBus.registerProcessRoute('open_window', coreHandler);
+        EventBus.registerProcessRoute('close_window', coreHandler);
 
         this.startCursorBridge();
         this.startAlwaysOnTopBridge();
@@ -250,6 +257,24 @@ class WindowEngineSingleton {
                 GlobalStateManager.setFocusedWindow(null);
             }
         }
+    }
+
+    /**
+     * Updates arbitrary properties of a window configuration.
+     * Useful for toggling lock state, opacity, etc.
+     */
+    updateWindowConfig(window_uid: string, updates: Partial<WindowConfig>) {
+        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        if (!currentWindows[window_uid]) return;
+
+        const updatedConfig = { ...currentWindows[window_uid], ...updates };
+        currentWindows[window_uid] = updatedConfig;
+
+        Storage.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:windows',
+            payload: currentWindows
+        });
     }
 
     focusWindow(window_uid: string) {

@@ -1,8 +1,49 @@
-import { BaseDirectory, writeTextFile, readTextFile, exists } from '@tauri-apps/plugin-fs';
-
+import { BaseDirectory, writeTextFile, readTextFile, exists, mkdir, readDir } from '@tauri-apps/plugin-fs';
 
 class FSEngineSingleton {
     private hasShownPermissionPopup = false;
+
+    /**
+     * Ensures a directory exists in the App Data directory.
+     */
+    async createDirectory(path: string): Promise<boolean> {
+        try {
+            const dirExists = await exists(path, { baseDir: BaseDirectory.AppConfig });
+            if (!dirExists) {
+                 await mkdir(path, { baseDir: BaseDirectory.AppConfig, recursive: true });
+            }
+            return true;
+        } catch (error) {
+            console.error(`FSEngine: Failed to create directory ${path}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Reads the contents of a directory.
+     */
+    async readDirectory(path: string) {
+        try {
+            return await readDir(path, { baseDir: BaseDirectory.AppConfig });
+        } catch (error) {
+            console.error(`FSEngine: Failed to read directory ${path}:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * Raw write to file (text).
+     */
+    async writeFile(filename: string, content: string): Promise<boolean> {
+        try {
+            await writeTextFile(filename, content, { baseDir: BaseDirectory.AppConfig });
+            return true;
+        } catch (error) {
+            console.error(`FSEngine: Failed to write file ${filename}:`, error);
+            this.showPermissionDeniedPopup(filename, error);
+            return false;
+        }
+    }
 
     /**
      * Ensures a JSON file exists in the App Data directory.

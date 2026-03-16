@@ -15,6 +15,7 @@ Please read the **8 Architecture Pillars**:
 6. `.ai/06_ui_and_window_lifecycle.md` - External-to-UI reactive bridge and window spatial state.
 7. `.ai/07_app_bootup_lifecycle.md` - The current ACE boot pipeline sequence.
 8. `.ai/08_pipeline_pattern.md` - The Pipeline Engine: Linear Execution with observability.
+9. `.ai/09_window_customization_and_layout.md` - Custom Window Strategy and Layout State.
 
 ---
 
@@ -74,6 +75,18 @@ Please read the **8 Architecture Pillars**:
 - [x] **Tools Registry List**: Real-time status of running background tasks.
 - [x] **Pipeline Registry List**: Real-time status of running background tasks.
 - [x] **Window Registry List**: Real-time status of running background tasks.
+- [ ] **Window Customization Strategy**:
+  - [ ] Refactor `BaseWindow` to be a pure logic container (headless) with no default styles.
+  - [ ] Implement `useWindowContext` to expose window actions (drag, close, resize) to widgets.
+  - [ ] Migrate widgets to own their chrome/frame styling.
+  - [ ] **Advanced Drag & Interaction**:
+    - [ ] Implement `DragRegion` component: A primitive for defining custom drag areas (e.g., full-body drag vs. topnav-only drag).
+    - [ ] Add `WindowContextMenu` on Right-Click: Native-like menu for "Lock Position", "Always on Top", "Close", "Save as Preset".
+    - [ ] Implement `Lock State`: When locked, ignore drag inputs but allow click-through if configured.
+- [ ] **Layout Persistence**:
+  - [ ] Implement `LayoutEngine` to snapshot `system:windows` state.
+  - [ ] Add `save_layout` and `load_layout` actions to `WindowEngine`.
+  - [ ] Create UI for managing saved layouts.
 
 ### 🖥️ Phase 4: The Core UI Shell & Local Loop (Integration Testing)
 

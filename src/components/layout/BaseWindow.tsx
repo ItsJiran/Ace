@@ -1,16 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { WindowConfig } from '#/schemas/window';
 import { WindowEngine } from '#/services/windowEngine';
-import { GripHorizontal, X, Minus } from 'lucide-react';
+import { GripHorizontal, X, Minus, Lock, Unlock, Eye, BringToFront, Layers } from 'lucide-react';
 import { ComponentRegistry } from '#/features/registry/ComponentRegistry';
 import { useAceMemory } from '#/hooks/useAceMemory';
 
 function BaseWindowComponent({ config }: { config: WindowConfig }) {
     const isFocused = config.is_focused;
-    const mouseFocusEnabled = useAceMemory<boolean>('system:mouse_focus_enabled') ?? true;
-    const canCapturePointer = mouseFocusEnabled;
+    const canCapturePointer = (useAceMemory<boolean>('system:mouse_focus_enabled') ?? true) && !config.is_locked;
+    
     const [isMounted, setIsMounted] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
     const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
     const dragPositionRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -18,6 +19,15 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
         const id = window.setTimeout(() => setIsMounted(true), 10);
         return () => window.clearTimeout(id);
     }, []);
+
+    // Close context menu on click outside or interaction
+    useEffect(() => {
+        const closeMenu = () => setContextMenu(null);
+        if (contextMenu) {
+            window.addEventListener('click', closeMenu);
+        }
+        return () => window.removeEventListener('click', closeMenu);
+    }, [contextMenu]);
 
     useEffect(() => {
         if (!isDragging) {
@@ -30,13 +40,23 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
     const isDraggingFocusedWindow = isDragging && isFocused;
 
     const handleFocus = () => {
-        if (!canCapturePointer) return;
+        // Allow focusing even if locked, just not dragging
+        if (!useAceMemory<boolean>('system:mouse_focus_enabled')) return;
 
         // Always re-assert focus on click when mouse focus is enabled.
-        // A window can stay marked `is_focused` in RAM while native focus/capture
-        // has been released after interacting with external windows.
         WindowEngine.focusWindow(config.window_uid);
     };
+
+    const handleContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setContextMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    };
+
+    const toggleLock = () => WindowEngine.updateWindowConfig(config.window_uid, { is_locked: !config.is_locked });
+    const toggleAlwaysOnTop = () => WindowEngine.updateWindowConfig(config.window_uid, { always_on_top: !config.always_on_top });
+    const setOpacity = (val: number) => WindowEngine.updateWindowConfig(config.window_uid, { opacity: val });
 
     const handleClose = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -44,14 +64,14 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
     };
 
     const handleDragStart = (e: React.MouseEvent) => {
-        if (!canCapturePointer) return;
+        if (!canCapturePointer || config.is_locked) return;
 
         // Only drag from the header area, prevent text selection
         e.preventDefault();
         e.stopPropagation();
 
         handleFocus();
-        const startX = e.clientX;
+        const startX = e.clientX; 
         const startY = e.clientY;
         const initialX = config.x;
         const initialY = config.y;
@@ -79,7 +99,7 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
         };
 
         const onMouseUp = () => {
-            if (rafId !== null) {
+             if (rafId !== null) {
                 window.cancelAnimationFrame(rafId);
                 flush();
             }
@@ -115,7 +135,8 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
                 transform: `translate3d(${(dragPosition?.x ?? config.x)}px, ${(dragPosition?.y ?? config.y)}px, 0)`,
                 width: config.width,
                 height: config.height,
-                zIndex: config.z_index,
+                zIndex: config.always_on_top ? 9999 + config.z_index : config.z_index,
+                opacity: config.opacity ?? 1,
                 // The Dual-Mode Container Logic
                 backgroundColor: isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)',
                 // backdropFilter: isDraggingFocusedWindow ? 'none' : (isFocused ? 'none' : 'blur(4px)'),
@@ -125,12 +146,15 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
         >
             {/* Native OS-like Drag Header */}
             <div
-                className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-colors ${isFocused ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}
+                className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-colors relative ${isFocused ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}
                 onMouseDown={handleDragStart}
+                onContextMenu={handleContextMenu}
             >
                 <div className={`flex items-center gap-2 ${isFocused ? 'text-white/60' : 'text-white/30'}`}>
                     <GripHorizontal size={14} />
                     <span className="text-xs font-semibold">{config.title || config.component_name}</span>
+                    {config.is_locked && <Lock size={10} className="text-amber-500" />}
+                    {config.always_on_top && <BringToFront size={10} className="text-emerald-500" />}
                 </div>
                 <div className="flex items-center gap-2">
                     <button className="text-white/40 hover:text-white transition-colors" title="Minimize">
@@ -140,6 +164,37 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
                         <X size={14} />
                     </button>
                 </div>
+                
+                {/* Context Menu */}
+                {contextMenu && (
+                    <div 
+                        className="absolute z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 text-xs w-48 text-zinc-300 flex flex-col pointer-events-auto"
+                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <button onClick={toggleLock} className="px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2">
+                            {config.is_locked ? <Unlock size={12}/> : <Lock size={12}/>}
+                            {config.is_locked ? "Unlock Position" : "Lock Position"}
+                        </button>
+                         <button onClick={toggleAlwaysOnTop} className="px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2">
+                            {config.always_on_top ? <Layers size={12} className="text-emerald-500"/> : <BringToFront size={12}/>}
+                            {config.always_on_top ? "Disable Always-On-Top" : "Always On Top"}
+                        </button>
+                        <div className="h-px bg-zinc-800 my-1"/>
+                         <div className="px-3 py-1 text-zinc-500 font-medium">Opacity</div>
+                         <div className="flex px-2 gap-1 pb-1">
+                             {[1, 0.9, 0.75, 0.5, 0.25].map(v => (
+                                 <button 
+                                    key={v}
+                                    onClick={() => setOpacity(v)}
+                                    className={`flex-1 h-6 rounded hover:bg-zinc-700 flex items-center justify-center ${config.opacity === v ? 'bg-zinc-700 text-white' : ''}`}
+                                 >
+                                    {v * 100}%
+                                 </button>
+                             ))}
+                         </div>
+                    </div>
+                )}
             </div>
 
             {/* Component Body - Rendering from the Dynamic Registry */}

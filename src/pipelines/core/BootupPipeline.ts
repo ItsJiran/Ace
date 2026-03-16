@@ -1,4 +1,5 @@
 import { PipelineEngine, type PipelineStep, type PipelineContext } from '#/services/pipelineEngine';
+import { LayoutEngine } from '#/services/layoutEngine';
 import { getCurrentWindow, currentMonitor, PhysicalSize, PhysicalPosition } from '@tauri-apps/api/window';
 
 export interface BootupContext extends PipelineContext {
@@ -78,11 +79,23 @@ const InitWindowLayerStep: PipelineStep<void, void> = {
     }
 };
 
+/**
+ * Phase 4: Layout Engine & Persistence
+ */
+const InitLayoutEngineStep: PipelineStep<void, void> = {
+    name: 'Init Layout Engine',
+    execute: async () => {
+        await LayoutEngine.init();
+        console.log('[Boot] Phase 4: Layout engine initialized.');
+    }
+};
+
 export class BootupPipeline extends PipelineEngine<void, void> {
     constructor() {
-        super('Bootup Sequence');
+        super('Bootup Sequence'); // argument is void
         this.addStep(InitCoreRuntimeBedStep);
         this.addStep(InitConfigAndGlobalStateStep);
         this.addStep(InitWindowLayerStep);
+        this.addStep(InitLayoutEngineStep);
     }
 }

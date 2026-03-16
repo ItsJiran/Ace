@@ -38,6 +38,11 @@ export const WindowConfigSchema = z.object({
     height: z.number(),
     z_index: z.number(),
 
+    // Visual State
+    opacity: z.number().optional().default(1),
+    is_locked: z.boolean().optional().default(false),
+    always_on_top: z.boolean().optional().default(false),
+
     is_focused: z.boolean(),
     is_minimized: z.boolean(),
 
