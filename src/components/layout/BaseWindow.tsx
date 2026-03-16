@@ -15,6 +15,7 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
     const dragSurface = config.drag_surface ?? 'header';
     const isBorderless = chromeStyle === 'borderless';
     const isFullDrag = dragSurface === 'full';
+    const hideRing = config.hide_ring ?? false;
     
     const [isMounted, setIsMounted] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
@@ -155,7 +156,7 @@ function BaseWindowComponent({ config }: { config: WindowConfig }) {
             onContextMenu={handleContextMenu}
             onMouseEnter={() => WindowEngine.enterWindowSurface(config.window_uid)}
             onMouseLeave={() => WindowEngine.leaveWindowSurface(config.window_uid)}
-            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${isDraggingFocusedWindow ? 'duration-0' : 'duration-150'} ${canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none'} ${isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10'} ${isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'}`}
+            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${isDraggingFocusedWindow ? 'duration-0' : 'duration-150'} ${canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none'} ${!hideRing && (isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10')} ${isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'}`}
             style={{
                 transform: `translate3d(${(dragPosition?.x ?? config.x)}px, ${(dragPosition?.y ?? config.y)}px, 0)`,
                 width: config.width,

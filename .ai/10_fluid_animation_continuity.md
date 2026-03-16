@@ -145,3 +145,102 @@ Design intent:
 
 This document sets motion principles and implementation direction.
 Exact damping, stiffness, durations, and curves can be tuned per component as long as continuity and responsiveness are preserved.
+
+## WindowEngine Animation Runtime
+
+As of the current implementation, WindowEngine is the sole orchestrator for all window-bound animation sequences. Components do not manage their own RAF loops for spatial motion.
+
+### Schema Location
+
+All types are defined in `src/schemas/animation.ts` (Zod).
+
+Key exported types:
+- `AnimationSequence` — the full playable sequence (segments, policy, mode, on_complete)
+- `AnimationSegment` — one phase of motion: `phase_label`, `from`, `to`, `easing`, `hold_ms`
+- `BoundsAnchor` — `SemanticAnchor | LiteralBounds` — where a segment starts or ends
+- `SemanticAnchor` — `'screen:center' | 'screen:bottom_center' | 'current' | ...`
+- `EasingType` — `'spring_back' | 'ease_in' | 'ease_out' | 'ease_in_out' | 'linear'`
+- `InterruptPolicy` — `'lock' | 'retarget' | 'cancel'`
+- `PositioningMode` — `'stateful_fixed' | 'relative_runtime'`
+- `AnimationRuntimeState` — written per-frame to RAM key `system:window_animations[uid]`
+
+Pure easing math is in `src/core/patterns/easing.ts`.
+
+### WindowEngine API
+
+```ts
+// Play an inline dynamic sequence
+WindowEngine.playAnimation(window_uid, sequence: AnimationSequence);
+
+// Stop immediately — window stays at current bounds
+WindowEngine.cancelAnimation(window_uid);
+
+// Redirect the current segment to a new target without reset
+WindowEngine.retargetAnimation(window_uid, newTo: BoundsAnchor);
+
+// Check if a lock-policy animation is blocking drag
+WindowEngine.isAnimationLocked(window_uid): boolean;
+```
+
+### BoundsAnchor Resolution
+
+Semantic strings are resolved by WindowEngine at the moment each segment activates — not at call-time. This means screen dimensions are always current:
+
+- `'screen:center'` → center of current viewport, preserving window size
+- `'screen:bottom_center'` → lower center with 90px bottom margin
+- `'current'` → the window's live bounds at segment start (used for retarget continuity)
+- Explicit `{ x, y, width, height }` → passed through unchanged (caller computes at call-time)
+
+### Interrupt Policy Behavior
+
+| Policy | On playAnimation called mid-run | Drag behavior |
+|---|---|---|
+| `lock` | New call ignored | Drag blocked (isAnimationLocked = true) |
+| `retarget` | Snaps from → live bounds, continues toward new target | Drag accepted, retargets on pointer-up |
+| `cancel` | Cancels immediately, new sequence starts | Drag cancels sequence |
+
+### Observability (DevKit)
+
+Every running animation writes to `system:window_animations` (a `Record<uid, AnimationRuntimeState>`) on each RAF frame. Components can subscribe via `useAceMemory('system:window_animations')` to display live phase, segment index, cycle count, and running state.
+
+Example display: `fps:60 phase:expand cycle:2 run`
+
+### Usage Examples
+
+```ts
+// Prompt-bar summon (stateful, locked)
+WindowEngine.playAnimation(uid, {
+	pattern_id: 'anim:prompt_bar:expand_search:stateful_fixed:v1',
+	positioning_mode: 'stateful_fixed',
+	interrupt_policy: 'lock',
+	loop: false,
+	on_complete: 'idle',
+	segments: [
+		{ phase_label: 'enter',  duration_ms: 500,  from: { x: startX, y: startY, width: 56, height: 56 }, to: 'screen:center', easing: 'spring_back', hold_ms: 0 },
+		{ phase_label: 'expand', duration_ms: 620,  from: 'current', to: { x: barX, y: barY, width: 540, height: 64 }, easing: 'spring_back', hold_ms: 0 },
+		{ phase_label: 'search', duration_ms: 1900, from: 'current', to: 'current', easing: 'linear', hold_ms: 0 },
+		{ phase_label: 'shrink', duration_ms: 520,  from: 'current', to: 'screen:center', easing: 'ease_in_out', hold_ms: 0 },
+		{ phase_label: 'exit',   duration_ms: 460,  from: 'current', to: { x: startX, y: startY, width: 56, height: 56 }, easing: 'ease_in', hold_ms: 0 },
+	],
+});
+
+// Close window after exit animation
+WindowEngine.playAnimation(uid, {
+	...sequence,
+	on_complete: 'close_window',
+});
+
+// Redirect mid-flight to follow cursor
+WindowEngine.retargetAnimation(uid, { x: cursorX - 28, y: cursorY - 28, width: 56, height: 56 });
+```
+
+### Pattern ID Convention
+
+```
+anim:<domain>:<name>:<positioning_mode>:v<version>
+```
+
+Examples:
+- `anim:prompt_bar:expand_search:stateful_fixed:v1`
+- `anim:window_card:morph_focus:relative_runtime:v1`
+- `anim:widget:slide_in:stateful_fixed:v1`

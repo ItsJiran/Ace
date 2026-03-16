@@ -1,141 +1,70 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WindowEngine } from '#/services/windowEngine';
+import { useAceMemory } from '#/hooks/useAceMemory';
+import type { AnimationRuntimeState, AnimationSequence } from '#/schemas/animation';
 
-type Phase = 'idle' | 'entering' | 'expanding' | 'searching' | 'shrinking' | 'exiting';
-type Bounds = { x: number; y: number; width: number; height: number };
+function buildPromptBarSequence(loop: boolean): AnimationSequence {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
 
-type Segment = {
-    phase: Exclude<Phase, 'idle'>;
-    durationMs: number;
-    from: Bounds;
-    to: Bounds;
-};
+    const circleW = 56, circleH = 56;
+    const barW = 540, barH = 64;
 
-const PHASE_LABEL: Record<Phase, string> = {
-    idle: 'Idle',
-    entering: 'Enter',
-    expanding: 'Expand',
-    searching: 'Searching',
-    shrinking: 'Shrink',
-    exiting: 'Exit',
-};
+    const startX = Math.round((vw - circleW) / 2);
+    const startY = Math.round(vh - circleH - 90);
+    const centerCircleX = Math.round((vw - circleW) / 2);
+    const centerCircleY = Math.round((vh - circleH) / 2);
+    const centerBarX = Math.round((vw - barW) / 2);
+    const centerBarY = Math.round((vh - barH) / 2);
 
-const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-const easeOutBack = (x: number) => {
-    const c1 = 1.70158;
-    const c3 = c1 + 1;
-    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-};
-
-const easeInCubic = (x: number) => x * x * x;
-const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
-
-const easeByPhase = (phase: Segment['phase'], t: number) => {
-    if (phase === 'entering' || phase === 'expanding') return easeOutBack(t);
-    if (phase === 'shrinking') return easeInOutCubic(t);
-    if (phase === 'exiting') return easeInCubic(t);
-    return t;
-};
+    return {
+        pattern_id: 'anim:prompt_bar:expand_search:stateful_fixed:v1',
+        positioning_mode: 'stateful_fixed',
+        interrupt_policy: 'lock',
+        loop,
+        on_complete: 'idle',
+        segments: [
+            { phase_label: 'enter',  duration_ms: 500,  from: { x: startX,        y: startY,        width: circleW, height: circleH }, to: { x: centerCircleX, y: centerCircleY, width: circleW, height: circleH }, easing: 'spring_back', hold_ms: 0 },
+            { phase_label: 'expand', duration_ms: 620,  from: 'current',           to: { x: centerBarX,    y: centerBarY,    width: barW,    height: barH    }, easing: 'spring_back', hold_ms: 0 },
+            { phase_label: 'search', duration_ms: 1900, from: 'current',           to: 'current',                                                               easing: 'linear',      hold_ms: 0 },
+            { phase_label: 'shrink', duration_ms: 520,  from: 'current',           to: { x: centerCircleX, y: centerCircleY, width: circleW, height: circleH }, easing: 'ease_in_out', hold_ms: 0 },
+            { phase_label: 'exit',   duration_ms: 460,  from: 'current',           to: { x: startX,        y: startY,        width: circleW, height: circleH }, easing: 'ease_in',     hold_ms: 0 },
+        ],
+    };
+}
 
 export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string }) {
-    const [phase, setPhase] = useState<Phase>('idle');
-    const [isRunning, setIsRunning] = useState(false);
     const [isLoop, setIsLoop] = useState(true);
-    const [cycles, setCycles] = useState(0);
-    const [fps, setFps] = useState(0);
     const [dotCount, setDotCount] = useState(0);
+    const [fps, setFps] = useState(0);
 
-    const rafRef = useRef<number | null>(null);
-    const segmentRef = useRef<Segment | null>(null);
-    const segmentStartRef = useRef(0);
-    const currentBoundsRef = useRef<Bounds>({ x: 0, y: 0, width: 56, height: 56 });
-
+    const fpsRafRef = useRef<number | null>(null);
     const fpsFramesRef = useRef(0);
     const fpsTimeRef = useRef(performance.now());
 
-    const loopRef = useRef(isLoop);
-    loopRef.current = isLoop;
+    // Read live animation state from WindowEngine RAM
+    const allAnimStates = useAceMemory<Record<string, AnimationRuntimeState>>('system:window_animations');
+    const animState = allAnimStates?.[windowUid];
 
-    const timeline = useMemo(() => {
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
+    const phase = animState?.current_phase ?? 'idle';
+    const isRunning = animState?.is_running ?? false;
+    const cycles = animState?.cycles ?? 0;
 
-        const circleW = 56;
-        const circleH = 56;
-        const barW = 540;
-        const barH = 64;
+    const isLoopRef = useRef(isLoop);
+    isLoopRef.current = isLoop;
 
-        const startX = Math.round((vw - circleW) / 2);
-        const startY = Math.round(vh - circleH - 90);
-
-        const centerCircleX = Math.round((vw - circleW) / 2);
-        const centerCircleY = Math.round((vh - circleH) / 2);
-
-        const centerBarX = Math.round((vw - barW) / 2);
-        const centerBarY = Math.round((vh - barH) / 2);
-
-        const startBounds: Bounds = { x: startX, y: startY, width: circleW, height: circleH };
-        const centerCircleBounds: Bounds = { x: centerCircleX, y: centerCircleY, width: circleW, height: circleH };
-        const centerBarBounds: Bounds = { x: centerBarX, y: centerBarY, width: barW, height: barH };
-
-        return {
-            startBounds,
-            centerCircleBounds,
-            centerBarBounds,
-            segments: [
-                { phase: 'entering', durationMs: 500, from: startBounds, to: centerCircleBounds },
-                { phase: 'expanding', durationMs: 620, from: centerCircleBounds, to: centerBarBounds },
-                { phase: 'searching', durationMs: 1900, from: centerBarBounds, to: centerBarBounds },
-                { phase: 'shrinking', durationMs: 520, from: centerBarBounds, to: centerCircleBounds },
-                { phase: 'exiting', durationMs: 460, from: centerCircleBounds, to: startBounds },
-            ] satisfies Segment[],
-        };
-    }, []);
-
-    const commitBounds = (b: Bounds) => {
-        currentBoundsRef.current = b;
-        WindowEngine.updateWindowBounds(windowUid, b.x, b.y, b.width, b.height);
+    const play = () => {
+        WindowEngine.playAnimation(windowUid, buildPromptBarSequence(isLoopRef.current));
     };
 
-    const startSegment = (segment: Segment, now: number) => {
-        segmentRef.current = segment;
-        segmentStartRef.current = now;
-        setPhase(segment.phase);
-
-        const begin = {
-            x: Math.round(segment.from.x),
-            y: Math.round(segment.from.y),
-            width: Math.round(segment.from.width),
-            height: Math.round(segment.from.height),
-        };
-
-        commitBounds(begin);
+    const replay = () => {
+        WindowEngine.cancelAnimation(windowUid);
+        requestAnimationFrame(() => play());
     };
 
-    const stopAnimation = (setIdle = true) => {
-        if (rafRef.current !== null) {
-            cancelAnimationFrame(rafRef.current);
-            rafRef.current = null;
-        }
-        setIsRunning(false);
-        segmentRef.current = null;
-        commitBounds(timeline.startBounds);
-        if (setIdle) {
-            setPhase('idle');
-        }
-    };
-
-    const run = () => {
-        if (rafRef.current !== null) {
-            cancelAnimationFrame(rafRef.current);
-            rafRef.current = null;
-        }
-
-        let idx = 0;
-
-        const step = (now: number) => {
+    // Independent FPS counter via its own lightweight RAF
+    useEffect(() => {
+        const tick = (now: number) => {
             fpsFramesRef.current += 1;
             const dt = now - fpsTimeRef.current;
             if (dt >= 1000) {
@@ -143,103 +72,46 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
                 fpsFramesRef.current = 0;
                 fpsTimeRef.current = now;
             }
-
-            const segment = segmentRef.current;
-            if (!segment) {
-                const next = timeline.segments[idx];
-                if (!next) {
-                    setCycles((c) => c + 1);
-                    if (loopRef.current) {
-                        idx = 0;
-                    } else {
-                        stopAnimation();
-                        return;
-                    }
-                    startSegment(timeline.segments[idx], now);
-                } else {
-                    startSegment(next, now);
-                }
-            }
-
-            const active = segmentRef.current;
-            if (!active) {
-                return;
-            }
-
-            const rawT = clamp((now - segmentStartRef.current) / active.durationMs, 0, 1);
-            const easedT = easeByPhase(active.phase, rawT);
-
-            const nextBounds: Bounds = {
-                x: Math.round(lerp(active.from.x, active.to.x, easedT)),
-                y: Math.round(lerp(active.from.y, active.to.y, easedT)),
-                width: Math.round(lerp(active.from.width, active.to.width, easedT)),
-                height: Math.round(lerp(active.from.height, active.to.height, easedT)),
-            };
-
-            commitBounds(nextBounds);
-
-            if (rawT >= 1) {
-                idx += 1;
-                segmentRef.current = null;
-            }
-
-            rafRef.current = requestAnimationFrame(step);
+            fpsRafRef.current = requestAnimationFrame(tick);
         };
+        fpsRafRef.current = requestAnimationFrame(tick);
+        return () => {
+            if (fpsRafRef.current !== null) cancelAnimationFrame(fpsRafRef.current);
+        };
+    }, []);
 
-        setIsRunning(true);
-        segmentRef.current = null;
-        rafRef.current = requestAnimationFrame(step);
-    };
-
-    const replay = () => {
-        stopAnimation(false);
-        setPhase('idle');
-        requestAnimationFrame(() => requestAnimationFrame(run));
-    };
-
+    // Configure window and start animation on mount
     useEffect(() => {
-        commitBounds(timeline.startBounds);
         WindowEngine.updateWindowConfig(windowUid, {
             chrome_style: 'borderless',
             drag_surface: 'full',
             is_locked: true,
             opacity: 1,
-            title: 'Prompt Bar Real Window'
+            hide_ring: true,
+            title: 'Prompt Bar Real Window',
         });
+        play();
+        return () => WindowEngine.cancelAnimation(windowUid);
+    }, [windowUid]);
 
-        requestAnimationFrame(() => requestAnimationFrame(run));
-
-        return () => {
-            if (rafRef.current !== null) {
-                cancelAnimationFrame(rafRef.current);
-            }
-        };
-    }, [timeline.startBounds.x, timeline.startBounds.y, timeline.startBounds.width, timeline.startBounds.height, windowUid]);
-
+    // Searching dot animation
     useEffect(() => {
-        if (phase !== 'searching') return;
-
+        if (phase !== 'search') return;
         setDotCount(0);
-        const id = window.setInterval(() => {
-            setDotCount((d) => (d + 1) % 4);
-        }, 350);
-
+        const id = window.setInterval(() => setDotCount((d) => (d + 1) % 4), 350);
         return () => window.clearInterval(id);
     }, [phase]);
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                WindowEngine.closeWindow(windowUid);
-            }
+            if (e.key === 'Escape') WindowEngine.closeWindow(windowUid);
         };
-
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [windowUid]);
 
-    const isBar = phase === 'expanding' || phase === 'searching' || phase === 'shrinking';
-    const fadeIn = phase !== 'idle' && phase !== 'exiting';
+    const isBar = phase === 'expand' || phase === 'search' || phase === 'shrink';
+    const fadeIn = isRunning && phase !== 'exit';
     const dots = '.'.repeat(dotCount);
 
     return (
@@ -298,7 +170,7 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
                         </span>
 
                         <span className="ml-auto text-[10px] font-mono text-zinc-300/70">
-                            {PHASE_LABEL[phase]}
+                            {phase}
                         </span>
                     </div>
                 )}
@@ -332,7 +204,7 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
             </div>
 
             <div className="absolute left-2 bottom-2 rounded bg-zinc-950/65 px-2 py-1 text-[10px] font-mono text-zinc-300/80 border border-zinc-700/60">
-                fps:{fps} phase:{PHASE_LABEL[phase]} cycle:{cycles} {isRunning ? 'run' : 'idle'}
+                fps:{fps} phase:{phase} cycle:{cycles} {isRunning ? 'run' : 'idle'}
             </div>
         </div>
     );

@@ -44,6 +44,7 @@ export const WindowConfigSchema = z.object({
     always_on_top: z.boolean().optional().default(false),
     chrome_style: z.enum(['standard', 'borderless']).optional().default('standard'),
     drag_surface: z.enum(['header', 'full']).optional().default('header'),
+    hide_ring: z.boolean().optional().default(false),
 
     is_focused: z.boolean(),
     is_minimized: z.boolean(),
