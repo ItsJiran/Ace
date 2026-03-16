@@ -67,10 +67,23 @@ export function StressTestMenu() {
         });
     };
 
+    const openPromptBarRealWindowTest = () => {
+        WindowEngine.spawnWindow({
+            component_name: 'stress_test_prompt_bar_real_window',
+            title: 'Stress Test: Prompt Bar Real Window',
+            x: 520,
+            y: 380,
+            width: 56,
+            height: 56,
+            chrome_style: 'borderless',
+            drag_surface: 'full',
+            is_locked: true,
+        });
+    };
+
     const openRAMIsolationTest = () => {
         WindowEngine.spawnWindow({
             component_name: 'stress_test_ram_isolation',
-            title: 'Stress Test: RAM Isolation',
             title: 'Stress Test: RAM Isolation',
             x: 440,
             y: 160,
@@ -140,6 +153,14 @@ export function StressTestMenu() {
             >
                 <p className="text-sm text-zinc-200">Prompt Bar Animation</p>
                 <p className="text-[11px] text-zinc-500">Circle → pill morphing · float bottom↑center · CSS spring + fade easing.</p>
+            </button>
+
+            <button
+                onClick={openPromptBarRealWindowTest}
+                className="w-full text-left rounded border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
+            >
+                <p className="text-sm text-zinc-200">Prompt Bar Real Window</p>
+                <p className="text-[11px] text-zinc-500">Animate actual window bounds via WindowEngine: bottom-center, morph, search, shrink, exit.</p>
             </button>
 
             <div className="border-t border-zinc-800 pt-2">
