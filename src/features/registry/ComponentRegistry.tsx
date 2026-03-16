@@ -13,6 +13,7 @@ import { StressTestChatMessageFlow } from '../dev/StressTestChatMessageFlow';
 import { StressTestWindowMotion } from '../dev/StressTestWindowMotion';
 import { StressTestWindowSwarm } from '../dev/StressTestWindowSwarm';
 import { StressTestRAMIsolation } from '../dev/StressTestRAMIsolation';
+import { StressTestPromptBarAnimation } from '../dev/StressTestPromptBarAnimation';
 import { RAMUsageAnalyzer } from '../dev/RAMUsageAnalyzer';
 import { HeadlessDragSurfaceDemo } from '../dev/HeadlessDragSurfaceDemo';
 import { DevMenu } from '#/components/dev/DevMenu';
@@ -36,6 +37,7 @@ const REGISTRY: Record<string, React.FC<any>> = {
     'stress_test_window_motion': StressTestWindowMotion,
     'stress_test_window_swarm': StressTestWindowSwarm,
     'stress_test_ram_isolation': StressTestRAMIsolation,
+    'stress_test_prompt_bar_animation': StressTestPromptBarAnimation,
     'headless_drag_surface_demo': HeadlessDragSurfaceDemo,
     'dev_menu': DevMenu,
     'loading_widget': LoadingWidget,

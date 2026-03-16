@@ -56,9 +56,21 @@ export function StressTestMenu() {
         });
     };
 
+    const openPromptBarAnimationTest = () => {
+        WindowEngine.spawnWindow({
+            component_name: 'stress_test_prompt_bar_animation',
+            title: 'Stress Test: Prompt Bar Animation',
+            x: 460,
+            y: 180,
+            width: 560,
+            height: 520,
+        });
+    };
+
     const openRAMIsolationTest = () => {
         WindowEngine.spawnWindow({
             component_name: 'stress_test_ram_isolation',
+            title: 'Stress Test: RAM Isolation',
             title: 'Stress Test: RAM Isolation',
             x: 440,
             y: 160,
@@ -116,6 +128,18 @@ export function StressTestMenu() {
             >
                 <p className="text-sm text-zinc-200">Window Swarm</p>
                 <p className="text-[11px] text-zinc-500">Spawn & animasikan beberapa window secara concurrent — orbital, bounce grid, scatter spring.</p>
+            </button>
+
+            <div className="border-t border-zinc-800 pt-2">
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">UI Shape Morphing</p>
+            </div>
+
+            <button
+                onClick={openPromptBarAnimationTest}
+                className="w-full text-left rounded border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
+            >
+                <p className="text-sm text-zinc-200">Prompt Bar Animation</p>
+                <p className="text-[11px] text-zinc-500">Circle → pill morphing · float bottom↑center · CSS spring + fade easing.</p>
             </button>
 
             <div className="border-t border-zinc-800 pt-2">
