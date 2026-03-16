@@ -8,11 +8,12 @@ The ecosystem operates on a strict 5-layer hierarchy:
 
 1. **The Transparent Layer**: The absolute base. A single, borderless Tauri `WebviewWindow`. Using OS-level content protection, screen-sharing apps cannot capture the assistant, and users can click "through" it into their IDE.
 2. **Global RAM (Storage Engine)**: Heavy payload data stored in indexable memory. This acts as the *Single Source of Truth* for the UI, preventing the IPC Event bus from bottlenecking.
-3. **The Window (Dumb Frame)**: Only handles X/Y coordinates, width/height, dragging, and focus. It fundamentally does not know what UI React components it contains.
+3. **The Window (Spatial Shell)**: Handles X/Y coordinates, width/height, dragging, focus, lock state, opacity, always-on-top, and chrome metadata. It still does not know widget business logic.
 4. **The Component (Active UI)**: Small, downloadable React components (`<ChatBubble />`, `<CalendarWidget />`). They capture human inputs, emit requests, and re-render purely by observing the RAM.
 5. **The Domain Engines & Process Registry**: 
    - **Self-Sovereign Engines**: Domain-specific logic (`fsEngine`, `aiGatewayEngine`) that listens directly to the Event Bus. They own their execution pipelines.
-   - **Process Registry**: A passive, optional ledger (`processEngine`) where engines *choose* to register long-running tasks for UI observability (loading bars, status updates). It does not supervise execution.
+  - **Process Registry**: A passive, optional ledger (`processEngine`) where engines *choose* to register long-running tasks for UI observability (loading bars, status updates). It does not supervise execution.
+  - **Layout Engine**: A persistence orchestrator that snapshots active windows to JSON files and rehydrates them on demand.
 
 ## 🤖 AI Strategy (Hybrid Session-Based Gateway)
 - **Session-Based Architecture**: The application is not inherently tied to one conversation. It instantiates isolated **Sessions** (e.g., `sess-abc`, `sess-xyz`). This allows for true multi-agent workflows where Tab A talks to OpenClaw (Local) while Tab B talks to GPT-4 separately.
@@ -98,7 +99,9 @@ The Core Engines (Always Active)
 
     processEngine (System Core): The Process Lifecycle Registry. A shared utility any engine can opt into when its operation needs observable, cancellable lifecycle tracking (PID, status, AbortSignal). It is not a mandatory supervisor — each engine decides for itself whether its work warrants a tracked process.
 
-    windowEngine (System Core): The spatial orchestrator. It manages the lifecycle, positioning, transparency, and state of Tauri WebviewWindows and UI dumb frames.
+    windowEngine (System Core): The spatial orchestrator. It manages the lifecycle, positioning, transparency, focus, and presentation metadata of overlay windows.
+
+    layoutEngine (System Core): The workspace snapshot orchestrator. It saves and loads layout JSON files from the AppConfig filesystem scope.
 
     globalStateManager (System Core): The global interaction tracker. It monitors cursor position, pointer state, active focus, the user's current attention target across the overlay, and the runtime snapshot of active config plus active/running keybinds.
 
@@ -155,7 +158,7 @@ If an interaction only matters to the component itself and happens at a high fre
 
     Examples: Typing in a text input, hovering over a button, dragging a window across the screen.
 
-    Execution: Handled entirely by React's internal useState or useRef. Only the final intent (e.g., pressing "Enter" after typing) is emitted to the Event Bus.
+    Execution: Handled entirely by React's internal useState or useRef. Only the final intent (e.g., pressing "Enter" after typing, or committing final bounds after dragging) should leave the local interaction loop.
 
 Pathway D: The Domain Engine Protocol (How background tasks communicate)
 

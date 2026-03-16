@@ -19,7 +19,7 @@ Before reading the cases, developers must understand the two unbreachable laws o
 2. **Listen First:** The `<ChatBubble />` component mounts and begins observing `storageEngine` at the key `msg-123`.
 3. **Emit Intent:** `<ChatInput />` emits -> `{ action: 'send_gateway', payload: { text: 'Hello' }, preallocated_memory: { message_uid: 'msg-123', session_id: 'sess-A' } }`.
 4. **Route:** The `eventEngine` validates the payload and routes a standardized `CoreEngineHandlerArgs` object to the `aiGatewayEngine`.
-5. **Session Lookup:** `aiGatewayEngine` reads `preallocated_memory.event_session_id`. It locates the correct `AISession` object (which holds the connection to `OpenClaw` or `OpenAI`).
+5. **Session Lookup:** `aiGatewayEngine` reads `preallocated_memory.session_id`. It locates the correct `AISession` object for the chosen provider.
 6. **Streaming & Parsing:** The provider streams chunks back. The engine appends these chunks to **Session A's private buffer** (preventing crosstalk if Session B is also streaming).
 7. **Direct RAM Write:** The parser updates `storageEngine` at `msg-123`.
 8. **React:** The UI updates in real-time.
@@ -60,11 +60,11 @@ Before reading the cases, developers must understand the two unbreachable laws o
 ## Case 4: Prompting that opens a New Window or UI Widget
 *Scenario: The user types "Show me my calendar", and the AI triggers the UI to open.*
 
-1. **AI Decision:** The LLM streams an intent to trigger UI. The `aiGatewayEngine` parses it and emits -> `{ action: 'open_window', payload: { window_type: 'calendar_widget' } }`.
+1. **AI Decision:** The LLM streams an intent to trigger UI. The `aiGatewayEngine` parses it and emits -> `{ action: 'open_window', payload: { component_name: 'calendar_widget' } }`.
 2. **Route:** The `eventEngine` matches this command to the `windowEngine`'s listener.
-3. **Spatial/OS Update:** The `windowEngine` takes over. 
-    * *If native OS window:* It commands Tauri via IPC to spawn a new physical window.
-    * *If overlay widget:* It updates the `storageEngine`'s active window layout registry.
+3. **Spatial/OS Update:** The `windowEngine` takes over.
+    * It allocates a `WindowConfig` with bounds, z-index, focus, and optional metadata such as `opacity`, `is_locked`, `always_on_top`, `chrome_style`, and `drag_surface`.
+    * It writes the new config into `system:windows`.
 4. **React:** The root `App.tsx` (Window Shell) observes the RAM layout change and immediately mounts the `<CalendarWindow />` dumb frame onto the screen.
 
 ---

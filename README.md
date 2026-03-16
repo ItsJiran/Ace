@@ -6,7 +6,7 @@ A local-first, overlay-based personal assistant powered by Tauri and AI, designe
 **CRITICAL FOR AI ASSISTANTS:**
 Before writing code, proposing architectural changes, or executing commands, you **MUST** read the context files located in the `.ai/` directory. These files contain the core identity, tech stack, and goals of the project.
 
-Please read the **8 Architecture Pillars**:
+Please read the **9 Architecture Pillars**:
 1. `.ai/01_project_overview.md` - Core idea, 5-layer architecture, and Terminology.
 2. `.ai/02_ui_and_registry.md` - Dual-Mode UI, Windows, and React Component routing.
 3. `.ai/03_event_lifecycle.md` - Interaction-to-Listener and the End-to-End unified flow.
@@ -22,7 +22,14 @@ Please read the **8 Architecture Pillars**:
 ## 🚀 Development Roadmap
 
 ### ✅ Completed Recently (March 2026)
-- [x] Boot pipeline refactor to ordered 3-phase startup (Core Runtime -> Config/Global State -> Window Layer).
+- [x] Refactor `processEngine` into a passive process registry instead of a mandatory task supervisor.
+- [x] Refactor `eventEngine` to route direct domain actions (for example `open_window`, `close_window`, `send_gateway`) through unified `CoreEngineHandlerArgs`.
+- [x] Refactor `aiGatewayEngine` to a session-based multi-provider model with isolated session buffers.
+- [x] Add `layout.ts` schema for persistent workspace snapshots and restoration payloads.
+- [x] Implement `layoutEngine` initialization plus JSON file persistence in AppConfig `layouts/`.
+- [x] Add window runtime controls: right-click context menu, lock position, always-on-top, opacity presets.
+- [x] Add hybrid window presentation modes: `standard` and `borderless`, including full-surface drag for headless test windows.
+- [x] Boot pipeline refactor to ordered 4-phase startup (Core Runtime -> Config/Global State -> Window Layer -> Layout Persistence).
 - [x] Introduce `globalStateManager` to track cursor/focus/runtime state, active config, and active/running keybinds.
 - [x] Add config-driven mouse focus behavior (`window.mouse_focus_enabled`) and wire it into window interaction mode.
 - [x] Implement `keybindEngine` with EventBus routing and runtime state synchronization.
@@ -53,17 +60,17 @@ Please read the **8 Architecture Pillars**:
 - [x] Implement Event Bus (Event Engine) & Process Engine basic routing.
 - [x] Implement Database (SQLite) for audit logging & Config/Keybinds.
 - [x] Implement **Pipeline Engine** for linear execution sequences.
-- [x] Document Unified Event Lifecycle & Bootup sequence (8 Pillars).
+- [x] Document Unified Event Lifecycle & Bootup sequence (9 Pillars).
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor (CURRENT)
 - [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (pospone for now since we need a robust event and ui and correct gateway so we can get the corrct feeedback)
-- [x] **Formalize Schemas (Core Done)**: Event, Window, and Storage schemas are formalized.
-- [ ] **Formalize Schemas (Remaining)**: Interaction, Listener, and Widget config schemas.
-- [ ] **Align Event Engine**: Enforce "Workers Never Listen" (Subordination) rule.
-- [ ] **Align Process Engine**: Integrate PipelineEngine for tool execution steps.
+- [x] **Formalize Schemas (Core Done)**: Event, Window, Storage, Layout, and AI session/provider schemas are formalized.
+- [ ] **Formalize Schemas (Remaining)**: Widget snapshot contracts and restoration-specific widget config schemas.
+- [x] **Align Event Engine**: Direct action routing with unified `CoreEngineHandlerArgs` is active.
+- [x] **Align Process Engine**: `processEngine` now acts as an optional lifecycle registry instead of a hard supervisor.
 - [ ] **Align Storage Engine**: Enforce Pre-Allocation Protocol for all results.
 - [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results.
-- [ ] **Align Window Engine**: Strict RAM-driven spatial state.
+- [x] **Align Window Engine**: RAM-driven spatial state with focus, lock, opacity, always-on-top, and chrome metadata.
 - [x] **Implement Bootup Sequence**: Refactor app entry for the current ordered boot pipeline.
 
 ### 🧩 Phase 3: The Development UI Kit
@@ -75,16 +82,16 @@ Please read the **8 Architecture Pillars**:
 - [x] **Tools Registry List**: Real-time status of running background tasks.
 - [x] **Pipeline Registry List**: Real-time status of running background tasks.
 - [x] **Window Registry List**: Real-time status of running background tasks.
-- [ ] **Window Customization Strategy**:
-  - [ ] Refactor `BaseWindow` to be a pure logic container (headless) with no default styles.
+- [~] **Window Customization Strategy**:
+  - [x] Extend `BaseWindow` into a hybrid shell supporting `standard` chrome and `borderless` presentation.
   - [ ] Implement `useWindowContext` to expose window actions (drag, close, resize) to widgets.
-  - [ ] Migrate widgets to own their chrome/frame styling.
-  - [ ] **Advanced Drag & Interaction**:
-    - [ ] Implement `DragRegion` component: A primitive for defining custom drag areas (e.g., full-body drag vs. topnav-only drag).
-    - [ ] Add `WindowContextMenu` on Right-Click: Native-like menu for "Lock Position", "Always on Top", "Close", "Save as Preset".
-    - [ ] Implement `Lock State`: When locked, ignore drag inputs but allow click-through if configured.
-- [ ] **Layout Persistence**:
-  - [ ] Implement `LayoutEngine` to snapshot `system:windows` state.
+  - [ ] Migrate production widgets to own their chrome/frame styling.
+  - [x] **Advanced Drag & Interaction**:
+    - [x] Support drag mode metadata (`header` vs `full`) for different widget interaction surfaces.
+    - [x] Add `WindowContextMenu` on Right-Click with `Lock Position`, `Always on Top`, and opacity presets.
+    - [x] Implement `Lock State`: When locked, disable manual drag but keep the window interactive.
+- [~] **Layout Persistence**:
+  - [x] Implement `LayoutEngine` to snapshot `system:windows` state and save/load JSON files from AppConfig.
   - [ ] Add `save_layout` and `load_layout` actions to `WindowEngine`.
   - [ ] Create UI for managing saved layouts.
 
@@ -142,7 +149,7 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 
 ### 🧠 Phase 6: The AI Gateway & Autonomous Tooling (The Brain)
 *Goal: Connect the local Client to the remote LLM and establish the autonomous ReAct loop.*
-- [ ] **AI Gateway Engine**: Implement TCP/WebSocket connection to the remote LLM (e.g., OpenClaw).
+- [~] **AI Gateway Engine**: Session-based provider registry and isolated session buffering are in place; transport/provider completion is still ongoing.
 - [ ] **The Stream Bypass**: Implement direct RAM writing for high-frequency token streaming (bypassing the Event Bus).
 - [ ] **Tool/Event Parser**: Build the logic to intercept tool-call JSONs from the LLM stream and emit them to the `eventEngine`.
 - [ ] **Native OS Tools**: Implement the actual Rust/TypeScript logic for core tools (Obsidian Reader, Shell Executor, File System).

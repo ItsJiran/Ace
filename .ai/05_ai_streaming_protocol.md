@@ -9,7 +9,7 @@ If the AI decides to perform three actions (look up a repository, open a tab, an
 The system prompts the AI Gateway to output a sequence of instructions using a markdown code block tagged as `event`:
 
 ```event
-<event_type>, <window_uid>, <process_uid>, <widget_uid>, <action>, <sub_action>
+<event_type>, <window_uid>, <process_uid>, <widget_uid>, <action>, <sub_action?>
 ... arbitrary payload text, markdown, or JSON string buffer goes here ...
 ... it builds up asynchronously line by line ...
 end_event
@@ -44,6 +44,13 @@ end_event
 3.  **Buffering**: The sub-process hides the text from the UI, buffering the inner tokens into a string payload in RAM.
 4.  **Instant Firing**: The exact millisecond the Engine receives `end_event`, it converts the block headers into an `InteractionSchema` JSON object and drops it onto the EventBus.
 5.  **Multi-Agent Simultaneity**: The AI continues generating the second event block, while the UI instantly reacts to the first one entirely asynchronously.
+
+## Normalization Rule
+
+The current runtime prefers direct routed actions such as `open_window`, `close_window`, and `send_gateway`.
+
+- Older blocks using `action + sub_action` pairs may still be parsed for compatibility.
+- New parser output should normalize them into the direct action form before routing through `eventEngine`.
 
 ## Fault Tolerance
 The `ai_parser` logic is heavily fortified with defensive Regex. Local LLMs (especially smaller ones like 8B variants) historically hallucinate escaping quotes, malformed JSON, or forgetting the `end_event` closer tag. If structural violations occur, the Process Engine aborts the block execution and falls back gracefully to standard conversational text output instead of crashing the UI.

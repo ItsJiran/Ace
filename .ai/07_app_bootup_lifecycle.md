@@ -2,7 +2,7 @@
 
 Because ACE relies on a strict decoupling of state, routing, and UI, the application cannot simply "render React" on load. The bootup sequence must be meticulously ordered to prevent race conditions, ghost events, or UI crashes. 
 
-The bootup sequence operates in **3 Strict Phases**, executed through the boot pipeline before post-boot UI effects are allowed to run.
+The bootup sequence operates in **4 Strict Phases**, executed through the boot pipeline before post-boot UI effects are allowed to run.
 
 ### Phase 1: Core Runtime Bed
 * **Action:** Bring up the absolute runtime foundation first.
@@ -28,6 +28,14 @@ The bootup sequence operates in **3 Strict Phases**, executed through the boot p
   2. Size and position the Tauri overlay window.
   3. Apply click-through ambient mode on startup.
 * **Result:** The transparent layer is ready, but still governed by the already-loaded runtime config.
+
+### Phase 4: Layout Persistence
+* **Action:** Start persistent layout support after the window layer exists.
+* **Execution:**
+  1. Boot `layoutEngine`.
+  2. Ensure the AppConfig `layouts/` directory exists.
+  3. Refresh the runtime list of available layouts.
+* **Result:** The system can save and restore workspace snapshots without blocking base overlay startup.
 
 ## What Does Not Boot Upfront
 

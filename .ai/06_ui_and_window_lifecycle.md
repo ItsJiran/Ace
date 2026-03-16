@@ -8,16 +8,18 @@ This document details how external events and internal interactions drive the vi
 The window layer is governed by runtime config and global state, especially `window.mouse_focus_enabled` from the config engine and its mirrored value in `globalStateManager.focus.mouse_focus_enabled`.
 
 ### 1. Window Creation (Spawn)
-1. **Trigger**: An `Interaction` with `action: 'open'`, `sub_action: 'open_window'` is emitted.
+1. **Trigger**: An `Interaction` with `action: 'open_window'` is emitted.
 2. **Routing**: The `EventBus` routes it to the `WindowEngine`.
 3. **Allocation**: `WindowEngine` generates a unique `window_uid`, assigns a `z_index`, and creates a `WindowConfig` entry.
-4. **RAM Commitment**: The new window is added to the `system:windows` map in **Global RAM**.
-5. **UI Rendering**: The main Overlay React component (observing `system:windows`) detects the new entry and renders the corresponding `<WindowFrame />`.
+4. **Metadata**: The config may include `opacity`, `is_locked`, `always_on_top`, `chrome_style`, and `drag_surface`.
+5. **RAM Commitment**: The new window is added to the `system:windows` map in **Global RAM**.
+6. **UI Rendering**: The main overlay React component detects the new entry and renders the corresponding `BaseWindow` shell.
 
 ### 2. Physical State Updates (Resize/Move)
 1. **Direct Manipulation**: User drags a window.
-2. **Local Update**: The `WindowEngine.updateWindowBounds` is called.
-3. **Broadcasting**: The updated bounds are written to RAM. All components observing that window (e.g., handles/frames) re-render immediately via `useSyncExternalStore`.
+2. **Transient Update**: Dragging is tracked in local React state to avoid RAM write floods.
+3. **Commit**: On mouse-up, `WindowEngine.updateWindowBounds` is called with final bounds.
+4. **Broadcasting**: The updated bounds are written to RAM. All components observing that window re-render immediately via `useSyncExternalStore`.
 
 ### 3. Mouse Focus Governance
 1. **Ambient Default**: The transparent layer starts in click-through mode so the user can still click the external target app.
@@ -44,7 +46,7 @@ The system avoids long-lived props or deep nesting. Instead, it uses **Dependenc
 ### 3. The Injection
 1. The `WindowEngine` creates the window.
 2. The `<CalendarWidget />` mounts inside the window.
-3. On mount, it reads its `props.payload_memory_uid` ('mem-999') and subscribes to it using the `useStorage` hook.
+3. On mount, it reads its `props.payload_memory_uid` (`mem-999`) and subscribes to it using the `useAceMemory` hook.
 4. The widget is now "alive" and reactive to any future updates to `mem-999` by any background process.
 
 ---
@@ -52,5 +54,11 @@ The system avoids long-lived props or deep nesting. Instead, it uses **Dependenc
 ## ⚖️ Architectural Guardrails
 - **No Direct Props for Data**: Never pass heavy data objects as props to windows. Only pass `memory_uid` strings.
 - **Window Blindness**: A window must never contain logic that depends on the specific widget it is holding.
-- **Single Source of Truth**: The visual state (X/Y, focused) lives ONLY in RAM, never in local React state (except for transient animation frames).
+- **Single Source of Truth**: The committed visual state (X/Y, focused, lock, opacity, chrome mode) lives in RAM. Transient drag frames may live in local React state until committed.
 - **Mouse Transparency First**: The overlay should assume click-through behavior by default unless runtime config explicitly allows mouse capture for windows.
+
+## Current Window Runtime Notes
+
+- `BaseWindow` is currently a hybrid shell, not a fully invisible provider. It supports `standard` framed mode and `borderless` mode.
+- Right-click opens a portal-based window context menu with lock, always-on-top, and opacity controls.
+- `is_locked` means manual dragging is disabled, but buttons, inputs, focus, and context menu interaction remain active.

@@ -29,6 +29,7 @@ Located in the entry point. Establishes the runtime bed before post-boot UI effe
 - **Step 1**: Init Global RAM, DB storage, Event Bus, and logging.
 - **Step 2**: Init Config Engine and Global State Manager.
 - **Step 3**: Init Window Engine and transparent overlay shell.
+- **Step 4**: Init Layout Engine and refresh persistent layout registry.
 
 ### 2. The Context Prompt Pipeline
 Used directly by `aiGatewayEngine`. Orchestrates raw data gathering for the LLM.
