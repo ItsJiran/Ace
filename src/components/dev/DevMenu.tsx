@@ -126,6 +126,74 @@ export function DevMenu() {
                 Open System Console
             </button>
 
+            <div className="h-px bg-zinc-700/50 my-2" />
+            <div className="text-xs font-semibold text-zinc-500 mb-1 px-1">Window & Layout Tests</div>
+
+            <button
+                onClick={() => WindowEngine.spawnWindow({
+                    component_name: 'system_console',
+                    title: 'Locked Terminal',
+                    x: 100,
+                    y: 100,
+                    width: 400,
+                    height: 300,
+                    is_locked: true
+                })}
+                className={buttonClass}
+            >
+                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                Spawn Locked Window
+            </button>
+
+            <button
+                onClick={() => WindowEngine.spawnWindow({
+                    component_name: 'system_console',
+                    title: 'Ghost Terminal (50%)',
+                    x: 150,
+                    y: 150,
+                    width: 400,
+                    height: 300,
+                    opacity: 0.5
+                })}
+                className={buttonClass}
+            >
+                 <div className="w-2 h-2 rounded-full bg-blue-500/50" />
+                Spawn Ghost Window
+            </button>
+
+             <button
+                onClick={() => WindowEngine.spawnWindow({
+                    component_name: 'system_console',
+                    title: 'Always On Top',
+                    x: 200,
+                    y: 200,
+                    width: 400,
+                    height: 300,
+                    always_on_top: true
+                })}
+                className={buttonClass}
+            >
+                 <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                Spawn Always-On-Top
+            </button>
+
+            <button
+                onClick={() => WindowEngine.spawnWindow({
+                    component_name: 'headless_drag_surface_demo',
+                    title: 'Headless Drag Surface',
+                    x: 280,
+                    y: 140,
+                    width: 420,
+                    height: 300,
+                    chrome_style: 'borderless',
+                    drag_surface: 'full'
+                })}
+                className={buttonClass}
+            >
+                <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                Spawn Headless Full-Drag Window
+            </button>
+
             <button
                 onClick={toggleDebugBg}
                 className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors border ${isDebugBg ? 'bg-amber-900/40 border-amber-500/50 text-amber-100 hover:bg-amber-800/50' : 'bg-zinc-800/80 border-zinc-700/50 text-zinc-400 hover:bg-zinc-700'}`}

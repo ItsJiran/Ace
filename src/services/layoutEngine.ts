@@ -16,7 +16,7 @@ import { LayoutSnapshotSchema } from '#/schemas/layout';
  * 4. Manage available layouts list.
  */
 class LayoutEngineSingleton {
-    private readonly LAYOUTS_DIR = '.ace/layouts';
+    private readonly LAYOUTS_DIR = 'layouts'; // Removed .ace prefix to avoid forbidden path issues
     private activeLayoutUid?: string;
 
     /**
@@ -27,9 +27,14 @@ class LayoutEngineSingleton {
         // Ensure directory exists
         // Note: fsEngine.ensureDir is assumed to exist, or we check existence
         try {
-            await FSEngine.createDirectory(this.LAYOUTS_DIR);
-            console.log(`[LayoutEngine] Initialized at ${this.LAYOUTS_DIR}`);
-            await this.refreshAvailableLayouts();
+            const success = await FSEngine.createDirectory(this.LAYOUTS_DIR);
+            
+            if (success) {
+                console.log(`[LayoutEngine] Initialized at ${this.LAYOUTS_DIR}`);
+                await this.refreshAvailableLayouts();
+            } else {
+                 console.warn(`[LayoutEngine] Failed to create layout dir at ${this.LAYOUTS_DIR}`);
+            }
         } catch (error) {
             console.warn(`[LayoutEngine] Failed to init layout dir:`, error);
         }

@@ -81,6 +81,10 @@ function App() {
       GlobalStateManager.setPointerDown(false);
     };
 
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
     const handleFocusIn = (e: FocusEvent) => {
       GlobalStateManager.setPointerInside(true);
       GlobalStateManager.setActiveElement((e.target as Element) ?? document.activeElement);
@@ -100,6 +104,7 @@ function App() {
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('contextmenu', handleContextMenu, { capture: true });
     window.addEventListener('focusin', handleFocusIn);
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
@@ -114,6 +119,7 @@ function App() {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('contextmenu', handleContextMenu, { capture: true });
       window.removeEventListener('focusin', handleFocusIn);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('focus', handleWindowFocus);
@@ -132,6 +138,7 @@ function App() {
     // Di Tauri, bg-transparent biasanya cukup, tapi 0.005 tetap aman digunakan
     <div
       className="absolute inset-0 w-screen h-screen overflow-hidden pointer-events-none"
+      onContextMenu={(e) => e.preventDefault()}
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.005)' }}
     >
       {/* Render semua window */}

@@ -209,12 +209,17 @@ class WindowEngineSingleton {
     /**
      * Spawns a physical Dumb Window UI block onto the screen.
      */
-    spawnWindow(config: Omit<WindowConfig, 'window_uid' | 'z_index' | 'is_focused' | 'is_minimized'>) {
+    spawnWindow(config: Omit<WindowConfig, 'window_uid' | 'z_index' | 'is_focused' | 'is_minimized' | 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface'> & Partial<Pick<WindowConfig, 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface'>>) {
         const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
         this.highest_z_index += 1;
 
         const freshWindow: WindowConfig = {
             ...config,
+            opacity: config.opacity ?? 1,
+            is_locked: config.is_locked ?? false,
+            always_on_top: config.always_on_top ?? false,
+            chrome_style: config.chrome_style ?? 'standard',
+            drag_surface: config.drag_surface ?? 'header',
             window_uid,
             z_index: this.highest_z_index,
             is_focused: true,

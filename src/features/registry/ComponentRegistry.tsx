@@ -14,6 +14,7 @@ import { StressTestWindowMotion } from '../dev/StressTestWindowMotion';
 import { StressTestWindowSwarm } from '../dev/StressTestWindowSwarm';
 import { StressTestRAMIsolation } from '../dev/StressTestRAMIsolation';
 import { RAMUsageAnalyzer } from '../dev/RAMUsageAnalyzer';
+import { HeadlessDragSurfaceDemo } from '../dev/HeadlessDragSurfaceDemo';
 import { DevMenu } from '#/components/dev/DevMenu';
 import { LoadingWidget } from '#/components/widgets/LoadingWidget';
 import { SystemConsole } from '#/components/widgets/SystemConsole';
@@ -35,6 +36,7 @@ const REGISTRY: Record<string, React.FC<any>> = {
     'stress_test_window_motion': StressTestWindowMotion,
     'stress_test_window_swarm': StressTestWindowSwarm,
     'stress_test_ram_isolation': StressTestRAMIsolation,
+    'headless_drag_surface_demo': HeadlessDragSurfaceDemo,
     'dev_menu': DevMenu,
     'loading_widget': LoadingWidget,
     'system_console': SystemConsole,
