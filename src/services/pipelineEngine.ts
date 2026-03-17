@@ -116,7 +116,9 @@ export class PipelineEngine<TInitial, TFinal> {
         process_uid: string | null;
         error: string | null;
     }) {
-        const current = (Storage.readMemory('system:pipeline_registry') as any[] | undefined) || [];
+        let current = (Storage.readMemory('system:pipeline_registry') as any[] | undefined);
+        if (!Array.isArray(current)) current = [];
+        
         const existing = current.find((item) => item.run_id === record.run_id);
 
         let next: any[];

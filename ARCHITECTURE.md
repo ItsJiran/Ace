@@ -38,6 +38,13 @@ The execution backend.
 - `globalStateManager`: Cursor, focus, config mirror, and runtime interaction tracker.
 - `layoutEngine`: Persistent layout snapshot manager for AppConfig JSON files.
 
+## Package Runtime Model
+
+- Core packages live in `src/core/packages/` and ship with the app.
+- User packages are installed to AppConfig `packages/<owner>/<package>/registry.json`.
+- `registryEngine` loads core package manifests first, then installed user packages from AppConfig.
+- `ComponentRegistry` source is part of core package at `src/core/packages/system/components/ComponentRegistry.tsx`.
+
 ```mermaid
 graph TD
     subgraph "Frontend / Renderer"

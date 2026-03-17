@@ -1,6 +1,78 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useWidgetEngine } from '#/services/widgetEngine';
-import { ExampleSystemMonitorRegistry } from '#/example_widget/registry';
+import type { RegistryPackage } from '#/schemas/registry';
+
+const ExampleSystemMonitorRegistry: RegistryPackage = {
+    namespace: 'example/system-monitor',
+    package_name: 'example/system-monitor',
+    version: '1.0.0',
+    repository_path: 'github.com/example/system-monitor',
+    file_location: 'packages/example/system-monitor',
+    author: 'ExampleDeveloper',
+    owner_scope: 'user',
+    source_scope: 'local',
+    widgets: [
+        {
+            widget_name: 'system_monitor_widget',
+            component_name: 'SystemMonitorComponent',
+            window_name: 'system_monitor_window',
+            entry_file: 'packages/example/system-monitor/components/SystemMonitor.tsx',
+        },
+    ],
+    components: [
+        {
+            name: 'SystemMonitorComponent',
+            react_behavior: 'headless_data_monitor',
+            data_requirements: ['sys_cpu_load', 'sys_memory_usage'],
+            emits_interactions: ['lookup_process_status'],
+            listens_to: [
+                {
+                    listened_event: 'os_metric_update',
+                    reaction: {
+                        reaction_type: 'store_in_ram',
+                        action: 'sys_metric_buffer',
+                    },
+                },
+                {
+                    listened_event: 'critical_system_alert',
+                    reaction: {
+                        reaction_type: 'emit_interaction',
+                        action: 'open_alert_window',
+                    },
+                },
+            ],
+        },
+    ],
+    windows: [
+        {
+            id: 'window:example/system-monitor:system_monitor:v1',
+            version: '1.0.0',
+            registry_type: 'window',
+            display_name: 'System Monitor Window',
+            owner_scope: 'user',
+            source_scope: 'local',
+            is_enabled: true,
+            dependency_refs: [],
+            capability_requirements: [],
+            tags: [],
+            window_name: 'system_monitor_window',
+            component_name: 'SystemMonitorComponent',
+            default_window_preset: {
+                component_name: 'SystemMonitorComponent',
+                width: 560,
+                height: 360,
+                title: 'System Monitor',
+            },
+        },
+    ],
+    tools: [],
+    features: [],
+    processes: [],
+    pipelines: [],
+    registries: [],
+    dependency_refs: [],
+    capability_requirements: [],
+};
 
 describe('Widget Engine (Registry Manager)', () => {
     beforeEach(() => {

@@ -42,6 +42,10 @@ Please read the **13 Architecture Pillars**:
 - [x] Fix Tauri capability permissions for window operations (`set-size`, `set-position`, `show`, `close`, `always-on-top`).
 - [x] Fix Tauri FS capability scope for AppConfig read/write and add graceful persistence failure handling.
 - [x] Sync architecture markdown docs (`.ai/*`, `ARCHITECTURE.md`, `README.md`) with latest manager/engine structure.
+- [x] Move core package location from `src/system` to `src/core/packages/system` to prevent root-level feature bloat.
+- [x] Add **Core Widget Design Language** pillar (`.ai/13_core_widget_design_language.md`) with light + dark mode visual direction.
+- [x] Move `ComponentRegistry` into core package at `src/core/packages/system/components/ComponentRegistry.tsx`.
+- [x] Add package installer flow to AppConfig path `~/.config/com.ace.assistant/packages/<owner>/<package>/`.
 
 #### ✅ Performance & Diagnostics Updates (March 2026)
 - [x] Optimize drag interaction with local drag state + commit-on-mouseup to avoid RAM write floods per frame.
@@ -86,8 +90,11 @@ Please read the **13 Architecture Pillars**:
 - [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results.
 - [x] **Align Window Engine**: RAM-driven spatial state with focus, lock, opacity, always-on-top, and chrome metadata.
 - [x] **Implement Bootup Sequence**: Refactor app entry for the current ordered boot pipeline.
-- [ ] **Formalize Widget Filesystem Scopes**: Mirror the multi-registry directory structure across `src/core/packages`, `widgets`, and `config/widgets`.
+- [ ] **Formalize Widget Filesystem Scopes**: Finalize package-first scopes across `src/core/packages` and AppConfig install root `packages/<owner>/<package>/`.
 - [ ] **Define Built-In vs User Package Ownership**: Core packages live in `src/core/packages` and are non-removable; local/user submissions live in `widgets` with one package identity/name; widget contracts stay focused on `components` + `windows`, while cross-domain bundles are classified as package ecosystem packages.
+- [ ] **Adopt `PackageEcosystemSchema` End-to-End**: Wire loader/validator/runtime usage so cross-domain bundles are validated and tracked explicitly.
+- [ ] **Widget Registry Runtime Upgrade**: Ensure runtime registration and diagnostics use `widgets` binding (`component + window`) as first-class contract.
+- [ ] **Package Discovery Pipeline**: Build discovery for `src/core/packages` and AppConfig `packages/<owner>/<package>/` with clear precedence and conflict diagnostics.
 
 ### 🧩 Phase 3: The Development UI Kit
 - [x] Basic "Dumb Window" generation & animation.
@@ -99,6 +106,7 @@ Please read the **13 Architecture Pillars**:
 - [x] **Pipeline Registry List**: Real-time status of running background tasks.
 - [x] **Window Registry List**: Real-time status of running background tasks.
 - [ ] **Widget Filesystem Explorer / Diagnostics**: Expose mirrored widget registry directories (`core`, `local widgets`, `config`) in Dev Kit for validation and debugging.
+- [ ] **Package Ecosystem Explorer**: Add Dev Kit panel to inspect package identity, included domains, and validation status.
 - [~] **Window Customization Strategy**:
   - [x] Extend `BaseWindow` into a hybrid shell supporting `standard` chrome and `borderless` presentation.
   - [x] Keep window actions centralized in `windowEngine` (no mandatory `useWindowContext` layer for current architecture).
@@ -163,6 +171,9 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 - [ ] **Base Dumb Components**: Build the UI primitives (e.g., `<CommandInput />`, `<ChatBubble />`, `<WindowFrame />`) using Shadcn & Tailwind.
 - [x] **Widget Dragger & Window Manager**: Implement spatial logic (X/Y coordinates, Z-index) driven purely by `windowEngine` RAM state.
 - [ ] **Settings Window**: Create a settings window for keybinds and configuration and tools list, and widget list.
+- [ ] **Theme System (Light/Dark) for Core Widgets**: Implement global design tokens from `.ai/13_core_widget_design_language.md` and apply to System/Prompt/Console widgets.
+- [ ] **Core Chat Surface Styling**: Implement AI/user bubble styling rules, floating pill input bar, and soft multi-layer shadows based on design language pillar.
+- [ ] **Motion Polish Pass**: Add subtle fade-in and typing indicator motion primitives (non-flashy) and standardize easing/duration tokens.
 
 ### 🧠 Phase 6: The AI Gateway & Autonomous Tooling (The Brain)
 *Goal: Connect the local Client to the remote LLM and establish the autonomous ReAct loop.*
@@ -171,3 +182,18 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 - [ ] **Tool/Event Parser**: Build the logic to intercept tool-call JSONs from the LLM stream and emit them to the `eventEngine`.
 - [ ] **Native OS Tools**: Implement the actual Rust/TypeScript logic for core tools (Obsidian Reader, Shell Executor, File System).
 - [ ] **Context Builder Pipeline**: Implement the process-engine context-building pipeline to gather chat history and active screen context before sending prompts.
+
+### 📦 Phase 7: Package Ecosystem Runtime (NEW)
+*Goal: Make package ecosystem a first-class runtime model for core and user submissions.*
+- [x] **Registry & Ecosystem UI Prototyping (Today's Task)**:
+  - [x] **Unified Package Registry Dashboard**: Centralized view aggregating tools, widgets, and components with search and filtering.
+  - [x] **Package Detail Inspector**: Slide-over panel displaying manifest details (version, author, dependencies, permissions, status).
+  - [x] **Independent Domain Registries**: Dedicated views for Tools, Widgets, and features (e.g. `ToolsRegistryList`).
+- [ ] **Package-Only Submission Policy**: Enforce that user submissions must be one package identity (not individual registry submissions), while still allowing package contents to include only selected domains (for example tools-only or components-only).
+- [ ] **Global Namespace Enforcement**: Implement strict ID validation logic (e.g., `owner:domain:name:version`) to prevent collisions between core, default, and user submissions.
+- [ ] **Per-Domain Namespace Rule**: Require every executable/runtime entry inside a package (`tools`, `processes`, `pipelines`, `features`, `components`, `windows`) to use namespaced IDs and reject non-namespaced registrations.
+- [ ] **Package Manifest Loader**: Parse and validate package manifests across all scopes.
+- [ ] **Scoped Registry Merge Rules**: Implement deterministic merge (`core` -> `local` -> `config policy`) with explicit collision handling.
+- [ ] **Install Queue Execution Engine**: Convert System Widget install queue into executable install pipeline + process tracking.
+- [ ] **Permission & Capability Review UI**: Add confirmation layer before enabling tool-capable packages.
+- [ ] **Versioned Package Upgrade Flow**: Add safe upgrade/rollback path with compatibility checks.

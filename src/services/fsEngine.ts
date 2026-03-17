@@ -89,7 +89,9 @@ class FSEngineSingleton {
         const isPermissionError =
             message.includes('not allowed') ||
             message.includes('permission') ||
-            message.includes('fs.write_text_file');
+            message.includes('fs.write_text_file') ||
+            message.includes('fs.read_dir') ||
+            message.includes('fs.read_text_file');
 
         if (!isPermissionError || this.hasShownPermissionPopup) {
             return;
@@ -107,8 +109,12 @@ class FSEngineSingleton {
                 `Failed file: ${filename}`,
                 'Action: restart app after capability update.',
                 'If this persists, verify src-tauri/capabilities/default.json includes:',
+                '- fs:allow-read-dir',
+                '- fs:allow-read-file',
+                '- fs:allow-write-file',
                 '- fs:allow-appconfig-read',
                 '- fs:allow-appconfig-write',
+                '- fs:scope-appconfig-recursive',
             ].join('\n')
         );
     }

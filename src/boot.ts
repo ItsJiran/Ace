@@ -1,4 +1,4 @@
-import { BootupPipeline, type BootupContext } from './pipelines/core/BootupPipeline';
+import { BootupPipeline, type BootupContext } from '#/core/packages/system/pipelines/BootupPipeline';
 
 let bootPromise: Promise<void> | null = null;
 

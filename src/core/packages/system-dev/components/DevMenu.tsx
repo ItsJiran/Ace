@@ -127,6 +127,14 @@ export function DevMenu() {
             </button>
 
             <button
+                onClick={() => openDevWindow('package_registry_view', 'Package Registry', 360, 120, 800, 500)}
+                className={buttonClass}
+            >
+                <Workflow size={14} className="text-teal-400" />
+                Open Package Registry
+            </button>
+
+            <button
                 onClick={() => openDevWindow('system_console', 'System Console', 360, 240, 620, 400)}
                 className={buttonClass}
             >

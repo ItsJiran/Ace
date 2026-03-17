@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BaseWindow } from './components/layout/BaseWindow';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState, WindowConfig } from '#/schemas/window';
 import { Storage as StorageEngine } from '#/services/storageEngine';
-import { FPSCounter } from './features/dev/FPSCounter';
 import { WindowEngine } from '#/services/windowEngine';
 import { GlobalStateManager } from '#/services/globalStateManager';
+
+const DevFPSCounter = import.meta.env.DEV
+  ? lazy(async () => {
+      const mod = await import('#/core/packages/system-dev/components/FPSCounter');
+      return { default: mod.FPSCounter };
+    })
+  : null;
 
 
 function App() {
@@ -146,7 +152,11 @@ function App() {
         <BaseWindow key={config.window_uid} config={config} />
       ))}
 
-      {import.meta.env.DEV && <FPSCounter />}
+      {import.meta.env.DEV && DevFPSCounter ? (
+        <Suspense fallback={null}>
+          <DevFPSCounter />
+        </Suspense>
+      ) : null}
 
       {/* Developer Feedback UI */}
       {isAmbient ? (

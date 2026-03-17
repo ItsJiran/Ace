@@ -1,0 +1,71 @@
+{
+  "namespace": "example/hello-world",
+  "package_name": "example/hello-world",
+  "version": "1.0.0",
+  "repository_path": "github.com/example/hello-world",
+  "file_location": "packages/example/hello-world",
+  "author": "Example Developer",
+  "owner_scope": "user",
+  "source_scope": "config",
+  "display_name": "Hello World Package",
+  "widgets": [
+    {
+      "widget_name": "hello_world_widget",
+      "component_name": "HelloWorldComponent",
+      "window_name": "hello_world_window",
+      "entry_file": "packages/example/hello-world/components/HelloWorld.tsx"
+    }
+  ],
+  "components": [
+    {
+      "name": "HelloWorldComponent",
+      "data_requirements": [],
+      "emits_interactions": ["open_window"],
+      "listens_to": [],
+      "react_behavior": "user_hello_world"
+    }
+  ],
+  "windows": [
+    {
+      "id": "window:example/hello-world:hello_world:v1",
+      "version": "1.0.0",
+      "registry_type": "window",
+      "display_name": "Hello World",
+      "owner_scope": "user",
+      "source_scope": "config",
+      "is_enabled": true,
+      "dependency_refs": [],
+      "capability_requirements": [],
+      "tags": ["example", "hello-world"],
+      "window_name": "hello_world_window",
+      "component_name": "HelloWorldComponent",
+      "default_window_preset": {
+        "component_name": "HelloWorldComponent",
+        "width": 400,
+        "height": 280,
+        "title": "Hello World"
+      }
+    }
+  ],
+  "tools": [
+    {
+      "id": "tool:example/hello-world:say_hello:v1",
+      "version": "1.0.0",
+      "registry_type": "tool",
+      "display_name": "Say Hello",
+      "owner_scope": "user",
+      "source_scope": "config",
+      "is_enabled": true,
+      "dependency_refs": [],
+      "capability_requirements": [],
+      "tags": ["example"],
+      "tool_name": "say_hello"
+    }
+  ],
+  "features": [],
+  "processes": [],
+  "pipelines": [],
+  "registries": [],
+  "dependency_refs": [],
+  "capability_requirements": []
+}

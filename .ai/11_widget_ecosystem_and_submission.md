@@ -38,13 +38,17 @@ Inside that folder, ACE should mirror the same package ecosystem structure used 
 
 ```text
 src/core/packages/
-├── tools/
-├── components/
-├── windows/
-├── pipelines/
-├── features/
-├── processes/
-└── registry/
+├── system/
+│   ├── registry.json
+│   ├── components/
+│   ├── windows/
+│   ├── tools/
+│   ├── features/
+│   ├── processes/
+│   └── pipelines/
+└── system-dev/
+	├── registry.json
+	└── components/
 ```
 
 ### 2. User-Contributed Widgets
@@ -54,17 +58,13 @@ User widgets are externally supplied bundles that can be imported and registered
 User widgets must be treated as untrusted until validated.
 They can be enabled, disabled, versioned, and removed without modifying core engine code.
 
-Local/user widget packages should live in a parallel workspace-level folder:
+Local/user packages are installed into AppConfig and discovered at boot:
 
 ```text
-widgets/
-├── tools/
-├── components/
-├── windows/
-├── pipelines/
-├── features/
-├── processes/
-└── registry/
+~/.config/com.ace.assistant/packages/
+└── <owner>/
+	└── <package>/
+		└── registry.json
 ```
 
 Important rule:
@@ -81,17 +81,17 @@ When grouped under one package identity, the complete wrapper is called `package
 Each widget package should expose metadata and capabilities.
 
 Required fields:
-1. `widget_id` (stable, namespaced)
-2. `version`
-3. `display_name`
-4. `entry_component`
-5. `capability_manifest` (declared tools/features/events)
+1. `namespace` (owner/package)
+2. `package_name`
+3. `version`
+4. `owner_scope`
+5. `source_scope`
 
 Optional fields:
-1. `default_window_preset`
-2. `layout_hints`
-3. `snapshot_handlers`
-4. `migration_handlers`
+1. `display_name`
+2. `dependency_refs`
+3. `capability_requirements`
+4. domain arrays (`widgets`, `components`, `windows`, `tools`, `features`, `processes`, `pipelines`, `registries`)
 
 ## Filesystem Scopes
 
@@ -107,38 +107,23 @@ src/core/packages/
 
 ### 2. Local Package Scope
 
-User/local widget packages discovered from the workspace-level widget folder.
+User/local packages discovered from AppConfig package install root.
 
 ```text
-widgets/
+~/.config/com.ace.assistant/packages/
 ```
 
 ### 3. Config Scope
 
-Configuration, manifests, enable/disable flags, per-package settings, and future install metadata.
+Configuration policy and package-level settings metadata.
 
 ```text
-config/widgets/
-```
-
-The config scope should mirror the same high-level package topology when needed, so ACE can reason about widget ownership, registry declarations, and user overrides consistently.
-
-Example target shape:
-
-```text
-config/widgets/
-├── tools/
-├── components/
-├── windows/
-├── pipelines/
-├── features/
-├── processes/
-└── registry/
+~/.config/com.ace.assistant/
+└── (policy/config files)
 ```
 
 Important clarification:
-the mirrored folder names do not imply that all folders must always exist together.
-They represent independent registry domains with consistent naming across scopes.
+packages are the submission unit, and each package may include only selected domains.
 
 Classification rule:
 1. If package only defines UI pairing (`components` + `windows`), it is a `widget` package.

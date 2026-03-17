@@ -1,13 +1,13 @@
 import { create } from 'zustand';
-import type { WidgetRegistry, WidgetComponent } from '../schemas/registry';
-import { WidgetRegistrySchema } from '../schemas/registry';
+import type { RegistryPackage, WidgetComponent } from '../schemas/registry';
+import { RegistryPackageSchema } from '../schemas/registry';
 
 interface WidgetEngineState {
     /** 
      * Dictionary of all loaded widget modules.
      * Key: The module name or repository path (e.g. 'local_system_monitor')
      */
-    registeredWidgets: Record<string, WidgetRegistry>;
+    registeredWidgets: Record<string, RegistryPackage>;
 
     /**
      * Parses and registers a raw JSON payload as a Widget Module.
@@ -32,7 +32,7 @@ export const useWidgetEngine = create<WidgetEngineState>((set, get) => ({
 
     registerWidget: (moduleId, rawRegistryJson) => {
         // 1. Validate the payload using Zod. Throws an error if invalid.
-        const parsedRegistry = WidgetRegistrySchema.parse(rawRegistryJson);
+        const parsedRegistry = RegistryPackageSchema.parse(rawRegistryJson);
 
         set((state) => ({
             registeredWidgets: {

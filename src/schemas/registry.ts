@@ -48,6 +48,29 @@ export const RegistryDependencyRefSchema = z.object({
 
 export type RegistryDependencyRef = z.infer<typeof RegistryDependencyRefSchema>;
 
+// ----------------------------------------------------------------------
+// 5. Package Manifest Schema (Example for Package Registry)
+// ----------------------------------------------------------------------
+
+export const PackageManifestSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    version: z.string(),
+    description: z.string().optional(),
+    author: z.string().optional(),
+    domain: RegistryDomainSchema,
+    dependencies: z.array(RegistryDependencyRefSchema).optional(),
+    permissions: z.array(z.string()).optional(),
+    status: z.enum(['active', 'inactive', 'error', 'installing']).default('active'),
+    repositoryUrl: z.string().url().optional(),
+    releaseDate: z.string().datetime().optional(),
+});
+
+export type PackageManifest = z.infer<typeof PackageManifestSchema>;
+
+// Package-level registry contract used by RegistryEngine is defined below,
+// after all domain entry schemas are declared.
+
 export const CapabilityRequirementSchema = z.object({
     capability: z.string(),
     required: z.boolean().default(true),
@@ -199,7 +222,7 @@ export type RegistryRegistryEntry = z.infer<typeof RegistryRegistryEntrySchema>;
 
 export const WidgetRegistryEntrySchema = BaseRegistryEntrySchema.extend({
     registry_type: z.literal('widget'),
-    widget_id: z.string(),
+    widget_name: z.string(),
     entry_component: z.string().optional(),
     default_window_preset: WindowPresetSchema.optional(),
     declared_domains: z.array(RegistryDomainSchema).default([]),
@@ -220,6 +243,32 @@ export const WidgetBindingSchema = z.object({
 
 export type WidgetBinding = z.infer<typeof WidgetBindingSchema>;
 
+// Package-level registry contract used by RegistryEngine.
+// A package is the submission unit, while domains are optional inside it.
+export const RegistryPackageSchema = z.object({
+    namespace: z.string(),
+    package_name: z.string(),
+    version: z.string(),
+    repository_path: z.string(),
+    file_location: z.string(),
+    author: z.string(),
+    owner_scope: RegistryOwnerScopeSchema.default('user'),
+    source_scope: FilesystemWidgetScopeSchema.default('local'),
+    display_name: z.string().optional(),
+    widgets: z.array(WidgetBindingSchema).default([]),
+    components: z.array(WidgetComponentSchema).default([]),
+    windows: z.array(WindowRegistryEntrySchema).default([]),
+    tools: z.array(ToolRegistryEntrySchema).default([]),
+    features: z.array(FeatureRegistryEntrySchema).default([]),
+    processes: z.array(ProcessRegistryEntrySchema).default([]),
+    pipelines: z.array(PipelineRegistryEntrySchema).default([]),
+    registries: z.array(RegistryRegistryEntrySchema).default([]),
+    dependency_refs: z.array(RegistryDependencyRefSchema).default([]),
+    capability_requirements: z.array(CapabilityRequirementSchema).default([]),
+});
+
+export type RegistryPackage = z.infer<typeof RegistryPackageSchema>;
+
 export const AnyRegistryEntrySchema = z.discriminatedUnion('registry_type', [
     WidgetRegistryEntrySchema,
     ComponentRegistryEntrySchema,
@@ -234,72 +283,19 @@ export const AnyRegistryEntrySchema = z.discriminatedUnion('registry_type', [
 export type AnyRegistryEntry = z.infer<typeof AnyRegistryEntrySchema>;
 
 // ----------------------------------------------------------------------
-// 6. Widget Package Registry (Simple Terminology)
+// 6. Backward Compatibility Alias
 // ----------------------------------------------------------------------
 
-export const WidgetRegistrySchema = z.object({
-    /** Canonical package name. */
-    package_name: z.string(),
-    /** Version of the downloaded widget package */
-    version: z.string(),
-    /** URL or reference to the source repository */
-    repository_path: z.string(),
-    /** Absolute local file path where the widget is installed */
-    file_location: z.string(),
-    /** Author name or identifier */
-    author: z.string(),
-    /** Optional stable widget package id for multi-registry adoption */
-    widget_id: z.string().optional(),
-    /** Optional display name for UI and diagnostics */
-    display_name: z.string().optional(),
-    /** Scope ownership and filesystem location */
-    owner_scope: RegistryOwnerScopeSchema.optional(),
-    source_scope: FilesystemWidgetScopeSchema.optional(),
-    /**
-     * Simple widget definitions: each widget binds a component to a window behavior.
-     * Folder `widgets/` should primarily contain TSX entry files for these bindings.
-     */
-    widgets: z.array(WidgetBindingSchema).default([]),
-    /** List of UI components provided by this registry module */
-    components: z.array(WidgetComponentSchema).default([]),
-    /** Window behavior presets used by widgets */
-    windows: z.array(WindowRegistryEntrySchema).default([]),
-    dependency_refs: z.array(RegistryDependencyRefSchema).default([]),
-    capability_requirements: z.array(CapabilityRequirementSchema).default([]),
-}).superRefine((pkg, ctx) => {
-    if (pkg.widgets.length === 0) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Widget package must include at least one widget binding (component + window).',
-            path: ['widgets'],
-        });
-    }
-
-    if (pkg.components.length === 0) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Widget package must include at least one component definition.',
-            path: ['components'],
-        });
-    }
-
-    if (pkg.windows.length === 0) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Widget package must include at least one window definition.',
-            path: ['windows'],
-        });
-    }
-});
-
-export type WidgetRegistry = z.infer<typeof WidgetRegistrySchema>;
+// Keep this alias to avoid breaking old imports while runtime contract is package-centric.
+export const WidgetRegistrySchema = RegistryPackageSchema;
+export type WidgetRegistry = RegistryPackage;
 
 // ----------------------------------------------------------------------
 // 7. Filesystem Scope Registry Schemas
 // ----------------------------------------------------------------------
 
 export const RegistryDomainCollectionSchema = z.object({
-    widgets: z.array(WidgetRegistryEntrySchema).default([]),
+    widgets: z.array(WidgetBindingSchema).default([]),
     components: z.array(ComponentRegistryEntrySchema).default([]),
     features: z.array(FeatureRegistryEntrySchema).default([]),
     tools: z.array(ToolRegistryEntrySchema).default([]),
@@ -341,7 +337,7 @@ export const PackageEcosystemSchema = z.object({
     version: z.string(),
     owner_scope: RegistryOwnerScopeSchema.default('user'),
     source_scope: FilesystemWidgetScopeSchema.default('local'),
-    widgets: z.array(WidgetRegistrySchema).default([]),
+    widgets: z.array(WidgetBindingSchema).default([]),
     tools: z.array(ToolRegistryEntrySchema).default([]),
     components: z.array(ComponentRegistryEntrySchema).default([]),
     windows: z.array(WindowRegistryEntrySchema).default([]),

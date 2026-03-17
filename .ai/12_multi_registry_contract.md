@@ -27,7 +27,7 @@ Each registry has a different responsibility and lifecycle.
 ### 1. Widget Registry
 
 Purpose:
-Maps `widget_id` to widget metadata and UI composition bindings.
+Maps package widget bindings (`widget_name`, `component_name`, `window_name`) to UI composition metadata.
 
 Stores:
 1. Identity and version
@@ -100,33 +100,24 @@ ACE should maintain three mirrored scopes:
 
 ```text
 src/core/packages/
-├── tools/
-├── components/
-├── windows/
-├── pipelines/
-├── features/
-├── processes/
-└── registry/
+├── system/
+│   └── registry.json
+└── system-dev/
+	└── registry.json
 ```
 
 Purpose:
 non-removable built-in widgets and registry-owned defaults shipped by ACE.
 
-### 2. Local Widget Scope
+### 2. Local Package Scope
 
 ```text
-widgets/
-├── tools/
-├── components/
-├── windows/
-├── pipelines/
-├── features/
-├── processes/
-└── registry/
+~/.config/com.ace.assistant/packages/
+└── <owner>/<package>/registry.json
 ```
 
 Purpose:
-user/local submissions and workspace-owned packages.
+user/local submissions and installed packages.
 
 Important:
 registries are independent, but terminology must stay strict:
@@ -143,14 +134,8 @@ Filesystem validity does not require every sibling domain to exist.
 ### 3. Config Scope
 
 ```text
-config/widgets/
-├── tools/
-├── components/
-├── windows/
-├── pipelines/
-├── features/
-├── processes/
-└── registry/
+~/.config/com.ace.assistant/
+└── (policy/config metadata)
 ```
 
 Purpose:
@@ -160,8 +145,8 @@ manifest state, enable/disable flags, policy, future installation metadata, and 
 
 At runtime, precedence should remain:
 1. `src/core/packages` (ACE built-in)
-2. `widgets` (local/user submissions)
-3. `config/widgets` as configuration and policy input, not as an execution override by default
+2. `~/.config/com.ace.assistant/packages` (local/user submissions)
+3. AppConfig policy/config metadata as configuration input, not as an execution override by default
 
 Config may disable or annotate registry entries, but it should not silently replace core handlers without explicit policy.
 

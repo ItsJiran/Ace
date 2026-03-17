@@ -19,7 +19,11 @@
     "global-shortcut:allow-unregister-all",
     "sql:default",
     "fs:default",
+    "fs:allow-read-dir",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
     "fs:allow-appconfig-read",
-    "fs:allow-appconfig-write"
+    "fs:allow-appconfig-write",
+    "fs:scope-appconfig-recursive"
   ]
 }

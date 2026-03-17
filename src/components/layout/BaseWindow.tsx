@@ -5,7 +5,7 @@ import type { AnimationRuntimeState } from '#/schemas/animation';
 import { WindowEngine } from '#/services/windowEngine';
 import { Storage } from '#/services/storageEngine';
 import { GripHorizontal, X, Minus, Lock, Unlock, BringToFront, Layers } from 'lucide-react';
-import { ComponentRegistry } from '#/features/registry/ComponentRegistry';
+import { ComponentRegistry } from '#/core/packages/system/components/ComponentRegistry';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { GlobalStateManager } from '#/services/globalStateManager';
 

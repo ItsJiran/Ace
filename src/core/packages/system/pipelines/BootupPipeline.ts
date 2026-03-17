@@ -17,12 +17,12 @@ const InitCoreRuntimeBedStep: PipelineStep<void, void> = {
         const { Storage } = await import('#/services/storageEngine');
         // const { DBEngine } = await import('#/services/dbEngine');
         const { EventBus } = await import('#/services/eventEngine');
-        // const { LoggerService } = await import('#/services/loggerService');
+        const { LoggerService } = await import('#/services/loggerService');
 
         void Storage;
         // await DBEngine.init();
         void EventBus;
-        // LoggerService.init();
+        LoggerService.init();
 
         console.log('[Boot] Phase 1: Global RAM, DB storage, and Event Bus are ready.');
     }
@@ -37,13 +37,15 @@ const InitConfigAndGlobalStateStep: PipelineStep<void, void> = {
     execute: async () => {
         const { GlobalStateManager } = await import('#/services/globalStateManager');
         const { ConfigEngine } = await import('#/services/configEngine');
+        const { RegistryEngine } = await import('#/services/registryEngine');
         const { KeybindEngine } = await import('#/services/keybindEngine');
 
         void GlobalStateManager;
         await ConfigEngine.boot();
+        await RegistryEngine.boot();
         KeybindEngine.init();
 
-        console.log('[Boot] Phase 2: Config engine, global state, and keybind engine are ready.');
+        console.log('[Boot] Phase 2: Config engine, registry engine, global state, and keybind engine are ready.');
     }
 };
 

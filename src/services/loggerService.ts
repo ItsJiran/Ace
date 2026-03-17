@@ -63,9 +63,10 @@ class LoggerServiceSingleton {
         const newLogs = [...currentLogs, entry].slice(-MAX_LOGS);
 
         Storage.dispatchRAMAction({
-            action: 'update_memory',
+            action: 'create_memory', // Use create_memory to overwrite the array instead of merging it into an object
             memory_uid: 'system:logs',
-            payload: newLogs
+            payload: newLogs,
+            classifications: ['system:core']
         });
     }
 }

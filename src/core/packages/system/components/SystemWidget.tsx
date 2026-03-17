@@ -8,7 +8,7 @@ import { Storage } from '#/services/storageEngine';
 import type { ConfigItem } from '#/schemas/config';
 import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
-import type { WidgetRegistry } from '#/schemas/registry';
+import type { RegistryPackage } from '#/schemas/registry';
 
 type SystemTab = 'overview' | 'config' | 'keybinds' | 'registries' | 'install';
 
@@ -22,7 +22,7 @@ type InstallRequest = {
 };
 
 type WidgetEngineSnapshot = {
-    registeredWidgets: Record<string, WidgetRegistry>;
+    registeredWidgets: Record<string, RegistryPackage>;
 };
 
 const TAB_LABELS: Record<SystemTab, string> = {
@@ -82,7 +82,7 @@ export function SystemWidget() {
     }, [configItems]);
 
     const widgetModules = useMemo(
-        () => Object.entries(registeredWidgets) as Array<[string, WidgetRegistry]>,
+        () => Object.entries(registeredWidgets) as Array<[string, RegistryPackage]>,
         [registeredWidgets],
     );
     const openWindows = useMemo(() => Object.values(windows).sort((a, b) => b.z_index - a.z_index), [windows]);
@@ -406,9 +406,9 @@ function MiniList({ title, rows, emptyText }: { title: string; rows: Array<{ tit
     );
 }
 
-function formatWidgetRegistryRow(moduleId: string, registry: WidgetRegistry) {
+function formatWidgetRegistryRow(moduleId: string, registry: RegistryPackage) {
     return {
-        title: registry.display_name || registry.package_name || registry.widget_id || moduleId,
+        title: registry.display_name || registry.package_name || moduleId,
         detail: `v${registry.version} • widgets:${registry.widgets.length} • components:${registry.components.length} • windows:${registry.windows.length}`,
     };
 }
