@@ -24,7 +24,34 @@ Please read the **13 Architecture Pillars**:
 
 ---
 
-## 🚀 Development Roadmap
+## � Host-Guest Architecture (New)
+
+The system now enforces a strict **Host-Guest Architecture** to decouple core services from packages.
+
+### 1. The Global Bridge (`window.ACE`)
+All package interactions must go through the `window.ACE` global object. Direct imports from `src/core` are forbidden for guest packages.
+
+- **ACE.memory**: Read/Write to global RAM.
+- **ACE.events**: Emit events to the Event Bus.
+- **ACE.registry**: Register components, tools, and widgets.
+- **ACE.hooks**: Access shared React hooks (`useAceWindow`, `useAceWidget`).
+
+### 2. Registry System
+Packages register their domains at runtime using the bridge:
+```ts
+window.ACE.registry.add('my-package', 'widgets', [ ... ]);
+window.ACE.registry.add('my-package', 'tools', [ ... ]);
+```
+
+### 3. Tool Engine
+The `ToolEngine` service (formerly `ToolRegistry`) manages all executable tools. Tools are defined as pure objects and registered via `ACE.registry.add(..., 'tools', lines)`.
+
+### 4. React-First Window Management
+Windows are no longer static config objects. They are **React Components** that manage their own spatial state using the `useAceWindow` hook provided by the bridge. This allows for full customizability of the window frame and behavior.
+
+---
+
+## �🚀 Development Roadmap
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor (CURRENT)
 - [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (pospone for now since we need a robust event and ui and correct gateway so we can get the corrct feeedback)

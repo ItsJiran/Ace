@@ -11,23 +11,43 @@ example-package/
 
 ## Window Integration Pattern (New)
 
-ACE now uses a hook bridge pattern for runtime integration.
+ACE now uses a Host-Guest architecture (the `window.ACE` bridge) for runtime integration.
 
-- For window lifecycle integration, use `useAceWindow`.
-- The hook gives you shared runtime behavior (focus, drag, lock, z-index, opacity, animation bridge) without forcing ACE visual styles.
-- Your package can fully own rendering and CSS while still staying compatible with the app runtime.
+- **Do not import internal hooks** from the core.
+- **Use the global bridge** `window.ACE.hooks` to access `useAceWindow`.
+- This ensures your package is decoupled from the core implementation.
 
 Minimal idea:
 
 ```tsx
-const window = useAceWindow(windowUid);
+// 1. Access the hook from the global bridge
+const { useAceWindow } = window.ACE.hooks; 
 
-return (
-  <div {...window.rootProps} style={window.rootStyle}>
-    <div onMouseDown={window.dragHandleProps.onMouseDown}>Drag Handle</div>
-    <button onClick={window.close}>Close</button>
-  </div>
-);
+// 2. Build your component
+export const MyWindow = ({ windowUid }: { windowUid: string }) => {
+  const window = useAceWindow(windowUid);
+
+  return (
+    <div {...window.rootProps} style={window.rootStyle}>
+      <div onMouseDown={window.dragHandleProps.onMouseDown}>Drag Handle</div>
+      <button onClick={window.close}>Close</button>
+    </div>
+  );
+};
+```
+
+## Registering Components (Code-Based)
+
+If your package includes code (not just JSON), register your components usage the registry bridge:
+
+```ts
+window.ACE.registry.add('my-package', 'widgets', [
+  {
+    name: 'MyWidget',
+    component: MyWindow, // The React component
+    // ...
+  }
+]);
 ```
 
 Animation bridge is available directly from the same hook:

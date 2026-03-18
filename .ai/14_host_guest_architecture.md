@@ -57,8 +57,8 @@ interface AceGuestAPI {
 
   // 4. Registration (Boot-time only)
   registry: {
-    registerComponent: (id: string, component: React.FC) => void;
-    registerTool: (id: string, handler: ToolHandler) => void;
+    // Generic registration for any domain (widgets, tools, pipelines, etc.)
+    add: (packageName: string, domain: string, items: unknown[]) => void;
   };
 }
 ```
@@ -66,8 +66,10 @@ interface AceGuestAPI {
 ## Implementation Strategy
 
 ### Phase 1: Guest Bridge & JIT Hooks (The ID Generator)
-We implement `window.ACE` including `ACE.hooks`.
-- **Lazy Registration**: When `ACE.hooks.useAceWindow()` is called, the Host:
+We implement `window.ACE` including `ACE.registry` and `ACE.hooks`.
+- **Registry**: Plugins register definitions via `ACE.registry.add('my-pkg', 'tools', [...])`.
+- **Lazy Hooks**: When `ACE.hooks.useAceWindow()` is called, the Host manages the coordination.
+
   1. Detects if `window_uid` is missing.
   2. Generates a stable unique ID (e.g., `guest:<plugin_id>:<uuid>`).
   3. Registers the Window in `System:Windows` RAM.

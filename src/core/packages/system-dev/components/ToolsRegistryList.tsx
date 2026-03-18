@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ToolRegistry } from '#/services/toolRegistry';
+import { ToolEngine } from '#/services/toolEngine';
 
 type ToolItem = {
     name: string;
@@ -11,7 +11,7 @@ export function ToolsRegistryList() {
 
     useEffect(() => {
         const refresh = () => {
-            const manifest = ToolRegistry.getManifest() as ToolItem[];
+            const manifest = ToolEngine.getManifest() as ToolItem[];
             setTools(manifest);
         };
 

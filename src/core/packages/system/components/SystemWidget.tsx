@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ToolRegistry } from '#/services/toolRegistry';
+import { ToolEngine } from '#/services/toolEngine';
 import { useWidgetEngine } from '#/services/widgetEngine';
 import { ConfigEngine } from '#/services/configEngine';
 import type { ConfigItem } from '#/schemas/config';
@@ -47,7 +47,7 @@ export function SystemWidget() {
 
     useEffect(() => {
         const refresh = () => {
-            setToolManifest(ToolRegistry.getManifest() as Array<{ name: string; description: string }>);
+            setToolManifest(ToolEngine.getManifest() as Array<{ name: string; description: string }>);
         };
 
         refresh();
@@ -254,7 +254,7 @@ export function SystemWidget() {
 
                 {tab === 'registries' && (
                     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                        <SectionCard title="Tool Registry" subtitle="Live manifest from ToolRegistry service">
+                        <SectionCard title="Tool Registry" subtitle="Live manifest from ToolEngine service">
                             <MiniList
                                 title="Tools"
                                 rows={toolManifest.map((tool) => ({ title: tool.name, detail: tool.description }))}

@@ -4,7 +4,7 @@ import {
 } from '#/schemas/tooling';
 
 
-class ToolRegistrySingleton {
+class ToolEngineSingleton {
     private registry: Map<string, ToolDefinition<any>> = new Map();
 
     constructor() {
@@ -18,10 +18,10 @@ class ToolRegistrySingleton {
      */
     register(tool: ToolDefinition<any>) {
         if (this.registry.has(tool.name)) {
-            console.warn(`ToolRegistry: Overwriting existing tool definition for "${tool.name}"`);
+            console.warn(`ToolEngine: Overwriting existing tool definition for "${tool.name}"`);
         }
         this.registry.set(tool.name, tool);
-        console.log(`ToolRegistry: Registered tool "${tool.name}"`);
+        console.log(`ToolEngine: Registered tool "${tool.name}"`);
     }
 
     /**
@@ -38,12 +38,12 @@ class ToolRegistrySingleton {
     validate(toolName: string, parameters: unknown) {
         const tool = this.getTool(toolName);
         if (!tool) {
-            throw new Error(`ToolRegistry: Tool "${toolName}" not found.`);
+            throw new Error(`ToolEngine: Tool "${toolName}" not found.`);
         }
 
         const result = tool.schema.safeParse(parameters);
         if (!result.success) {
-            throw new Error(`ToolRegistry: Validation failed for "${toolName}": ${result.error.message}`);
+            throw new Error(`ToolEngine: Validation failed for "${toolName}": ${result.error.message}`);
         }
 
         return result.data;
@@ -61,4 +61,4 @@ class ToolRegistrySingleton {
     }
 }
 
-export const ToolRegistry = new ToolRegistrySingleton();
+export const ToolEngine = new ToolEngineSingleton();

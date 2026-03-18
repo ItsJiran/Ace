@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PackageDetail } from './PackageDetail';
 import type { PackageManifest, RegistryDomain } from '#/schemas/registry';
-import { ToolRegistry } from '#/services/toolRegistry';
+import { ToolEngine } from '#/services/toolEngine';
 // import { COMPONENT_CATALOG } from './ComponentRegistry'; // Circular dependency
 import { Search, Grid, List, Activity, Terminal, Layers, Codesandbox, Settings2, DownloadCloud, AlertTriangle } from 'lucide-react';
 
@@ -64,7 +64,7 @@ export function PackageRegistryView() {
 
     useEffect(() => {
         // 1. Fetch Tools
-        const tools = (ToolRegistry.getManifest() as any[]).map(t => ({
+        const tools = (ToolEngine.getManifest() as any[]).map(t => ({
             id: t.name,
             name: t.name,
             version: '1.0.0', // Mock version for tools

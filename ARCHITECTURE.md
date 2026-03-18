@@ -37,6 +37,8 @@ The execution backend.
 - `windowEngine`: Spatial window orchestrator.
 - `globalStateManager`: Cursor, focus, config mirror, and runtime interaction tracker.
 - `layoutEngine`: Persistent layout snapshot manager for AppConfig JSON files.
+- `registryEngine`: Manages package installation and runtime registry for components/tools/widgets.
+- `toolEngine`: Manages executable tools and their schemas.
 
 ## Package Runtime Model
 

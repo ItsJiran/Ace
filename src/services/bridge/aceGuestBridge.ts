@@ -54,11 +54,11 @@ export interface AceGuestAPI {
     };
 
     /**
-     * (Legacy/Manual) Registry Bridge
-     * Direct registration for non-hook based setups.
+     * Registry Bridge
+     * Direct registration for package domains (widgets, components, windows, etc).
      */
     registry: {
-        register: (domain: string, entry: any) => void;
+        add: (packageName: string, domain: 'widgets' | 'components' | 'windows' | 'tools' | 'features' | 'processes' | 'pipelines' | 'registries', items: unknown[]) => void;
     };
 }
 
@@ -116,9 +116,9 @@ export const aceGuestBridge: AceGuestAPI = {
     },
 
     registry: {
-        register: (domain, entry) => {
-            // Minimal shim
-            console.log(`[ACE.registry] Manual register: ${domain}`, entry);
+        add: (packageName, domain, items) => {
+            // Direct injection to RegistryInputEngine singleton
+            RegistryInputEngine.registerDomain(packageName, domain as any, items);
         }
     }
 };
