@@ -1,13 +1,11 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 import { useAceWindow } from '#/hooks/useAceWindow';
 
 type BaseTarget = { x: number; y: number; width: number; height: number };
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_relative_modifier_animation',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_relative_anim',
 };
 

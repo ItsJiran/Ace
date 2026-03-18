@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
 import { EventBus } from '#/services/eventEngine';
 
@@ -6,11 +7,9 @@ type RouteItem = {
     handlers: number;
 };
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'event_registry_list',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
+    data_requirements: ['system:events'],
     react_behavior: 'dev_event_registry',
 };
 

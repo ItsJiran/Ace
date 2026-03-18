@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type Dot = {
@@ -12,11 +13,8 @@ type Dot = {
 
 const random = (min: number, max: number) => Math.random() * (max - min) + min;
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_ui_animation_fps',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_animation',
 };
 

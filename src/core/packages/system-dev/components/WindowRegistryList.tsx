@@ -1,10 +1,9 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { WindowConfig } from '#/schemas/window';
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'window_registry_list',
     data_requirements: ['system:windows'],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_window_registry',
 };
 

@@ -42,27 +42,55 @@ export const CorePackageLoader = {
             const exports = mod as any;
             let registered = false;
 
-            // Case A: File exports a full 'registry' object (Universal)
-            if (exports.registry) {
-                Object.entries(exports.registry).forEach(([domain, items]) => {
-                    if (Array.isArray(items) && items.length > 0) {
+            // Determine domain context from folder structure
+            // e.g. "widgets", "components", "windows"
+            const relativePath = path.substring(path.indexOf(folder) + folder.length + 1);
+            const inferredDomain = relativePath.split('/')[0];
+            const validDomains = ['widgets', 'components', 'windows', 'tools', 'features', 'processes', 'pipelines'];
+
+            // The `registry` export provides just identity/metadata.
+            // The `default` export (if a plain object) provides the full config.
+            // We merge them so files don't have to duplicate data.
+            const rawRegistry = exports.registry;
+            const defaultExport = exports.default;
+            const defaultIsPlainObject =
+                defaultExport !== null &&
+                typeof defaultExport === 'object' &&
+                !Array.isArray(defaultExport) &&
+                typeof defaultExport !== 'function';
+
+            const effectiveRegistry = rawRegistry
+                ? (defaultIsPlainObject ? { ...rawRegistry, ...defaultExport } : rawRegistry)
+                : undefined;
+
+            // Case A: File exports a 'registry' object
+            if (effectiveRegistry) {
+                const reg = effectiveRegistry;
+
+                // Single-object format: { name: '...', react_behavior: '...' }
+                // Used when file is in a known domain folder and exports a single config object.
+                // effectiveRegistry is already merged with default export (if plain object).
+                if (!Array.isArray(reg) && typeof reg === 'object') {
+                    // Start with folder-based inference
+                    let targetDomain = inferredDomain;
+
+                    // Heuristic overrides based on well-known identity keys
+                    if ('widget_name' in reg) targetDomain = 'widgets';
+                    else if ('tool_name' in reg) targetDomain = 'tools';
+                    else if ('process_type' in reg) targetDomain = 'processes';
+                    else if ('feature_name' in reg) targetDomain = 'features';
+                    else if ('pipeline_name' in reg) targetDomain = 'pipelines';
+                    else if ('react_behavior' in reg && reg.react_behavior === 'window_shell') targetDomain = 'windows';
+                    else if ('name' in reg && 'react_behavior' in reg) targetDomain = 'components';
+
+                    if (validDomains.includes(targetDomain)) {
                         try {
-                            window.ACE.registry.add(packageName, domain as any, items);
+                            window.ACE.registry.add(packageName, targetDomain as any, [reg]);
                             registered = true;
                         } catch (e) {
                             console.error(`[CorePackageLoader] Failed to load registry from ${path}:`, e);
                         }
                     }
-                });
-            }
-
-            // Case B: File exports a single 'config' object (Component Shortcut)
-            if (exports.config) {
-                try {
-                    window.ACE.registry.add(packageName, 'components', [exports.config]);
-                    registered = true;
-                } catch (e) {
-                    console.error(`[CorePackageLoader] Failed to load component config from ${path}:`, e);
                 }
             }
 

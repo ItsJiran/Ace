@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 
 // ─── Phase Machine ─────────────────────────────────────────────────────────────
@@ -63,11 +64,8 @@ const TRANSITIONS: Record<Phase, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_prompt_bar_animation',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_prompt_bar',
 };
 

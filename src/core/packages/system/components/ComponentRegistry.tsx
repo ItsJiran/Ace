@@ -6,6 +6,7 @@ import { SystemConsole } from '#/core/packages/system/components/SystemConsole';
 import { SystemWidget } from '#/core/packages/system/components/SystemWidget';
 import { SystemCenterWindow } from '#/core/packages/system/windows/SystemCenterWindow';
 import { SystemConsoleWindow } from '#/core/packages/system/windows/SystemConsoleWindow';
+import { DockBarWindow } from '#/core/packages/system/windows/DockBarWindow';
 
 type RegistryComponentProps = {
     windowUid: string;
@@ -104,6 +105,7 @@ const CORE_REGISTRY: Record<string, ComponentType<RegistryComponentProps>> = {
     'system_widget': SystemWidget,
     'system_center_window': SystemCenterWindow,
     'system_console_window': SystemConsoleWindow,
+    'dock_bar_window': DockBarWindow,
 };
 
 const DEV_FALLBACK_REGISTRY: Record<string, ComponentType<RegistryComponentProps>> = import.meta.env.DEV

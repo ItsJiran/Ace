@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type ChatMessage = {
@@ -37,11 +38,8 @@ const makeAiMessage = (tokenCount: number) => {
 
 const makeUserMessage = () => USER_PROMPTS[randomInt(0, USER_PROMPTS.length - 1)];
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_chat_message_flow',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_chat',
 };
 

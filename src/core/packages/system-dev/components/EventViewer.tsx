@@ -1,4 +1,10 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useAceMemory } from '#/hooks/useAceMemory';
+
+export const registry: AceRegistryType.Component = {
+    name: 'event_viewer_ui',
+    react_behavior: 'dev_event_stream',
+};
 
 type EventStreamItem = {
     id: string;
@@ -8,14 +14,6 @@ type EventStreamItem = {
     sub_action: string | null;
     process_uid: string | null;
     payload: Record<string, unknown>;
-};
-
-export const config = {
-    name: 'event_viewer',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
-    react_behavior: 'dev_event_stream',
 };
 
 export function EventViewer() {

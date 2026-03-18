@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useAceMemory } from '#/hooks/useAceMemory';
 
 type PipelineRun = {
@@ -10,11 +11,9 @@ type PipelineRun = {
     error: string | null;
 };
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'pipeline_registry_list',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
+    data_requirements: ['system:pipeline_registry'],
     react_behavior: 'dev_pipeline_registry',
 };
 

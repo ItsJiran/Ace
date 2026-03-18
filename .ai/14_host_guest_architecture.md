@@ -1,133 +1,161 @@
 # Host-Guest Architecture & Inversion of Control
 
-This document defines the architectural standard for the User Package Ecosystem (Plugins), moving from a "Widget" model to a strict "Host-Guest" model.
+This document defines the architectural contract between the ACE core (Host) and any package (Guest).
+
+See also: `11_package_ecosystem_and_submission.md` for the full package structure and submission model.
 
 ## Core Philosophy
 
 ### 1. Inversion of Control (IoC)
-Start with the mindset: **The Plugin (Guest) is a library. The App (Host) is the framework.**
-- Plugins do not "run" themselves. They export definitions.
-- Plugins do not "mount" themselves. They are mounted by the Host into specific Slots.
-- Plugins do not "decide" where they appear. The Host's Configuration Engine decides.
+**The Package (Guest) is a library. The App (Host) is the framework.**
+
+- Packages do not run themselves. They export declarations.
+- Packages do not mount themselves. They are mounted by the Host via the ComponentRegistry and WindowEngine.
+- Packages do not decide where they appear. The Host's RegistryEngine and launcher configuration decides.
 
 ### 2. Host-Guest Relationship
-- **Host (ACE Core)**: The compiled binary. Owns the Window, the Event Loop, the Global RAM, and the React Tree.
-- **Guest (Plugin)**: A JS/TS bundle loaded at runtime. It has no direct access to the Host's internals. It can only communicate via the **Bridge**.
 
-### 3. Hierarchical Slot System
-To prevent UI chaos (e.g., plugins opening windows inside buttons), we enforce a strict hierarchy adhering to the **Widget** definition in Pillar 11:
+| Role | Responsibility |
+|---|---|
+| **Host (ACE Core)** | Compiled binary. Owns the Window, Event Loop, Global RAM, React Tree, and registry. |
+| **Guest (Package)** | Source files or JS bundle loaded at boot. Has no direct access to Host internals. Communicates only via the `window.ACE` bridge. |
 
-**Hierarchy: Widget ➔ Window ➔ Component**
+### 3. Hierarchy: Widget → Window → Component
 
-1.  **Widget (The Unit)**: The top-level composition unit. A plugin registers a *Widget*.
-2.  **Window (The Shell)**: The Widget *defines* or *owns* a Window configuration (bounds, chrome, behavior). It interacts with the Host's Window Manager.
-3.  **Component (The Content)**: The Window *renders* a Root Component. This Component lives inside the Window's content area.
+To prevent UI chaos, the Host enforces a strict rendering hierarchy.
 
-**Invariant:**
-- A **Component** cannot strictly "own" a Window (it renders *inside* one).
-- A **Window** cannot exist without a parent **Widget** definition.
-- The **Host** manages the Widget lifecycle, which in turn manages the Window, which manages the Component.
+```
+Widget (entry point — declares the intent)
+  └── Window (shell — manages bounds, drag, focus via useAceWindow)
+        └── Component (content — pure React UI, no window state)
+```
+
+**Invariants:**
+- A **Component** does not own a Window. It renders *inside* one.
+- A **Window** must be referenced by at least one Widget (or spawned explicitly by `WindowEngine`).
+- The **Host** controls the Widget lifecycle → Window lifecycle → Component mount.
+- A Widget's `registry` only declares its identity (`widget_name`, `entry_id`). Configuration about windows and launch surfaces belongs to the window preset system or launcher config — not the Widget file itself.
 
 ---
 
-## The Guest Bridge (API Surface)
+## The `window.ACE` Bridge (Guest API Surface)
 
-The Host exposes a secure, versioned API to Guests. This is the **ONLY** way a plugin interacts with ACE.
+This is the **only** way a package interacts with ACE at runtime.
 
 ```typescript
-// global.d.ts (exposed to plugins)
+// Exposed on window.ACE (see src/services/bridge/aceGuestBridge.ts)
 interface AceGuestAPI {
-  // 1. Reactivity (Read-Only by default, Write via Actions)
-  memory: {
-    use: (key: string) => any; // React Hook equivalent
-    get: (key: string) => any; // Snapshot
-    // No direct .set()! Use Events to request changes.
-  };
+    // 1. Reactivity — read RAM, subscribe to changes
+    memory: {
+        use: <T>(key: string) => T | undefined;  // React Hook (subscribe)
+        get: <T>(key: string) => T | undefined;  // Snapshot (no subscription)
+        // No direct .set() — request changes via events.emit()
+    };
 
-  // 2. Communication (Fire-and-Forget)
-  events: {
-    emit: (intent: InteractionSchema) => void;
-  };
+    // 2. Communication — fire-and-forget intents
+    events: {
+        emit: (intent: { action: string; [key: string]: unknown }) => void;
+    };
 
-  // 3. JIT Registration Hooks (Lazy ID Generation)
-  hooks: {
-    useAceWindow: (config?: Partial<WindowConfig>) => UseAceWindowResult;
-    useAceWidget: (config?: WidgetConfig) => UseAceWidgetResult;
-  };
+    // 3. Hooks — JIT window/widget lifecycle binding
+    hooks: {
+        useAceWindow: (windowUid: string) => UseAceWindowResult;
+    };
 
-  // 4. Registration (Boot-time only)
-  registry: {
-    // Generic registration for any domain (widgets, tools, pipelines, etc.)
-    add: (packageName: string, domain: string, items: unknown[]) => void;
-  };
+    // 4. Registration — boot-time only, called by CorePackageLoader
+    registry: {
+        add: (packageName: string, domain: string, items: unknown[]) => void;
+    };
 }
 ```
 
-## Implementation Strategy
+**RAM is read-only for Guests via the bridge.** All writes happen through `events.emit()`, which the Host routes to the appropriate engine (WindowEngine, FSEngine, etc.).
 
-### Phase 1: Guest Bridge & JIT Hooks (The ID Generator)
-We implement `window.ACE` including `ACE.registry` and `ACE.hooks`.
-- **Registry**: Plugins register definitions via `ACE.registry.add('my-pkg', 'tools', [...])`.
-- **Lazy Hooks**: When `ACE.hooks.useAceWindow()` is called, the Host manages the coordination.
+---
 
-  1. Detects if `window_uid` is missing.
-  2. Generates a stable unique ID (e.g., `guest:<plugin_id>:<uuid>`).
-  3. Registers the Window in `System:Windows` RAM.
-  4. Returns the ID to the component.
+## Self-Registering Pattern (Current Implementation)
 
-This ensures Plugins don't need to manage IDs manually.
+Core packages (in `src/core/packages/`) use a source-level self-registering pattern:
 
-### Phase 2: The Loader (Dynamic Import)
-We will use a standard `import()` mechanism or a lightweight module loader (like `SystemJS` if we need robust isolation, or native ESM for modern implementation).
+1. Each domain file exports `const registry` with its identity.
+2. `CorePackageLoader` scans all files via `import.meta.glob` at build time.
+3. Discovered `registry` exports are automatically fed into `RegistryEngine.registerPackage()`.
 
-**Directory Structure:**
-```text
-~/.config/ace/plugins/
-  └── weather-widget/
-      ├── manifest.json  // capabilities, name, version
-      └── main.js        // bundled entry point
+This means **no manual wiring** — adding a file to the right folder is enough.
+
+```typescript
+// src/core/packages/system/tools/MyTool.ts
+import type { AceRegistryType } from '#/schemas/registryTypes';
+
+export const registry: AceRegistryType.Tool = {
+    tool_name: 'my_tool',
+    description: 'Does something useful.',
+};
+
+export default async function myTool(params: { input: string }) {
+    // implementation
+}
 ```
 
-**Loading Sequence:**
-1. **Discovery:** Host scans `manifest.json` files.
-2. **Validation:** Host checks permissions (e.g., "Does this plugin need 'network' access?").
-3. **Import:** Host runs `import(pluginPath)`.
-4. **Registration:** Plugin executes `ACE.registry.register(...)`.
-5. **Lock:** Host locks the registry. No more registrations allowed after boot.
+---
 
-### Phase 2: The Slot Component (`<AceSlot />`)
-The Host implements a generic wrapper to safely render Guest content.
+## External Package Loading (Bundled JS)
+
+User-installed packages that are bundled as a single JS file use a different path:
+
+**Directory:**
+```text
+~/.config/com.ace.assistant/packages/
+└── <owner>/<package>/
+    ├── registry.json     ← Package identity + entry_point path
+    └── dist/index.js     ← Bundled entry (references window.ACE, not internal imports)
+```
+
+**Loading sequence:**
+1. **Discovery** — `RegistryEngine` scans `registry.json` files in AppConfig.
+2. **Validation** — Schema check + permission/capability gate.
+3. **Import** — Host calls `convertFileSrc()` + dynamic `import(assetUrl)`.
+4. **Registration** — Bundle calls `window.ACE.registry.add(...)` to declare its domains.
+5. **Lock** — Registry is frozen after boot. No late registrations.
+
+External bundles must use `window.ACE.react` (Host-provided React) instead of bundling their own React.
+
+---
+
+## ComponentRegistry Slot (`<AceWindow />`)
+
+The Host renders Guest components inside a generic `<AceWindow />` shell that provides:
+- `ErrorBoundary` — crashes are contained per-window, not app-wide
+- `Suspense` — lazy-loaded components show a fallback
+- window context injection via `windowUid` prop
 
 ```tsx
-// Host Implementation
-const AceSlot = ({ slotId, context }) => {
-  const pluginComponent = useRegistry(slotId);
+// Simplified — see src/components/layout/AceWindow.tsx
+const AceWindow = ({ windowConfig }) => {
+    const Component = ComponentRegistry.resolve(windowConfig.component_name);
 
-  if (!pluginComponent) return <EmptySlot />;
-
-  return (
-    <ErrorBoundary fallback={<PluginCrashError />}>
-      <Suspense fallback={<Spinner />}>
-        {/* We inject the Bridge Context here if needed */}
-        <pluginComponent.Render {...context} />
-      </Suspense>
-    </ErrorBoundary>
-  );
+    return (
+        <ErrorBoundary fallback={<WindowCrashError />}>
+            <Suspense fallback={<LoadingWidget />}>
+                <Component windowUid={windowConfig.window_uid} />
+            </Suspense>
+        </ErrorBoundary>
+    );
 };
 ```
 
-### Phase 3: Dogfooding (Core-as-Plugin)
-To ensure the API is robust, **Core Features** (like the System Console or Settings) should eventually be refactored to use the *exact same* Guest API as external plugins.
+---
 
 ## Security Considerations
 
-1. **No DOM Access:** Plugins should ideally not access `document` directly. (Hard to enforce in JS, but we can lint/audit or use Shadow DOM).
-2. **Capability-Based Security:**
-   - A plugin cannot emit `system:shutdown` unless it has the `system.power` capability in `manifest.json`.
-   - The `events.emit()` function checks the plugin's permissions before routing the event.
+1. **Capability Declaration** — Packages declare required capabilities in `registry.json`. `events.emit()` checks permissions before routing.
+2. **No Internal Imports** — External bundle packages cannot import from `#/services/*` or `#/schemas/*`. Only `window.ACE` is accessible.
+3. **Registry Lock** — After boot, `RegistryEngine` rejects any new `registry.add()` calls. Prevents runtime injection attacks.
+4. **Error Isolation** — Each window is wrapped in an `ErrorBoundary`. A crashing package cannot take down the whole app.
+5. **Validated Schemas** — All registered items are parsed through Zod schemas in `RegistryEngine.registerPackage()` before activation.
 
-## Migration Path
+---
 
-1. **Refactor `manifest.json`**: Add `capabilities` array.
-2. **Implement `AceGuestBridge`**: Create the global object in `src/boot.ts` or `src/main.tsx` before React mounts.
-3. **Update `LoadingWidget`**: Convert it to use the new Slot system as a test case.
+## Dogfooding Rule
+
+Core packages (`system`, `system-dev`) must use the **same `window.ACE` bridge** that external packages use — no special internal shortcuts. This ensures the bridge API is always production-quality and that core packages are always valid reference implementations.

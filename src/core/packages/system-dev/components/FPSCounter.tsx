@@ -1,10 +1,8 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'fps_counter',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_fps_overlay',
 };
 

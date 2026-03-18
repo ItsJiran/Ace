@@ -1,12 +1,10 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 interface HeadlessDragSurfaceDemoProps {
     windowUid: string;
 }
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'headless_drag_surface_demo',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_drag_demo',
 };
 

@@ -1,12 +1,11 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
 import { Storage } from '#/services/storageEngine';
 import type { ProcessRecord } from '#/schemas/process';
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'process_monitor',
     data_requirements: ['system:processes'],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_process_monitor',
 };
 

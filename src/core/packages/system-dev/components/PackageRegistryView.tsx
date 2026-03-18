@@ -1,9 +1,15 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
 import { PackageDetail } from './PackageDetail';
 import type { PackageManifest, RegistryDomain } from '#/schemas/registry';
 import { ToolEngine } from '#/services/toolEngine';
 // import { COMPONENT_CATALOG } from './ComponentRegistry'; // Circular dependency
 import { Search, Grid, List, Activity, Terminal, Layers, Codesandbox, Settings2, DownloadCloud, AlertTriangle } from 'lucide-react';
+
+export const registry: AceRegistryType.Component = {
+    name: 'package_registry_view',
+    react_behavior: 'dev_package_registry',
+};
 
 const COMPONENT_CATALOG = [
     'ram_viewer',
@@ -53,14 +59,6 @@ const MOCK_METADATA: Record<string, Partial<PackageManifest>> = {
         domain: 'component',
         status: 'inactive'
     }
-};
-
-export const config = {
-    name: 'package_registry_view',
-    data_requirements: ['system:package_registry'],
-    emits_interactions: [],
-    listens_to: [],
-    react_behavior: 'dev_package_registry',
 };
 
 export function PackageRegistryView() {

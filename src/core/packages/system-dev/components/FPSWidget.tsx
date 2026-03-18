@@ -1,10 +1,8 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 
-export const config = {
-    name: 'fps_widget',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
+export const registry: AceRegistryType.Component = {
+    name: 'fps_widget_ui',
     react_behavior: 'dev_fps_counter',
 };
 

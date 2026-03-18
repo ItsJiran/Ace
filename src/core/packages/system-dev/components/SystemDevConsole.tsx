@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge, Flame } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
@@ -21,6 +22,11 @@ interface RuntimeRegistryDomains {
         };
     }>;
 }
+
+export const registry: AceRegistryType.Component = {
+    name: 'system_dev_console_ui',
+    react_behavior: 'dev_console',
+};
 
 export function SystemDevConsole() {
     const overlayState = window.ACE.memory.use<GlobalOverlayState>('system:overlay_state');

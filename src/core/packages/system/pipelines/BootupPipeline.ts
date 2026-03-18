@@ -1,6 +1,14 @@
 import { PipelineEngine, type PipelineStep, type PipelineContext } from '#/services/pipelineEngine';
 import { LayoutEngine } from '#/services/layoutEngine';
 import { getCurrentWindow, currentMonitor, PhysicalSize, PhysicalPosition } from '@tauri-apps/api/window';
+import type { AceRegistryType } from '#/schemas/registryTypes';
+
+export const registry: AceRegistryType.Pipeline = {
+    pipeline_name: 'bootup_sequence',
+    description: 'Core boot sequence: runtime bed → config → window layer → layout engine.',
+    step_names: ['Init Core Runtime Bed', 'Init Config And Global State', 'Init Window Layer', 'Init Layout Engine'],
+    cancellable: false,
+};
 
 export interface BootupContext extends PipelineContext {
     startTime: number;

@@ -45,8 +45,55 @@ The execution backend.
 - Core packages live in `src/core/packages/` and ship with the app.
 - User packages are installed to AppConfig `packages/<owner>/<package>/registry.json`.
 - `registryEngine` loads core package manifests first, then installed user packages from AppConfig.
-- `CorePackageLoader` automatically scans `src/core/packages` for new file-based registries at build time.
-- **Isolated Dependencies / Plugins**: External packages can provide a bundled `dist/index.js` entry point referenced in `registry.json`. This bundle should use `window.ACE.react` instead of shipping its own React.
+- `CorePackageLoader` automatically scans `src/core/packages` to build the runtime registry from `export const registry` declarations.
+
+## 6. Core Package Architecture (Distributed Registry)
+
+Core packages (`system`, `system-dev`) follow a strict **Distributed Registry** pattern where each file is self-registering. This eliminates monolithic registry files and allows components to be portable.
+
+### Directory Structure
+Each package is organized into domain-specific folders:
+- **`widgets/` (The Orchestrator)**: `.ts` files defining the Widget Identity, Launch Profile, and Window Preset. This is the entry point for the system (e.g., Start Menu visibility). It points to a specific `component_name` to render.
+- **`components/` (The UI)**: `.tsx` files containing the React implementation. They export `registry` defining their `react_behavior` string and any data requirements.
+- **`windows/` (The Shell)**: `.tsx` files wrapping a component with a specific window shell (e.g., `useAceWindow`). They export `registry` defining themselves as `window_shell`.
+
+### File Pattern
+
+**Widget Definition (`src/core/packages/system/widgets/MyWidget.ts`)**:
+```typescript
+export const registry = {
+    widget_name: 'my_widget',
+    entry_id: 'my_widget_main',
+    runtime_kind: 'ui_widget',
+    launch_profile: { surfaces: ['start_menu'] },
+    component_name: 'my_widget_window', // Points to the window wrapper
+    window_profile: { ... }
+};
+```
+
+**Component Implementation (`src/core/packages/system/components/MyWidget.tsx`)**:
+```typescript
+export const registry = {
+    name: 'my_widget_ui',
+    react_behavior: 'my_widget_behavior',
+};
+export const MyWidget = () => { ... };
+```
+
+**Window Wrapper (`src/core/packages/system/windows/MyWidgetWindow.tsx`)**:
+```typescript
+import { MyWidget } from '../components/MyWidget';
+export const registry = {
+    name: 'my_widget_window',
+    react_behavior: 'window_shell',
+};
+export const MyWidgetWindow = ({ windowUid }) => {
+    useAceWindow(windowUid);
+    return <MyWidget />;
+};
+```
+
+**Isolated Dependencies / Plugins**: External packages can provide a bundled `dist/index.js` entry point referenced in `registry.json`. This bundle should use `window.ACE.react` instead of shipping its own React.
 
 ```mermaid
 graph TD

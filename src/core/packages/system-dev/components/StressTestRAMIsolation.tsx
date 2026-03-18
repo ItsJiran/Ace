@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { Storage } from '#/services/storageEngine';
@@ -40,11 +41,8 @@ function WatchedMemoryDisplay() {
     );
 }
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_ram_isolation',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_ram',
 };
 

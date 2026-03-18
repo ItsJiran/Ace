@@ -1,10 +1,8 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { WindowEngine } from '#/services/windowEngine';
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_menu',
-    data_requirements: [],
-    emits_interactions: ['spawn_window'],
-    listens_to: [],
     react_behavior: 'dev_stress_launcher',
 };
 

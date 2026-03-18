@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnimationSequence } from '#/schemas/animation';
+import type { AceRegistryType } from '#/schemas/registryTypes';
+
+export const registry: AceRegistryType.Window = {
+    name: 'stress_test_prompt_bar_window',
+    react_behavior: 'window_shell',
+};
 
 function buildPromptBarSequence(loop: boolean): AnimationSequence {
     const vw = window.innerWidth;

@@ -1,5 +1,11 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useState, useEffect } from 'react';
 import { Storage } from '#/services/storageEngine';
+
+export const registry: AceRegistryType.Component = {
+    name: 'ram_viewer',
+    react_behavior: 'dev_ram_viewer',
+};
 
 const MAX_STR_LEN = 300;
 
@@ -139,13 +145,6 @@ function RAMSection({ title, data, accent }: {
 }
 
 // ─── Main component ────────────────────────────────────────────────────────
-export const config = {
-    name: 'ram_viewer',
-    data_requirements: ['system:ram'],
-    emits_interactions: [],
-    listens_to: [],
-    react_behavior: 'dev_ram_monitor',
-};
 
 export function RAMViewer() {
     const [globalData, setGlobalData] = useState<Record<string, any>>({});

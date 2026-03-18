@@ -53,16 +53,16 @@ Windows are no longer static config objects. They are **React Components** that 
 
 ## �🚀 Development Roadmap
 
-### 🛡️ Phase 2: Engine Alignment & Schema Refactor (CURRENT)
+### 🛡️ Phase 2: Engine Alignment & Schema Refactor
 - [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (pospone for now since we need a robust event and ui and correct gateway so we can get the corrct feeedback)
 - [ ] **Formalize Schemas (Remaining)**: Widget snapshot contracts and restoration-specific widget config schemas.
 - [ ] **Align Storage Engine**: Enforce Pre-Allocation Protocol for all results.
 - [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results.
-- [ ] **Formalize Widget Filesystem Scopes**: Finalize package-first scopes across `src/core/packages` and AppConfig install root `packages/<owner>/<package>/`.
-- [ ] **Define Built-In vs User Package Ownership**: Core packages live in `src/core/packages` and are non-removable; local/user submissions live in `widgets` with one package identity/name; widget contracts stay focused on `components` + `windows`, while cross-domain bundles are classified as package ecosystem packages.
-- [ ] **Adopt `PackageEcosystemSchema` End-to-End**: Wire loader/validator/runtime usage so cross-domain bundles are validated and tracked explicitly.
+- [x] **Formalize Widget Filesystem Scopes**: Finalize package-first scopes across `src/core/packages` and AppConfig install root `packages/<owner>/<package>/`.
+- [x] **Define Built-In vs User Package Ownership**: Core packages live in `src/core/packages` and are non-removable; local/user submissions live in `widgets` with one package identity/name; widget contracts stay focused on `components` + `windows`, while cross-domain bundles are classified as package ecosystem packages.
+- [x] **Adopt `PackageEcosystemSchema` End-to-End**: Wire loader/validator/runtime usage so cross-domain bundles are validated and tracked explicitly.
 - [ ] **Widget Registry Runtime Upgrade**: Ensure runtime registration and diagnostics use `widgets` binding (`component + window`) as first-class contract.
-- [ ] **Package Discovery Pipeline**: Build discovery for `src/core/packages` and AppConfig `packages/<owner>/<package>/` with clear precedence and conflict diagnostics.
+- [x] **Package Discovery Pipeline**: Build discovery for `src/core/packages` and AppConfig `packages/<owner>/<package>/` with clear precedence and conflict diagnostics.
 
 ### 🧩 Phase 3: The Development UI Kit
 - [ ] **Widget Filesystem Explorer / Diagnostics**: Expose mirrored widget registry directories (`core`, `local widgets`, `config`) in Dev Kit for validation and debugging.
@@ -108,7 +108,7 @@ To verify your architecture is ready for Phase 5, your "Mock Brain" test should 
 
 You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writing to 10 different RAM keys simultaneously, while the UI remains at a smooth 60 FPS with zero lag in the input box.
 
-### 🖥️ Phase 5: The Core UI Shell & Local Loop (Human-System Integration)
+### 🖥️ Phase 5: The Core UI Shell & Local Loop (Human-System Integration) (CURRENT)
 *Goal: Build the user-facing transparent overlay, the core Shadcn components, and prove the UI-to-Engine CQRS loop works without an AI.*
 - [ ] **Tauri Transparent Layer**: Configure the borderless, click-through fullscreen window (Layer 1).
 - [ ] **Base Dumb Components**: Build the UI primitives (e.g., `<CommandInput />`, `<ChatBubble />`, `<WindowFrame />`) using Shadcn & Tailwind.
@@ -116,6 +116,11 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 - [ ] **Theme System (Light/Dark) for Core Widgets**: Implement global design tokens from `.ai/13_core_widget_design_language.md` and apply to System/Prompt/Console widgets.
 - [ ] **Core Chat Surface Styling**: Implement AI/user bubble styling rules, floating pill input bar, and soft multi-layer shadows based on design language pillar.
 - [ ] **Motion Polish Pass**: Add subtle fade-in and typing indicator motion primitives (non-flashy) and standardize easing/duration tokens.
+
+#### Core System Widgets (New Tasks)
+- [ ] **Prompt Bar Widget**: The floating input bar for interacting with the assistant.
+- [ ] **Dock Bar Widget**: A minimal system dock for accessing Settings, Tools, and specialized modes.
+- [ ] **Notifications Widget**: A robust toast/notification system for system alerts and tool outputs.
 
 ### 🧠 Phase 6: The AI Gateway & Autonomous Tooling (The Brain)
 *Goal: Connect the local Client to the remote LLM and establish the autonomous ReAct loop.*
@@ -324,8 +329,8 @@ ACE.config.defineRegistry({
 - **Dependencies** are scoped per entry-point during bundling (Tree Shaking).
 
 #### Roadmap Tasks
-- [ ] **Define Guest API Contract**: Interface for `window.ACE` (Memory, Events, Registry).
-- [ ] **Build Plugin Loader**: Logic to scan, validate manifest, and `import()` JS bundles.
+- [x] **Define Guest API Contract**: Interface for `window.ACE` (Memory, Events, Registry).
+- [x] **Build Plugin Loader**: Logic to scan, validate manifest, and `import()` JS bundles.
 - [ ] **Implement Slot System**: `<SafeComponentSlot />` wrapper with ErrorBoundaries.
 - [ ] **Core-as-Plugin Refactor**: Refactor internal "System Widgets" to use the exact same `ACE_API` as external plugins to prove dogfoods.
 - [ ] **Permission & Capability Review UI**: Add confirmation layer before enabling tool-capable packages.

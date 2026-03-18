@@ -1,3 +1,9 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
+export const registry: AceRegistryType.Component = {
+    name: 'hello_world_component',
+    react_behavior: 'dev_hello_world',
+};
+
 export function HelloWorldComponent() {
     return (
         <div className="w-full h-full bg-zinc-950 text-zinc-100 p-6 flex items-center justify-center">

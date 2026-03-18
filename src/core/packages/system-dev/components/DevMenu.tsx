@@ -1,13 +1,12 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge, Flame } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { WindowEngine } from '#/services/windowEngine';
 import type { GlobalOverlayState } from '#/schemas/window';
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'dev_menu',
-    data_requirements: ['system:overlay_state'],
-    emits_interactions: ['spawn_window', 'toggle_overlay_mode', 'toggle_debug_bg'],
-    listens_to: [],
-    react_behavior: 'dev_launcher_menu',
+    react_behavior: 'dev_menu'
 };
 
 interface RuntimeRegistryDomains {

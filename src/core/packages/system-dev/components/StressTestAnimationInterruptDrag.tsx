@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useState } from 'react';
 import { useAceWindow } from '#/hooks/useAceWindow';
 import type { AnimationSequence, InterruptPolicy } from '#/schemas/animation';
@@ -57,11 +58,8 @@ function buildDisruptionSequence(policy: Policy, loop: boolean): AnimationSequen
     };
 }
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_animation_interrupt_drag',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_anim_interrupt',
 };
 

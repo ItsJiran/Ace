@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Storage } from '#/services/storageEngine';
@@ -38,11 +39,9 @@ const labelColor = (rss: number) => {
     return 'text-emerald-300';
 };
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'ram_usage_analyzer',
     data_requirements: ['system:ram'],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_ram_analyzer',
 };
 

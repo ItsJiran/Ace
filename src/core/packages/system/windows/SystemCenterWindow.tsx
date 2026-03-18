@@ -1,23 +1,15 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { SystemWidget } from '../components/SystemWidget';
+import { useAceWindow } from '#/hooks/useAceWindow';
 
-export const registry = {
-    components: [{
-        name: 'system_center_window',
-        data_requirements: [],
-        emits_interactions: [],
-        listens_to: [],
-        react_behavior: 'window_shell',
-    }],
-    windows: [{
-        registry_type: 'window',
-        window_name: 'system_main_window',
-        component_name: 'system_center_window',
-    }],
+export const registry: AceRegistryType.Window = {
+    name: 'system_center_window',
+    react_behavior: 'window_shell',
 };
 
 export function SystemCenterWindow({ windowUid }: { windowUid: string }) {
     // Initialize window context and lifecycle
-    window.ACE.hooks.useAceWindow(windowUid);
+    useAceWindow(windowUid);
 
     return <SystemWidget />;
 }

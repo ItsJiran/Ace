@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 import { WindowEngine } from '#/services/windowEngine';
 import { Storage } from '#/services/storageEngine';
@@ -21,11 +22,8 @@ const ANIMATION_DESC: Record<AnimationType, string> = {
 
 type BaseState = { x: number; y: number; width: number; height: number };
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_window_motion',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_window_motion',
 };
 

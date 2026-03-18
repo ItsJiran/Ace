@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 import type { AnimationSequence } from '#/schemas/animation';
 
@@ -31,11 +32,8 @@ function buildPromptBarSequence(loop: boolean): AnimationSequence {
     };
 }
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_prompt_bar_real_window',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_prompt_bar_window',
 };
 

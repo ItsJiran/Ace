@@ -3,5 +3,6 @@
   "package_name": "itsjiran/ace-system-dev",
   "owner_scope": "core",
   "source_scope": "core",
-  "display_name": "ACE System Dev Package"
+  "display_name": "ACE System Dev Package",
+  "file_location": "src/core/packages/system-dev"
 }

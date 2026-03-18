@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
 import { ToolEngine } from '#/services/toolEngine';
 
@@ -6,11 +7,8 @@ type ToolItem = {
     description: string;
 };
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'tools_registry_list',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_tools_registry',
 };
 

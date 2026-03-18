@@ -1,3 +1,4 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Storage } from '#/services/storageEngine';
 
@@ -47,11 +48,8 @@ const createInitialStreams = (count: number): ChatStream[] => {
     }));
 };
 
-export const config = {
+export const registry: AceRegistryType.Component = {
     name: 'stress_test_prompt_response_load',
-    data_requirements: [],
-    emits_interactions: [],
-    listens_to: [],
     react_behavior: 'dev_stress_prompt_response',
 };
 

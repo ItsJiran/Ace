@@ -1,14 +1,10 @@
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-export const registry = {
-    components: [{
-        name: 'loading_widget',
-        data_requirements: [],
-        emits_interactions: [],
-        listens_to: [],
-        react_behavior: 'system_loading_state',
-    }],
+export const registry: AceRegistryType.Component = {
+    name: 'loading_widget',
+    react_behavior: 'system_loading_state',
 };
 
 export const LoadingWidget: React.FC = () => {
