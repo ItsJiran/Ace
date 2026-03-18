@@ -63,6 +63,14 @@ const TRANSITIONS: Record<Phase, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+export const config = {
+    name: 'stress_test_prompt_bar_animation',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_prompt_bar',
+};
+
 export function StressTestPromptBarAnimation() {
     const [phase, setPhase]           = useState<Phase>('idle');
     const [fps, setFps]               = useState(0);

@@ -6,6 +6,14 @@ type RouteItem = {
     handlers: number;
 };
 
+export const config = {
+    name: 'event_registry_list',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_event_registry',
+};
+
 export function EventRegistryList() {
     const [routes, setRoutes] = useState<RouteItem[]>([]);
 

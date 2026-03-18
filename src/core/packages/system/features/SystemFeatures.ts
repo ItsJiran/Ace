@@ -1,3 +1,16 @@
+export const registry = {
+    features: [
+        {
+            registry_type: 'feature',
+            feature_name: 'system_center_dashboard',
+        },
+        {
+            registry_type: 'feature',
+            feature_name: 'package_install_queue',
+        },
+    ]
+};
+
 /**
  * System package feature IDs placeholder.
  */

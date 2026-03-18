@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
+export const config = {
+    name: 'fps_counter',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_fps_overlay',
+};
+
 export function FPSCounter() {
     const [fps, setFps] = useState(0);
     const lastTsRef = useRef<number>(performance.now());

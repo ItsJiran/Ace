@@ -139,6 +139,14 @@ function RAMSection({ title, data, accent }: {
 }
 
 // ─── Main component ────────────────────────────────────────────────────────
+export const config = {
+    name: 'ram_viewer',
+    data_requirements: ['system:ram'],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_ram_monitor',
+};
+
 export function RAMViewer() {
     const [globalData, setGlobalData] = useState<Record<string, any>>({});
     const [classData, setClassData] = useState<Record<string, any>>({});

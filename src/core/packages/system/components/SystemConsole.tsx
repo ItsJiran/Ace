@@ -2,6 +2,16 @@ import React, { useEffect, useRef } from 'react';
 import { type LogEntry } from '#/services/loggerService';
 import { Terminal } from 'lucide-react';
 
+export const registry = {
+    components: [{
+        name: 'system_console',
+        data_requirements: ['system:logs'],
+        emits_interactions: [],
+        listens_to: [],
+        react_behavior: 'system_log_console',
+    }],
+};
+
 export const SystemConsole: React.FC = () => {
     const logs = window.ACE.memory.use<LogEntry[]>('system:logs') || [];
     const scrollRef = useRef<HTMLDivElement>(null);

@@ -74,8 +74,6 @@ export const BaseRegistryEntrySchema = z.object({
     source_path: z.string().optional(),
     
     is_enabled: z.boolean().default(true),
-    dependency_refs: z.array(RegistryDependencyRefSchema).default([]),
-    capability_requirements: z.array(CapabilityRequirementSchema).default([]),
     tags: z.array(z.string()).default([]),
 });
 export type BaseRegistryEntry = z.infer<typeof BaseRegistryEntrySchema>;
@@ -277,6 +275,8 @@ export const RegistryPackageSchema = z.object({
     repository_path: z.string(),
     /** Physical file location hint */
     file_location: z.string(),
+    /** Entry point for bundled packages (e.g. "dist/index.js") */
+    entry_point: z.string().optional(),
     /** Author name/email */
     author: z.string(),
     

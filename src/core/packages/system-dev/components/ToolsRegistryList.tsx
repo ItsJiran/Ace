@@ -6,6 +6,14 @@ type ToolItem = {
     description: string;
 };
 
+export const config = {
+    name: 'tools_registry_list',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_tools_registry',
+};
+
 export function ToolsRegistryList() {
     const [tools, setTools] = useState<ToolItem[]>([]);
 

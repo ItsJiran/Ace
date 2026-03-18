@@ -1,5 +1,13 @@
 import { WindowEngine } from '#/services/windowEngine';
 
+export const config = {
+    name: 'stress_test_menu',
+    data_requirements: [],
+    emits_interactions: ['spawn_window'],
+    listens_to: [],
+    react_behavior: 'dev_stress_launcher',
+};
+
 export function StressTestMenu() {
     const openUiAnimationFpsTest = () => {
         WindowEngine.spawnWindow({

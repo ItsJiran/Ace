@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
+export const config = {
+    name: 'fps_widget',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_fps_counter',
+};
+
 export function FPSWidget() {
     const [fps, setFps] = useState(0);
     const [frameMs, setFrameMs] = useState(0);

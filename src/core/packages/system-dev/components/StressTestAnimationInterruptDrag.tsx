@@ -57,6 +57,14 @@ function buildDisruptionSequence(policy: Policy, loop: boolean): AnimationSequen
     };
 }
 
+export const config = {
+    name: 'stress_test_animation_interrupt_drag',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_anim_interrupt',
+};
+
 export function StressTestAnimationInterruptDrag({ windowUid }: { windowUid: string }) {
     const {
         animationState,

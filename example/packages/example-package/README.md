@@ -13,15 +13,17 @@ example-package/
 
 ACE now uses a Host-Guest architecture (the `window.ACE` bridge) for runtime integration.
 
-- **Do not import internal hooks** from the core.
-- **Use the global bridge** `window.ACE.hooks` to access `useAceWindow`.
-- This ensures your package is decoupled from the core implementation.
+- **Use the global bridge** `window.ACE.react` (do not bundle React).
+- **Use the global bridge** `window.ACE.hooks` to access hooks.
+- **Entry Points**: Use the `entry_point` field in `registry.json` if you are distributing a bundled plugin.
 
 Minimal idea:
 
 ```tsx
-// 1. Access the hook from the global bridge
-const { useAceWindow } = window.ACE.hooks; 
+const React = window.ACE.react;
+// ...
+return React.createElement('div', {}, 'Hello from Guest Package');
+``` 
 
 // 2. Build your component
 export const MyWindow = ({ windowUid }: { windowUid: string }) => {

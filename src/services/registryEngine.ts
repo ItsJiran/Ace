@@ -2,11 +2,11 @@ import { FSEngine } from './fsEngine';
 import { Storage } from './storageEngine';
 import { useWidgetEngine } from './widgetEngine';
 import { RegistryInputEngine } from './registryInputEngine';
+import { CorePackageLoader } from './corePackageLoader';
 import { RegistryPackageSchema, type RegistryPackage } from '#/schemas/registry';
 import CoreSystemRegistryJson from '#/core/packages/system/registry.json';
 import SystemDevRegistryJson from '#/core/packages/system-dev/registry.json';
-import { registerSystemPackageDomains } from '#/core/packages/system/registry.hooks';
-import { registerSystemDevPackageDomains } from '#/core/packages/system-dev/registry.hooks';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 interface PackageSummary {
     package_name: string;
@@ -63,11 +63,8 @@ class RegistryEngineSingleton {
             console.warn('[RegistryEngine] Packages directory could not be initialized. Running core-only mode.');
         }
 
-        // Register domain payloads via hook-style registry input API.
-        registerSystemPackageDomains();
-        if (import.meta.env.DEV) {
-            registerSystemDevPackageDomains();
-        }
+        // Register domain payloads via auto-discovery
+        CorePackageLoader.load();
 
         this.registerPackage(CoreSystemRegistryJson);
 
@@ -121,6 +118,8 @@ class RegistryEngineSingleton {
                 console.warn(`[RegistryEngine] WidgetEngine bridge skipped for ${pkg.package_name}:`, error);
             }
         }
+
+        return pkg;
     }
 
     private normalizePackageManifest(rawPkg: unknown) {
@@ -312,6 +311,7 @@ class RegistryEngineSingleton {
                     supported_domains: Array.isArray(entry.supported_domains) ? entry.supported_domains : [],
                 };
             }),
+            entry_point: this.pickString(src.entry_point),
         };
     }
 
@@ -354,11 +354,45 @@ class RegistryEngineSingleton {
         }
     }
 
-    private tryRegisterManifest(path: string, manifest: unknown) {
+    private async tryRegisterManifest(path: string, manifest: unknown) {
         try {
-            this.registerPackage(manifest);
+            const pkg = this.registerPackage(manifest);
+            
+            // If the package has a bundled entry point (external plugin), load it.
+            if (pkg.entry_point) {
+                await this.loadPluginBundle(path, pkg.entry_point);
+            }
         } catch (error) {
             console.warn(`[RegistryEngine] Invalid package manifest skipped: ${path}`, error);
+        }
+    }
+
+    /**
+     * Dynamically imports a bundled JS file from the user's config folder.
+     * This allows "Isolated Dependencies" where the plugin bundles its own libraries (e.g. zustand).
+     * The plugin code is expected to access 'window.ACE' to register itself.
+     */
+    private async loadPluginBundle(manifestPath: string, entryPoint: string) {
+        // manifestPath is like: /home/user/.config/ace/packages/owner/pkg/registry.json
+        // we want the directory: /home/user/.config/ace/packages/owner/pkg/
+        // entryPoint is relative: dist/index.js
+        
+        // Basic dirname implementation since we might not have 'path' module in browser context easily
+        const pkgDir = manifestPath.substring(0, manifestPath.lastIndexOf('/')); 
+        const scriptPath = `${pkgDir}/${entryPoint}`;
+        
+        // Convert filesystem path to a URL that the WebView can load (asset://...)
+        const assetUrl = convertFileSrc(scriptPath);
+
+        console.log(`[RegistryEngine] Loading plugin bundle: ${assetUrl}`);
+
+        try {
+            // Dynamic import of the bundle.
+            // valid bundles should contain side-effects that call window.ACE.registry.add()
+            await import(/* @vite-ignore */ assetUrl);
+            console.log(`[RegistryEngine] Plugin bundle loaded: ${entryPoint}`);
+        } catch (error) {
+            console.error(`[RegistryEngine] Failed to load plugin bundle ${scriptPath}:`, error);
         }
     }
 

@@ -1,6 +1,16 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
+export const registry = {
+    components: [{
+        name: 'loading_widget',
+        data_requirements: [],
+        emits_interactions: [],
+        listens_to: [],
+        react_behavior: 'system_loading_state',
+    }],
+};
+
 export const LoadingWidget: React.FC = () => {
     return (
         <div className="w-full h-full flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl overflow-hidden">

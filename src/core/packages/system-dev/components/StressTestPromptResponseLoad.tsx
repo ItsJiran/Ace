@@ -47,6 +47,14 @@ const createInitialStreams = (count: number): ChatStream[] => {
     }));
 };
 
+export const config = {
+    name: 'stress_test_prompt_response_load',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_prompt_response',
+};
+
 export function StressTestPromptResponseLoad() {
     const [isRunning, setIsRunning] = useState(false);
     const [fps, setFps] = useState(0);

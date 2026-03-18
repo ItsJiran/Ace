@@ -45,7 +45,8 @@ The execution backend.
 - Core packages live in `src/core/packages/` and ship with the app.
 - User packages are installed to AppConfig `packages/<owner>/<package>/registry.json`.
 - `registryEngine` loads core package manifests first, then installed user packages from AppConfig.
-- `ComponentRegistry` source is part of core package at `src/core/packages/system/components/ComponentRegistry.tsx`.
+- `CorePackageLoader` automatically scans `src/core/packages` for new file-based registries at build time.
+- **Isolated Dependencies / Plugins**: External packages can provide a bundled `dist/index.js` entry point referenced in `registry.json`. This bundle should use `window.ACE.react` instead of shipping its own React.
 
 ```mermaid
 graph TD
@@ -63,13 +64,18 @@ graph TD
         PR[Process Registry]
         WE[Window Engine]
         LE[Layout Engine]
+        RG[Registry Engine]
     end
 
-    subgraph "Domain Execution"
-        AG[AI Gateway Engine]
-        FS[FS Engine]
-        PL[Pipeline Engine]
+    subgraph "Package Ecosystem"
+        CP[Core Packages]
+        UP[User Packages (JSON)]
+        EP[External Plugins (Bundled JS)]
     end
+
+    RG --> CP
+    RG --> UP
+    RG --> EP
 
     W1 -- emits interaction --> EE
     W2 -- emits interaction --> EE
@@ -84,6 +90,7 @@ graph TD
     AG -. optional tracking .-> PR
     FS -. optional tracking .-> PR
     PL -. optional tracking .-> PR
+    EP -. registers via .-> window.ACE
 ```
 
 ## Example Workflow: Prompting Opens a Window

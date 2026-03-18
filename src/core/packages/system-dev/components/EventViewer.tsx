@@ -10,6 +10,14 @@ type EventStreamItem = {
     payload: Record<string, unknown>;
 };
 
+export const config = {
+    name: 'event_viewer',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_event_stream',
+};
+
 export function EventViewer() {
     const events = (useAceMemory<EventStreamItem[]>('system:event_stream') || []).slice().reverse();
 

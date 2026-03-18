@@ -38,6 +38,14 @@ const labelColor = (rss: number) => {
     return 'text-emerald-300';
 };
 
+export const config = {
+    name: 'ram_usage_analyzer',
+    data_requirements: ['system:ram'],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_ram_analyzer',
+};
+
 export function RAMUsageAnalyzer() {
     const [stats, setStats] = useState<RAMStats>(() => Storage.getRAMStats());
     const [procMem, setProcMem] = useState<ProcessMemory>({ rss_bytes: 0, vm_bytes: 0 });

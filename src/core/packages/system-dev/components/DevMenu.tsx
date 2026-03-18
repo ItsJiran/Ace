@@ -2,6 +2,14 @@ import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Work
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 
+export const config = {
+    name: 'dev_menu',
+    data_requirements: ['system:overlay_state'],
+    emits_interactions: ['spawn_window', 'toggle_overlay_mode', 'toggle_debug_bg'],
+    listens_to: [],
+    react_behavior: 'dev_launcher_menu',
+};
+
 interface RuntimeRegistryDomains {
     windows?: Array<{
         id?: string;

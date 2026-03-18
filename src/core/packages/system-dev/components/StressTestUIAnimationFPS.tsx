@@ -12,6 +12,14 @@ type Dot = {
 
 const random = (min: number, max: number) => Math.random() * (max - min) + min;
 
+export const config = {
+    name: 'stress_test_ui_animation_fps',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_animation',
+};
+
 export function StressTestUIAnimationFPS() {
     const [isRunning, setIsRunning] = useState(false);
     const [dotCount, setDotCount] = useState(160);

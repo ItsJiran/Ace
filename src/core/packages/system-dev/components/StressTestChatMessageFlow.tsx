@@ -37,6 +37,14 @@ const makeAiMessage = (tokenCount: number) => {
 
 const makeUserMessage = () => USER_PROMPTS[randomInt(0, USER_PROMPTS.length - 1)];
 
+export const config = {
+    name: 'stress_test_chat_message_flow',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_chat',
+};
+
 export function StressTestChatMessageFlow() {
     const [isRunning, setIsRunning] = useState(false);
     const [fps, setFps] = useState(0);

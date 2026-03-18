@@ -1,5 +1,13 @@
 import type { WindowConfig } from '#/schemas/window';
 
+export const config = {
+    name: 'window_registry_list',
+    data_requirements: ['system:windows'],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_window_registry',
+};
+
 export function WindowRegistryList() {
     const windows = window.ACE.memory.use<Record<string, WindowConfig>>('system:windows') || {};
     const rows = Object.values(windows).sort((a, b) => b.z_index - a.z_index);

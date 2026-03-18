@@ -8,7 +8,7 @@ import { GlobalStateManager } from '#/services/globalStateManager';
 
 const DevFPSCounter = import.meta.env.DEV
   ? lazy(async () => {
-      const mod = await import('#/core/packages/system-dev/features/FPSCounter');
+      const mod = await import('#/core/packages/system-dev/components/FPSCounter');
       return { default: mod.FPSCounter };
     })
   : null;

@@ -7,6 +7,30 @@ import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
 import type { RegistryPackage } from '#/schemas/registry';
 
+export const registry = {
+    widgets: [{
+        widget_name: 'system_widget',
+        runtime_kind: 'ui_widget',
+        component_name: 'system_widget',
+        window_name: 'system_main_window',
+        launch_profile: {
+            surfaces: ['start_menu', 'command_palette'],
+            launch_order: 10,
+        },
+        window_profile: {
+            window_name: 'system_main_window',
+            restoration_strategy: 'restore_state',
+        },
+    }],
+    components: [{
+        name: 'system_widget',
+        data_requirements: ['system:config', 'system:keybinds', 'system:windows', 'system:install_requests'],
+        emits_interactions: ['open_window', 'close_window', 'lookup', 'execute_tool'],
+        listens_to: [],
+        react_behavior: 'system_center',
+    }],
+};
+
 type SystemTab = 'overview' | 'config' | 'keybinds' | 'registries' | 'install';
 
 type InstallRequest = {

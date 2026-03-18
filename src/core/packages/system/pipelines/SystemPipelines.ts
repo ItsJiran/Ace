@@ -1,3 +1,20 @@
+export const registry = {
+    pipelines: [
+        {
+            registry_type: 'pipeline',
+            pipeline_name: 'install_widget_package',
+            step_names: ['fetch_manifest', 'validate', 'install', 'register'],
+            cancellable: true,
+        },
+        {
+            registry_type: 'pipeline',
+            pipeline_name: 'install_tool_package',
+            step_names: ['fetch_manifest', 'validate', 'install', 'register'],
+            cancellable: true,
+        },
+    ]
+};
+
 /**
  * System package pipeline IDs placeholder.
  */

@@ -31,6 +31,14 @@ function buildPromptBarSequence(loop: boolean): AnimationSequence {
     };
 }
 
+export const config = {
+    name: 'stress_test_prompt_bar_real_window',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_prompt_bar_window',
+};
+
 export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string }) {
     const {
         animationState,

@@ -10,6 +10,14 @@ type PipelineRun = {
     error: string | null;
 };
 
+export const config = {
+    name: 'pipeline_registry_list',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_pipeline_registry',
+};
+
 export function PipelineRegistryList() {
     const runs = (useAceMemory<PipelineRun[]>('system:pipeline_registry') || []).slice().reverse();
 

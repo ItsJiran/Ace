@@ -5,16 +5,25 @@ import { useAceComponent } from '#/hooks/useAceComponent';
 import { useAceTask } from '#/hooks/useAceTask';
 import { useAceWindow } from '#/hooks/useAceWindow';
 
-import { EventEngine } from '#/services/eventEngine';
+import { EventBus as EventEngine } from '#/services/eventEngine';
 import { RegistryInputEngine } from '#/services/registryInputEngine';
 import { Storage } from '#/services/storageEngine';
 import type { EventPattern } from '#/schemas/events';
+import React from 'react';
+import ReactDOM from 'react-dom';
 
 // -----------------------------------------------------------------------------
 // Type Definitions for Guest API
 // -----------------------------------------------------------------------------
 
 export interface AceGuestAPI {
+    /**
+     * React Bridge
+     * 3rd party plugins should use this instead of bundling their own React.
+     */
+    react: typeof React;
+    reactDOM: typeof ReactDOM;
+
     /**
      * Configuration Bridge
      * Used by Bundler entries (main.ts) to define package capabilities.
@@ -67,6 +76,9 @@ export interface AceGuestAPI {
 // -----------------------------------------------------------------------------
 
 export const aceGuestBridge: AceGuestAPI = {
+    react: React,
+    reactDOM: ReactDOM,
+
     config: {
         defineRegistry: (registryMap) => {
             console.log('[ACE.config] defineRegistry called', registryMap);

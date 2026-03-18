@@ -21,6 +21,14 @@ const ANIMATION_DESC: Record<AnimationType, string> = {
 
 type BaseState = { x: number; y: number; width: number; height: number };
 
+export const config = {
+    name: 'stress_test_window_motion',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_window_motion',
+};
+
 export function StressTestWindowMotion({ windowUid }: { windowUid: string }) {
     const [isRunning, setIsRunning] = useState(false);
     const [fps, setFps] = useState(0);

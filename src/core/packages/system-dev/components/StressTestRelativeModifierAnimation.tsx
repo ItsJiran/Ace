@@ -3,6 +3,14 @@ import { useAceWindow } from '#/hooks/useAceWindow';
 
 type BaseTarget = { x: number; y: number; width: number; height: number };
 
+export const config = {
+    name: 'stress_test_relative_modifier_animation',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_relative_anim',
+};
+
 export function StressTestRelativeModifierAnimation({ windowUid }: { windowUid: string }) {
     const {
         updateConfig,

@@ -15,6 +15,14 @@ const PATTERN_DESC: Record<SwarmPattern, string> = {
     scatter_spring: 'Window bergerak spring acak + resize tiap frame — tests resize concurrent overhead.',
 };
 
+export const config = {
+    name: 'stress_test_window_swarm',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_window_swarm',
+};
+
 export function StressTestWindowSwarm({ windowUid: _controllerUid }: { windowUid: string }) {
     const [isRunning, setIsRunning] = useState(false);
     const [fps, setFps] = useState(0);

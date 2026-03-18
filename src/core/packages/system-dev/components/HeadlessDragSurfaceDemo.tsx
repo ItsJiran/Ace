@@ -2,6 +2,14 @@ interface HeadlessDragSurfaceDemoProps {
     windowUid: string;
 }
 
+export const config = {
+    name: 'headless_drag_surface_demo',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_drag_demo',
+};
+
 export function HeadlessDragSurfaceDemo({ windowUid }: HeadlessDragSurfaceDemoProps) {
     return (
         <div className="h-full w-full rounded-[28px] border border-cyan-400/30 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.28),_rgba(8,47,73,0.9)_42%,_rgba(5,10,20,0.98)_100%)] p-5 text-cyan-50 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">

@@ -40,6 +40,14 @@ function WatchedMemoryDisplay() {
     );
 }
 
+export const config = {
+    name: 'stress_test_ram_isolation',
+    data_requirements: [],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_stress_ram',
+};
+
 export function StressTestRAMIsolation() {
     // Animation state — runs fully in local RAF, no RAM involved.
     const [isAnimating, setIsAnimating] = useState(false);

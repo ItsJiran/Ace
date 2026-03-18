@@ -55,6 +55,14 @@ const MOCK_METADATA: Record<string, Partial<PackageManifest>> = {
     }
 };
 
+export const config = {
+    name: 'package_registry_view',
+    data_requirements: ['system:package_registry'],
+    emits_interactions: [],
+    listens_to: [],
+    react_behavior: 'dev_package_registry',
+};
+
 export function PackageRegistryView() {
     const [packages, setPackages] = useState<PackageManifest[]>([]);
     const [selectedPkg, setSelectedPkg] = useState<PackageManifest | null>(null);
