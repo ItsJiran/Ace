@@ -22,7 +22,7 @@ interface RuntimeRegistryDomains {
     }>;
 }
 
-export function DevMenu() {
+export function SystemDevConsole() {
     const overlayState = window.ACE.memory.use<GlobalOverlayState>('system:overlay_state');
     const registryDomains = window.ACE.memory.use<RuntimeRegistryDomains>('system:registry_domains');
 

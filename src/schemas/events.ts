@@ -22,7 +22,9 @@ export const Actions = [
     'send_terminal',
     'execute_tool',
     'run_shell',
-    'read_file'
+    'read_file',
+    'set_overlay_mode',
+    'debug_action'
 ] as const;
 
 // ----------------------------------------------------------------------

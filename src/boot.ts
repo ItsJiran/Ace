@@ -1,4 +1,5 @@
 import { BootupPipeline, type BootupContext } from '#/core/packages/system/pipelines/BootupPipeline';
+import { initACEBridge } from '#/services/bridge/aceGuestBridge';
 
 let bootPromise: Promise<void> | null = null;
 
@@ -14,9 +15,11 @@ export async function bootACE() {
 
     bootPromise = (async () => {
         console.group('🚀 ACE: Booting System...');
+        
+        // Initialize Guest Bridge immediately so early hooks can bind
+        initACEBridge();
 
-        const pipeline = new BootupPipeline();
-        const context: BootupContext = { startTime: Date.now() };
+        const pipeline = new BootupPipeline();        const context: BootupContext = { startTime: Date.now() };
 
         try {
             await pipeline.run(undefined, context);

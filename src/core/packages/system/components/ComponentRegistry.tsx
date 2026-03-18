@@ -4,6 +4,8 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 import { LoadingWidget } from '#/core/packages/system/components/LoadingWidget';
 import { SystemConsole } from '#/core/packages/system/components/SystemConsole';
 import { SystemWidget } from '#/core/packages/system/components/SystemWidget';
+import { SystemCenterWindow } from '#/core/packages/system/windows/SystemCenterWindow';
+import { SystemConsoleWindow } from '#/core/packages/system/windows/SystemConsoleWindow';
 
 type RegistryComponentProps = {
     windowUid: string;
@@ -100,13 +102,16 @@ const CORE_REGISTRY: Record<string, ComponentType<RegistryComponentProps>> = {
     'loading_widget': LoadingWidget,
     'system_console': SystemConsole,
     'system_widget': SystemWidget,
+    'system_center_window': SystemCenterWindow,
+    'system_console_window': SystemConsoleWindow,
 };
 
 const DEV_FALLBACK_REGISTRY: Record<string, ComponentType<RegistryComponentProps>> = import.meta.env.DEV
     ? {
-        'dev_menu': lazyComponentFromLoader(
-            () => import('#/core/packages/system-dev/components/DevMenu') as Promise<Record<string, unknown>>,
-            'dev_menu'
+        'dev_menu': lazy(() =>
+            import('#/core/packages/system-dev/components/SystemDevConsole').then((module) => ({
+                default: module.SystemDevConsole,
+            }))
         ),
     }
     : {};

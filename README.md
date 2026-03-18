@@ -20,6 +20,7 @@ Please read the **13 Architecture Pillars**:
 11. `.ai/11_widget_ecosystem_and_submission.md` - Widget (components + windows) and package ecosystem submission model.
 12. `.ai/12_multi_registry_contract.md` - Formal contracts for widget and cross-domain package ecosystem registries.
 13. `.ai/13_core_widget_design_language.md` - Core widget visual language for light/dark mode, component style, and motion tone.
+14. `.ai/14_host_guest_architecture.md` - Host-Guest Architecture, Inversion of Control, and the Plug-in Slot System.
 
 ---
 
@@ -97,16 +98,210 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 - [ ] **Native OS Tools**: Implement the actual Rust/TypeScript logic for core tools (Obsidian Reader, Shell Executor, File System).
 - [ ] **Context Builder Pipeline**: Implement the process-engine context-building pipeline to gather chat history and active screen context before sending prompts.
 
-### 📦 Phase 7: Package Ecosystem Runtime (NEW)
-*Goal: Make package ecosystem a first-class runtime model for core and user submissions.*
-- [ ] **Package-Only Submission Policy**: Enforce that user submissions must be one package identity (not individual registry submissions), while still allowing package contents to include only selected domains (for example tools-only or components-only).
-- [ ] **Global Namespace Enforcement**: Implement strict ID validation logic (e.g., `owner:domain:name:version`) to prevent collisions between core, default, and user submissions.
-- [ ] **Per-Domain Namespace Rule**: Require every executable/runtime entry inside a package (`tools`, `processes`, `pipelines`, `features`, `components`, `windows`) to use namespaced IDs and reject non-namespaced registrations.
-- [ ] **Package Manifest Loader**: Parse and validate package manifests across all scopes.
-- [ ] **Scoped Registry Merge Rules**: Implement deterministic merge (`core` -> `local` -> `config policy`) with explicit collision handling.
-- [ ] **Install Queue Execution Engine**: Convert System Widget install queue into executable install pipeline + process tracking.
+### 📦 Phase 7: Host-Guest Package Ecosystem (The Plugin Architecture)
+*Goal: Implement a strict Host-Guest architecture where the App (Host) controls the lifecycle, and Plugins (Guests) simply register capabilities via a secure Bridge.*
+
+#### Core Design Principles
+1. **Inversion of Control (IoC):**
+   - Plugins do *not* force themselves into the UI.
+   - Plugins *register* components/definitions.
+   - The Host decides *when* and *where* to render them based on user config and context.
+   - *Example:* A plugin registers "WeatherWidget". It does not call `render()`. The Host reads config, sees "WeatherWidget" is pinned, and renders it in a specific slot.
+
+2. **Host-Guest Architecture:**
+   - **The Host (Main App):** Compiled Tauri/React binary. Provides the "Sandbox", Global RAM, Event Bus, and Layout Engine.
+   - **The Guest (Plugin):** Raw JS/TS bundles living in the `~/.config/` folder. They rely entirely on Host APIs to function.
+   - **The Bridge:** A secured API layer allowing Guests to talk to Host capabilities (RAM, Events) without accessing internal logic.
+
+3. **Hierarchical Slot System:**
+   - Strict UI containment rules to prevent chaos.
+   - **Hierarchy: Widget ➔ Window ➔ Component**.
+   - A **Widget** defines the top-level unit/configuration.
+   - A **Window** is the shell owned by the Widget.
+   - A **Component** is the content rendered inside the Window.
+
+#### Implementation Plan: The Guest Bridge
+
+To expose app abilities (RAM, Events) to plugins without breaking IoC, we will implement a global `ACE_API` bridge injected at runtime.
+
+**1. The `ACE_GUEST_BRIDGE` (SDK)**
+The Host will expose a sealed global object or module shim `window.ACE` available to plugins:
+- `ACE.memory.use(key)`: Hook-compatible reader for Global RAM.
+- `ACE.events.emit(intent)`: Strictly typed event emitter (fire-and-forget).
+- **`ACE.hooks.use*(config)`**: JIT registration hooks (e.g., `useAceWindow`) that auto-generate unique IDs (e.g., `window_uid`) upon first invocation.
+- `ACE.registry.register(manifest)`: The only write-access allowed during boot.
+
+**Implementation Strategy: Raw Core vs. Bundled Plugins**
+
+To maintain a unified architecture without blocking progress on the SDK:
+
+1.  **Core App (Current Focus)**:
+    - Internal packages (`src/core/packages`) used for standard system widgets.
+    - Written in **Raw TypeScript**.
+    - **NOT Bundled** individually; they are compiled as part of the main `npm run build` process.
+    - **MUST** still use the `window.ACE` bridge pattern to prove the architecture works.
+
+2.  **User Plugins (Future)**:
+    - External packages (`~/.config/ace/packages`).
+    - Written in **TypeScript/JavaScript** by 3rd party developers.
+    - **MUST be Bundled** into a single `main.js` (plus `registry.json`) using a future SDK (`@ace/sdk`).
+    - The Host will load them via dynamic import.
+
+**Decision:** We defer the "Plugin Loader" and "SDK Build Step" until the Core App is stable. We focus ONLY on refactoring `src/core/packages` to use the Host-Guest pattern (dogfooding).
+
+#### Roadmap Tasks
+- [ ] **Define Guest API Contract**: Interface for `window.ACE` (Memory, Events, Registry).
+*A. The Widget Definition (`widget.ts`)*
+Defines the top-level composition.
+```typescript
+import { ACE } from 'ace-api'; // Mock/Shim for dev
+
+export const WeatherWidget = () => {
+  // 1. JIT Registration: "I am a widget, give me an ID"
+  const { widgetUid } = ACE.hooks.useAceWidget({
+    package: "weather",
+    name: "main",
+    default_visibility: "visible"
+  });
+
+  // 2. Window Connection: "I own a window, manage it"
+  const { windowUid } = ACE.hooks.useAceWindow({
+    parent_widget: widgetUid,
+    title: "Weather",
+    bounds: { width: 300, height: 200 }
+  });
+
+  // 3. Render the Root Component inside the Window Slot
+  return (
+    <AceWindowSlot uid={windowUid}>
+      <WeatherRootComponent />
+    </AceWindowSlot>
+  );
+};
+```
+
+*B. The Root Component (`components/Root.tsx`)*
+Pure React content. JIT Registration, Memory Creation, and Events.
+
+```typescript
+export const WeatherRootComponent = (props: { widgetUid: string }) => {
+  // 1. JIT Component Registration (Get unique ID)
+  const { componentUid } = ACE.hooks.useAceComponent({
+    name: "weather-display",
+    parent_widget: props.widgetUid
+  });
+
+  // 2. Local State ID Generation (Deterministic based on Component ID)
+  // "weather:state:<random_uuid>"
+  const [internalStateId] = useState(() => ACE.memory.createId("weather:state"));
+
+  // 3. READ: Subscribe to RAM (Global or Local)
+  const temperature = ACE.memory.use("weather:curr_temp"); // Shared global key
+  const viewState = ACE.memory.use(internalStateId, { mode: "detailed" }); // Private local key
+
+  // 4. WRITE: Emit Intent (IoC - ask Host to do work)
+  const refresh = () => {
+    // Write transient state to local RAM first
+    ACE.memory.write(internalStateId, { loading: true });
+
+    ACE.events.emit({
+      action: "execute_tool",
+      payload: { tool: "fetch_weather" },
+      // Tell the tool where to write the result
+      reply_to_memory: "weather:curr_temp"
+    });
+  };
+
+  return (
+    <div className="weather-card" data-uid={componentUid}>
+      <div className="header">
+        <h1>{temperature}°C</h1>
+        {viewState.loading && <Spinner />}
+      </div>
+      <button onClick={refresh}>Refresh</button>
+
+      {/* 5. Sub-Slot for plugins to extend this component */}
+      <AceComponentSlot name="weather.footer_actions" context={{ temp: temperature }} />
+    </div>
+  );
+};
+```
+
+**3. The Component Slot (`<AceSlot />`)**
+A Host component that acts as a boundary:
+- Error Boundaries: If a Guest crashes, the Slot turns red, but the Host stays alive.
+- Props Injection: The Host injects authorized context into the Guest via the Slot.
+
+**4. The "Registry-Less" Vision (Bundled SDK Goal)**
+*Goal: Automation. Developers write Code, not Config.*
+
+In the future SDK, the `registry.json` becomes minimal effectively removing the need to manually list every widget/window. The Bundler (or Runtime) detects your `useAce*` hooks and auto-registers your definitions.
+
+**The "Magic" Manifest**:
+```json
+// registry.json (Minimal definition only)
+{
+  "namespace": "user.jiran",
+  "package": "weather",
+  "version": "1.0.0",
+  "permissions": ["network", "storage"],
+  "entry": "dist/main.js"
+}
+```
+*No manual lists of widgets or windows required. They are inferred from the code.*
+
+*The "Magic" Flow*:
+1. Developer writes code using `ACE.hooks.useAceWidget(...)`.
+2. The SDK Bundler detects this call.
+3. The Bundler automatically injects the widget metadata into the Registration Payload (hidden from user).
+4. When `main.js` loads, it registers the capabilities without user friction.
+
+*Result:* Developer simply defines package metadata, and the rest is inferred.
+
+**5. Granular Unit Lifecycle (Lazy Loading)**
+*Goal: Load only what is needed. Don't run the whole package if the user only requested one specific tool.*
+
+We move away from monolithic "Package Launch" to **Granular Unit Activation**. The Host loads code lazily based on the specific capability requested.
+
+*A. Granular Activation Map (`main.ts`)*
+The Bundler scans this config to know *which file* to load for *which event*, without loading the whole bundle.
+
+```typescript
+ACE.config.defineRegistry({
+  // 1. Widget: Only loads React/UI code when user explicitly opens it
+  "weather-main": {
+    kind: "widget",
+    activation: { on_command: "weather.open" },
+    entry: "./ui/WeatherWidget.tsx"
+  },
+
+  // 2. Tool: Only loads the function when AI calls "get_forecast"
+  "fetch-forecast": {
+    kind: "tool",
+    activation: { on_tool_call: "weather.get_forecast" },
+    entry: "./tools/WeatherActions.ts"
+  },
+
+  // 3. Process: Runs automatically at boot (Background Service)
+  "sync-service": {
+    kind: "process",
+    activation: { on_lifecycle: "boot" },
+    entry: "./services/SyncPoller.ts"
+  }
+});
+```
+
+*B. The Efficiency Gain*
+- If the user only uses the **AI Tool** to ask "What's the weather?", the **UI Code** (`WeatherWidget.tsx` + React + CSS) is **NEVER loaded**.
+- If the user uses the **Widget**, the **Process** is loaded independently.
+- **Dependencies** are scoped per entry-point during bundling (Tree Shaking).
+
+#### Roadmap Tasks
+- [ ] **Define Guest API Contract**: Interface for `window.ACE` (Memory, Events, Registry).
+- [ ] **Build Plugin Loader**: Logic to scan, validate manifest, and `import()` JS bundles.
+- [ ] **Implement Slot System**: `<SafeComponentSlot />` wrapper with ErrorBoundaries.
+- [ ] **Core-as-Plugin Refactor**: Refactor internal "System Widgets" to use the exact same `ACE_API` as external plugins to prove dogfoods.
 - [ ] **Permission & Capability Review UI**: Add confirmation layer before enabling tool-capable packages.
-- [ ] **Versioned Package Upgrade Flow**: Add safe upgrade/rollback path with compatibility checks.
 
 ### 🪟 Hook Bridge Plan: `useAceWindow` + Runtime Integrations
 

@@ -1,8 +1,7 @@
-import { useAceMemory } from '#/hooks/useAceMemory';
 import type { WindowConfig } from '#/schemas/window';
 
 export function WindowRegistryList() {
-    const windows = useAceMemory<Record<string, WindowConfig>>('system:windows') || {};
+    const windows = window.ACE.memory.use<Record<string, WindowConfig>>('system:windows') || {};
     const rows = Object.values(windows).sort((a, b) => b.z_index - a.z_index);
 
     return (

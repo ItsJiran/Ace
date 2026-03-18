@@ -66,7 +66,18 @@ class WindowEngineSingleton {
              if (action === 'open_window') {
                 this.spawnWindow(payload as any);
             }
-             if (action === 'close_window') {
+             if (action === 'set_overlay_mode') {
+                const mode = payload.mode as 'ambient' | 'interactive';
+                if (mode) this.setOverlayMode(mode);
+            }
+
+            if (action === 'debug_action') {
+                 if (payload.action === 'toggle_debug_bg') {
+                     this.toggleDebugBg();
+                 }
+            }
+
+            if (action === 'close_window') {
                 // Determine target: Payload (External command) or Source (Self-close)
                 const targetUid = payload?.window_uid || interaction.source?.window_uid || interaction.window_uid;
                 if (targetUid) {
@@ -77,6 +88,8 @@ class WindowEngineSingleton {
 
         EventBus.registerProcessRoute('open_window', coreHandler);
         EventBus.registerProcessRoute('close_window', coreHandler);
+        EventBus.registerProcessRoute('set_overlay_mode', coreHandler);
+        EventBus.registerProcessRoute('debug_action', coreHandler);
 
         this.startCursorBridge();
         this.startAlwaysOnTopBridge();

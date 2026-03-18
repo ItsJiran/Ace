@@ -1,10 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { useAceMemory } from '#/hooks/useAceMemory';
 import { type LogEntry } from '#/services/loggerService';
 import { Terminal } from 'lucide-react';
 
 export const SystemConsole: React.FC = () => {
-    const logs = useAceMemory<LogEntry[]>('system:logs') || [];
+    const logs = window.ACE.memory.use<LogEntry[]>('system:logs') || [];
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {

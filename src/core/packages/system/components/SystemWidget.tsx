@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { WindowEngine } from '#/services/windowEngine';
-import { useAceMemory } from '#/hooks/useAceMemory';
 import { ToolRegistry } from '#/services/toolRegistry';
 import { useWidgetEngine } from '#/services/widgetEngine';
 import { ConfigEngine } from '#/services/configEngine';
-import { Storage } from '#/services/storageEngine';
 import type { ConfigItem } from '#/schemas/config';
 import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
@@ -42,10 +39,10 @@ export function SystemWidget() {
     const [toolNote, setToolNote] = useState('');
     const [shortcutDrafts, setShortcutDrafts] = useState<Record<string, string>>({});
 
-    const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
-    const keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
-    const windows = useAceMemory<Record<string, WindowConfig>>('system:windows') ?? {};
-    const installQueue = useAceMemory<InstallRequest[]>('system:install_requests') ?? [];
+    const configItems = window.ACE.memory.use<ConfigItem[]>('system:config') ?? [];
+    const keybinds = window.ACE.memory.use<Keybind[]>('system:keybinds') ?? [];
+    const windows = window.ACE.memory.use<Record<string, WindowConfig>>('system:windows') ?? {};
+    const installQueue = window.ACE.memory.use<InstallRequest[]>('system:install_requests') ?? [];
     const registeredWidgets = useWidgetEngine((state: WidgetEngineSnapshot) => state.registeredWidgets);
 
     useEffect(() => {
@@ -56,18 +53,6 @@ export function SystemWidget() {
         refresh();
         const id = window.setInterval(refresh, 1000);
         return () => window.clearInterval(id);
-    }, []);
-
-    useEffect(() => {
-        const current = Storage.readMemory('system:install_requests');
-        if (current === undefined) {
-            Storage.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: 'system:install_requests',
-                payload: [] as InstallRequest[],
-                classifications: ['system:core'],
-            });
-        }
     }, []);
 
     const configByCategory = useMemo(() => {
@@ -100,21 +85,11 @@ export function SystemWidget() {
             created_at: Date.now(),
         };
 
-        Storage.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:install_requests',
-            payload: [...installQueue, nextRequest],
-            classifications: ['system:core'],
-        });
+        window.ACE.memory.write('system:install_requests', [...installQueue, nextRequest]);
     };
 
     const removeInstallRequest = (id: string) => {
-        Storage.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:install_requests',
-            payload: installQueue.filter((item) => item.id !== id),
-            classifications: ['system:core'],
-        });
+        window.ACE.memory.write('system:install_requests', installQueue.filter((item) => item.id !== id));
     };
 
     const updateConfigValue = async (item: ConfigItem, rawValue: string | boolean) => {
@@ -197,10 +172,10 @@ export function SystemWidget() {
 
                             <SectionCard title="System Actions" subtitle="Jump to related system surfaces">
                                 <div className="grid grid-cols-1 gap-2">
-                                    <button data-window-action="true" onClick={() => WindowEngine.spawnWindow({ component_name: 'tools_registry_list', title: 'Tools Registry', x: 180, y: 120, width: 520, height: 380 })} className={buttonClass}>Open Tools Registry</button>
-                                    <button data-window-action="true" onClick={() => WindowEngine.spawnWindow({ component_name: 'window_registry_list', title: 'Window Registry', x: 240, y: 160, width: 520, height: 380 })} className={buttonClass}>Open Window Registry</button>
-                                    <button data-window-action="true" onClick={() => WindowEngine.spawnWindow({ component_name: 'process_monitor', title: 'Process Monitor', x: 300, y: 200, width: 560, height: 420 })} className={buttonClass}>Open Process Monitor</button>
-                                    <button data-window-action="true" onClick={() => WindowEngine.spawnWindow({ component_name: 'stress_test_menu', title: 'Stress Test Menu', x: 360, y: 100, width: 440, height: 340 })} className={buttonClass}>Open Stress Test Menu</button>
+                                    <button data-window-action="true" onClick={() => window.ACE.events.emit({ event_type: 'interaction', action: 'open_window', payload: { component_name: 'tools_registry_list', title: 'Tools Registry', x: 180, y: 120, width: 520, height: 380 } })} className={buttonClass}>Open Tools Registry</button>
+                                    <button data-window-action="true" onClick={() => window.ACE.events.emit({ event_type: 'interaction', action: 'open_window', payload: { component_name: 'window_registry_list', title: 'Window Registry', x: 240, y: 160, width: 520, height: 380 } })} className={buttonClass}>Open Window Registry</button>
+                                    <button data-window-action="true" onClick={() => window.ACE.events.emit({ event_type: 'interaction', action: 'open_window', payload: { component_name: 'process_monitor', title: 'Process Monitor', x: 300, y: 200, width: 560, height: 420 } })} className={buttonClass}>Open Process Monitor</button>
+                                    <button data-window-action="true" onClick={() => window.ACE.events.emit({ event_type: 'interaction', action: 'open_window', payload: { component_name: 'stress_test_menu', title: 'Stress Test Menu', x: 360, y: 100, width: 440, height: 340 } })} className={buttonClass}>Open Stress Test Menu</button>
                                 </div>
                             </SectionCard>
                         </div>

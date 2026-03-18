@@ -59,6 +59,20 @@ export function registerSystemPackageDomains() {
             listens_to: [],
             react_behavior: 'system_loading_state',
         },
+        {
+            name: 'system_center_window',
+            data_requirements: [],
+            emits_interactions: [],
+            listens_to: [],
+            react_behavior: 'window_shell',
+        },
+        {
+            name: 'system_console_window',
+            data_requirements: [],
+            emits_interactions: [],
+            listens_to: [],
+            react_behavior: 'window_shell',
+        },
     ]);
 
     useAceWindowRegistry.registry(PACKAGE_NAME, [
@@ -74,12 +88,32 @@ export function registerSystemPackageDomains() {
             capability_requirements: [],
             tags: [],
             window_name: 'system_main_window',
-            component_name: 'system_widget',
+            component_name: 'system_center_window',
             default_window_preset: {
-                component_name: 'system_widget',
-                width: 760,
-                height: 520,
+                component_name: 'system_center_window',
+                width: 980,
+                height: 700,
                 title: 'System Center',
+            },
+        },
+        {
+            id: 'window:itsjiran/ace-system:system_console:v1',
+            version: '1.0.0',
+            registry_type: 'window',
+            display_name: 'System Console',
+            owner_scope: 'core',
+            source_scope: 'core',
+            is_enabled: true,
+            dependency_refs: [],
+            capability_requirements: [],
+            tags: ['debug', 'console'],
+            window_name: 'system_console_window',
+            component_name: 'system_console_window',
+            default_window_preset: {
+                component_name: 'system_console_window',
+                width: 620,
+                height: 400,
+                title: 'System Console',
             },
         },
     ]);
