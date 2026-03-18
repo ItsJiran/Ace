@@ -63,15 +63,24 @@ Your package does not ship its own React or Core Logic. instead, it consumes the
    }]);
    ```
 
-4. **Manifest (`registry.json`)**:
-   Create a `registry.json` in your root.
-   
-   ```json
-   {
-     "package_name": "my-package",
-     "entry_point": "dist/index.js",
-     "owner_scope": "user",
-     "description": "My awesome plugin"
+4. **Entry Manifest (`src/entry.ts`)**:
+   Declare package identity in code and register through `window.ACE.registry`.
+
+   ```ts
+   const ACE = (window as any).ACE;
+
+   export const manifest = {
+     namespace: 'my-org/my-package',
+     package_name: 'my-org/my-package',
+     version: '1.0.0',
+     owner_scope: 'user',
+     source_scope: 'local',
+     display_name: 'My Package'
+   };
+
+   export default function bootstrap() {
+     ACE.registry.registerPackage(manifest);
+     ACE.registry.add(manifest.package_name, 'widgets', [{ widget_name: 'my_widget' }]);
    }
    ```
 
@@ -87,4 +96,4 @@ Your package does not ship its own React or Core Logic. instead, it consumes the
 - **ACE.reactDOM**: The host's ReactDOM instance.
 - **ACE.memory**: Hooks and functions to interact with the Global RAM.
 - **ACE.events**: Emit events to the system bus.
-- **ACE.registry**: Register components, tools, and widgets.
+- **ACE.registry**: Register package manifest and domain entries (`registerPackage`, `registerPackageModules`, `add`).

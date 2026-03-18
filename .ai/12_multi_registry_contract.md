@@ -101,9 +101,9 @@ ACE should maintain three mirrored scopes:
 ```text
 src/core/packages/
 ├── system/
-│   └── registry.json
+│   └── entry.ts
 └── system-dev/
-	└── registry.json
+	└── entry.ts
 ```
 
 Purpose:
@@ -113,7 +113,7 @@ non-removable built-in widgets and registry-owned defaults shipped by ACE.
 
 ```text
 ~/.config/com.ace.assistant/packages/
-└── <owner>/<package>/registry.json
+└── <owner>/<package>/dist/index.js
 ```
 
 Purpose:

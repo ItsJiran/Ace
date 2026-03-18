@@ -62,8 +62,10 @@ interface AceGuestAPI {
         useAceWindow: (windowUid: string) => UseAceWindowResult;
     };
 
-    // 4. Registration — boot-time only, called by CorePackageLoader
+    // 4. Registration — boot-time only, called by CorePackageLoader / package entry
     registry: {
+        registerPackage: (manifest: unknown) => unknown;
+        registerPackageModules: (packageName: string, modules: Record<string, unknown>) => void;
         add: (packageName: string, domain: string, items: unknown[]) => void;
     };
 }
@@ -77,9 +79,9 @@ interface AceGuestAPI {
 
 Core packages (in `src/core/packages/`) use a source-level self-registering pattern:
 
-1. Each domain file exports `const registry` with its identity.
-2. `CorePackageLoader` scans all files via `import.meta.glob` at build time.
-3. Discovered `registry` exports are automatically fed into `RegistryEngine.registerPackage()`.
+1. Each package exposes `entry.ts` with `export const manifest` and `export default registerPackage(...)`.
+2. `CorePackageLoader` loads each package `entry.ts`, registers manifest via `window.ACE.registry.registerPackage(...)`.
+3. Entry bootstrap calls `window.ACE.registry.registerPackageModules(packageName, modules)` to register all domain files.
 
 This means **no manual wiring** — adding a file to the right folder is enough.
 
@@ -107,15 +109,14 @@ User-installed packages that are bundled as a single JS file use a different pat
 ```text
 ~/.config/com.ace.assistant/packages/
 └── <owner>/<package>/
-    ├── registry.json     ← Package identity + entry_point path
-    └── dist/index.js     ← Bundled entry (references window.ACE, not internal imports)
+    └── dist/index.js     ← Bundled entry (exports manifest/bootstrap, references window.ACE)
 ```
 
 **Loading sequence:**
-1. **Discovery** — `RegistryEngine` scans `registry.json` files in AppConfig.
-2. **Validation** — Schema check + permission/capability gate.
+1. **Discovery** — `RegistryEngine` discovers package entry bundles in AppConfig.
+2. **Validation** — Bundle signature/manifest shape is validated.
 3. **Import** — Host calls `convertFileSrc()` + dynamic `import(assetUrl)`.
-4. **Registration** — Bundle calls `window.ACE.registry.add(...)` to declare its domains.
+4. **Registration** — Bundle calls `window.ACE.registry.registerPackage(...)` then registers domains via `window.ACE.registry.registerPackageModules(...)` (or `add(...)` manually).
 5. **Lock** — Registry is frozen after boot. No late registrations.
 
 External bundles must use `window.ACE.react` (Host-provided React) instead of bundling their own React.
@@ -148,7 +149,7 @@ const AceWindow = ({ windowConfig }) => {
 
 ## Security Considerations
 
-1. **Capability Declaration** — Packages declare required capabilities in `registry.json`. `events.emit()` checks permissions before routing.
+1. **Capability Declaration** — Packages declare required capabilities in entry manifest. `events.emit()` checks permissions before routing.
 2. **No Internal Imports** — External bundle packages cannot import from `#/services/*` or `#/schemas/*`. Only `window.ACE` is accessible.
 3. **Registry Lock** — After boot, `RegistryEngine` rejects any new `registry.add()` calls. Prevents runtime injection attacks.
 4. **Error Isolation** — Each window is wrapped in an `ErrorBoundary`. A crashing package cannot take down the whole app.

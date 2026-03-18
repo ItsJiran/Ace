@@ -1,8 +1,0 @@
-{
-  "namespace": "itsjiran/ace-system",
-  "package_name": "itsjiran/ace-system",
-  "owner_scope": "core",
-  "source_scope": "core",
-  "display_name": "ACE System Package",
-  "file_location": "src/core/packages/system"
-}

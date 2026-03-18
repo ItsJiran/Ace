@@ -6,7 +6,7 @@ This is a minimal ACE package example. Use it as a starting point for building y
 
 ```
 example-package/
-└── registry.json    ← The only required file for ACE to recognize a package
+└── entry.ts         ← The only required file for ACE to recognize a package
 ```
 
 ## Window Integration Pattern (New)
@@ -15,7 +15,7 @@ ACE now uses a Host-Guest architecture (the `window.ACE` bridge) for runtime int
 
 - **Use the global bridge** `window.ACE.react` (do not bundle React).
 - **Use the global bridge** `window.ACE.hooks` to access hooks.
-- **Entry Points**: Use the `entry_point` field in `registry.json` if you are distributing a bundled plugin.
+- **Entry Points**: Export `manifest` + default bootstrap function in `entry.ts` (or bundled `dist/index.js`).
 
 Minimal idea:
 
@@ -59,7 +59,7 @@ Animation bridge is available directly from the same hook:
 - `window.cancelAnimation()`
 - `window.retargetAnimation(anchor)`
 
-## registry.json fields
+## `entry.ts` manifest fields
 
 | Field | Required | Description |
 |-------|----------|-------------|

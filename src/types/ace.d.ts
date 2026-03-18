@@ -23,6 +23,8 @@ declare global {
             };
             registry: {
                 add: (packageName: string, domain: string, items: any[]) => void;
+                registerPackage: (manifest: unknown) => unknown;
+                registerPackageModules: (packageName: string, modules: Record<string, unknown>) => void;
             };
         };
     }

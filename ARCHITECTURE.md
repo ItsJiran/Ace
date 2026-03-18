@@ -43,9 +43,9 @@ The execution backend.
 ## Package Runtime Model
 
 - Core packages live in `src/core/packages/` and ship with the app.
-- User packages are installed to AppConfig `packages/<owner>/<package>/registry.json`.
-- `registryEngine` loads core package manifests first, then installed user packages from AppConfig.
-- `CorePackageLoader` automatically scans `src/core/packages` to build the runtime registry from `export const registry` declarations.
+- Core package identity is declared in `entry.ts` (`export const manifest`) and domain entries are registered through `window.ACE.registry`.
+- User packages are installed to AppConfig `packages/<owner>/<package>/` and should expose one package entry bundle that registers its manifest + domains through `window.ACE.registry`.
+- `registryEngine` is the source of truth for package/domain listings; `CorePackageLoader` executes package `entry.ts` files and delegates registration through the bridge.
 
 ## 6. Core Package Architecture (Distributed Registry)
 
@@ -64,10 +64,12 @@ Each package is organized into domain-specific folders:
 export const registry = {
     widget_name: 'my_widget',
     entry_id: 'my_widget_main',
-    runtime_kind: 'ui_widget',
+};
+
+export default {
+    component_name: 'my_widget_window',
     launch_profile: { surfaces: ['start_menu'] },
-    component_name: 'my_widget_window', // Points to the window wrapper
-    window_profile: { ... }
+    window_profile: { /* optional preset */ },
 };
 ```
 
@@ -77,7 +79,7 @@ export const registry = {
     name: 'my_widget_ui',
     react_behavior: 'my_widget_behavior',
 };
-export const MyWidget = () => { ... };
+export default function MyWidget() { ... }
 ```
 
 **Window Wrapper (`src/core/packages/system/windows/MyWidgetWindow.tsx`)**:
@@ -87,13 +89,13 @@ export const registry = {
     name: 'my_widget_window',
     react_behavior: 'window_shell',
 };
-export const MyWidgetWindow = ({ windowUid }) => {
+export default function MyWidgetWindow({ windowUid }) {
     useAceWindow(windowUid);
     return <MyWidget />;
-};
+}
 ```
 
-**Isolated Dependencies / Plugins**: External packages can provide a bundled `dist/index.js` entry point referenced in `registry.json`. This bundle should use `window.ACE.react` instead of shipping its own React.
+**Isolated Dependencies / Plugins**: External packages should provide a single entry bundle (for example `dist/index.js`) that calls `window.ACE.registry.registerPackage(...)` and `window.ACE.registry.add(...)` at boot. The bundle should use `window.ACE.react` instead of shipping its own React.
 
 ```mermaid
 graph TD

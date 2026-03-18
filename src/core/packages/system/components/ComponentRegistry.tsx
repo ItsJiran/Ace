@@ -1,12 +1,6 @@
 import { Suspense, lazy, useMemo } from 'react';
 import type { ComponentType } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
-import { LoadingWidget } from '#/core/packages/system/components/LoadingWidget';
-import { SystemConsole } from '#/core/packages/system/components/SystemConsole';
-import { SystemWidget } from '#/core/packages/system/components/SystemWidget';
-import { SystemCenterWindow } from '#/core/packages/system/windows/SystemCenterWindow';
-import { SystemConsoleWindow } from '#/core/packages/system/windows/SystemConsoleWindow';
-import { DockBarWindow } from '#/core/packages/system/windows/DockBarWindow';
 
 type RegistryComponentProps = {
     windowUid: string;
@@ -99,25 +93,6 @@ function lazyComponentFromLoader(
     };
 }
 
-const CORE_REGISTRY: Record<string, ComponentType<RegistryComponentProps>> = {
-    'loading_widget': LoadingWidget,
-    'system_console': SystemConsole,
-    'system_widget': SystemWidget,
-    'system_center_window': SystemCenterWindow,
-    'system_console_window': SystemConsoleWindow,
-    'dock_bar_window': DockBarWindow,
-};
-
-const DEV_FALLBACK_REGISTRY: Record<string, ComponentType<RegistryComponentProps>> = import.meta.env.DEV
-    ? {
-        'dev_menu': lazy(() =>
-            import('#/core/packages/system-dev/components/SystemDevConsole').then((module) => ({
-                default: module.SystemDevConsole,
-            }))
-        ),
-    }
-    : {};
-
 interface RegistryProps {
     componentName: string;
     windowUid: string;
@@ -139,7 +114,7 @@ export function ComponentRegistry({ componentName, windowUid, payloadMemoryUid }
 
         for (const component of domains?.components ?? []) {
             const componentNameKey = component.name;
-            if (!componentNameKey || CORE_REGISTRY[componentNameKey]) continue;
+            if (!componentNameKey) continue;
 
             const fileLocation = packagePathByName.get((component as { package_name?: string }).package_name ?? '');
             if (!fileLocation || !fileLocation.startsWith('src/')) continue;
@@ -165,9 +140,7 @@ export function ComponentRegistry({ componentName, windowUid, payloadMemoryUid }
         }
 
         return {
-            ...CORE_REGISTRY,
             ...dynamicRegistry,
-            ...DEV_FALLBACK_REGISTRY,
         };
     }, [domains, packageSummaries]);
 
@@ -178,7 +151,7 @@ export function ComponentRegistry({ componentName, windowUid, payloadMemoryUid }
             <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
                 <p>Unregistered Component Schema:</p>
                 <span className="text-red-400 font-bold mt-1 text-sm">{componentName}</span>
-                <p className="mt-4 text-zinc-600">Please register this name in src/core/packages/system/components/ComponentRegistry.tsx</p>
+                <p className="mt-4 text-zinc-600">Ensure this component is declared in package registry and loaded by RegistryEngine.</p>
             </div>
         );
     }
@@ -186,4 +159,4 @@ export function ComponentRegistry({ componentName, windowUid, payloadMemoryUid }
     return <Component windowUid={windowUid} payloadMemoryUid={payloadMemoryUid} />;
 }
 
-export const COMPONENT_CATALOG = Object.keys(CORE_REGISTRY);
+export const COMPONENT_CATALOG: string[] = [];

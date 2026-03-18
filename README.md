@@ -176,7 +176,7 @@ To maintain a unified architecture without blocking progress on the SDK:
 2.  **User Plugins (Future)**:
     - External packages (`~/.config/ace/packages`).
     - Written in **TypeScript/JavaScript** by 3rd party developers.
-    - **MUST be Bundled** into a single `main.js` (plus `registry.json`) using a future SDK (`@ace/sdk`).
+    - **MUST be Bundled** into a single `main.js` (with embedded manifest/bootstrap) using a future SDK (`@ace/sdk`).
     - The Host will load them via dynamic import.
 
 **Decision:** We defer the "Plugin Loader" and "SDK Build Step" until the Core App is stable. We focus ONLY on refactoring `src/core/packages` to use the Host-Guest pattern (dogfooding).
@@ -267,17 +267,20 @@ A Host component that acts as a boundary:
 **4. The "Registry-Less" Vision (Bundled SDK Goal)**
 *Goal: Automation. Developers write Code, not Config.*
 
-In the future SDK, the `registry.json` becomes minimal effectively removing the need to manually list every widget/window. The Bundler (or Runtime) detects your `useAce*` hooks and auto-registers your definitions.
+In the future SDK, `entry.ts` manifest stays minimal while domain registration is inferred and auto-wired. The Bundler (or Runtime) detects your `useAce*` hooks and auto-registers your definitions.
 
 **The "Magic" Manifest**:
-```json
-// registry.json (Minimal definition only)
-{
-  "namespace": "user.jiran",
-  "package": "weather",
-  "version": "1.0.0",
-  "permissions": ["network", "storage"],
-  "entry": "dist/main.js"
+```ts
+// entry.ts (Minimal manifest + bootstrap)
+export const manifest = {
+  namespace: 'user.jiran/weather',
+  package_name: 'user.jiran/weather',
+  version: '1.0.0',
+  permissions: ['network', 'storage']
+};
+
+export default function bootstrap() {
+  window.ACE.registry.registerPackage(manifest);
 }
 ```
 *No manual lists of widgets or windows required. They are inferred from the code.*
@@ -459,11 +462,11 @@ Direction decision:
 #### 3) Manifest Optionality and Hook-Generated Entries
 
 - [ ] Define which registry fields can be generated from hook metadata so package authors do not repeatedly redefine full JSON blocks.
-- [ ] Keep `registry.json` as package identity + policy layer, while per-domain runtime entries can be declared via hooks.
+- [ ] Keep `entry.ts` manifest as package identity + policy layer, while per-domain runtime entries can be declared via hooks.
 - [ ] Define merge behavior between manifest-declared entries and hook-declared entries.
 
 Current direction (adopted):
-- `registry.json` is now package identity first (namespace, package_name, owner/source scope, display label).
+- `entry.ts` manifest is now package identity first (namespace, package_name, owner/source scope, display label).
 - Domain registrations are provided through per-domain registry input hooks.
 - Runtime aggregates all domain inputs first, then exposes diagnostics for missing/incomplete domains.
 

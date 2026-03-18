@@ -1,11 +1,8 @@
 import { FSEngine } from './fsEngine';
 import { Storage } from './storageEngine';
-import { useWidgetEngine } from './widgetEngine';
 import { RegistryInputEngine } from './registryInputEngine';
 import { CorePackageLoader } from './corePackageLoader';
 import { RegistryPackageSchema, type RegistryPackage } from '#/schemas/registry';
-import CoreSystemRegistryJson from '#/core/packages/system/registry.json';
-import SystemDevRegistryJson from '#/core/packages/system-dev/registry.json';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 interface PackageSummary {
@@ -49,6 +46,9 @@ interface WidgetEntrySummary {
     };
 }
 
+type RegistryDomainPlural = 'widgets' | 'components' | 'windows' | 'tools' | 'features' | 'processes' | 'pipelines';
+type EntryModuleMap = Record<string, unknown>;
+
 class RegistryEngineSingleton {
     private readonly PACKAGES_DIR = 'packages';
     private readonly REGISTRY_FILE = 'registry.json';
@@ -66,12 +66,6 @@ class RegistryEngineSingleton {
         // Register domain payloads via auto-discovery
         CorePackageLoader.load();
 
-        this.registerPackage(CoreSystemRegistryJson);
-
-        if (import.meta.env.DEV) {
-            this.registerPackage(SystemDevRegistryJson);
-        }
-
         await this.loadInstalledPackages();
         this.publishToRAM();
 
@@ -83,41 +77,76 @@ class RegistryEngineSingleton {
         return Array.from(this.packages.values());
     }
 
+    /**
+     * Register package domain entries from an eager import map (e.g. import.meta.glob(..., { eager: true })).
+     * This centralizes package entry logic so each package entry.ts stays minimal.
+     */
+    registerPackageDomainsFromModules(packageName: string, modules: EntryModuleMap) {
+        const aggregated: Record<RegistryDomainPlural, unknown[]> = {
+            widgets: [],
+            components: [],
+            windows: [],
+            tools: [],
+            features: [],
+            processes: [],
+            pipelines: [],
+        };
+
+        const inferDomainFromPath = (path: string): RegistryDomainPlural | null => {
+            const match = path.match(/^\.\/([^/]+)\//);
+            if (!match) return null;
+
+            const domain = match[1] as RegistryDomainPlural;
+            if (
+                domain === 'widgets'
+                || domain === 'components'
+                || domain === 'windows'
+                || domain === 'tools'
+                || domain === 'features'
+                || domain === 'processes'
+                || domain === 'pipelines'
+            ) {
+                return domain;
+            }
+
+            return null;
+        };
+
+        for (const [path, moduleValue] of Object.entries(modules)) {
+            const domain = inferDomainFromPath(path);
+            if (!domain) continue;
+
+            const mod = moduleValue as Record<string, unknown>;
+            const registry = mod.registry;
+            if (!registry || typeof registry !== 'object' || Array.isArray(registry)) continue;
+
+            const defaultExport = mod.default;
+            const defaultIsPlainObject =
+                defaultExport !== null
+                && typeof defaultExport === 'object'
+                && !Array.isArray(defaultExport)
+                && typeof defaultExport !== 'function';
+
+            const entry = defaultIsPlainObject
+                ? { ...(registry as Record<string, unknown>), ...(defaultExport as Record<string, unknown>) }
+                : registry;
+
+            aggregated[domain].push(entry);
+        }
+
+        (Object.entries(aggregated) as Array<[RegistryDomainPlural, unknown[]]>).forEach(([domain, items]) => {
+            if (items.length > 0) {
+                RegistryInputEngine.registerDomain(packageName, domain as any, items);
+            }
+        });
+    }
+
     registerPackage(rawPkg: unknown) {
         const normalized = this.normalizePackageManifest(rawPkg);
         const pkg = RegistryPackageSchema.parse(normalized);
         this.enforceNamespace(pkg);
 
         this.packages.set(pkg.package_name, pkg);
-
-        // Bridge existing WidgetEngine so current diagnostics keep working.
-        if (pkg.widgets.length > 0 && pkg.components.length > 0 && pkg.windows.length > 0) {
-            try {
-                useWidgetEngine.getState().registerWidget(pkg.package_name, {
-                    namespace: pkg.namespace,
-                    package_name: pkg.package_name,
-                    version: pkg.version,
-                    repository_path: pkg.repository_path,
-                    file_location: pkg.file_location,
-                    author: pkg.author,
-                    owner_scope: pkg.owner_scope,
-                    source_scope: pkg.source_scope,
-                    display_name: pkg.display_name,
-                    widgets: pkg.widgets,
-                    components: pkg.components,
-                    windows: pkg.windows,
-                    tools: pkg.tools,
-                    features: pkg.features,
-                    processes: pkg.processes,
-                    pipelines: pkg.pipelines,
-                    registries: pkg.registries,
-                    dependency_refs: pkg.dependency_refs,
-                    capability_requirements: pkg.capability_requirements,
-                });
-            } catch (error) {
-                console.warn(`[RegistryEngine] WidgetEngine bridge skipped for ${pkg.package_name}:`, error);
-            }
-        }
 
         return pkg;
     }
@@ -408,15 +437,27 @@ class RegistryEngineSingleton {
             }
         };
 
-        pkg.windows.forEach((entry) => check(entry.id, 'window'));
+        pkg.windows.forEach((entry) => {
+            if (entry.id) check(entry.id, 'window');
+        });
         pkg.widgets.forEach((entry) => {
             if (entry.entry_id) check(entry.entry_id, 'widget');
         });
-        pkg.tools.forEach((entry) => check(entry.id, 'tool'));
-        pkg.features.forEach((entry) => check(entry.id, 'feature'));
-        pkg.processes.forEach((entry) => check(entry.id, 'process'));
-        pkg.pipelines.forEach((entry) => check(entry.id, 'pipeline'));
-        pkg.registries.forEach((entry) => check(entry.id, 'registry'));
+        pkg.tools.forEach((entry) => {
+            if (entry.id) check(entry.id, 'tool');
+        });
+        pkg.features.forEach((entry) => {
+            if (entry.id) check(entry.id, 'feature');
+        });
+        pkg.processes.forEach((entry) => {
+            if (entry.id) check(entry.id, 'process');
+        });
+        pkg.pipelines.forEach((entry) => {
+            if (entry.id) check(entry.id, 'pipeline');
+        });
+        pkg.registries.forEach((entry) => {
+            if (entry.id) check(entry.id, 'registry');
+        });
     }
 
     private publishToRAM() {

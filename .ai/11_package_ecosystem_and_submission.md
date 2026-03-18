@@ -7,13 +7,13 @@ This document formalizes how ACE treats packages as first-class modular products
 - **Widget** — UI entry point identity. Tells the system *what* to show and *when* (Start Menu, auto-start, etc). Has no window/launch config in its `registry` — those are handled separately by Window and the launcher configuration.
 - **Component** — Pure React UI rendered inside a window. Owns its own visual logic. Does not manage window state.
 - **Window** — Shell wrapper that binds a component to the window lifecycle (`useAceWindow`). One per spawnable window type.
-- **Package** — The unit of submission. A folder with `registry.json` + domain files. Can contain any combination of domains.
+- **Package** — The unit of submission. A folder with `entry.ts` + domain files. Can contain any combination of domains.
 - **Package Ecosystem** — A package that includes multiple domains (`tools`, `components`, `windows`, `pipelines`, `features`, `processes`). The full cross-domain wrapper.
 
 ## Core Principles
 
 1. **Self-Registering Files**: Every domain file declares its own identity via `export const registry`. No central wiring needed.
-2. **Auto-Discovery**: `CorePackageLoader` scans all files at boot via `import.meta.glob`. Files that export `registry` are automatically registered.
+2. **Entry-Driven Auto-Discovery**: `CorePackageLoader` loads each package `entry.ts` at boot. The entry then registers domain files via `window.ACE.registry.registerPackageModules(...)`.
 3. **Local-First Safety**: Package execution must respect ACE permission and validation gates.
 4. **Registry-Driven Runtime**: All domains become active only after passing registration schema validation.
 5. **Isolation by Default**: Package state and outputs must be addressable by deterministic IDs.
@@ -25,7 +25,7 @@ All packages — both core and user — follow the same directory structure. Eac
 
 ```text
 <package-root>/
-├── registry.json       ← Package identity manifest (no domain items)
+├── entry.ts            ← Package manifest + registration bootstrap
 ├── widgets/            ← Widget entry point declarations (UI or headless)
 ├── windows/            ← Window shell wrappers (useAceWindow)
 ├── components/         ← Pure React UI content
@@ -42,7 +42,7 @@ Shipped with the app. Not user-removable.
 ```text
 src/core/packages/
 ├── system/
-│   ├── registry.json
+│   ├── entry.ts
 │   ├── widgets/
 │   ├── windows/
 │   ├── components/
@@ -51,7 +51,7 @@ src/core/packages/
 │   ├── processes/
 │   └── pipelines/
 └── system-dev/
-    ├── registry.json
+    ├── entry.ts
     ├── widgets/
     ├── windows/
     └── components/
@@ -65,7 +65,7 @@ Discovered from AppConfig at boot. Treated as untrusted until validated.
 ~/.config/com.ace.assistant/packages/
 └── <owner>/
     └── <package>/
-        ├── registry.json
+        ├── dist/index.js      ← package entry bundle (or src/entry.ts before bundling)
         ├── widgets/
         ├── components/
         └── ...
@@ -73,7 +73,7 @@ Discovered from AppConfig at boot. Treated as untrusted until validated.
 
 ## Package Contract
 
-Every package must have a `registry.json` with these fields:
+Every package must expose a manifest in `entry.ts` (or bundled entry) with these fields:
 
 **Required:**
 - `namespace` (e.g. `jiran/notepad`)
@@ -87,7 +87,7 @@ Every package must have a `registry.json` with these fields:
 - `file_location`
 - `entry_point` (for bundled single-file packages)
 
-Domain items (`widgets`, `components`, `tools`, etc.) are **not** declared in `registry.json`. They are auto-discovered from the folder structure.
+Domain items (`widgets`, `components`, `tools`, etc.) are not declared in the manifest. They are auto-discovered and registered from domain files by calling `window.ACE.registry.registerPackageModules(...)`.
 
 ## Self-Registering File Pattern
 
@@ -96,7 +96,7 @@ Every domain file exports two things:
 1. `export const registry` — minimal identity declaration, typed via `AceRegistryType`
 2. `export default` — the main callable (React component, async function, class, etc.)
 
-`CorePackageLoader` discovers both exports at boot. `registry` determines what to register. `default` is what gets called or rendered.
+At boot, package entry bootstrap discovers both exports. `registry` determines what to register. `default` is what gets called or rendered.
 
 ```typescript
 import type { AceRegistryType } from '#/schemas/registryTypes';
@@ -138,20 +138,20 @@ Files only need to declare a short `entry_id` or `tool_name`. The full namespace
 
 ## Submission Lifecycle
 
-1. **Discover** — User provides a package folder or bundle with `registry.json`.
+1. **Discover** — User provides a package folder or bundle with `entry.ts` (or built entry bundle).
 2. **Validate** — ACE validates schema, declared capabilities, and permission requirements.
-3. **Register** — `CorePackageLoader` / `RegistryEngine` scans domain files and inserts entries into runtime registry.
+3. **Register** — `CorePackageLoader` executes package entry, entry calls registry APIs, and `RegistryEngine` inserts entries into runtime registry.
 4. **Activate** — Package domains are live. Widgets appear in launcher, tools callable by AI, windows spawnable.
 5. **Observe** — Process runs are trackable via ProcessEngine. RAM subscriptions reflect state.
 6. **Revoke** — Package disabled/uninstalled. Registry entries removed. No core code change required.
 
 ## Security and Governance
 
-1. **Capability Declaration Required** — Packages must explicitly declare required tools/events in `registry.json`. No implicit privileges.
+1. **Capability Declaration Required** — Packages must explicitly declare required tools/events in their entry manifest. No implicit privileges.
 2. **Permission Gate** — Dangerous capabilities (filesystem, network) require explicit user consent.
 3. **Boundary Enforcement** — Packages communicate via `window.ACE` bridge only. No direct mutation of engine internals.
 4. **Versioned Compatibility** — Breaking changes use versioned IDs. Old consumers continue to work until explicitly migrated.
-5. **Package Identity Clarity** — One `registry.json` per package folder. No ambiguous multi-package bundles.
+5. **Package Identity Clarity** — One `entry.ts` manifest per package folder. No ambiguous multi-package bundles.
 
 ## Runtime Behavior Model
 
@@ -178,7 +178,7 @@ Each domain file follows two rules:
 1. `export const registry` — minimal identity declaration, typed via `AceRegistryType`
 2. `export default` — **the main callable** for that domain. Can be: a React component, a plain function, an async function, or a config object.
 
-`CorePackageLoader` auto-discovers both exports at boot via `import.meta.glob`.  
+Package entry bootstrap auto-discovers both exports at boot via `import.meta.glob`.  
 `registry` determines *what* to register. `default` is *what gets called/rendered*.
 
 ```typescript
@@ -187,19 +187,28 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 ---
 
-### `registry.json` — Package Identity Manifest
+### `entry.ts` — Package Manifest + Bootstrap
 
-One per package folder. Contains only package-level metadata. No domain items.
+One per package folder. Contains package-level metadata and registration bootstrap.
 
-```json
-{
-  "namespace": "jiran/notepad",
-  "package_name": "jiran/notepad",
-  "version": "1.0.0",
-  "owner_scope": "user",
-  "source_scope": "local",
-  "display_name": "Notepad Package",
-  "file_location": "src/core/packages/notepad"
+```ts
+export const manifest = {
+  namespace: 'jiran/notepad',
+  package_name: 'jiran/notepad',
+  version: '1.0.0',
+  owner_scope: 'user',
+  source_scope: 'local',
+  display_name: 'Notepad Package',
+  file_location: 'src/core/packages/notepad',
+};
+
+const modules = import.meta.glob('./{widgets,components,windows,tools,features,processes,pipelines}/*.{ts,tsx}', {
+  eager: true,
+});
+
+export default function registerPackage({ packageName }: { packageName: string }) {
+  window.ACE.registry.registerPackage(manifest);
+  window.ACE.registry.registerPackageModules(packageName, modules);
 }
 ```
 

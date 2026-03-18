@@ -1,12 +1,10 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useState } from 'react';
 import { ToolEngine } from '#/services/toolEngine';
-import { useWidgetEngine } from '#/services/widgetEngine';
 import { ConfigEngine } from '#/services/configEngine';
 import type { ConfigItem } from '#/schemas/config';
 import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
-import type { RegistryPackage } from '#/schemas/registry';
 
 export const registry: AceRegistryType.Component = {
     name: 'system_widget',
@@ -25,8 +23,15 @@ type InstallRequest = {
     created_at: number;
 };
 
-type WidgetEngineSnapshot = {
-    registeredWidgets: Record<string, RegistryPackage>;
+type PackageSummary = {
+    package_name: string;
+    display_name?: string;
+    version: string;
+    counts: {
+        widgets: number;
+        components: number;
+        windows: number;
+    };
 };
 
 const TAB_LABELS: Record<SystemTab, string> = {
@@ -50,7 +55,7 @@ export function SystemWidget() {
     const keybinds = window.ACE.memory.use<Keybind[]>('system:keybinds') ?? [];
     const windows = window.ACE.memory.use<Record<string, WindowConfig>>('system:windows') ?? {};
     const installQueue = window.ACE.memory.use<InstallRequest[]>('system:install_requests') ?? [];
-    const registeredWidgets = useWidgetEngine((state: WidgetEngineSnapshot) => state.registeredWidgets);
+    const packageSummaries = window.ACE.memory.use<PackageSummary[]>('system:package_registry') ?? [];
 
     useEffect(() => {
         const refresh = () => {
@@ -73,10 +78,7 @@ export function SystemWidget() {
         return Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
     }, [configItems]);
 
-    const widgetModules = useMemo(
-        () => Object.entries(registeredWidgets) as Array<[string, RegistryPackage]>,
-        [registeredWidgets],
-    );
+    const widgetModules = useMemo(() => packageSummaries, [packageSummaries]);
     const openWindows = useMemo(() => Object.values(windows).sort((a, b) => b.z_index - a.z_index), [windows]);
 
     const queueInstallRequest = (kind: 'widget' | 'tool', source: string, note: string) => {
@@ -168,9 +170,9 @@ export function SystemWidget() {
                                     />
                                     <MiniList
                                         title="Installed Widget Modules"
-                                        rows={widgetModules.map(([moduleId, registry]) => ({
-                                            title: registry.display_name || moduleId,
-                                            detail: `${registry.version} • widgets:${registry.widgets.length} • components:${registry.components.length} • windows:${registry.windows.length}`,
+                                        rows={widgetModules.map((pkg) => ({
+                                            title: pkg.display_name || pkg.package_name,
+                                            detail: `${pkg.version} • widgets:${pkg.counts.widgets} • components:${pkg.counts.components} • windows:${pkg.counts.windows}`,
                                         }))}
                                         emptyText="No widget packages registered yet."
                                     />
@@ -269,10 +271,10 @@ export function SystemWidget() {
                             />
                         </SectionCard>
 
-                        <SectionCard title="Widget Registry" subtitle="Registered widget modules from WidgetEngine">
+                        <SectionCard title="Widget Registry" subtitle="Registered packages from RegistryEngine">
                             <MiniList
                                 title="Modules"
-                                rows={widgetModules.map(([moduleId, registry]) => formatWidgetRegistryRow(moduleId, registry))}
+                                rows={widgetModules.map((pkg) => formatWidgetRegistryRow(pkg))}
                                 emptyText="No widget packages registered."
                             />
                         </SectionCard>
@@ -388,9 +390,9 @@ function MiniList({ title, rows, emptyText }: { title: string; rows: Array<{ tit
     );
 }
 
-function formatWidgetRegistryRow(moduleId: string, registry: RegistryPackage) {
+function formatWidgetRegistryRow(pkg: PackageSummary) {
     return {
-        title: registry.display_name || registry.package_name || moduleId,
-        detail: `v${registry.version} • widgets:${registry.widgets.length} • components:${registry.components.length} • windows:${registry.windows.length}`,
+        title: pkg.display_name || pkg.package_name,
+        detail: `${pkg.version} • widgets:${pkg.counts.widgets} • components:${pkg.counts.components} • windows:${pkg.counts.windows}`,
     };
 }

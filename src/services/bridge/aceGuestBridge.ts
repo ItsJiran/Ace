@@ -7,6 +7,7 @@ import { useAceWindow } from '#/hooks/useAceWindow';
 
 import { EventBus as EventEngine } from '#/services/eventEngine';
 import { RegistryInputEngine } from '#/services/registryInputEngine';
+import { RegistryEngine } from '#/services/registryEngine';
 import { Storage } from '#/services/storageEngine';
 import type { EventPattern } from '#/schemas/events';
 import React from 'react';
@@ -68,6 +69,8 @@ export interface AceGuestAPI {
      */
     registry: {
         add: (packageName: string, domain: 'widgets' | 'components' | 'windows' | 'tools' | 'features' | 'processes' | 'pipelines' | 'registries', items: unknown[]) => void;
+        registerPackage: (manifest: unknown) => unknown;
+        registerPackageModules: (packageName: string, modules: Record<string, unknown>) => void;
     };
 }
 
@@ -131,6 +134,12 @@ export const aceGuestBridge: AceGuestAPI = {
         add: (packageName, domain, items) => {
             // Direct injection to RegistryInputEngine singleton
             RegistryInputEngine.registerDomain(packageName, domain as any, items);
+        },
+        registerPackage: (manifest) => {
+            return RegistryEngine.registerPackage(manifest);
+        },
+        registerPackageModules: (packageName, modules) => {
+            RegistryEngine.registerPackageDomainsFromModules(packageName, modules);
         }
     }
 };
