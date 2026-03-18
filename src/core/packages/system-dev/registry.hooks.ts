@@ -1,0 +1,38 @@
+import { useAceComponent } from '#/hooks/useAceRegistryDomain';
+
+const PACKAGE_NAME = 'itsjiran/ace-system-dev';
+
+let registered = false;
+
+export function registerSystemDevPackageDomains() {
+    if (registered) return;
+
+    useAceComponent.registry(PACKAGE_NAME, [
+        { name: 'dev_menu', data_requirements: ['system:overlay_state'], emits_interactions: ['spawn_window', 'toggle_overlay_mode', 'toggle_debug_bg'], listens_to: [], react_behavior: 'dev_launcher_menu' },
+        { name: 'ram_viewer', data_requirements: ['system:ram'], emits_interactions: [], listens_to: [], react_behavior: 'dev_ram_monitor' },
+        { name: 'ram_usage_analyzer', data_requirements: ['system:ram'], emits_interactions: [], listens_to: [], react_behavior: 'dev_ram_analyzer' },
+        { name: 'event_viewer', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_event_stream' },
+        { name: 'event_registry_list', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_event_registry' },
+        { name: 'process_monitor', data_requirements: ['system:processes'], emits_interactions: [], listens_to: [], react_behavior: 'dev_process_monitor' },
+        { name: 'tools_registry_list', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_tools_registry' },
+        { name: 'pipeline_registry_list', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_pipeline_registry' },
+        { name: 'window_registry_list', data_requirements: ['system:windows'], emits_interactions: [], listens_to: [], react_behavior: 'dev_window_registry' },
+        { name: 'fps_widget', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_fps_counter' },
+        { name: 'fps_counter', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_fps_overlay' },
+        { name: 'package_registry_view', data_requirements: ['system:package_registry'], emits_interactions: [], listens_to: [], react_behavior: 'dev_package_registry' },
+        { name: 'headless_drag_surface_demo', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_drag_demo' },
+        { name: 'stress_test_menu', data_requirements: [], emits_interactions: ['spawn_window'], listens_to: [], react_behavior: 'dev_stress_launcher' },
+        { name: 'stress_test_ui_animation_fps', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_animation' },
+        { name: 'stress_test_prompt_response_load', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_prompt_response' },
+        { name: 'stress_test_chat_message_flow', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_chat' },
+        { name: 'stress_test_window_motion', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_window_motion' },
+        { name: 'stress_test_window_swarm', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_window_swarm' },
+        { name: 'stress_test_ram_isolation', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_ram' },
+        { name: 'stress_test_prompt_bar_animation', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_prompt_bar' },
+        { name: 'stress_test_prompt_bar_real_window', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_prompt_bar_window' },
+        { name: 'stress_test_animation_interrupt_drag', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_anim_interrupt' },
+        { name: 'stress_test_relative_modifier_animation', data_requirements: [], emits_interactions: [], listens_to: [], react_behavior: 'dev_stress_relative_anim' },
+    ]);
+
+    registered = true;
+}

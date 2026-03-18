@@ -1,8 +1,12 @@
 import { FSEngine } from './fsEngine';
 import { Storage } from './storageEngine';
 import { useWidgetEngine } from './widgetEngine';
+import { RegistryInputEngine } from './registryInputEngine';
 import { RegistryPackageSchema, type RegistryPackage } from '#/schemas/registry';
 import CoreSystemRegistryJson from '#/core/packages/system/registry.json';
+import SystemDevRegistryJson from '#/core/packages/system-dev/registry.json';
+import { registerSystemPackageDomains } from '#/core/packages/system/registry.hooks';
+import { registerSystemDevPackageDomains } from '#/core/packages/system-dev/registry.hooks';
 
 interface PackageSummary {
     package_name: string;
@@ -22,6 +26,29 @@ interface PackageSummary {
     };
 }
 
+interface WidgetEntrySummary {
+    entry_id: string;
+    widget_name: string;
+    runtime_kind: 'ui_widget' | 'headless_widget' | 'hybrid_widget';
+    package_name: string;
+    namespace: string;
+    owner_scope: 'core' | 'default' | 'user';
+    source_scope: 'core' | 'local' | 'config';
+    component_name?: string;
+    window_name?: string;
+    launch_profile: {
+        surfaces: Array<'start_menu' | 'command_palette' | 'auto_start' | 'hidden'>;
+        default_visibility: 'visible' | 'hidden';
+        startup_policy: 'never' | 'opt_in' | 'always';
+        requires_user_pin: boolean;
+        launch_order: number;
+    };
+    action_binding?: {
+        binding_type: 'tool' | 'process' | 'pipeline' | 'feature' | 'event';
+        binding_name: string;
+    };
+}
+
 class RegistryEngineSingleton {
     private readonly PACKAGES_DIR = 'packages';
     private readonly REGISTRY_FILE = 'registry.json';
@@ -36,15 +63,16 @@ class RegistryEngineSingleton {
             console.warn('[RegistryEngine] Packages directory could not be initialized. Running core-only mode.');
         }
 
+        // Register domain payloads via hook-style registry input API.
+        registerSystemPackageDomains();
+        if (import.meta.env.DEV) {
+            registerSystemDevPackageDomains();
+        }
+
         this.registerPackage(CoreSystemRegistryJson);
 
         if (import.meta.env.DEV) {
-            try {
-                const devPackage = await import('#/core/packages/system-dev/registry.json');
-                this.registerPackage(devPackage.default);
-            } catch (error) {
-                console.warn('[RegistryEngine] system-dev package could not be loaded in DEV mode:', error);
-            }
+            this.registerPackage(SystemDevRegistryJson);
         }
 
         await this.loadInstalledPackages();
@@ -69,6 +97,7 @@ class RegistryEngineSingleton {
         if (pkg.widgets.length > 0 && pkg.components.length > 0 && pkg.windows.length > 0) {
             try {
                 useWidgetEngine.getState().registerWidget(pkg.package_name, {
+                    namespace: pkg.namespace,
                     package_name: pkg.package_name,
                     version: pkg.version,
                     repository_path: pkg.repository_path,
@@ -80,6 +109,11 @@ class RegistryEngineSingleton {
                     widgets: pkg.widgets,
                     components: pkg.components,
                     windows: pkg.windows,
+                    tools: pkg.tools,
+                    features: pkg.features,
+                    processes: pkg.processes,
+                    pipelines: pkg.pipelines,
+                    registries: pkg.registries,
                     dependency_refs: pkg.dependency_refs,
                     capability_requirements: pkg.capability_requirements,
                 });
@@ -103,7 +137,7 @@ class RegistryEngineSingleton {
         };
 
         const namespacedId = (
-            domain: 'tool' | 'feature' | 'process' | 'pipeline' | 'window' | 'registry',
+            domain: 'tool' | 'feature' | 'process' | 'pipeline' | 'window' | 'registry' | 'widget',
             rawId: unknown,
             fallbackName: string
         ) => {
@@ -131,6 +165,7 @@ class RegistryEngineSingleton {
         const pipelines = Array.isArray(src.pipelines) ? src.pipelines : [];
         const windows = Array.isArray(src.windows) ? src.windows : [];
         const registries = Array.isArray(src.registries) ? src.registries : [];
+        const widgets = Array.isArray(src.widgets) ? src.widgets : [];
 
         return {
             ...src,
@@ -140,7 +175,65 @@ class RegistryEngineSingleton {
             repository_path: this.pickString(src.repository_path, `package://${packageName}`),
             file_location: this.pickString(src.file_location, `${this.PACKAGES_DIR}/${packageName}`),
             author: this.pickString(src.author, 'Unknown'),
-            widgets: Array.isArray(src.widgets) ? src.widgets : [],
+            widgets: widgets.map((item, index) => {
+                const entry = (item && typeof item === 'object') ? (item as Record<string, unknown>) : {};
+                const widgetName = this.pickString(entry.widget_name, `widget_${index + 1}`);
+                const runtimeKindRaw = this.pickString(entry.runtime_kind, 'ui_widget');
+                const runtime_kind = (runtimeKindRaw === 'headless_widget' || runtimeKindRaw === 'hybrid_widget')
+                    ? runtimeKindRaw
+                    : 'ui_widget';
+
+                const defaultSurfaces: Array<'start_menu' | 'command_palette' | 'auto_start' | 'hidden'> = ['start_menu'];
+                const launchProfileInput = (entry.launch_profile && typeof entry.launch_profile === 'object')
+                    ? (entry.launch_profile as Record<string, unknown>)
+                    : {};
+                const surfaceInput = Array.isArray(launchProfileInput.surfaces) ? launchProfileInput.surfaces : defaultSurfaces;
+                const surfaces = surfaceInput.filter(
+                    (surface): surface is 'start_menu' | 'command_palette' | 'auto_start' | 'hidden' => (
+                        surface === 'start_menu' ||
+                        surface === 'command_palette' ||
+                        surface === 'auto_start' ||
+                        surface === 'hidden'
+                    )
+                );
+
+                const startupPolicyInput = this.pickString(launchProfileInput.startup_policy, 'never');
+                const startup_policy = startupPolicyInput === 'opt_in' || startupPolicyInput === 'always'
+                    ? startupPolicyInput
+                    : 'never';
+
+                const visibilityInput = this.pickString(launchProfileInput.default_visibility, 'visible');
+                const default_visibility = visibilityInput === 'hidden' ? 'hidden' : 'visible';
+
+                const actionBinding = (entry.action_binding && typeof entry.action_binding === 'object')
+                    ? (entry.action_binding as Record<string, unknown>)
+                    : undefined;
+
+                return {
+                    ...entry,
+                    widget_name: widgetName,
+                    entry_id: namespacedId('widget', entry.entry_id, widgetName),
+                    runtime_kind,
+                    launch_profile: {
+                        surfaces: surfaces.length > 0 ? surfaces : defaultSurfaces,
+                        default_visibility,
+                        startup_policy,
+                        requires_user_pin: Boolean(launchProfileInput.requires_user_pin),
+                        launch_order: Number.isFinite(Number(launchProfileInput.launch_order))
+                            ? Number(launchProfileInput.launch_order)
+                            : 100,
+                    },
+                    action_binding: actionBinding ? {
+                        binding_type: this.pickString(actionBinding.binding_type, 'event'),
+                        binding_name: this.pickString(actionBinding.binding_name, widgetName),
+                        payload_template: actionBinding.payload_template,
+                    } : undefined,
+                    window_profile: entry.window_profile,
+                    component_name: this.pickString(entry.component_name),
+                    window_name: this.pickString(entry.window_name),
+                    settings_schema_ref: this.pickString(entry.settings_schema_ref),
+                };
+            }),
             components: Array.isArray(src.components) ? src.components : [],
             tools: tools.map((item, index) => {
                 const entry = (item && typeof item === 'object') ? (item as Record<string, unknown>) : {};
@@ -282,6 +375,9 @@ class RegistryEngineSingleton {
         };
 
         pkg.windows.forEach((entry) => check(entry.id, 'window'));
+        pkg.widgets.forEach((entry) => {
+            if (entry.entry_id) check(entry.entry_id, 'widget');
+        });
         pkg.tools.forEach((entry) => check(entry.id, 'tool'));
         pkg.features.forEach((entry) => check(entry.id, 'feature'));
         pkg.processes.forEach((entry) => check(entry.id, 'process'));
@@ -290,7 +386,20 @@ class RegistryEngineSingleton {
     }
 
     private publishToRAM() {
-        const packageList = Array.from(this.packages.values());
+        const packageList = Array.from(this.packages.values()).map((pkg) => {
+            const domainInputs = RegistryInputEngine.getPackageDomainInputs(pkg.package_name);
+            return {
+                ...pkg,
+                widgets: [...pkg.widgets, ...(domainInputs.widgets as RegistryPackage['widgets'])],
+                components: [...pkg.components, ...(domainInputs.components as RegistryPackage['components'])],
+                windows: [...pkg.windows, ...(domainInputs.windows as RegistryPackage['windows'])],
+                tools: [...pkg.tools, ...(domainInputs.tools as RegistryPackage['tools'])],
+                features: [...pkg.features, ...(domainInputs.features as RegistryPackage['features'])],
+                processes: [...pkg.processes, ...(domainInputs.processes as RegistryPackage['processes'])],
+                pipelines: [...pkg.pipelines, ...(domainInputs.pipelines as RegistryPackage['pipelines'])],
+                registries: [...pkg.registries, ...(domainInputs.registries as RegistryPackage['registries'])],
+            };
+        });
 
         const summaries: PackageSummary[] = packageList.map((pkg) => ({
             package_name: pkg.package_name,
@@ -332,10 +441,52 @@ class RegistryEngineSingleton {
             classifications: ['system:core'],
         });
 
+        const widgetEntries: WidgetEntrySummary[] = packageList.flatMap((pkg) =>
+            pkg.widgets.map((entry) => ({
+                entry_id: entry.entry_id ?? `widget:${pkg.namespace}:${entry.widget_name}:v1`,
+                widget_name: entry.widget_name,
+                runtime_kind: entry.runtime_kind,
+                package_name: pkg.package_name,
+                namespace: pkg.namespace,
+                owner_scope: pkg.owner_scope,
+                source_scope: pkg.source_scope,
+                component_name: entry.component_name,
+                window_name: entry.window_name,
+                launch_profile: entry.launch_profile ?? {
+                    surfaces: ['start_menu'],
+                    default_visibility: 'visible',
+                    startup_policy: 'never',
+                    requires_user_pin: false,
+                    launch_order: 100,
+                },
+                action_binding: entry.action_binding
+                    ? {
+                        binding_type: entry.action_binding.binding_type,
+                        binding_name: entry.action_binding.binding_name,
+                    }
+                    : undefined,
+            }))
+        );
+
+        Storage.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:widget_entries',
+            payload: widgetEntries,
+            classifications: ['system:core'],
+        });
+
         Storage.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:package_install_root',
             payload: this.PACKAGES_DIR,
+            classifications: ['system:core'],
+        });
+
+        const diagnostics = packageList.map((pkg) => RegistryInputEngine.getDiagnostics(pkg.package_name));
+        Storage.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:registry_input_diagnostics',
+            payload: diagnostics,
             classifications: ['system:core'],
         });
     }

@@ -36,6 +36,10 @@ function snakeToPascal(value: string) {
         .join('');
 }
 
+function normalizeName(value: string) {
+    return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
 function resolveEntryPath(fileLocation: string, componentName: string) {
     const basePath = `/${fileLocation.replace(/^\/+/, '').replace(/\/+$/, '')}`;
     const fileBase = snakeToPascal(componentName);
@@ -44,6 +48,22 @@ function resolveEntryPath(fileLocation: string, componentName: string) {
 
     if (sourceModuleLoaders[exact]) return exact;
     if (sourceModuleLoaders[fallback]) return fallback;
+
+    // Robust fallback: match normalized component name against every file under <package>/components
+    // Example: ram_viewer -> RAMViewer.tsx
+    const target = normalizeName(componentName);
+    const targetPascal = normalizeName(fileBase);
+
+    for (const path of Object.keys(sourceModuleLoaders)) {
+        if (!path.startsWith(`${basePath}/components/`) || !path.endsWith('.tsx')) continue;
+
+        const filename = path.split('/').pop()?.replace(/\.tsx$/, '') ?? '';
+        const normalizedFilename = normalizeName(filename);
+
+        if (normalizedFilename === target || normalizedFilename === targetPascal) {
+            return path;
+        }
+    }
 
     return sourceModuleLoadersLowerCase.get(exact.toLowerCase()) ? exact.toLowerCase() : null;
 }

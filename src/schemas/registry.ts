@@ -230,15 +230,79 @@ export const WidgetRegistryEntrySchema = BaseRegistryEntrySchema.extend({
 
 export type WidgetRegistryEntry = z.infer<typeof WidgetRegistryEntrySchema>;
 
+export const WidgetRuntimeKindSchema = z.enum(['ui_widget', 'headless_widget', 'hybrid_widget']);
+export type WidgetRuntimeKind = z.infer<typeof WidgetRuntimeKindSchema>;
+
+export const WidgetLaunchSurfaceSchema = z.enum(['start_menu', 'command_palette', 'auto_start', 'hidden']);
+export type WidgetLaunchSurface = z.infer<typeof WidgetLaunchSurfaceSchema>;
+
+export const WidgetLaunchProfileSchema = z.object({
+    surfaces: z.array(WidgetLaunchSurfaceSchema).default(['start_menu']),
+    default_visibility: z.enum(['visible', 'hidden']).default('visible'),
+    startup_policy: z.enum(['never', 'opt_in', 'always']).default('never'),
+    requires_user_pin: z.boolean().default(false),
+    launch_order: z.number().int().default(100),
+});
+
+export type WidgetLaunchProfile = z.infer<typeof WidgetLaunchProfileSchema>;
+
+export const WidgetWindowProfileSchema = z.object({
+    profile_name: z.string().optional(),
+    window_name: z.string().optional(),
+    default_window_preset: WindowPresetSchema.optional(),
+    restoration_strategy: z.enum(['fresh', 'restore_state', 'clone']).optional(),
+    animation_profile_ref: z.string().optional(),
+});
+
+export type WidgetWindowProfile = z.infer<typeof WidgetWindowProfileSchema>;
+
+export const WidgetActionBindingSchema = z.object({
+    binding_type: z.enum(['tool', 'process', 'pipeline', 'feature', 'event']),
+    binding_name: z.string(),
+    payload_template: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type WidgetActionBinding = z.infer<typeof WidgetActionBindingSchema>;
+
 /**
- * A Widget is a simple UI bundle that pairs a component with a window behavior.
- * This keeps widget terminology lightweight and focused on visual runtime entities.
+ * Widget is the app-entry runtime unit.
+ * It can be visual (`ui_widget`), non-visual (`headless_widget`), or mixed (`hybrid_widget`).
  */
 export const WidgetBindingSchema = z.object({
     widget_name: z.string(),
-    component_name: z.string(),
-    window_name: z.string(),
+    entry_id: z.string().optional(),
+    runtime_kind: WidgetRuntimeKindSchema.default('ui_widget'),
+    component_name: z.string().optional(),
+    window_name: z.string().optional(),
     entry_file: z.string().optional(),
+    launch_profile: WidgetLaunchProfileSchema.optional(),
+    window_profile: WidgetWindowProfileSchema.optional(),
+    settings_schema_ref: z.string().optional(),
+    action_binding: WidgetActionBindingSchema.optional(),
+}).superRefine((value, ctx) => {
+    if (value.runtime_kind === 'ui_widget' && !value.component_name) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'ui_widget requires component_name',
+            path: ['component_name'],
+        });
+    }
+
+    if (value.runtime_kind === 'headless_widget' && !value.action_binding) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'headless_widget requires action_binding',
+            path: ['action_binding'],
+        });
+    }
+
+    if (value.runtime_kind === 'hybrid_widget' && !value.component_name && !value.action_binding) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'hybrid_widget requires component_name or action_binding',
+            path: ['runtime_kind'],
+        });
+    }
 });
 
 export type WidgetBinding = z.infer<typeof WidgetBindingSchema>;

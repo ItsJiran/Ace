@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { BaseWindow } from './components/layout/BaseWindow';
+import { AceWindow } from './components/layout/AceWindow';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState, WindowConfig } from '#/schemas/window';
 import { Storage as StorageEngine } from '#/services/storageEngine';
@@ -149,7 +149,7 @@ function App() {
     >
       {/* Render semua window */}
       {Object.values(windows).map(config => (
-        <BaseWindow key={config.window_uid} config={config} />
+        <AceWindow key={config.window_uid} config={config} />
       ))}
 
       {import.meta.env.DEV && DevFPSCounter ? (

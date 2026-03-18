@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { WindowEngine } from '#/services/windowEngine';
-import { useAceMemory } from '#/hooks/useAceMemory';
-import type { AnimationRuntimeState, AnimationSequence } from '#/schemas/animation';
+import { useAceWindow } from '#/hooks/useAceWindow';
+import type { AnimationSequence } from '#/schemas/animation';
 
 function buildPromptBarSequence(loop: boolean): AnimationSequence {
     const vw = window.innerWidth;
@@ -34,6 +33,13 @@ function buildPromptBarSequence(loop: boolean): AnimationSequence {
 }
 
 export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string }) {
+    const {
+        animationState,
+        playAnimation,
+        cancelAnimation,
+        updateConfig,
+        close,
+    } = useAceWindow(windowUid);
     const [isLoop, setIsLoop] = useState(true);
     const [dotCount, setDotCount] = useState(0);
     const [fps, setFps] = useState(0);
@@ -42,9 +48,8 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
     const fpsFramesRef = useRef(0);
     const fpsTimeRef = useRef(performance.now());
 
-    // Read live animation state from WindowEngine RAM
-    const allAnimStates = useAceMemory<Record<string, AnimationRuntimeState>>('system:window_animations');
-    const animState = allAnimStates?.[windowUid];
+    // Read live animation state through the shared window hook bridge.
+    const animState = animationState;
 
     const phase = animState?.current_phase ?? 'idle';
     const isRunning = animState?.is_running ?? false;
@@ -54,11 +59,11 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
     isLoopRef.current = isLoop;
 
     const play = () => {
-        WindowEngine.playAnimation(windowUid, buildPromptBarSequence(isLoopRef.current));
+        playAnimation(buildPromptBarSequence(isLoopRef.current));
     };
 
     const replay = () => {
-        WindowEngine.cancelAnimation(windowUid);
+        cancelAnimation();
         requestAnimationFrame(() => play());
     };
 
@@ -82,7 +87,7 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
 
     // Configure window and start animation on mount
     useEffect(() => {
-        WindowEngine.updateWindowConfig(windowUid, {
+        updateConfig({
             chrome_style: 'borderless',
             drag_surface: 'full',
             is_locked: true,
@@ -91,8 +96,8 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
             title: 'Prompt Bar Real Window',
         });
         play();
-        return () => WindowEngine.cancelAnimation(windowUid);
-    }, [windowUid]);
+        return () => cancelAnimation();
+    }, [cancelAnimation, playAnimation, updateConfig]);
 
     // Searching dot animation
     useEffect(() => {
@@ -104,11 +109,11 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') WindowEngine.closeWindow(windowUid);
+            if (e.key === 'Escape') close();
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [windowUid]);
+    }, [close]);
 
     const isBar = phase === 'expand' || phase === 'search' || phase === 'shrink';
     const fadeIn = isRunning && phase !== 'exit';
@@ -195,7 +200,7 @@ export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string
                 </button>
                 <button
                     data-window-action="true"
-                    onClick={() => WindowEngine.closeWindow(windowUid)}
+                    onClick={close}
                     className="rounded border border-red-500/60 bg-red-900/35 px-2 py-1 text-[10px] text-red-100 hover:bg-red-800/45 transition-colors"
                     title="Close"
                 >

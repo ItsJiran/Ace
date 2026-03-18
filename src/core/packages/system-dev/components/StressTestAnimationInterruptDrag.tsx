@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { WindowEngine } from '#/services/windowEngine';
-import { useAceMemory } from '#/hooks/useAceMemory';
-import type { AnimationRuntimeState, AnimationSequence, InterruptPolicy } from '#/schemas/animation';
+import { useAceWindow } from '#/hooks/useAceWindow';
+import type { AnimationSequence, InterruptPolicy } from '#/schemas/animation';
 
 type Policy = InterruptPolicy;
 
@@ -59,11 +58,17 @@ function buildDisruptionSequence(policy: Policy, loop: boolean): AnimationSequen
 }
 
 export function StressTestAnimationInterruptDrag({ windowUid }: { windowUid: string }) {
+    const {
+        animationState,
+        playAnimation,
+        cancelAnimation,
+        updateConfig,
+        updateBounds,
+    } = useAceWindow(windowUid);
     const [policy, setPolicy] = useState<Policy>('retarget');
     const [loop, setLoop] = useState(true);
 
-    const allAnimStates = useAceMemory<Record<string, AnimationRuntimeState>>('system:window_animations');
-    const animState = allAnimStates?.[windowUid];
+    const animState = animationState;
 
     const phase = animState?.current_phase ?? 'idle';
     const running = animState?.is_running ?? false;
@@ -72,16 +77,16 @@ export function StressTestAnimationInterruptDrag({ windowUid }: { windowUid: str
     const sequence = useMemo(() => buildDisruptionSequence(policy, loop), [policy, loop]);
 
     const play = () => {
-        WindowEngine.playAnimation(windowUid, sequence);
+        playAnimation(sequence);
     };
 
     const restart = () => {
-        WindowEngine.cancelAnimation(windowUid);
-        requestAnimationFrame(() => WindowEngine.playAnimation(windowUid, sequence));
+        cancelAnimation();
+        requestAnimationFrame(() => playAnimation(sequence));
     };
 
     useEffect(() => {
-        WindowEngine.updateWindowConfig(windowUid, {
+        updateConfig({
             title: 'Stress Test: Animation Interrupt Drag',
             chrome_style: 'borderless',
             drag_surface: 'full',
@@ -90,13 +95,13 @@ export function StressTestAnimationInterruptDrag({ windowUid }: { windowUid: str
             opacity: 1,
         });
 
-        WindowEngine.updateWindowBounds(windowUid, 220, window.innerHeight - 180, 460, 90);
+        updateBounds(220, window.innerHeight - 180, 460, 90);
         play();
 
         return () => {
-            WindowEngine.cancelAnimation(windowUid);
+            cancelAnimation();
         };
-    }, [windowUid]);
+    }, [cancelAnimation, playAnimation, updateBounds, updateConfig]);
 
     useEffect(() => {
         restart();

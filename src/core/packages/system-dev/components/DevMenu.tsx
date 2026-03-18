@@ -4,8 +4,29 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 
+interface RuntimeRegistryDomains {
+    windows?: Array<{
+        id?: string;
+        package_name?: string;
+        owner_scope?: 'core' | 'default' | 'user';
+        source_scope?: 'core' | 'local' | 'config';
+        is_enabled?: boolean;
+        display_name?: string;
+        window_name?: string;
+        component_name?: string;
+        default_window_preset?: {
+            x?: number;
+            y?: number;
+            width?: number;
+            height?: number;
+            title?: string;
+        };
+    }>;
+}
+
 export function DevMenu() {
     const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
+    const registryDomains = useAceMemory<RuntimeRegistryDomains>('system:registry_domains');
 
     // Fallbacks just in case the engine isn't ready
     const isAmbient = overlayState?.mode === 'ambient';
@@ -36,15 +57,41 @@ export function DevMenu() {
 
     const buttonClass = 'flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 duration-75';
 
+    const corePackageWindows = (registryDomains?.windows ?? [])
+        .filter((entry) => entry.owner_scope === 'core' && entry.source_scope === 'core' && entry.is_enabled !== false)
+        .filter((entry) => entry.component_name && entry.component_name !== 'dev_menu')
+        .sort((a, b) => (a.display_name ?? a.window_name ?? '').localeCompare(b.display_name ?? b.window_name ?? ''));
+
     return (
         <div className="flex flex-col gap-2 w-full h-full text-zinc-300 overflow-y-auto pr-1">
-            <button
-                onClick={() => openDevWindow('system_widget', 'System Center', 120, 70, 980, 700)}
-                className={buttonClass}
-            >
-                <HardDrive size={14} className="text-sky-300" />
-                Open System Widget
-            </button>
+            <div className="text-xs font-semibold text-zinc-500 mb-1 px-1">Core Package Windows (Dynamic)</div>
+
+            {corePackageWindows.length === 0 && (
+                <div className="text-xs text-zinc-600 px-2 py-2 border border-zinc-800 rounded">
+                    No core package windows found in <code>system:registry_domains</code>.
+                </div>
+            )}
+
+            {corePackageWindows.map((entry, index) => {
+                const preset = entry.default_window_preset;
+                const title = preset?.title ?? entry.display_name ?? entry.window_name ?? entry.component_name ?? 'Core Window';
+                const width = preset?.width ?? 760;
+                const height = preset?.height ?? 520;
+                const x = preset?.x ?? 120 + (index * 36);
+                const y = preset?.y ?? 70 + (index * 24);
+                const componentName = entry.component_name ?? 'system_widget';
+
+                return (
+                    <button
+                        key={entry.id ?? `${componentName}-${index}`}
+                        onClick={() => openDevWindow(componentName, title, x, y, width, height)}
+                        className={buttonClass}
+                    >
+                        <HardDrive size={14} className="text-sky-300" />
+                        Open {title}
+                    </button>
+                );
+            })}
 
             <button
                 onClick={() => openDevWindow('event_viewer', 'Event Viewer', 60, 60, 620, 420)}
@@ -132,6 +179,14 @@ export function DevMenu() {
             >
                 <Workflow size={14} className="text-teal-400" />
                 Open Package Registry
+            </button>
+
+            <button
+                onClick={() => openDevWindow('hello_world_component', 'Hello World (Example Package)', 420, 180, 480, 320)}
+                className={buttonClass}
+            >
+                <Activity size={14} className="text-emerald-300" />
+                Open Hello World Package
             </button>
 
             <button

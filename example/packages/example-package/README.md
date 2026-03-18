@@ -9,6 +9,34 @@ example-package/
 └── registry.json    ← The only required file for ACE to recognize a package
 ```
 
+## Window Integration Pattern (New)
+
+ACE now uses a hook bridge pattern for runtime integration.
+
+- For window lifecycle integration, use `useAceWindow`.
+- The hook gives you shared runtime behavior (focus, drag, lock, z-index, opacity, animation bridge) without forcing ACE visual styles.
+- Your package can fully own rendering and CSS while still staying compatible with the app runtime.
+
+Minimal idea:
+
+```tsx
+const window = useAceWindow(windowUid);
+
+return (
+  <div {...window.rootProps} style={window.rootStyle}>
+    <div onMouseDown={window.dragHandleProps.onMouseDown}>Drag Handle</div>
+    <button onClick={window.close}>Close</button>
+  </div>
+);
+```
+
+Animation bridge is available directly from the same hook:
+
+- `window.animationState`
+- `window.playAnimation(sequence)`
+- `window.cancelAnimation()`
+- `window.retargetAnimation(anchor)`
+
 ## registry.json fields
 
 | Field | Required | Description |

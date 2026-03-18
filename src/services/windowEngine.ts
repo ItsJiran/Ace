@@ -359,7 +359,7 @@ class WindowEngineSingleton {
 
     /**
      * Returns true if `window_uid` currently has a running animation with
-     * `interrupt_policy: 'lock'`. Used by BaseWindow to block drag gestures.
+        * `interrupt_policy: 'lock'`. Used by useAceWindow to block drag gestures.
      */
     isAnimationLocked(window_uid: string): boolean {
         const seq = this.animationSeqs.get(window_uid);

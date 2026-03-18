@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { WindowEngine } from '#/services/windowEngine';
+import { useAceWindow } from '#/hooks/useAceWindow';
 
 type BaseTarget = { x: number; y: number; width: number; height: number };
 
 export function StressTestRelativeModifierAnimation({ windowUid }: { windowUid: string }) {
+    const {
+        updateConfig,
+        updateBounds,
+    } = useAceWindow(windowUid);
     const [isDragging, setIsDragging] = useState(false);
     const [amplitude, setAmplitude] = useState(18);
     const [frequency, setFrequency] = useState(2.8);
@@ -24,8 +28,7 @@ export function StressTestRelativeModifierAnimation({ windowUid }: { windowUid: 
             const bounceY = Math.sin(now * omega) * amplitude;
             const base = baseTargetRef.current;
 
-            WindowEngine.updateWindowBounds(
-                windowUid,
+            updateBounds(
                 base.x,
                 Math.round(base.y + bounceY),
                 base.width,
@@ -50,18 +53,18 @@ export function StressTestRelativeModifierAnimation({ windowUid }: { windowUid: 
     };
 
     useEffect(() => {
-        WindowEngine.updateWindowConfig(windowUid, {
+        updateConfig({
             title: 'Stress Test: Relative Modifier Animation',
             chrome_style: 'borderless',
             drag_surface: 'full',
             hide_ring: true,
-            // Lock shell drag so BaseWindow does not override transform during pointer drag.
+            // Lock shell drag so the shared window wrapper does not override transform during pointer drag.
             // Relative drag for this test is handled by the internal pad below.
             is_locked: true,
             opacity: 1,
         });
 
-        WindowEngine.updateWindowBounds(windowUid, 320, 340, 460, 96);
+        updateBounds(320, 340, 460, 96);
         baseTargetRef.current = { x: 320, y: 340, width: 460, height: 96 };
         startModifierLoop();
 
@@ -71,7 +74,7 @@ export function StressTestRelativeModifierAnimation({ windowUid }: { windowUid: 
             }
             setRunning(false);
         };
-    }, [windowUid]);
+    }, [updateBounds, updateConfig]);
 
     // Restart loop when modifier settings change so period accounting stays stable.
     useEffect(() => {
