@@ -18,7 +18,11 @@ The bootup sequence operates in **4 Strict Phases**, executed through the boot p
 * **Execution:**
   1. Boot `globalStateManager`.
   2. Boot `configEngine`.
-  3. Boot `registryEngine` (core package first, then installed packages from AppConfig `packages/`).
+  3. **Boot `registryEngine`**:
+      *   Create `packages/` directory.
+      *   Load **Core Packages** (system, system-dev) from `src/core`.
+      *   Load **External Packages** from AppConfig `packages/`.
+      *   Validate dependencies and publish registry to RAM.
   4. Boot `keybindEngine`.
   5. Sync active config and active keybinds into RAM and into `system:global_state`.
 * **Why:** Window and overlay behavior depend on config such as `window.mouse_focus_enabled`.

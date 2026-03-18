@@ -1,5 +1,5 @@
 import { BootupPipeline, type BootupContext } from '#/core/packages/system/pipelines/BootupPipeline';
-import { initACEBridge } from '#/services/bridge/aceGuestBridge';
+import { RegistryEngine } from '#/services/registryEngine';
 
 let bootPromise: Promise<void> | null = null;
 
@@ -16,8 +16,17 @@ export async function bootACE() {
     bootPromise = (async () => {
         console.group('🚀 ACE: Booting System...');
         
-        // Initialize Guest Bridge immediately so early hooks can bind
-        initACEBridge();
+        // Initialize window.ACE registry bridge immediately so packages can register
+        if (typeof window !== 'undefined') {
+            (window as any).ACE = {
+                registry: {
+                    registerPackage: (manifest: unknown) => RegistryEngine.registerPackage(manifest),
+                    registerPackageModules: (packageName: string, modules: Record<string, unknown>) =>
+                        RegistryEngine.registerPackageDomainsFromModules(packageName, modules),
+                }
+            };
+            console.log('🔌 ACE Registry Bridge Initialized.');
+        }
 
         const pipeline = new BootupPipeline();        const context: BootupContext = { startTime: Date.now() };
 

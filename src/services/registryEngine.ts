@@ -315,7 +315,7 @@ class RegistryEngineSingleton {
             }),
             windows: windows.map((item, index) => {
                 const entry = (item && typeof item === 'object') ? (item as Record<string, unknown>) : {};
-                const windowName = this.pickString(entry.window_name, entry.display_name, `window_${index + 1}`);
+                const windowName = this.pickString(entry.window_name, entry.name as string, entry.display_name, `window_${index + 1}`);
                 const componentName = this.pickString(entry.component_name, 'system_widget');
                 return {
                     ...entry,

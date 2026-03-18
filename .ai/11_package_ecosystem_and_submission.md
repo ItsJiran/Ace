@@ -136,6 +136,137 @@ Examples:
 
 Files only need to declare a short `entry_id` or `tool_name`. The full namespaced ID is generated automatically.
 
+## Application Boot & Package Registration Flow
+
+When the app starts, the following sequence orchestrates all package discovery and registration:
+
+### Phase 1: Bootstrap Environment (before `RegistryEngine.boot()`)
+
+1. **App starts** — React mounts, `bootACE()` is called.
+2. **Global bridge initialized** — `window.ACE.registry` is set up and exposed globally.
+   ```typescript
+   window.ACE = {
+       registry: {
+           registerPackage: (manifest) => RegistryEngine.registerPackage(manifest),
+           registerPackageModules: (packageName, modules) => 
+               RegistryEngine.registerPackageDomainsFromModules(packageName, modules),
+       }
+   };
+   ```
+
+### Phase 2: Core Package Discovery & Registration
+
+3. **Core packages lookup** — `CorePackageLoader` scans `src/core/packages/*/entry.ts` via `import.meta.glob()`.
+4. **For each core package entry.ts:**
+   - Extract `manifest` export (package identity)
+   - Call `window.ACE.registry.registerPackage(manifest)` to register the package
+   - Extract `default` export (bootstrap function)
+   - Collect `import.meta.glob()` result of all domain files
+   - Call `window.ACE.registry.registerPackageModules(packageName, modules)` to register all domains at once
+   - `RegistryEngine.registerPackageDomainsFromModules()` auto-discovers and registers widgets, components, windows, tools, features, processes, pipelines from the glob result
+
+### Phase 3: External Package Discovery & Loading
+
+5. **External packages lookup** — `RegistryEngine` scans `~/.config/com.ace.assistant/packages/` for `registry.json` entry manifests.
+6. **For each external package:**
+   - Validate manifest schema and capabilities
+   - If package has an `entry_point` (bundled.js), dynamically load it via:
+     ```typescript
+     const assetUrl = convertFileSrc(scriptPath); // Convert filesystem path to webview asset://
+     await import(/* @vite-ignore */ assetUrl);  // Load the bundle
+     ```
+   - Bundle executes and calls `window.ACE.registry.registerPackage(manifest)` + `window.ACE.registry.registerPackageModules(...)` on its own
+
+### Phase 4: Publish to RAM
+
+7. **All packages registered** — `RegistryEngine.publishToRAM()` aggregates all registered packages and domains:
+   - `system:package_registry` — list of all package summaries (counts of each domain)
+   - `system:registry_domains` — flattened list of all domain entries by type (widgets, components, windows, tools, etc.)
+   - `system:widget_entries` — widget-specific metadata (launch profiles, action bindings)
+   - `system:registry_input_diagnostics` — debug info per package
+
+### Phase 5: Dependency Validation & Version Checking
+
+9. **Dependency resolution** — For each registered package, `RegistryEngine` validates declared dependencies:
+   - Check if all required packages (declared in entry manifest) are present and registered
+   - Verify version compatibility constraints
+   - Flag missing or incompatible dependencies before activation
+   - If critical dependencies missing → package marked as `invalid`, domains not activated
+
+10. **Versioning & compatibility** — Ensure all package versions meet:
+    - Minimum ACE framework version requirement
+    - Cross-package version compatibility (e.g., Package A requires Package B v1.2+)
+    - If validation fails → package blocked from execution, logged for admin/developer review
+
+### Phase 6: Widget Runtime Execution
+
+11. **Widget activation** — Once all packages pass dependency validation:
+    - Iterate through all registered widgets
+    - For each widget, extract runtime configuration from `launch_profile` (if any):
+      ```typescript
+      launch_profile: {
+          surfaces: ['start_menu', 'command_palette'],  // Where widget appears
+          default_visibility: 'visible',                 // Initial visibility
+          startup_policy: 'opt_in' | 'always' | 'never', // Auto-start behavior
+          requires_user_pin: false,                      // Security gate
+          launch_order: 100,                             // Execution order
+      }
+      ```
+
+12. **Conditional widget execution** — Each widget declares via manifest:
+    - `skip_auto_execute: true` — widget is NOT executed automatically. Another package can manually invoke it later via `window.ACE.events.emit()` or direct calls.
+    - If NOT skipped → widget's `default` export is executed:
+      - If React component: rendered in launcher/start menu
+      - If function: invoked immediately (headless execution)
+
+13. **Runtime state** — After widget execution:
+    - Widget state is trackable in RAM (via `system:widget_entries`)
+    - Other packages can subscribe to widget state changes
+    - Widgets can emit events that trigger tools, features, processes, or other widgets
+
+### Phase 7: System Ready for User
+
+14. **Full boot complete** — All phases passed:
+    - Core packages registered and widgets executed
+    - External packages registered, dependencies validated, widgets conditionally executed
+    - RAM fully populated with registry data
+    - Event system active
+    - UI ready to accept user input
+
+**Execution order with dependencies:**
+```
+RegistryEngine.boot() → CorePackageLoader (register core) 
+  → AutoDiscoverExternalPackages (register user packages)
+  → ValidateDependencies (all packages)
+  → PublishToRAM
+  → ExecuteWidgets (with launch_profile config, respecting skip_auto_execute)
+  → System Ready
+```
+
+**Key invariants:**
+- Widgets are the only domain with auto-execution behavior (due to runtime state)
+- Other domains (tools, features, processes, pipelines) are lazy — executed on-demand via events or explicit calls
+- Dependency validation happens BEFORE any widget execution
+- A package can declare `skip_auto_execute: true` to let another package manage its widget lifecycle
+- All executed widgets have their runtime results reflected in RAM
+
+---
+
+### Phase 5: Apps Ready (Registry Lock)
+
+8. **Registry lock** — No new registrations allowed. System ready to serve widgets, tools, windows, etc.
+
+**Key invariants:**
+- Both core and external packages use the **same** `window.ACE.registry` API.
+- `RegistryEngine` does **not** distinguish between core and user packages at registration time — all flow through the same validation and schema checks.
+- External bundles run in the same React context as core code — they can use `window.ACE.react` for React, hooks, etc.
+- All domains are schema-validated before activation (via Zod in `RegistryEngine.normalizePackageManifest()`).
+- **Widgets are the only domain with auto-execution behavior** — other domains (tools, features, processes, pipelines) are lazy, invoked on-demand.
+- Dependency validation happens **before any widget execution** — bad dependencies block widget activation.
+- Packages can opt-out of widget auto-execution via `skip_auto_execute: true` flag for external management.
+
+---
+
 ## Submission Lifecycle
 
 1. **Discover** — User provides a package folder or bundle with `entry.ts` (or built entry bundle).

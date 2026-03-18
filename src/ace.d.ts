@@ -1,8 +1,11 @@
 // src/ace.d.ts
-import type { AceGuestAPI } from './services/bridge/aceGuestBridge';
-
 declare global {
   interface Window {
-    ACE: AceGuestAPI;
+    ACE: {
+      registry: {
+        registerPackage: (manifest: unknown) => unknown;
+        registerPackageModules: (packageName: string, modules: Record<string, unknown>) => void;
+      };
+    };
   }
 }

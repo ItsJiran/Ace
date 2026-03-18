@@ -17,10 +17,9 @@ Please read the **13 Architecture Pillars**:
 8. `.ai/08_pipeline_pattern.md` - The Pipeline Engine: Linear Execution with observability.
 9. `.ai/09_window_customization_and_layout.md` - Custom Window Strategy and Layout State.
 10. `.ai/10_fluid_animation_continuity.md` - Continuity-first animation system, spring motion, and stateful vs relative animation IDs.
-11. `.ai/11_widget_ecosystem_and_submission.md` - Widget (components + windows) and package ecosystem submission model.
-12. `.ai/12_multi_registry_contract.md` - Formal contracts for widget and cross-domain package ecosystem registries.
-13. `.ai/13_core_widget_design_language.md` - Core widget visual language for light/dark mode, component style, and motion tone.
-14. `.ai/14_host_guest_architecture.md` - Host-Guest Architecture, Inversion of Control, and the Plug-in Slot System.
+11. `.ai/11_package_ecosystem_and_submission.md` - Widget (components + windows) and package ecosystem submission model.
+12. `.ai/13_core_ui_design_language.md` - Core widget visual language for light/dark mode, component style, and motion tone.
+13. `.ai/14_host_guest_architecture.md` - Host-Guest Architecture, Inversion of Control, and the Plug-in Slot System.
 
 ---
 
@@ -33,35 +32,37 @@ All package interactions must go through the `window.ACE` global object. Direct 
 
 - **ACE.memory**: Read/Write to global RAM.
 - **ACE.events**: Emit events to the Event Bus.
-- **ACE.registry**: Register components, tools, and widgets.
+- **ACE.registry**: Register packages, components, and tools.
 - **ACE.hooks**: Access shared React hooks (`useAceWindow`, `useAceWidget`).
 
 ### 2. Registry System
-Packages register their domains at runtime using the bridge:
+Packages register their domains at runtime using the bridge. The system is **Entry-Driven**: each package provides an `entry.ts` that registers its modules.
+
 ```ts
-window.ACE.registry.add('my-package', 'widgets', [ ... ]);
-window.ACE.registry.add('my-package', 'tools', [ ... ]);
+// In entry.ts
+window.ACE.registry.registerPackage(manifest);
+window.ACE.registry.registerPackageModules('my-package', { ... });
 ```
 
 ### 3. Tool Engine
-The `ToolEngine` service (formerly `ToolRegistry`) manages all executable tools. Tools are defined as pure objects and registered via `ACE.registry.add(..., 'tools', lines)`.
+The `ToolEngine` service (formerly `ToolRegistry`) manages all executable tools. Tools are defined as pure objects and registered via the registry.
 
 ### 4. React-First Window Management
-Windows are no longer static config objects. They are **React Components** that manage their own spatial state using the `useAceWindow` hook provided by the bridge. This allows for full customizability of the window frame and behavior.
+Windows are **React Components** that manage their own spatial state using the `useAceWindow` hook provided by the bridge. This allows for full customizability of the window frame and behavior.
 
 ---
 
 ## �🚀 Development Roadmap
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor
-- [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (pospone for now since we need a robust event and ui and correct gateway so we can get the corrct feeedback)
+- [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (postpone for now since we need a robust event and ui and correct gateway so we can get the correct feedback)
 - [ ] **Formalize Schemas (Remaining)**: Widget snapshot contracts and restoration-specific widget config schemas.
 - [ ] **Align Storage Engine**: Enforce Pre-Allocation Protocol for all results.
 - [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results.
 - [x] **Formalize Widget Filesystem Scopes**: Finalize package-first scopes across `src/core/packages` and AppConfig install root `packages/<owner>/<package>/`.
 - [x] **Define Built-In vs User Package Ownership**: Core packages live in `src/core/packages` and are non-removable; local/user submissions live in `widgets` with one package identity/name; widget contracts stay focused on `components` + `windows`, while cross-domain bundles are classified as package ecosystem packages.
 - [x] **Adopt `PackageEcosystemSchema` End-to-End**: Wire loader/validator/runtime usage so cross-domain bundles are validated and tracked explicitly.
-- [ ] **Widget Registry Runtime Upgrade**: Ensure runtime registration and diagnostics use `widgets` binding (`component + window`) as first-class contract.
+- [x] **Widget Registry Runtime Upgrade**: Ensure runtime registration and diagnostics use `widgets` binding (`component + window`) as first-class contract.
 - [x] **Package Discovery Pipeline**: Build discovery for `src/core/packages` and AppConfig `packages/<owner>/<package>/` with clear precedence and conflict diagnostics.
 
 ### 🧩 Phase 3: The Development UI Kit

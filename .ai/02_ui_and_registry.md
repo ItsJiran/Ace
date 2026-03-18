@@ -18,12 +18,14 @@ Drag behavior is also metadata-driven:
 1. **`header`**: Drag starts from the header only.
 2. **`full`**: Drag can start from the full surface, excluding window action controls.
 
-## Component Registry Pattern
+## Registry & Component Pattern
 
-1. A feature component registers itself under a stable string key.
-2. `windowEngine` opens windows using `component_name`.
-3. `ComponentRegistry` resolves that key to a React component.
-4. Missing registrations fall back to a safe diagnostic placeholder.
+The UI is composed of **Packages** which contain **Components**.
+
+1. **Package Registration**: At boot, packages register themselves via `window.ACE.registry`.
+2. **Component Lookup**: Components are stored in the global registry under `${package}:${name}` or simple names.
+3. **Window Engine**: Opens windows by referencing a registered component name.
+4. **Resiliency**: Missing registrations fall back to a safe diagnostic placeholder component.
 
 ## Interaction Schema Requirements
 

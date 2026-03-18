@@ -22,19 +22,27 @@ See also: `11_package_ecosystem_and_submission.md` for the full package structur
 
 ### 3. Hierarchy: Widget → Window → Component
 
-To prevent UI chaos, the Host enforces a strict rendering hierarchy.
+To prevent UI chaos, the Host enforces a strict rendering hierarchy with clear role separation.
+
+**Terminology (from Package Ecosystem model):**
+
+- **Widget** — UI entry point identity that tells the system *what* to show and *when* (Start Menu, auto-start, command palette, etc.). Declares intent only (`widget_name`, `entry_id`). Configuration about windows and launch surfaces belongs to the window preset system or launcher config — not the Widget file itself.
+- **Window** — Shell wrapper that binds a component to the window lifecycle (`useAceWindow`). Manages bounds, drag, focus, and spawn/close events. One per spawnable window type.
+- **Component** — Pure React UI content rendered inside a window. Owns its own visual logic and state. Does not manage window state or bounds.
+
+**Rendering hierarchy:**
 
 ```
 Widget (entry point — declares the intent)
-  └── Window (shell — manages bounds, drag, focus via useAceWindow)
-        └── Component (content — pure React UI, no window state)
+  └── Window (shell — manages lifecycle via useAceWindow)
+        └── Component (content — pure React UI)
 ```
 
 **Invariants:**
 - A **Component** does not own a Window. It renders *inside* one.
 - A **Window** must be referenced by at least one Widget (or spawned explicitly by `WindowEngine`).
-- The **Host** controls the Widget lifecycle → Window lifecycle → Component mount.
-- A Widget's `registry` only declares its identity (`widget_name`, `entry_id`). Configuration about windows and launch surfaces belongs to the window preset system or launcher config — not the Widget file itself.
+- A **Widget's** `registry` only declares identity. Launch config (surfaces, startup_policy, visibility) is NOT in the Widget—it belongs in window presets or launcher configuration.
+- The **Host** controls the entire Widget lifecycle → Window lifecycle → Component mount chain.
 
 ---
 
@@ -43,45 +51,34 @@ Widget (entry point — declares the intent)
 This is the **only** way a package interacts with ACE at runtime.
 
 ```typescript
-// Exposed on window.ACE (see src/services/bridge/aceGuestBridge.ts)
-interface AceGuestAPI {
-    // 1. Reactivity — read RAM, subscribe to changes
-    memory: {
-        use: <T>(key: string) => T | undefined;  // React Hook (subscribe)
-        get: <T>(key: string) => T | undefined;  // Snapshot (no subscription)
-        // No direct .set() — request changes via events.emit()
-    };
-
-    // 2. Communication — fire-and-forget intents
-    events: {
-        emit: (intent: { action: string; [key: string]: unknown }) => void;
-    };
-
-    // 3. Hooks — JIT window/widget lifecycle binding
-    hooks: {
-        useAceWindow: (windowUid: string) => UseAceWindowResult;
-    };
-
-    // 4. Registration — boot-time only, called by CorePackageLoader / package entry
+// Exposed on window.ACE (initialized in src/boot.ts)
+interface AceRegistryAPI {
+    // Registry Bridge — boot-time only, called by CorePackageLoader and package entry files
     registry: {
         registerPackage: (manifest: unknown) => unknown;
         registerPackageModules: (packageName: string, modules: Record<string, unknown>) => void;
-        add: (packageName: string, domain: string, items: unknown[]) => void;
     };
 }
 ```
 
-**RAM is read-only for Guests via the bridge.** All writes happen through `events.emit()`, which the Host routes to the appropriate engine (WindowEngine, FSEngine, etc.).
+---
 
 ---
 
 ## Self-Registering Pattern (Current Implementation)
 
-Core packages (in `src/core/packages/`) use a source-level self-registering pattern:
+All packages — core and user — follow the same self-registering file pattern defined in the Package Ecosystem model:
 
-1. Each package exposes `entry.ts` with `export const manifest` and `export default registerPackage(...)`.
-2. `CorePackageLoader` loads each package `entry.ts`, registers manifest via `window.ACE.registry.registerPackage(...)`.
-3. Entry bootstrap calls `window.ACE.registry.registerPackageModules(packageName, modules)` to register all domain files.
+1. **Each domain file** exports two things:
+   - `export const registry` — minimal identity declaration, typed via `AceRegistryType`
+   - `export default` — the main callable (React component, async function, etc.)
+
+2. **Package entry (`entry.ts`)** orchestrates registration:
+   - Declares `export const manifest` with package-level metadata
+   - Calls `window.ACE.registry.registerPackage(manifest)` to register package identity
+   - Calls `window.ACE.registry.registerPackageModules(packageName, modules)` to auto-discover and register all domain files
+
+3. **At boot**, `CorePackageLoader` loads each package `entry.ts` and executes the default function.
 
 This means **no manual wiring** — adding a file to the right folder is enough.
 
@@ -101,38 +98,50 @@ export default async function myTool(params: { input: string }) {
 
 ---
 
-## External Package Loading (Bundled JS)
+## External Package Loading (User-Installed Packages)
 
-User-installed packages that are bundled as a single JS file use a different path:
+User-installed packages are discovered from AppConfig and follow the same self-registering pattern as core packages:
 
-**Directory:**
+**Directory structure:**
 ```text
 ~/.config/com.ace.assistant/packages/
 └── <owner>/<package>/
-    └── dist/index.js     ← Bundled entry (exports manifest/bootstrap, references window.ACE)
+    ├── entry.ts          ← Package manifest + bootstrap (or bundled as dist/index.js)
+    ├── widgets/
+    ├── components/
+    ├── windows/
+    ├── tools/
+    └── ...
 ```
 
 **Loading sequence:**
-1. **Discovery** — `RegistryEngine` discovers package entry bundles in AppConfig.
-2. **Validation** — Bundle signature/manifest shape is validated.
-3. **Import** — Host calls `convertFileSrc()` + dynamic `import(assetUrl)`.
-4. **Registration** — Bundle calls `window.ACE.registry.registerPackage(...)` then registers domains via `window.ACE.registry.registerPackageModules(...)` (or `add(...)` manually).
-5. **Lock** — Registry is frozen after boot. No late registrations.
+1. **Discovery** — `RegistryEngine` discovers package directories in AppConfig.
+2. **Validation** — Package manifest is validated against entry schema.
+3. **Registration** — Package `entry.ts` (or bundled entry point) is executed:
+   - Calls `window.ACE.registry.registerPackage(manifest)` to register package identity
+   - Calls `window.ACE.registry.registerPackageModules(packageName, modules)` to register all domains
+4. **Activation** — Domains are live. Widgets appear in launchers, tools are callable, windows are spawnable.
+5. **Lock** — Registry is frozen after boot. No late registrations allowed (prevents injection attacks).
 
-External bundles must use `window.ACE.react` (Host-provided React) instead of bundling their own React.
+External packages must not bundle their own React — they must use `window.ACE.react` (Host-provided).
 
 ---
 
-## ComponentRegistry Slot (`<AceWindow />`)
+## Runtime: Widget → Window → Component Flow
 
-The Host renders Guest components inside a generic `<AceWindow />` shell that provides:
-- `ErrorBoundary` — crashes are contained per-window, not app-wide
-- `Suspense` — lazy-loaded components show a fallback
-- window context injection via `windowUid` prop
+When a Widget is activated (clicked in Start Menu, auto-spawn, etc.), the Host orchestrates this flow:
+
+1. **Widget activation** — User clicks widget or system auto-triggers it.
+2. **Window spawn** — Host looks up the window preset for that widget, creates window instance via `WindowEngine`.
+3. **Component resolution** — Host resolves the `component_name` for that window via `ComponentRegistry`.
+4. **Component mount** — Component is rendered inside the window shell (which calls `useAceWindow`).
+
+The `ComponentRegistry` is the runtime resolver:
 
 ```tsx
 // Simplified — see src/components/layout/AceWindow.tsx
 const AceWindow = ({ windowConfig }) => {
+    // Dynamically resolve component by name from registry
     const Component = ComponentRegistry.resolve(windowConfig.component_name);
 
     return (
@@ -145,15 +154,23 @@ const AceWindow = ({ windowConfig }) => {
 };
 ```
 
+**Key points:**
+- **Widget** only declares intent (name, id). It has no knowledge of windows.
+- **Window** knows which component to render (`component_name`) and manages the window lifecycle.
+- **Component** is pure UI — it receives `windowUid` to call `useAceWindow` if needed, but doesn't own the window.
+- Errors crash only the window, not the whole app (via `ErrorBoundary`).
+
 ---
 
-## Security Considerations
+## Security and Governance
 
-1. **Capability Declaration** — Packages declare required capabilities in entry manifest. `events.emit()` checks permissions before routing.
-2. **No Internal Imports** — External bundle packages cannot import from `#/services/*` or `#/schemas/*`. Only `window.ACE` is accessible.
-3. **Registry Lock** — After boot, `RegistryEngine` rejects any new `registry.add()` calls. Prevents runtime injection attacks.
-4. **Error Isolation** — Each window is wrapped in an `ErrorBoundary`. A crashing package cannot take down the whole app.
-5. **Validated Schemas** — All registered items are parsed through Zod schemas in `RegistryEngine.registerPackage()` before activation.
+1. **Boundary Enforcement** — Packages communicate via `window.ACE` bridge only. No direct mutation of engine internals or imports from `#/services/*` / `#/schemas/*`.
+2. **Capability Declaration** — Packages declare required capabilities in entry manifest. Dangerous capabilities (filesystem, network) require explicit user consent.
+3. **Validated Schemas** — All registered items are parsed through Zod schemas in `RegistryEngine.registerPackage()` before activation.
+4. **Registry Lock** — After boot, `RegistryEngine` rejects any new registrations. Prevents runtime injection attacks.
+5. **Error Isolation** — Each window is wrapped in an `ErrorBoundary`. A crashing package cannot take down the whole app or other windows.
+6. **Package Identity Clarity** — One `entry.ts` manifest per package. No ambiguous multi-package bundles.
+7. **Versioned Compatibility** — Breaking changes use versioned IDs. Old consumers continue working until explicitly migrated.
 
 ---
 
