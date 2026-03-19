@@ -1,5 +1,5 @@
 import { useSyncExternalStore, useCallback } from 'react';
-import { Storage } from '../services/storageEngine';
+import { StorageEngine } from '../services/storageEngine';
 
 /**
  * A React Hook connecting Components to the Storage Engine's Socket Bus.
@@ -13,7 +13,7 @@ export function useAceMemory<T = any>(key: string): T | undefined {
     const subscribe = useCallback(
         (onStoreChange: () => void) => {
             // By passing `onStoreChange`, we tell React when it needs to re-fetch the snapshot
-            return Storage.subscribe(key, onStoreChange);
+            return StorageEngine.subscribe(key, onStoreChange);
         },
         [key]
     );
@@ -21,10 +21,10 @@ export function useAceMemory<T = any>(key: string): T | undefined {
     // 2. Define how React reads the current instant value from RAM
     const getSnapshot = useCallback(() => {
         // If it returns undefined for a memory, try to find it as a classification tag
-        const memoryPayload = Storage.readMemory(key);
+        const memoryPayload = StorageEngine.readMemory(key);
         if (memoryPayload !== undefined) return memoryPayload as T;
 
-        const classificationPayload = Storage.readClassification(key);
+        const classificationPayload = StorageEngine.readClassification(key);
         return classificationPayload as T;
     }, [key]);
 

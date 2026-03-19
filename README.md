@@ -30,10 +30,13 @@ The system now enforces a strict **Host-Guest Architecture** to decouple core se
 ### 1. The Global Bridge (`window.ACE`)
 All package interactions must go through the `window.ACE` global object. Direct imports from `src/core` are forbidden for guest packages.
 
-- **ACE.memory**: Read/Write to global RAM.
-- **ACE.events**: Emit events to the Event Bus.
-- **ACE.registry**: Register packages, components, and tools.
-- **ACE.hooks**: Access shared React hooks (`useAceWindow`, `useAceWidget`).
+- **ACE.registry**: The central registry engine.
+- **ACE.widget**: Widget engine for retrieving widget schemas.
+- **ACE.tool**: Tool engine for command execution.
+- **ACE.process**: Process management engine.
+- **ACE.window**: Window management engine.
+- **ACE.event**: Global event bus.
+- **ACE.storage**: Persistent storage engine.
 
 ### 2. Registry System
 Packages register their domains at runtime using the bridge. The system is **Entry-Driven**: each package provides an `entry.ts` that registers its modules.
@@ -41,11 +44,12 @@ Packages register their domains at runtime using the bridge. The system is **Ent
 ```ts
 // In entry.ts
 window.ACE.registry.registerPackage(manifest);
-window.ACE.registry.registerPackageModules('my-package', { ... });
+const modules = import.meta.glob('./**/*.(ts|tsx)', { eager: true });
+window.ACE.registry.registerPackageModules(manifest.name, modules);
 ```
 
-### 3. Tool Engine
-The `ToolEngine` service (formerly `ToolRegistry`) manages all executable tools. Tools are defined as pure objects and registered via the registry.
+### 3. Engine Ecosystem
+All core functionality is now exposed via dedicated engines (WidgetEngine, ToolEngine, etc.) which act as facades over the central Registry. Packages should use these engines to interact with the system.
 
 ### 4. React-First Window Management
 Windows are **React Components** that manage their own spatial state using the `useAceWindow` hook provided by the bridge. This allows for full customizability of the window frame and behavior.
@@ -55,15 +59,11 @@ Windows are **React Components** that manage their own spatial state using the `
 ## �🚀 Development Roadmap
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor
+- [ ] **Post-Migration Architecture Debug & Correction**: Comprehensive debugging and architecture fixes following the recent Host-Guest and package ecosystem migrations. (Main Goal)
 - [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (postpone for now since we need a robust event and ui and correct gateway so we can get the correct feedback)
 - [ ] **Formalize Schemas (Remaining)**: Widget snapshot contracts and restoration-specific widget config schemas.
 - [ ] **Align Storage Engine**: Enforce Pre-Allocation Protocol for all results.
 - [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results.
-- [x] **Formalize Widget Filesystem Scopes**: Finalize package-first scopes across `src/core/packages` and AppConfig install root `packages/<owner>/<package>/`.
-- [x] **Define Built-In vs User Package Ownership**: Core packages live in `src/core/packages` and are non-removable; local/user submissions live in `widgets` with one package identity/name; widget contracts stay focused on `components` + `windows`, while cross-domain bundles are classified as package ecosystem packages.
-- [x] **Adopt `PackageEcosystemSchema` End-to-End**: Wire loader/validator/runtime usage so cross-domain bundles are validated and tracked explicitly.
-- [x] **Widget Registry Runtime Upgrade**: Ensure runtime registration and diagnostics use `widgets` binding (`component + window`) as first-class contract.
-- [x] **Package Discovery Pipeline**: Build discovery for `src/core/packages` and AppConfig `packages/<owner>/<package>/` with clear precedence and conflict diagnostics.
 
 ### 🧩 Phase 3: The Development UI Kit
 - [ ] **Widget Filesystem Explorer / Diagnostics**: Expose mirrored widget registry directories (`core`, `local widgets`, `config`) in Dev Kit for validation and debugging.
@@ -187,26 +187,18 @@ To maintain a unified architecture without blocking progress on the SDK:
 *A. The Widget Definition (`widget.ts`)*
 Defines the top-level composition.
 ```typescript
-import { ACE } from 'ace-api'; // Mock/Shim for dev
+import type { AceRegistryType } from '#/schemas/registryTypes';
 
-export const WeatherWidget = () => {
-  // 1. JIT Registration: "I am a widget, give me an ID"
-  const { widgetUid } = ACE.hooks.useAceWidget({
-    package: "weather",
-    name: "main",
-    default_visibility: "visible"
-  });
+// 1. Explicit Identity Declaration
+export const registry: AceRegistryType.Widget = {
+  widget_name: 'weather_main',
+  description: 'Main weather dashboard',
+};
 
-  // 2. Window Connection: "I own a window, manage it"
-  const { windowUid } = ACE.hooks.useAceWindow({
-    parent_widget: widgetUid,
-    title: "Weather",
-    bounds: { width: 300, height: 200 }
-  });
-
-  // 3. Render the Root Component inside the Window Slot
+// 2. The Component Implementation
+export default function WeatherWidget() {
   return (
-    <AceWindowSlot uid={windowUid}>
+    <AceWindowSlot uid="window:weather_main">
       <WeatherRootComponent />
     </AceWindowSlot>
   );
@@ -214,47 +206,22 @@ export const WeatherWidget = () => {
 ```
 
 *B. The Root Component (`components/Root.tsx`)*
-Pure React content. JIT Registration, Memory Creation, and Events.
+Pure React content. Explicit Component Registration.
 
 ```typescript
-export const WeatherRootComponent = (props: { widgetUid: string }) => {
-  // 1. JIT Component Registration (Get unique ID)
-  const { componentUid } = ACE.hooks.useAceComponent({
-    name: "weather-display",
-    parent_widget: props.widgetUid
-  });
+import type { AceRegistryType } from '#/schemas/registryTypes';
 
-  // 2. Local State ID Generation (Deterministic based on Component ID)
-  // "weather:state:<random_uuid>"
-  const [internalStateId] = useState(() => ACE.memory.createId("weather:state"));
+export const registry: AceRegistryType.Component = {
+  component_name: 'weather_root',
+};
 
-  // 3. READ: Subscribe to RAM (Global or Local)
-  const temperature = ACE.memory.use("weather:curr_temp"); // Shared global key
-  const viewState = ACE.memory.use(internalStateId, { mode: "detailed" }); // Private local key
-
-  // 4. WRITE: Emit Intent (IoC - ask Host to do work)
-  const refresh = () => {
-    // Write transient state to local RAM first
-    ACE.memory.write(internalStateId, { loading: true });
-
-    ACE.events.emit({
-      action: "execute_tool",
-      payload: { tool: "fetch_weather" },
-      // Tell the tool where to write the result
-      reply_to_memory: "weather:curr_temp"
-    });
-  };
-
+export default function WeatherRootComponent() {
+  // 1. Access Shared State via Engine
+  const temperature = window.ACE.memory.use("weather:curr_temp"); 
+  
   return (
-    <div className="weather-card" data-uid={componentUid}>
-      <div className="header">
-        <h1>{temperature}°C</h1>
-        {viewState.loading && <Spinner />}
-      </div>
-      <button onClick={refresh}>Refresh</button>
-
-      {/* 5. Sub-Slot for plugins to extend this component */}
-      <AceComponentSlot name="weather.footer_actions" context={{ temp: temperature }} />
+    <div className="weather-card">
+      <h1>{temperature}°C</h1>
     </div>
   );
 };
@@ -265,58 +232,43 @@ A Host component that acts as a boundary:
 - Error Boundaries: If a Guest crashes, the Slot turns red, but the Host stays alive.
 - Props Injection: The Host injects authorized context into the Guest via the Slot.
 
-**4. The "Registry-Less" Vision (Bundled SDK Goal)**
-*Goal: Automation. Developers write Code, not Config.*
+**4. The "Entry-Driven" Standard**
+*Goal: Clarity and Explicit Ownership.*
 
-In the future SDK, `entry.ts` manifest stays minimal while domain registration is inferred and auto-wired. The Bundler (or Runtime) detects your `useAce*` hooks and auto-registers your definitions.
+We use **Explicit Registration**. Code is code, metadata is metadata.
 
-**The "Magic" Manifest**:
+**The Entry Manifest (`entry.ts`)**:
 ```ts
-// entry.ts (Minimal manifest + bootstrap)
+// entry.ts
 export const manifest = {
   namespace: 'user.jiran/weather',
   package_name: 'user.jiran/weather',
   version: '1.0.0',
-  permissions: ['network', 'storage']
 };
 
+// Standard Boilerplate
 export default function bootstrap() {
   window.ACE.registry.registerPackage(manifest);
+  
+  // Register all modules from this package
+  const modules = import.meta.glob('./**/*.(ts|tsx)', { eager: true });
+  window.ACE.registry.registerPackageModules(manifest.package_name, modules);
 }
 ```
-*No manual lists of widgets or windows required. They are inferred from the code.*
-
-*The "Magic" Flow*:
-1. Developer writes code using `ACE.hooks.useAceWidget(...)`.
-2. The SDK Bundler detects this call.
-3. The Bundler automatically injects the widget metadata into the Registration Payload (hidden from user).
-4. When `main.js` loads, it registers the capabilities without user friction.
-
-*Result:* Developer simply defines package metadata, and the rest is inferred.
 
 **5. Granular Unit Lifecycle (Lazy Loading)**
-*Goal: Load only what is needed. Don't run the whole package if the user only requested one specific tool.*
+*Goal: Load only what is needed.*
 
 We move away from monolithic "Package Launch" to **Granular Unit Activation**. The Host loads code lazily based on the specific capability requested.
 
-*A. Granular Activation Map (`main.ts`)*
-The Bundler scans this config to know *which file* to load for *which event*, without loading the whole bundle.
+*A. Package Entry Point (`entry.ts`)*
+The registry knows exactly where each capability lives because the `import.meta.glob` map provides the file paths.
 
 ```typescript
-ACE.config.defineRegistry({
-  // 1. Widget: Only loads React/UI code when user explicitly opens it
-  "weather-main": {
-    kind: "widget",
-    activation: { on_command: "weather.open" },
-    entry: "./ui/WeatherWidget.tsx"
-  },
-
-  // 2. Tool: Only loads the function when AI calls "get_forecast"
-  "fetch-forecast": {
-    kind: "tool",
-    activation: { on_tool_call: "weather.get_forecast" },
-    entry: "./tools/WeatherActions.ts"
-  },
+// entry.ts
+// The registry stores the module path for each tool/widget
+// enabling targeted execution.
+```
 
   // 3. Process: Runs automatically at boot (Background Service)
   "sync-service": {
@@ -506,7 +458,7 @@ Current direction (adopted):
 
 #### 6.1) Registry Input-First Runtime (Implemented Foundation)
 
-- [x] Added per-domain registry input API surface (`useAceTool.registry`, `useAceProcess.registry`, `useAcePipeline.registry`, `useAceComponent.registry`, `useAceWindowRegistry.registry`, `useAceWidget.registry`).
+- [x] Added per-domain registry input API surface (`export const registry`).
 - [x] Added singleton registry input backing store to collect dynamic per-package domain payloads.
 - [x] RegistryEngine now merges package manifest + domain inputs before publishing runtime registries.
 - [x] Added `system:registry_input_diagnostics` so validation can run after input aggregation and show missing domains.

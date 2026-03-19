@@ -1,4 +1,4 @@
-import { Storage } from '#/services/storageEngine';
+import { StorageEngine } from '#/services/storageEngine';
 
 export interface PipelineStep<TInput, TOutput> {
     name: string;
@@ -56,7 +56,7 @@ export class PipelineEngine<TInitial, TFinal> {
 
             // 2. Laporkan progress ke RAM (agar UI bisa tahu)
             if (context.process_uid) {
-                Storage.dispatchRAMAction({
+                StorageEngine.dispatchRAMAction({
                     action: 'update_memory',
                     memory_uid: context.process_uid,
                     payload: { current_step: step.name }
@@ -116,7 +116,7 @@ export class PipelineEngine<TInitial, TFinal> {
         process_uid: string | null;
         error: string | null;
     }) {
-        let current = (Storage.readMemory('system:pipeline_registry') as any[] | undefined);
+        let current = (StorageEngine.readMemory('system:pipeline_registry') as any[] | undefined);
         if (!Array.isArray(current)) current = [];
         
         const existing = current.find((item) => item.run_id === record.run_id);
@@ -136,7 +136,7 @@ export class PipelineEngine<TInitial, TFinal> {
             next = [...current, record].slice(-this.maxPipelineLogs);
         }
 
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:pipeline_registry',
             payload: next,

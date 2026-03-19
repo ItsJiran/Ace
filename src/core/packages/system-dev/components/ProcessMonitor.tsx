@@ -1,6 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
-import { Storage } from '#/services/storageEngine';
+import { StorageEngine } from '#/services/storageEngine';
 import type { ProcessRecord } from '#/schemas/process';
 
 export const registry: AceRegistryType.Component = {
@@ -14,9 +14,9 @@ export function ProcessMonitor() {
 
     useEffect(() => {
         const refresh = () => {
-            const uids = (Storage.readClassification('system:process_registry') || []) as string[];
+            const uids = (StorageEngine.readClassification('system:process_registry') || []) as string[];
             const next = uids
-                .map((uid) => Storage.readMemory(uid) as ProcessRecord | undefined)
+                .map((uid) => StorageEngine.readMemory(uid) as ProcessRecord | undefined)
                 .filter(Boolean) as ProcessRecord[];
 
             next.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));

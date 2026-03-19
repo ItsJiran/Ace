@@ -22,9 +22,11 @@ Drag behavior is also metadata-driven:
 
 The UI is composed of **Packages** which contain **Components**.
 
-1. **Package Registration**: At boot, packages register themselves via `window.ACE.registry`.
-2. **Component Lookup**: Components are stored in the global registry under `${package}:${name}` or simple names.
-3. **Window Engine**: Opens windows by referencing a registered component name.
+1. **Package Registration**: At boot, packages register themselves via `window.ACE.registry` (RegistryEngine).
+2. **Registry-First Storage**: All components, widgets, and tools are stored securely in the central `RegistryEngine` using a generic schema.
+3. **Engine Facades**: 
+   - `WidgetEngine` (`window.ACE.widget`) acts as a facade to lookup UI components from the registry.
+   - `WindowEngine` (`window.ACE.window`) orchestrates window spawning by resolving component definitions.
 4. **Resiliency**: Missing registrations fall back to a safe diagnostic placeholder component.
 
 ## Interaction Schema Requirements

@@ -1,5 +1,6 @@
-import { Storage } from './storageEngine';
+import { StorageEngine } from './storageEngine';
 import { EventBus } from './eventEngine';
+import { RegistryEngine } from './registryEngine';
 import { GlobalStateManager } from './globalStateManager';
 import { invoke } from '@tauri-apps/api/core';
 import { cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
@@ -27,18 +28,30 @@ class WindowEngineSingleton {
     private animationRetargets = new Map<string, LiteralBounds>();
 
     private getMouseFocusEnabled() {
-        const mouseFocusMemory = Storage.readMemory('system:mouse_focus_enabled');
+        const mouseFocusMemory = StorageEngine.readMemory('system:mouse_focus_enabled');
         if (typeof mouseFocusMemory === 'boolean') {
             return mouseFocusMemory;
         }
 
-        const globalState = Storage.readMemory('system:global_state') as GlobalState | undefined;
+        const globalState = StorageEngine.readMemory('system:global_state') as GlobalState | undefined;
         return globalState?.focus.mouse_focus_enabled ?? true;
+    }
+
+    /**
+     * Retrieve a specific window entry from the registry.
+     * Wraps RegistryEngine.getDomainEntry with 'windows' domain preset.
+     */
+    getRegistry({ packageName, name }: { packageName: string; name: string }) {
+        return RegistryEngine.getDomainEntry({
+            packageName,
+            domain: 'windows',
+            name
+        });
     }
 
     constructor() {
         // 1. Initialize the root Overlay State into accessible Global RAM
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:overlay_state',
             payload: {
@@ -52,7 +65,7 @@ class WindowEngineSingleton {
         });
 
         // 2. Initialize the Windows Dictionary into accessible Global RAM
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:windows',
             payload: {} as Record<string, WindowConfig>,
@@ -126,14 +139,14 @@ class WindowEngineSingleton {
 
             // If mouse-focus behavior is disabled, always enforce ambient pass-through.
             if (!state.focus.mouse_focus_enabled) {
-                const overlayState = Storage.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
                 if (overlayState?.mode !== 'ambient') {
                     this.setOverlayMode('ambient');
                 }
                 return;
             }
 
-            const windows = (Storage.readMemory('system:windows') as Record<string, WindowConfig> | undefined) || {};
+            const windows = (StorageEngine.readMemory('system:windows') as Record<string, WindowConfig> | undefined) || {};
             const windowList = Object.values(windows).filter((win) => !win.is_minimized);
 
             if (windowList.length === 0) {
@@ -168,7 +181,7 @@ class WindowEngineSingleton {
                         logicalCursorY <= win.y + win.height;
                 });
 
-                const overlayState = Storage.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
                 const currentMode = overlayState?.mode ?? 'ambient';
 
                 // Re-enable interaction when cursor enters any overlay window bounds.
@@ -194,7 +207,7 @@ class WindowEngineSingleton {
      * Interactive: Catching pointer events (e.g. Chat box clicked).
      */
     setOverlayMode(mode: 'ambient' | 'interactive') {
-        const overlayState = Storage.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+        const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
         if (overlayState?.mode === mode) {
             return;
         }
@@ -206,9 +219,9 @@ class WindowEngineSingleton {
     }
 
     toggleDebugBg() {
-        const state = Storage.readMemory('system:overlay_state') as GlobalOverlayState;
+        const state = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState;
         if (state) {
-            Storage.dispatchRAMAction({
+            StorageEngine.dispatchRAMAction({
                 action: 'update_memory',
                 memory_uid: 'system:overlay_state',
                 payload: { debug_bg: !state.debug_bg }
@@ -241,7 +254,7 @@ class WindowEngineSingleton {
             is_minimized: false
         };
 
-        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
 
         // Remove focus from all others
         Object.keys(currentWindows).forEach(key => {
@@ -252,7 +265,7 @@ class WindowEngineSingleton {
         currentWindows[window_uid] = freshWindow;
 
         // Commit full state back to RAM
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',   // It overwrites if we use the same ID, or we can use update_memory
             memory_uid: 'system:windows',
             payload: currentWindows
@@ -263,11 +276,11 @@ class WindowEngineSingleton {
     }
 
     closeWindow(window_uid: string) {
-        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
         if (currentWindows[window_uid]) {
             const wasFocused = currentWindows[window_uid].is_focused;
             delete currentWindows[window_uid];
-            Storage.dispatchRAMAction({
+            StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: 'system:windows',
                 payload: currentWindows
@@ -284,13 +297,13 @@ class WindowEngineSingleton {
      * Useful for toggling lock state, opacity, etc.
      */
     updateWindowConfig(window_uid: string, updates: Partial<WindowConfig>) {
-        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
         if (!currentWindows[window_uid]) return;
 
         const updatedConfig = { ...currentWindows[window_uid], ...updates };
         currentWindows[window_uid] = updatedConfig;
 
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:windows',
             payload: currentWindows
@@ -300,7 +313,7 @@ class WindowEngineSingleton {
     focusWindow(window_uid: string) {
         if (!this.getMouseFocusEnabled()) return;
 
-        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
         if (!currentWindows[window_uid]) return;
 
         this.highest_z_index += 1;
@@ -310,7 +323,7 @@ class WindowEngineSingleton {
         });
         currentWindows[window_uid].z_index = this.highest_z_index;
 
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:windows',
             payload: currentWindows
@@ -328,7 +341,7 @@ class WindowEngineSingleton {
             return;
         }
 
-        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
         if (!currentWindows[window_uid]) return;
 
         invoke('set_ignore_cursor_events', { ignore: false }).catch(console.error);
@@ -346,7 +359,7 @@ class WindowEngineSingleton {
     }
 
     updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number) {
-        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
         if (!currentWindows[window_uid]) return;
 
         const current = currentWindows[window_uid];
@@ -361,7 +374,7 @@ class WindowEngineSingleton {
 
         currentWindows[window_uid] = { ...currentWindows[window_uid], x, y, width, height };
 
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:windows',
             payload: currentWindows
@@ -423,9 +436,9 @@ class WindowEngineSingleton {
     }
 
     private writeAnimationRuntimeState(state: AnimationRuntimeState) {
-        const existing = (Storage.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined) ?? {};
+        const existing = (StorageEngine.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined) ?? {};
         existing[state.window_uid] = state;
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:window_animations',
             payload: existing,
@@ -433,9 +446,9 @@ class WindowEngineSingleton {
     }
 
     private clearAnimationRuntimeState(window_uid: string) {
-        const existing = (Storage.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined) ?? {};
+        const existing = (StorageEngine.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined) ?? {};
         delete existing[window_uid];
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:window_animations',
             payload: existing,
@@ -459,7 +472,7 @@ class WindowEngineSingleton {
             this.cancelAnimation(window_uid);
         }
 
-        const currentWindows = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
         if (!currentWindows[window_uid]) return;
 
         this.animationSeqs.set(window_uid, sequence);
@@ -474,13 +487,13 @@ class WindowEngineSingleton {
         let holdUntil = -1;
 
         const getCurrentLiveBounds = (): LiteralBounds => {
-            const wins = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+            const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
             const win = wins[window_uid];
             return win ? { x: win.x, y: win.y, width: win.width, height: win.height } : { x: 0, y: 0, width: 56, height: 56 };
         };
 
         const step = (now: number) => {
-            const wins = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+            const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
             if (!wins[window_uid]) {
                 this.cleanupAnimation(window_uid);
                 return;
@@ -623,7 +636,7 @@ class WindowEngineSingleton {
         if (!seq) return;
         if (seq.interrupt_policy === 'lock') return;
 
-        const wins = Storage.readMemory('system:windows') as Record<string, WindowConfig>;
+        const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
         const win = wins[window_uid];
         if (!win) return;
 

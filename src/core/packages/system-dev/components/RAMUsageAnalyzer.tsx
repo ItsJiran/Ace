@@ -1,9 +1,9 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Storage } from '#/services/storageEngine';
+import { StorageEngine } from '#/services/storageEngine';
 
-type RAMStats = ReturnType<typeof Storage.getRAMStats>;
+type RAMStats = ReturnType<typeof StorageEngine.getRAMStats>;
 
 type ProcessMemory = {
     rss_bytes: number;
@@ -46,12 +46,12 @@ export const registry: AceRegistryType.Component = {
 };
 
 export function RAMUsageAnalyzer() {
-    const [stats, setStats] = useState<RAMStats>(() => Storage.getRAMStats());
+    const [stats, setStats] = useState<RAMStats>(() => StorageEngine.getRAMStats());
     const [procMem, setProcMem] = useState<ProcessMemory>({ rss_bytes: 0, vm_bytes: 0 });
 
     useEffect(() => {
         const refresh = async () => {
-            setStats(Storage.getRAMStats());
+            setStats(StorageEngine.getRAMStats());
             setProcMem(await fetchProcessMemory());
         };
 
@@ -146,7 +146,7 @@ export function RAMUsageAnalyzer() {
             <div className="flex items-center justify-between text-[10px] text-zinc-500">
                 <span>Updated: {new Date(stats.sampled_at).toLocaleTimeString()}</span>
                 <button
-                    onClick={() => setStats(Storage.getRAMStats())}
+                    onClick={() => setStats(StorageEngine.getRAMStats())}
                     className="rounded border border-zinc-700 bg-zinc-900/70 px-2 py-1 text-zinc-300 hover:bg-zinc-800"
                 >
                     Refresh

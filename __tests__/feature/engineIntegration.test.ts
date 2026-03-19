@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { parseAIStreamChunk } from '#/services/aiParser';
 import { EventBus } from '#/services/eventEngine';
-import { Storage } from '#/services/storageEngine';
+import { StorageEngine } from '#/services/storageEngine';
 import type { Interaction } from '#/schemas/events';
 
 describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket Workflow', () => {
@@ -15,12 +15,12 @@ describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket
     it('should route an AI Stream block to the EventBus, trigger a Mock Process, and verify the Storage sockets fire', () => {
         // 1. Setup the "React Component" (The Observability Socket)
         const reactComponentRenderSpy = vi.fn();
-        Storage.subscribe('type:ai_response', reactComponentRenderSpy);
+        StorageEngine.subscribe('type:ai_response', reactComponentRenderSpy);
 
         // 2. Setup the "Background Tool Process" (The Commander listening to the EventBus)
         const mockToolExecutor = vi.fn().mockImplementation((interaction: Interaction) => {
             // The Tool Executor executes the tool safely, and drops the raw data payload into Global RAM
-            Storage.dispatchRAMAction({
+            StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 process_uid: 'test_tool_executor',
                 payload: { raw_json: interaction.payload.text },
@@ -59,11 +59,11 @@ end_event
         expect(reactComponentRenderSpy).toHaveBeenCalledTimes(1);
 
         // C. Fetch the final payload directly from RAM to prove it works
-        const memoryArray = Storage.readClassification('type:ai_response');
+        const memoryArray = StorageEngine.readClassification('type:ai_response');
         expect(memoryArray).toBeDefined();
 
         const memoryId = memoryArray![0];
-        const massivePayloadData = Storage.readMemory(memoryId);
+        const massivePayloadData = StorageEngine.readMemory(memoryId);
         expect(massivePayloadData.raw_json).toBe("massive block");
     });
 });

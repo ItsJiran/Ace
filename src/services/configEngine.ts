@@ -1,5 +1,5 @@
 import { FSEngine } from './fsEngine';
-import { Storage } from './storageEngine';
+import { StorageEngine } from './storageEngine';
 import { GlobalStateManager } from './globalStateManager';
 import { BASE_CONFIG_ITEMS, BASE_KEYBINDS } from '#/constants/defaults';
 import type { ConfigItem } from '#/schemas/config';
@@ -142,7 +142,7 @@ class ConfigEngineSingleton {
     }
 
     private syncConfigToRAM(items: ConfigItem[]) {
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:config',
             payload: items,
@@ -153,7 +153,7 @@ class ConfigEngineSingleton {
     }
 
     private syncKeybindsToRAM(binds: Keybind[]) {
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:keybinds',
             payload: binds,
@@ -178,7 +178,7 @@ class ConfigEngineSingleton {
     }
 
     async updateConfigItem(key: string, value: any, category?: string, description?: string) {
-        const currentItems = (Storage.readMemory('system:config') as ConfigItem[] | undefined) || [];
+        const currentItems = (StorageEngine.readMemory('system:config') as ConfigItem[] | undefined) || [];
         const nextItems = [...currentItems];
         const existingIndex = nextItems.findIndex((item) => item.key === key);
 

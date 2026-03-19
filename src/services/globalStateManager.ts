@@ -1,4 +1,4 @@
-import { Storage } from './storageEngine';
+import { StorageEngine } from './storageEngine';
 import type { GlobalState } from '#/schemas/globalState';
 import type { GlobalOverlayState } from '#/schemas/window';
 import type { ConfigItem } from '#/schemas/config';
@@ -33,9 +33,9 @@ const MOUSE_FOCUS_MEMORY_UID = 'system:mouse_focus_enabled';
 
 class GlobalStateManagerSingleton {
     constructor() {
-        const existing = Storage.readMemory('system:global_state');
+        const existing = StorageEngine.readMemory('system:global_state');
         if (!existing) {
-            Storage.dispatchRAMAction({
+            StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: 'system:global_state',
                 payload: DEFAULT_GLOBAL_STATE,
@@ -43,9 +43,9 @@ class GlobalStateManagerSingleton {
             });
         }
 
-        const mouseFocusExisting = Storage.readMemory(MOUSE_FOCUS_MEMORY_UID);
+        const mouseFocusExisting = StorageEngine.readMemory(MOUSE_FOCUS_MEMORY_UID);
         if (typeof mouseFocusExisting !== 'boolean') {
-            Storage.dispatchRAMAction({
+            StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: MOUSE_FOCUS_MEMORY_UID,
                 payload: true,
@@ -55,7 +55,7 @@ class GlobalStateManagerSingleton {
     }
 
     readState() {
-        return (Storage.readMemory('system:global_state') as GlobalState | undefined) ?? DEFAULT_GLOBAL_STATE;
+        return (StorageEngine.readMemory('system:global_state') as GlobalState | undefined) ?? DEFAULT_GLOBAL_STATE;
     }
 
     setCursorPosition(x: number, y: number) {
@@ -192,9 +192,9 @@ class GlobalStateManagerSingleton {
             },
         }));
 
-        const existing = Storage.readMemory(MOUSE_FOCUS_MEMORY_UID);
+        const existing = StorageEngine.readMemory(MOUSE_FOCUS_MEMORY_UID);
         if (existing !== mouse_focus_enabled) {
-            Storage.dispatchRAMAction({
+            StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: MOUSE_FOCUS_MEMORY_UID,
                 payload: mouse_focus_enabled,
@@ -217,9 +217,9 @@ class GlobalStateManagerSingleton {
             },
         }));
 
-        const existing = Storage.readMemory(MOUSE_FOCUS_MEMORY_UID);
+        const existing = StorageEngine.readMemory(MOUSE_FOCUS_MEMORY_UID);
         if (existing !== mouse_focus_enabled) {
-            Storage.dispatchRAMAction({
+            StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: MOUSE_FOCUS_MEMORY_UID,
                 payload: mouse_focus_enabled,
@@ -283,7 +283,7 @@ class GlobalStateManagerSingleton {
         const currentState = this.readState();
         const nextState = updater(currentState);
 
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:global_state',
             payload: nextState,
@@ -292,7 +292,7 @@ class GlobalStateManagerSingleton {
     }
 
     private syncOverlayState(patch: Partial<GlobalOverlayState>) {
-        const currentOverlay = Storage.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+        const currentOverlay = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
         if (!currentOverlay) return;
 
         const hasActualChange = Object.entries(patch).some(([key, value]) => {
@@ -302,7 +302,7 @@ class GlobalStateManagerSingleton {
             return;
         }
 
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:overlay_state',
             payload: { ...currentOverlay, ...patch },

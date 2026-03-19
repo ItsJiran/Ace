@@ -1,5 +1,5 @@
 import { EventBus } from './eventEngine';
-import { Storage } from './storageEngine';
+import { StorageEngine } from './storageEngine';
 import { WindowEngine } from './windowEngine';
 import { GlobalStateManager } from './globalStateManager';
 import { ConfigEngine } from './configEngine';
@@ -33,7 +33,7 @@ class KeybindEngineSingleton {
             })));
         }
 
-        Storage.subscribe('system:keybinds', (binds: Keybind[] | undefined) => {
+        StorageEngine.subscribe('system:keybinds', (binds: Keybind[] | undefined) => {
             this.allKeybinds = binds || [];
             this.activeKeybinds = this.allKeybinds.filter((bind) => bind.enabled);
             void this.syncGlobalShortcutRegistrations();
@@ -81,7 +81,7 @@ class KeybindEngineSingleton {
     }
 
     private syncActiveKeybinds() {
-        const binds = Storage.readMemory('system:keybinds') as Keybind[] | undefined;
+        const binds = StorageEngine.readMemory('system:keybinds') as Keybind[] | undefined;
         this.allKeybinds = binds || [];
         this.activeKeybinds = this.allKeybinds.filter((bind) => bind.enabled);
     }

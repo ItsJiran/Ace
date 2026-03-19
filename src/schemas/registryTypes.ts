@@ -3,7 +3,7 @@
  *
  * Used in package source files to type-check `export const registry`.
  * Runtime normalization (owner_scope, registry_type, generated IDs, etc.)
- * is handled by CorePackageLoader and RegistryEngine — you do NOT need to
+ * is handled by RegistryEngine auto-discovery — you do NOT need to
  * specify those here.
  *
  * Future: This namespace is designed to be extractable as a standalone

@@ -1,4 +1,4 @@
-import { Storage } from './storageEngine';
+import { StorageEngine } from './storageEngine';
 import { EventBus } from './eventEngine';
 import { WindowEngine } from './windowEngine';
 import { FSEngine } from './fsEngine';
@@ -45,7 +45,7 @@ class LayoutEngineSingleton {
      * @param name The display name of the layout
      */
     async saveLayout(name: string) {
-        const windows = Storage.readMemory('system:windows') as Record<string, any>;
+        const windows = StorageEngine.readMemory('system:windows') as Record<string, any>;
         if (!windows) {
             console.warn('[LayoutEngine] No windows to save.');
             return;
@@ -173,7 +173,7 @@ class LayoutEngineSingleton {
             const layoutFiles = files.filter(f => f.name.endsWith('.json'));
             
             // Write to RAM for UI to display list
-            Storage.dispatchRAMAction({
+            StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: 'system:available_layouts',
                 payload: layoutFiles.map(f => ({ name: f.name, path: f.path })),

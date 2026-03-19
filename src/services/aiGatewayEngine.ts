@@ -1,4 +1,4 @@
-import { Storage } from './storageEngine';
+import { StorageEngine } from './storageEngine';
 import { EventBus } from './eventEngine';
 import { parseAIStreamChunk } from './aiParser';
 import type { Interaction } from '../schemas/events';
@@ -114,8 +114,8 @@ class AIGatewayEngineSingleton {
 
         // 1. PATHWAY A: Append Conversational Text to RAM
         if (textToPrint) {
-            const currentText = Storage.readMemory(ramKey) || '';
-            Storage.dispatchRAMAction({
+            const currentText = StorageEngine.readMemory(ramKey) || '';
+            StorageEngine.dispatchRAMAction({
                 action: 'update_memory',
                 memory_uid: ramKey,
                 payload: { text: currentText + textToPrint }
@@ -172,7 +172,7 @@ class AIGatewayEngineSingleton {
         session.activeOutputRamKey = reply_to_ram_key;
 
         // PRE-ALLOCATION
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: reply_to_ram_key,
             payload: { text: '', status: 'streaming', session_id: sessionId }
@@ -194,7 +194,7 @@ class AIGatewayEngineSingleton {
 
         // Finalize state
         session.status = 'connected';
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'update_memory',
             memory_uid: reply_to_ram_key,
             payload: { status: 'completed' }

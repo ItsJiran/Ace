@@ -13,9 +13,9 @@ This document formalizes how ACE treats packages as first-class modular products
 ## Core Principles
 
 1. **Self-Registering Files**: Every domain file declares its own identity via `export const registry`. No central wiring needed.
-2. **Entry-Driven Auto-Discovery**: `CorePackageLoader` loads each package `entry.ts` at boot. The entry then registers domain files via `window.ACE.registry.registerPackageModules(...)`.
+2. **Hybrid Discovery**: `RegistryEngine` uses `import.meta.glob` for core packages (build-time) and dynamic scanning for external packages (runtime).
 3. **Local-First Safety**: Package execution must respect ACE permission and validation gates.
-4. **Registry-Driven Runtime**: All domains become active only after passing registration schema validation.
+4. **Registry-Driven Runtime**: All domains are accessed via unified Engine APIs (`ACE.widget`, `ACE.tool`) that query the central Registry.
 5. **Isolation by Default**: Package state and outputs must be addressable by deterministic IDs.
 6. **Extensible by Users**: End users can contribute and install their own packages.
 
@@ -138,7 +138,12 @@ Files only need to declare a short `entry_id` or `tool_name`. The full namespace
 
 ## Application Boot & Package Registration Flow
 
-When the app starts, the following sequence orchestrates all package discovery and registration:
+When the app starts, the following sequence orchestrates all package discovery and registration using a **Hybrid Discovery Strategy**:
+
+| Package Type | Discovery Mechanism | Loading Strategy |
+|---|---|---|
+| **Core (Internal)** | `import.meta.glob` | **Build-Time Resolved**. Vite bundles references at compile time. |
+| **External (User)** | `fs.readDir` + `manifest.json` | **Runtime Resolved**. Tauri scans FS, app loads via Dynamic Import. |
 
 ### Phase 1: Bootstrap Environment (before `RegistryEngine.boot()`)
 
@@ -149,54 +154,50 @@ When the app starts, the following sequence orchestrates all package discovery a
        registry: {
            registerPackage: (manifest) => RegistryEngine.registerPackage(manifest),
            registerPackageModules: (packageName, modules) => 
-               RegistryEngine.registerPackageDomainsFromModules(packageName, modules),
+               RegistryEngine.registerPackageModules(packageName, modules),
        }
    };
    ```
 
-### Phase 2: Core Package Discovery & Registration
+### Phase 2: Core Package Discovery (Build-Time)
 
-3. **Core packages lookup** — `CorePackageLoader` scans `src/core/packages/*/entry.ts` via `import.meta.glob()`.
-4. **For each core package entry.ts:**
-   - Extract `manifest` export (package identity)
-   - Call `window.ACE.registry.registerPackage(manifest)` to register the package
-   - Extract `default` export (bootstrap function)
-   - Collect `import.meta.glob()` result of all domain files
-   - Call `window.ACE.registry.registerPackageModules(packageName, modules)` to register all domains at once
-   - `RegistryEngine.registerPackageDomainsFromModules()` auto-discovers and registers widgets, components, windows, tools, features, processes, pipelines from the glob result
+3. **Core packages lookup** — `RegistryEngine` executes the pre-compiled glob patterns found in source.
+   - `src/core/packages/*/entry.ts` are already resolved by Vite.
+4. **For each core package entry:**
+   - The `entry.ts` executes immediately.
+   - It calls `window.ACE.registry.registerPackage(manifest)`.
+   - It calls `window.ACE.registry.registerPackageModules(pkg, modules)` using the `import.meta.glob` results from within the package.
+   - **Result**: Core domains are registered synchronously during boot.
 
-### Phase 3: External Package Discovery & Loading
+### Phase 3: External Package Discovery (Runtime)
 
-5. **External packages lookup** — `RegistryEngine` scans `~/.config/com.ace.assistant/packages/` for `registry.json` entry manifests.
-6. **For each external package:**
-   - Validate manifest schema and capabilities
-   - If package has an `entry_point` (bundled.js), dynamically load it via:
-     ```typescript
-     const assetUrl = convertFileSrc(scriptPath); // Convert filesystem path to webview asset://
-     await import(/* @vite-ignore */ assetUrl);  // Load the bundle
-     ```
-   - Bundle executes and calls `window.ACE.registry.registerPackage(manifest)` + `window.ACE.registry.registerPackageModules(...)` on its own
+5. **Scanning** — `RegistryEngine` uses Tauri FS API to scan `~/.config/ace/packages/` for folders containing `manifest.json`.
+   - *Security Check*: Validates manifest structure before loading any code.
+6. **Dynamic Loading** — For each valid external package:
+   - **Path Resolution**: Converts the absolute path of `dist/index.js` to a webview-compatible URL (e.g., `asset://localhost/.../index.js`).
+   - **Dynamic Import**: Executes `await import(/* @vite-ignore */ entryUrl)`.
+7. **Self-Registration** — The loaded bundle executes its entry point:
+   - The bundle contains the "hydrated" modules map internally (generated by the package author's bundler).
+   - It calls `window.ACE.registry.registerPackageModules(...)` just like a core package.
+   - **Result**: External domains are registered asynchronously after boot.
 
 ### Phase 4: Publish to RAM
 
-7. **All packages registered** — `RegistryEngine.publishToRAM()` aggregates all registered packages and domains:
-   - `system:package_registry` — list of all package summaries (counts of each domain)
-   - `system:registry_domains` — flattened list of all domain entries by type (widgets, components, windows, tools, etc.)
-   - `system:widget_entries` — widget-specific metadata (launch profiles, action bindings)
-   - `system:registry_input_diagnostics` — debug info per package
+8. **Aggregation** — `RegistryEngine.publishToRAM()` aggregates all registered packages (Core + External) into Global RAM:
+   - `system:package_registry` — list of all package summaries.
+   - `system:registry_domains` — flattened list of all domain entries.
+   - `system:widget_entries` — widget-specific launch profiles.
 
-### Phase 5: Dependency Validation & Version Checking
+### Phase 5: Dependency Validation & Activation
 
-9. **Dependency resolution** — For each registered package, `RegistryEngine` validates declared dependencies:
-   - Check if all required packages (declared in entry manifest) are present and registered
-   - Verify version compatibility constraints
-   - Flag missing or incompatible dependencies before activation
-   - If critical dependencies missing → package marked as `invalid`, domains not activated
+9. **Dependency resolution** — `RegistryEngine` validates declared dependencies:
+   - Checks if required packages are present.
+   - Verifies version compatibility.
+   - If critical dependencies are missing → package marked `invalid`.
 
-10. **Versioning & compatibility** — Ensure all package versions meet:
-    - Minimum ACE framework version requirement
-    - Cross-package version compatibility (e.g., Package A requires Package B v1.2+)
-    - If validation fails → package blocked from execution, logged for admin/developer review
+10. **Widget Activation** — Valid widgets are made available to the `WidgetEngine` and Launcher.
+    - `skip_auto_execute: true` widgets wait for explicit invocation.
+    - Standard widgets are ready to be spawned by the user.
 
 ### Phase 6: Widget Runtime Execution
 
@@ -235,7 +236,7 @@ When the app starts, the following sequence orchestrates all package discovery a
 
 **Execution order with dependencies:**
 ```
-RegistryEngine.boot() → CorePackageLoader (register core) 
+RegistryEngine.boot() → registerPackage (register core) 
   → AutoDiscoverExternalPackages (register user packages)
   → ValidateDependencies (all packages)
   → PublishToRAM
@@ -258,12 +259,12 @@ RegistryEngine.boot() → CorePackageLoader (register core)
 
 **Key invariants:**
 - Both core and external packages use the **same** `window.ACE.registry` API.
-- `RegistryEngine` does **not** distinguish between core and user packages at registration time — all flow through the same validation and schema checks.
-- External bundles run in the same React context as core code — they can use `window.ACE.react` for React, hooks, etc.
-- All domains are schema-validated before activation (via Zod in `RegistryEngine.normalizePackageManifest()`).
-- **Widgets are the only domain with auto-execution behavior** — other domains (tools, features, processes, pipelines) are lazy, invoked on-demand.
-- Dependency validation happens **before any widget execution** — bad dependencies block widget activation.
-- Packages can opt-out of widget auto-execution via `skip_auto_execute: true` flag for external management.
+- **Hybrid Discovery**: Core is eager (bundled), External is lazy (dynamic import).
+- `RegistryEngine` normalizes both into a unified `RuntimeIndex`.
+- External bundles run in the same React context as core code.
+- All domains are schema-validated before activation.
+- **Widgets are the only domain with auto-execution behavior** — other domains are lazy.
+- Dependency validation happens **before any widget execution**.
 
 ---
 
@@ -271,7 +272,7 @@ RegistryEngine.boot() → CorePackageLoader (register core)
 
 1. **Discover** — User provides a package folder or bundle with `entry.ts` (or built entry bundle).
 2. **Validate** — ACE validates schema, declared capabilities, and permission requirements.
-3. **Register** — `CorePackageLoader` executes package entry, entry calls registry APIs, and `RegistryEngine` inserts entries into runtime registry.
+3. **Register** — `RegistryEngine` executes package entry, entry calls registry APIs, and `RegistryEngine` inserts entries into runtime registry.
 4. **Activate** — Package domains are live. Widgets appear in launcher, tools callable by AI, windows spawnable.
 5. **Observe** — Process runs are trackable via ProcessEngine. RAM subscriptions reflect state.
 6. **Revoke** — Package disabled/uninstalled. Registry entries removed. No core code change required.
@@ -309,8 +310,8 @@ Each domain file follows two rules:
 1. `export const registry` — minimal identity declaration, typed via `AceRegistryType`
 2. `export default` — **the main callable** for that domain. Can be: a React component, a plain function, an async function, or a config object.
 
-Package entry bootstrap auto-discovers both exports at boot via `import.meta.glob`.  
-`registry` determines *what* to register. `default` is *what gets called/rendered*.
+**Core Packages**: Entry uses `import.meta.glob` to discover these exports.
+**External Packages**: Internal bundler resolves these exports, and the bundle registers them manually interactively.
 
 ```typescript
 import type { AceRegistryType } from '#/schemas/registryTypes';
@@ -318,28 +319,67 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 ---
 
-### `entry.ts` — Package Manifest + Bootstrap
+### `entry.ts` — Core Package Manifest + Bootstrap
 
-One per package folder. Contains package-level metadata and registration bootstrap.
+One per core package folder. Contains package-level metadata and eager registration.
 
 ```ts
 export const manifest = {
   namespace: 'jiran/notepad',
   package_name: 'jiran/notepad',
   version: '1.0.0',
-  owner_scope: 'user',
+  owner_scope: 'core',
   source_scope: 'local',
-  display_name: 'Notepad Package',
-  file_location: 'src/core/packages/notepad',
 };
 
+// VITE GLOB: Resolved at Build Time
 const modules = import.meta.glob('./{widgets,components,windows,tools,features,processes,pipelines}/*.{ts,tsx}', {
   eager: true,
 });
 
-export default function registerPackage({ packageName }: { packageName: string }) {
+export default function bootstrap() {
   window.ACE.registry.registerPackage(manifest);
-  window.ACE.registry.registerPackageModules(packageName, modules);
+  window.ACE.registry.registerPackageModules(manifest.package_name, modules);
+}
+```
+
+---
+
+### External Package Loading Strategy (Bundled)
+
+External packages are loaded from `dist/index.js`. The bundler (e.g., tsup, vite lib) aggregates all domains into a single file that self-registers upon execution.
+
+**User Folder Structure:**
+```text
+~/.config/ace/packages/user.jiran.notepad/
+  ├── manifest.json       <-- Metadata statis (entry point, capabilities)
+  ├── dist/
+  │   ├── index.js        <-- Entry point bundle (code)
+  │   └── assets/
+```
+
+**Runtime Loading Logic (`RegistryEngine`):**
+1. **Reads `manifest.json`** to validate permissions and find `entry_point`.
+2. **Converts path** to `asset://.../dist/index.js`.
+3. **Dynamic Import**: `await import(url)`.
+4. **Execution**: The bundle runs and calls `window.ACE.registry` immediately.
+
+**Inside the Bundle (`dist/index.js` source):**
+```typescript
+// The bundler has already resolved all imports.
+import { registry as outputRegistry, default as outputFn } from './tools/OutputTool';
+
+// The bundle manually constructs the modules map
+const modules = {
+  'tools/OutputTool.ts': { registry: outputRegistry, default: outputFn }
+};
+
+const manifest = { ... };
+
+// Self-Registration
+if (window.ACE) {
+  window.ACE.registry.registerPackage(manifest);
+  window.ACE.registry.registerPackageModules(manifest.package_name, modules);
 }
 ```
 
@@ -394,7 +434,7 @@ export default function clipboardMonitor() {
 ### `components/NotepadUI.tsx` — Component (Pure UI)
 
 Konten visual yang di-render di dalam window.  
-Default export = React component yang di-mount oleh ComponentRegistry.  
+Default export = React component yang di-mount oleh sistem.  
 **Tidak memanggil `useAceWindow`** — itu urusan windows/.
 
 ```tsx
@@ -429,7 +469,7 @@ export default function NotepadUI() {
 
 Jembatan antara WindowEngine (drag, resize, lifecycle) dan UI component.  
 Wajib memanggil `useAceWindow(windowUid)`.  
-Default export = React component yang di-mount oleh ComponentRegistry saat window di-spawn.
+Default export = React component yang di-mount oleh WindowEngine saat window di-spawn.
 
 ```tsx
 import type { AceRegistryType } from '#/schemas/registryTypes';

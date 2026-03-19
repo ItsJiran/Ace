@@ -1,5 +1,5 @@
 import type { Interaction, CoreEngineHandlerArgs } from '#/schemas/events';
-import { Storage } from './storageEngine';
+import { StorageEngine } from './storageEngine';
 
 type ProcessCallback = (args: CoreEngineHandlerArgs<any>) => Promise<void>;
 type SyncProcessCallback = (args: CoreEngineHandlerArgs<any>) => void;
@@ -101,10 +101,10 @@ class EventEngineSingleton {
             payload: interaction.payload,
         };
 
-        const current = (Storage.readMemory('system:event_stream') as any[] | undefined) || [];
+        const current = (StorageEngine.readMemory('system:event_stream') as any[] | undefined) || [];
         const next = [...current, entry].slice(-this.maxEventLogs);
 
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:event_stream',
             payload: next,

@@ -1,6 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useState, useEffect } from 'react';
-import { Storage } from '#/services/storageEngine';
+import { StorageEngine } from '#/services/storageEngine';
 
 export const registry: AceRegistryType.Component = {
     name: 'ram_viewer',

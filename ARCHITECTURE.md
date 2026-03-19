@@ -26,26 +26,29 @@ The reactive tools mounted inside windows.
 ## 5. Event Engine, Process Registry, and Domain Engines
 The execution backend.
 - **Event Engine**: Routes normalized domain actions such as `open_window`, `close_window`, `send_gateway`, and `execute_tool`.
-- **Process Engine**: Passive lifecycle registry used only when an engine wants observability or cancellation.
-- **Domain Engines**: Self-sovereign services such as `aiGatewayEngine`, `windowEngine`, `fsEngine`, `layoutEngine`, and `pipelineEngine`.
+- **Process Engine**: Facade for the `processes` domain. Manages spawning and status updates, relying on `RegistryEngine` for definitions.
+- **Domain Engines**: Specialized singletons (`widgetEngine`, `toolEngine`, `windowEngine`) that act as domain-specific interfaces to the central `RegistryEngine`.
 
 ## Core Managers
 
 - `storageEngine`: Global RAM and classification memory.
 - `eventEngine`: System-wide intent router.
-- `processEngine`: Optional lifecycle registry.
-- `windowEngine`: Spatial window orchestrator.
+- `registryEngine`: **The Heart.** Central immutable registry for all package domains (Widgets, Tools, Processes, etc.).
+- `widgetEngine`: Facade for `widgets` and `components` domains.
+- `toolEngine`: Facade for `tools` domain with schema validation.
+- `processEngine`: Facade for `processes` domain and lifecycle management.
+- `windowEngine`: Facade for `windows` domain and spatial orchestration.
+- `pipelineEngine`: Facade for `pipelines` execution.
 - `globalStateManager`: Cursor, focus, config mirror, and runtime interaction tracker.
-- `layoutEngine`: Persistent layout snapshot manager for AppConfig JSON files.
-- `registryEngine`: Manages package installation and runtime registry for components/tools/widgets.
-- `toolEngine`: Manages executable tools and their schemas.
+- `layoutEngine`: Persistent layout snapshot manager.
 
 ## Package Runtime Model
 
 - Core packages live in `src/core/packages/` and ship with the app.
-- Core package identity is declared in `entry.ts` (`export const manifest`) and domain entries are registered through `window.ACE.registry`.
-- User packages are installed to AppConfig `packages/<owner>/<package>/` and should expose one package entry bundle that registers its manifest + domains through `window.ACE.registry`.
-- `registryEngine` is the source of truth for package/domain listings; `CorePackageLoader` executes package `entry.ts` files and delegates registration through the bridge.
+- Packages register their manifest and domains via `window.ACE.registry`.
+- **Registry-First**: All domain objects (widgets, components, tools) are stored as generic entries in `RegistryEngine`.
+- **Engine Facades**: Specific logic (like "Launch a Widget") is handled by `window.ACE.widget`, which internally queries `RegistryEngine`.
+- `registryEngine` is the single source of truth for all package data.
 
 ## 6. Core Package Architecture (Distributed Registry)
 

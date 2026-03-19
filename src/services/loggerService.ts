@@ -1,4 +1,4 @@
-import { Storage } from './storageEngine';
+import { StorageEngine } from './storageEngine';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
 
@@ -25,7 +25,7 @@ class LoggerServiceSingleton {
         if (this.isInitialized) return;
 
         // 1. Create the memory store in Global RAM
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:logs',
             payload: [] as LogEntry[],
@@ -59,10 +59,10 @@ class LoggerServiceSingleton {
             id: Math.random().toString(36).substring(2, 9)
         };
 
-        const currentLogs = Storage.readMemory('system:logs') as LogEntry[] || [];
+        const currentLogs = StorageEngine.readMemory('system:logs') as LogEntry[] || [];
         const newLogs = [...currentLogs, entry].slice(-MAX_LOGS);
 
-        Storage.dispatchRAMAction({
+        StorageEngine.dispatchRAMAction({
             action: 'create_memory', // Use create_memory to overwrite the array instead of merging it into an object
             memory_uid: 'system:logs',
             payload: newLogs,

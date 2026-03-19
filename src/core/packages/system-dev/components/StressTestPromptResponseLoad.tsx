@@ -1,6 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Storage } from '#/services/storageEngine';
+import { StorageEngine } from '#/services/storageEngine';
 
 type ChatStream = {
     id: string;
@@ -137,7 +137,7 @@ export function StressTestPromptResponseLoad() {
                 };
 
                 if (writeToRam) {
-                    Storage.dispatchRAMAction({
+                    StorageEngine.dispatchRAMAction({
                         action: 'create_memory',
                         memory_uid: `stress:prompt_response:${stream.id}`,
                         payload: {

@@ -52,12 +52,15 @@ This is the **only** way a package interacts with ACE at runtime.
 
 ```typescript
 // Exposed on window.ACE (initialized in src/boot.ts)
-interface AceRegistryAPI {
-    // Registry Bridge — boot-time only, called by CorePackageLoader and package entry files
-    registry: {
-        registerPackage: (manifest: unknown) => unknown;
-        registerPackageModules: (packageName: string, modules: Record<string, unknown>) => void;
-    };
+interface AceAPI {
+    registry: RegistryEngine; // For package registration (registerPackage, registerPackageModules)
+    widget: WidgetEngine;     // For UI Component lookup
+    tool: ToolEngine;         // For Tool validation & lookup
+    process: ProcessEngine;   // For Process registration & lifecycle
+    window: WindowEngine;     // For Window management
+    event: EventBus;          // For Interaction routing
+    storage: StorageEngine;   // For RAM access
+    PipelineEngine: Class<PipelineEngine>; // For Pipeline creation
 }
 ```
 
@@ -78,7 +81,7 @@ All packages — core and user — follow the same self-registering file pattern
    - Calls `window.ACE.registry.registerPackage(manifest)` to register package identity
    - Calls `window.ACE.registry.registerPackageModules(packageName, modules)` to auto-discover and register all domain files
 
-3. **At boot**, `CorePackageLoader` loads each package `entry.ts` and executes the default function.
+3. **At boot**, `RegistryEngine` loads each package `entry.ts` and executes it.
 
 This means **no manual wiring** — adding a file to the right folder is enough.
 

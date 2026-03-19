@@ -22,7 +22,7 @@ export interface BootupContext extends PipelineContext {
 const InitCoreRuntimeBedStep: PipelineStep<void, void> = {
     name: 'Init Core Runtime Bed',
     execute: async () => {
-        const { Storage } = await import('#/services/storageEngine');
+        const { StorageEngine } = await import('#/services/storageEngine');
         // const { DBEngine } = await import('#/services/dbEngine');
         const { EventBus } = await import('#/services/eventEngine');
         const { LoggerService } = await import('#/services/loggerService');
@@ -109,3 +109,4 @@ export class BootupPipeline extends PipelineEngine<void, void> {
         this.addStep(InitLayoutEngineStep);
     }
 }
+export default BootupPipeline;

@@ -1,63 +1,63 @@
+import { RegistryEngine } from './registryEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
-import {
-    ShellCommandTool
-} from '#/schemas/tooling';
-
 
 class ToolEngineSingleton {
-    private registry: Map<string, ToolDefinition<any>> = new Map();
-
-    constructor() {
-        // Register core tools automatically
-        this.register(ShellCommandTool);
-    }
-
     /**
-     * Registers a new tool into the system.
-     * This is polymorphic and supports any tool following the ToolDefinition pattern.
+     * Retrieve a specific tool definition from the registry.
+     * Wraps RegistryEngine.getDomainEntry with 'tools' domain preset.
      */
-    register(tool: ToolDefinition<any>) {
-        if (this.registry.has(tool.name)) {
-            console.warn(`ToolEngine: Overwriting existing tool definition for "${tool.name}"`);
-        }
-        this.registry.set(tool.name, tool);
-        console.log(`ToolEngine: Registered tool "${tool.name}"`);
-    }
-
-    /**
-     * Retrieves a tool by its unique name.
-     */
-    getTool(name: string): ToolDefinition<any> | undefined {
-        return this.registry.get(name);
+    getRegistry({ packageName, name }: { packageName: string; name: string }) {
+        return RegistryEngine.getDomainEntry({
+            packageName,
+            domain: 'tools',
+            name
+        });
     }
 
     /**
      * Validates raw parameters against a tool's Zod schema.
-     * Use this in the Event Bus before dispatching to the Process Engine.
      */
-    validate(toolName: string, parameters: unknown) {
-        const tool = this.getTool(toolName);
-        if (!tool) {
-            throw new Error(`ToolEngine: Tool "${toolName}" not found.`);
+    validate(packageName: string, toolName: string, parameters: unknown) {
+        const result = this.getRegistry({ packageName, name: toolName });
+        
+        if (!result || !result.entry) {
+            throw new Error(`ToolEngine: Tool "${packageName}/${toolName}" not found in Registry.`);
         }
 
-        const result = tool.schema.safeParse(parameters);
-        if (!result.success) {
-            throw new Error(`ToolEngine: Validation failed for "${toolName}": ${result.error.message}`);
+        const toolDef = result.entry.implementation as ToolDefinition<any>;
+        
+        if (!toolDef || !toolDef.schema) {
+             throw new Error(`ToolEngine: Invalid tool implementation for "${packageName}/${toolName}". Missing schema.`);
         }
 
-        return result.data;
+        const parseResult = toolDef.schema.safeParse(parameters);
+        if (!parseResult.success) {
+            throw new Error(`ToolEngine: Validation failed for "${packageName}/${toolName}": ${parseResult.error.message}`);
+        }
+
+        return parseResult.data;
     }
 
     /**
-     * Returns all registered tools for AI inspection or UI listing.
+     * Returns all registered tools for AI inspection.
+     * Note: This now queries the RegistryEngine directly.
      */
     getManifest() {
-        return Array.from(this.registry.values()).map(t => ({
-            name: t.name,
-            description: t.description,
-            // Extract the simple JSON schema for the AI if needed
-        }));
+        const packages = RegistryEngine.getPackages();
+        const tools = [];
+        for (const pkg of packages) {
+            const domain = pkg.domains.tools;
+            if (domain) {
+                for (const [name, entry] of Object.entries(domain)) {
+                    tools.push({
+                        name: name, // or entry.name if available
+                        packageName: pkg.manifest.package_name,
+                        // potentially more metadata
+                    });
+                }
+            }
+        }
+        return tools;
     }
 }
 

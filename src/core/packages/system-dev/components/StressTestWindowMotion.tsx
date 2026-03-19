@@ -1,7 +1,7 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 import { WindowEngine } from '#/services/windowEngine';
-import { Storage } from '#/services/storageEngine';
+import { StorageEngine } from '#/services/storageEngine';
 import type { WindowConfig } from '#/schemas/window';
 
 type AnimationType = 'bounce' | 'figure8' | 'pop_scale' | 'spring_snap';
@@ -44,7 +44,7 @@ export function StressTestWindowMotion({ windowUid }: { windowUid: string }) {
     const frameTimeAccRef = useRef(0);
 
     const capture = () => {
-        const wins = Storage.readMemory('system:windows') as Record<string, WindowConfig> | null;
+        const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig> | null;
         if (wins?.[windowUid]) {
             const w = wins[windowUid];
             baseRef.current = { x: w.x, y: w.y, width: w.width, height: w.height };

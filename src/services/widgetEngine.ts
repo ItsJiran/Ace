@@ -1,69 +1,63 @@
-import { create } from 'zustand';
-import type { RegistryPackage, WidgetComponent } from '../schemas/registry';
-import { RegistryPackageSchema } from '../schemas/registry';
+import { RegistryEngine } from './registryEngine';
+import type { RegistryDomainEntry } from '../schemas/registry';
 
-interface WidgetEngineState {
-    /** 
-     * Dictionary of all loaded widget modules.
-     * Key: The module name or repository path (e.g. 'local_system_monitor')
+/**
+ * ============================================================================
+ * WIDGET ENGINE - Widget & Component Management
+ * ============================================================================
+ * Consumes the central RegistryEngine to provide widget-specific logic locally.
+ * Acts as a domain-specific wrapper around generic registry data.
+ */
+
+class WidgetEngineSingleton {
+    /**
+     * Retrieve a specific widget definition from the registry.
+     * Wraps RegistryEngine.getDomainEntry with 'widgets' domain preset.
      */
-    registeredWidgets: Record<string, RegistryPackage>;
+    getRegistry({ packageName, name }: { packageName: string; name: string }) {
+        return RegistryEngine.getDomainEntry({
+            packageName,
+            domain: 'widgets',
+            name
+        });
+    }
 
     /**
-     * Parses and registers a raw JSON payload as a Widget Module.
-     * Validates strictly against Zod schemas.
+     * Retrieve a specific component definition from the registry.
+     * Wraps RegistryEngine.getDomainEntry with 'components' domain preset.
      */
-    registerWidget: (moduleId: string, rawRegistryJson: unknown) => void;
-
-    /**
-     * Quick lookup to grab the specific Component definition by its name.
-     * Useful for the Engine when trying to route an event to a component type.
-     */
-    getComponentDefinition: (componentName: string) => WidgetComponent | undefined;
+    getComponent({ packageName, name }: { packageName: string; name: string }) {
+        return RegistryEngine.getDomainEntry({
+            packageName,
+            domain: 'components',
+            name
+        });
+    }
 
     /**
      * Get all components across all modules that listen to a specific event.
+     * Iterates through all registered packages via RegistryEngine.
      */
-    getComponentsListeningTo: (eventName: string) => WidgetComponent[];
-}
+    getComponentsListeningTo(eventName: string): RegistryDomainEntry[] {
+        const listeners: RegistryDomainEntry[] = [];
+        const packages = RegistryEngine.getPackages();
 
-export const useWidgetEngine = create<WidgetEngineState>((set, get) => ({
-    registeredWidgets: {},
+        for (const pkg of packages) {
+            const components = pkg.domains['components'];
+            if (!components) continue;
 
-    registerWidget: (moduleId, rawRegistryJson) => {
-        // 1. Validate the payload using Zod. Throws an error if invalid.
-        const parsedRegistry = RegistryPackageSchema.parse(rawRegistryJson);
-
-        set((state) => ({
-            registeredWidgets: {
-                ...state.registeredWidgets,
-                [moduleId]: parsedRegistry
-            }
-        }));
-
-        console.log(`[Widget Engine] Successfully registered module: ${moduleId} v${parsedRegistry.version}`);
-    },
-
-    getComponentDefinition: (componentName) => {
-        const { registeredWidgets } = get();
-        for (const registry of Object.values(registeredWidgets)) {
-            const found = registry.components.find(c => c.name === componentName);
-            if (found) return found;
-        }
-        return undefined;
-    },
-
-    getComponentsListeningTo: (eventName) => {
-        const { registeredWidgets } = get();
-        const listeners: WidgetComponent[] = [];
-
-        for (const registry of Object.values(registeredWidgets)) {
-            for (const component of registry.components) {
-                const isListening = component.listens_to.some(sub => sub.listened_event === eventName);
-                if (isListening) listeners.push(component);
+            for (const entry of Object.values(components)) {
+                // Check if entry has listens_to (dynamically, since schema is loose)
+                const candidate = entry as any;
+                if (Array.isArray(candidate.listens_to)) {
+                    const isListening = candidate.listens_to.some((sub: any) => sub.listened_event === eventName);
+                    if (isListening) listeners.push(entry);
+                }
             }
         }
 
         return listeners;
     }
-}));
+}
+
+export const WidgetEngine = new WidgetEngineSingleton();
