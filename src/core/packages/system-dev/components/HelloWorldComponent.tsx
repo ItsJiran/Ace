@@ -4,7 +4,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_hello_world',
 };
 
-export function HelloWorldComponent() {
+export default function HelloWorldComponent() {
     return (
         <div className="w-full h-full bg-zinc-950 text-zinc-100 p-6 flex items-center justify-center">
             <div className="max-w-md w-full rounded-xl border border-zinc-700/60 bg-zinc-900/80 p-5 shadow-lg">

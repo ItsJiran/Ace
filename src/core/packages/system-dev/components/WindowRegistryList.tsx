@@ -7,7 +7,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_window_registry',
 };
 
-export function WindowRegistryList() {
+export default function WindowRegistryList() {
     const windows = window.ACE.memory.use<Record<string, WindowConfig>>('system:windows') || {};
     const rows = Object.values(windows).sort((a, b) => b.z_index - a.z_index);
 

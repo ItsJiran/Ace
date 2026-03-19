@@ -40,3 +40,5 @@ export const LoadingWidget: React.FC = () => {
         </div>
     );
 };
+
+export default LoadingWidget;

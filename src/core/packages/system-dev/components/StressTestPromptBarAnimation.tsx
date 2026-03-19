@@ -69,7 +69,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_prompt_bar',
 };
 
-export function StressTestPromptBarAnimation() {
+export default function StressTestPromptBarAnimation() {
     const [phase, setPhase]           = useState<Phase>('idle');
     const [fps, setFps]               = useState(0);
     const [isAutoLoop, setIsAutoLoop] = useState(false);

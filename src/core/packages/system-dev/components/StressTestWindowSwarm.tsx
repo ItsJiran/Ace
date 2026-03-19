@@ -21,7 +21,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_window_swarm',
 };
 
-export function StressTestWindowSwarm({ windowUid: _controllerUid }: { windowUid: string }) {
+export default function StressTestWindowSwarm({ windowUid: _controllerUid }: { windowUid: string }) {
     const [isRunning, setIsRunning] = useState(false);
     const [fps, setFps] = useState(0);
     const [frameTimeMs, setFrameTimeMs] = useState(0);

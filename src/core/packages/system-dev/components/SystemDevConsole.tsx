@@ -28,7 +28,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_console',
 };
 
-export function SystemDevConsole() {
+export default function SystemDevConsole() {
     const overlayState = window.ACE.memory.use<GlobalOverlayState>('system:overlay_state');
     const registryDomains = window.ACE.memory.use<RuntimeRegistryDomains>('system:registry_domains');
 

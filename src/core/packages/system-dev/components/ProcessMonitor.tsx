@@ -9,7 +9,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_process_monitor',
 };
 
-export function ProcessMonitor() {
+export default function ProcessMonitor() {
     const [rows, setRows] = useState<ProcessRecord[]>([]);
 
     useEffect(() => {

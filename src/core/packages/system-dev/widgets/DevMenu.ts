@@ -3,22 +3,23 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 export const registry: AceRegistryType.Widget = {
     widget_name: 'dev_menu',
     entry_id: 'dev_menu_main',
+    autostart: true,
+    environment: ['dev']
 };
 
-export default {
-    component_name: 'dev_menu',
-    window_profile: {
-        window_name: 'dev_menu',
-        default_window_preset: {
-            component_name: 'dev_menu',
-            width: 320,
-            height: 400,
-            chrome_style: 'standard',
-            title: 'Dev Menu',
-        },
-    },
-    launch_profile: {
-        surfaces: ['start_menu', 'command_palette'],
-        launch_order: 999,
-    },
-};
+/**
+ * Widget logic: Spawns the Dev Menu window.
+ */
+export default function activate() {
+    // Resolve default window configuration from registry
+    const windowDef = window.ACE.registry.resolveEntry('dev_menu', 'windows');
+    const default_config = windowDef?.metadata?.default_config;
+
+    window.ACE.window.spawnWindow(default_config || {
+        component_name: 'dev_menu',
+        title: 'Dev Kit (Fallback)',
+        width: 320,
+        height: 600
+    });
+}
+

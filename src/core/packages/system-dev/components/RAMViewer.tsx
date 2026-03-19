@@ -146,14 +146,14 @@ function RAMSection({ title, data, accent }: {
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export function RAMViewer() {
+export default function RAMViewer() {
     const [globalData, setGlobalData] = useState<Record<string, any>>({});
     const [classData, setClassData] = useState<Record<string, any>>({});
     const [refreshedAt, setRefreshedAt] = useState<string>('');
 
     const refreshRAM = () => {
-        const globalRam = (Storage as any).global_ram as Map<string, any>;
-        const classRam = (Storage as any).classification_ram as Map<string, string[]>;
+        const globalRam = (StorageEngine as any).global_ram as Map<string, any>;
+        const classRam = (StorageEngine as any).classification_ram as Map<string, string[]>;
 
         const sanitizedGlobal: Record<string, any> = {};
         for (const [k, v] of globalRam.entries()) {

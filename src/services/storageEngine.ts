@@ -218,4 +218,4 @@ class StorageEngineSingleton {
 }
 
 // Export as a pure Singleton
-export const Storage = new StorageEngineSingleton();
+export const StorageEngine = new StorageEngineSingleton();

@@ -6,7 +6,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_fps_counter',
 };
 
-export function FPSWidget() {
+export default function FPSWidget() {
     const [fps, setFps] = useState(0);
     const [frameMs, setFrameMs] = useState(0);
     const lastTsRef = useRef<number>(performance.now());

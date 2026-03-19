@@ -1,5 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import { SystemConsole } from '../components/SystemConsole';
+import SystemConsole from '../components/SystemConsole';
 import { useAceWindow } from '#/hooks/useAceWindow';
 
 export const registry: AceRegistryType.Window = {

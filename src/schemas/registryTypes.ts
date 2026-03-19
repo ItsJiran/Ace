@@ -22,6 +22,10 @@ export namespace AceRegistryType {
     export interface Widget {
         widget_name: string;
         entry_id?: string;
+        /** Should this widget launch automatically on system start? */
+        autostart?: boolean;
+        /** Which environments this widget is allowed to run in */
+        environment?: ('dev' | 'prod')[];
     }
 
     // -----------------------------------------------------------------------

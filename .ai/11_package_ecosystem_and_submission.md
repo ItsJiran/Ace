@@ -199,31 +199,22 @@ When the app starts, the following sequence orchestrates all package discovery a
     - `skip_auto_execute: true` widgets wait for explicit invocation.
     - Standard widgets are ready to be spawned by the user.
 
-### Phase 6: Widget Runtime Execution
+### Phase 6: Automatic Widget Execution
 
-11. **Widget activation** — Once all packages pass dependency validation:
-    - Iterate through all registered widgets
-    - For each widget, extract runtime configuration from `launch_profile` (if any):
-      ```typescript
-      launch_profile: {
-          surfaces: ['start_menu', 'command_palette'],  // Where widget appears
-          default_visibility: 'visible',                 // Initial visibility
-          startup_policy: 'opt_in' | 'always' | 'never', // Auto-start behavior
-          requires_user_pin: false,                      // Security gate
-          launch_order: 100,                             // Execution order
-      }
-      ```
+11. **Widget activation** — Once all packages pass dependency validation, `BootupPipeline` runs the `InitAutoStartWidgetsStep`:
+    - Iterate through all registered widgets.
+    - Check registry metadata for `environment` constraints (e.g. `['dev']`) against current mode.
+    - Check registry metadata for `autostart: true`.
 
-12. **Conditional widget execution** — Each widget declares via manifest:
-    - `skip_auto_execute: true` — widget is NOT executed automatically. Another package can manually invoke it later via `window.ACE.events.emit()` or direct calls.
-    - If NOT skipped → widget's `default` export is executed:
-      - If React component: rendered in launcher/start menu
-      - If function: invoked immediately (headless execution)
+12. **Activator Execution** — If `autostart` is true:
+    - The widget's default export (activator function) is executed immediately.
+    - This function typically spawns initial windows or starts background monitoring processes.
+    - Example: `DevMenu` widget calls `window.ACE.window.spawnWindow(...)`.
 
 13. **Runtime state** — After widget execution:
-    - Widget state is trackable in RAM (via `system:widget_entries`)
-    - Other packages can subscribe to widget state changes
-    - Widgets can emit events that trigger tools, features, processes, or other widgets
+    - Widget state is trackable in RAM (via `system:widget_entries`).
+    - Other packages can subscribe to widget state changes.
+    - Widgets can emit events that trigger tools, features, processes, or other widgets.
 
 ### Phase 7: System Ready for User
 
@@ -287,11 +278,13 @@ RegistryEngine.boot() → registerPackage (register core)
 
 ## Runtime Behavior Model
 
-1. Window layer is generic — it renders whatever `component_name` is registered.
-2. `RegistryEngine` resolves component/window names to implementations at runtime.
-3. Package logic operates via `EventEngine` + `StorageEngine` patterns.
-4. Tool execution is governed by domain engines with optional process observability.
-5. All packages — core and user — use the identical bridge API (`window.ACE`).
+1. Window layer is generic — it renders whatever `component_name` is registered in the `windows` domain.
+2. `App.tsx` iterates `system:windows` from RAM, resolves the entry, and renders it.
+3. The package's Window component is responsible for wrapping its content in `<AceWindow>` to provide the shell.
+4. `RegistryEngine` resolves component/window names to implementations at runtime.
+5. Package logic operates via `EventEngine` + `StorageEngine` patterns.
+6. Tool execution is governed by domain engines with optional process observability.
+7. All packages — core and user — use the identical bridge API `window.ACE`.
 
 ## What This Enables
 
@@ -385,47 +378,30 @@ if (window.ACE) {
 
 ---
 
-### `widgets/NotepadWidget.tsx` — Widget (UI Tile variant)
+### `widgets/NotepadWidget.ts` — Widget Activator
 
-Widget adalah entry point sistem. `registry` hanya menyimpan identity.  
-Default export bisa berupa **React component** (tile di launcher) atau **plain function** (headless).
-
-**Variant A — React component** (widget punya tile UI sendiri):
-
-```tsx
-import type { AceRegistryType } from '#/schemas/registryTypes';
-
-export const registry: AceRegistryType.Widget = {
-    widget_name: 'notepad',
-    entry_id: 'notepad_main',
-};
-
-// Default: React component ditampilkan sebagai tile di launcher / start menu
-export default function NotepadTile() {
-    return (
-        <button
-            className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-white/10"
-            onClick={() => window.ACE.events.emit({ action: 'open_window', component_name: 'notepad_window' })}
-        >
-            <span className="text-2xl">📝</span>
-            <span className="text-xs text-zinc-300">Notepad</span>
-        </button>
-    );
-}
-```
-
-**Variant B — Plain function** (widget headless, tidak punya tile):
+Widget adalah entry point untuk menjalankan behavior paket, seperti membuka window.  
+`registry` menentukan identitas dan kapan harus berjalan (`autostart`, `environment`).
 
 ```typescript
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
-    widget_name: 'clipboard_monitor',
+    widget_name: 'notepad',
+    entry_id: 'notepad_activator',
+    autostart: true,
+    environment: ['prod', 'dev']
 };
 
-// Default: fungsi yang dijalankan saat widget di-activate
-export default function clipboardMonitor() {
-    // monitor clipboard changes headlessly
+// Default export: Activator function (function yang dijalankan saat boot)
+export default function startNotepad() {
+    // Spawn window utama saat widget mulai
+    window.ACE.window.spawnWindow({
+        component_name: 'notepad_window',
+        title: 'Notepad',
+        width: 800,
+        height: 600
+    });
 }
 ```
 
@@ -468,25 +444,30 @@ export default function NotepadUI() {
 ### `windows/NotepadWindow.tsx` — Window Shell
 
 Jembatan antara WindowEngine (drag, resize, lifecycle) dan UI component.  
-Wajib memanggil `useAceWindow(windowUid)`.  
-Default export = React component yang di-mount oleh WindowEngine saat window di-spawn.
+Package bertanggung jawab membungkus kontennya dengan `<AceWindow>`.  
+Default export = React component yang menerima properties config dan rendering shell.
 
 ```tsx
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import { useAceWindow } from '#/hooks/useAceWindow';
+import { AceWindow } from '#/components/layout/AceWindow';
+import type { WindowConfig } from '#/schemas/window';
 import NotepadUI from '../components/NotepadUI';
 
 export const registry: AceRegistryType.Window = {
-    name: 'notepad_window',
+    window_name: 'notepad_window',
     react_behavior: 'window_shell',
 };
 
-export default function NotepadWindow({ windowUid }: { windowUid: string }) {
-    useAceWindow(windowUid);
-
-    return <NotepadUI />;
+export default function NotepadWindow({ config }: { config: WindowConfig }) {
+    // AceWindow menangani useAceWindow hook dan frame (minimize/close buttons)
+    return (
+        <AceWindow config={config}>
+            <NotepadUI />
+        </AceWindow>
+    );
 }
 ```
+
 
 ---
 

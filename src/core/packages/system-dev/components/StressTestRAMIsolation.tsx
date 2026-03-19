@@ -46,7 +46,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_ram',
 };
 
-export function StressTestRAMIsolation() {
+export default function StressTestRAMIsolation() {
     // Animation state — runs fully in local RAF, no RAM involved.
     const [isAnimating, setIsAnimating] = useState(false);
     const [fps, setFps] = useState(0);

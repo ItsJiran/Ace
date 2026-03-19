@@ -12,7 +12,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_tools_registry',
 };
 
-export function ToolsRegistryList() {
+export default function ToolsRegistryList() {
     const [tools, setTools] = useState<ToolItem[]>([]);
 
     useEffect(() => {

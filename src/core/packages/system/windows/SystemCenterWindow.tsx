@@ -1,5 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import { SystemWidget } from '../components/SystemWidget';
+import SystemWidget from '../components/SystemWidget';
 import { useAceWindow } from '#/hooks/useAceWindow';
 
 export const registry: AceRegistryType.Window = {

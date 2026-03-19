@@ -1,26 +1,34 @@
+import { AceWindow } from '#/components/layout/AceWindow';
+import FPSCounter from '../components/FPSCounter';
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import { FPSWidget } from '../components/FPSWidget';
-import { useAceWindow } from '#/hooks/useAceWindow';
+import type { WindowConfig } from '#/schemas/window';
 
 export const registry: AceRegistryType.Window = {
-    name: 'fps_widget_window',
-    react_behavior: 'window_shell',
+    window_name: 'fps_counter',
+    default_config: {
+        component_name: 'fps_counter',
+        title: 'FPS',
+        x: 10,
+        y: 10,
+        width: 100,
+        height: 60,
+        chrome_style: 'standard', // Use standard to allow dragging
+        always_on_top: true,
+        is_locked: false,
+        opacity: 0.8,
+        hide_ring: true
+    }
 };
 
-export const FPSWindow = ({ windowUid }: { windowUid: string }) => {
-    const { dragHandleProps } = useAceWindow(windowUid);
-
-    // FPS Widget is usually draggable by itself or needs props passed.
-    // If FPSWidget doesn't accept drag handle props, we might need to wrap it.
-    // Checking FPSWidget again, it doesn't seem to take props. It's just a display.
-    // So we wrap it in a draggable div if it's borderless, or just render it if the window shell handles dragging.
-    // Assuming standard window behavior for now.
-
+export default function FPSWindow({ config }: { config: WindowConfig }) {
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-transparent">
-             <div {...dragHandleProps} className="w-full h-full cursor-move">
-                <FPSWidget />
-             </div>
-        </div>
+        <AceWindow config={config}>
+            <div className="w-full h-full flex items-center justify-center text-xs font-mono text-green-400 bg-black/50 rounded pointer-events-none select-none">
+                <div className="pointer-events-auto">
+                    <FPSCounter />
+                </div>
+            </div>
+        </AceWindow>
     );
-};
+}
+

@@ -27,7 +27,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_window_motion',
 };
 
-export function StressTestWindowMotion({ windowUid }: { windowUid: string }) {
+export default function StressTestWindowMotion({ windowUid }: { windowUid: string }) {
     const [isRunning, setIsRunning] = useState(false);
     const [fps, setFps] = useState(0);
     const [frameTimeMs, setFrameTimeMs] = useState(0);

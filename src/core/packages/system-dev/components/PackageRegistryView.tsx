@@ -1,6 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
-import { PackageDetail } from './PackageDetail';
+import PackageDetail from './PackageDetail';
 import type { PackageManifest, RegistryDomain } from '#/schemas/registry';
 import { ToolEngine } from '#/services/toolEngine';
 // import { COMPONENT_CATALOG } from './ComponentRegistry'; // Circular dependency
@@ -61,7 +61,7 @@ const MOCK_METADATA: Record<string, Partial<PackageManifest>> = {
     }
 };
 
-export function PackageRegistryView() {
+export default function PackageRegistryView() {
     const [packages, setPackages] = useState<PackageManifest[]>([]);
     const [selectedPkg, setSelectedPkg] = useState<PackageManifest | null>(null);
     const [filter, setFilter] = useState<RegistryDomain | 'all'>('all');

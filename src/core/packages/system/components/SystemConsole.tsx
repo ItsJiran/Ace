@@ -59,3 +59,5 @@ export const SystemConsole: React.FC = () => {
         </div>
     );
 };
+
+export default SystemConsole;

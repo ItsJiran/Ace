@@ -13,7 +13,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_event_registry',
 };
 
-export function EventRegistryList() {
+export default function EventRegistryList() {
     const [routes, setRoutes] = useState<RouteItem[]>([]);
 
     useEffect(() => {

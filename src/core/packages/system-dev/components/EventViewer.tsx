@@ -16,7 +16,7 @@ type EventStreamItem = {
     payload: Record<string, unknown>;
 };
 
-export function EventViewer() {
+export default function EventViewer() {
     const events = (useAceMemory<EventStreamItem[]>('system:event_stream') || []).slice().reverse();
 
     return (

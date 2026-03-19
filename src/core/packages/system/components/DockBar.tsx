@@ -41,3 +41,5 @@ export const DockBar = ({ windowUid }: { windowUid: string }) => {
         </div>
     );
 };
+
+export default DockBar;

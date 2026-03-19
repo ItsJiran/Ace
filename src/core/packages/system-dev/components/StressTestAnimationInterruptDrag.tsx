@@ -63,7 +63,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_anim_interrupt',
 };
 
-export function StressTestAnimationInterruptDrag({ windowUid }: { windowUid: string }) {
+export default function StressTestAnimationInterruptDrag({ windowUid }: { windowUid: string }) {
     const {
         animationState,
         playAnimation,

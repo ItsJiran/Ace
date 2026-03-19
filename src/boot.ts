@@ -46,7 +46,7 @@ export async function bootACE() {
          */
 
         try {
-            // 1. Boot Registry (loads 'src/core/packages/system/entry.ts' via loader)
+            // 1. Boot Registry (loads core package manifests and scans package domains)
             await RegistryEngine.boot();
 
             // 2 & 3. Find Bootup Pipeline from System Package

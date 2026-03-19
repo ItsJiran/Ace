@@ -6,7 +6,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_launcher',
 };
 
-export function StressTestMenu() {
+export default function StressTestMenu() {
     const openUiAnimationFpsTest = () => {
         WindowEngine.spawnWindow({
             component_name: 'stress_test_ui_animation_fps',

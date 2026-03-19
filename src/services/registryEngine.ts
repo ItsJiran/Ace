@@ -96,6 +96,46 @@ class RegistryEngineSingleton {
         return entry ? { metadata: pkg.metadata, entry } : null;
     }
 
+    /**
+     * Resolves a registry entry by string query "package:name" or just "name".
+     * @param query - The string to resolve (e.g., "system:SystemConsole" or "SystemConsole")
+     * @param domain - The domain to search in (default: 'components')
+     */
+    resolveEntry(query: string, domain: string = 'components') {
+        if (!query) return null;
+
+        // 1. Direct Package Lookup (e.g. "system:Console")
+        if (query.includes(':')) {
+            const [pkgName, entryName] = query.split(':');
+            const result = this.getDomainEntry({ packageName: pkgName, domain, name: entryName });
+            return result ? result.entry : null;
+        }
+
+        // 2. Scan All Packages (e.g. "Console")
+        // Warning: This returns the first match found. Naming collisions are possible.
+        for (const pkg of this.runtimeIndex.values()) {
+            const map = pkg.domains[domain];
+            if (map?.has(query)) {
+                return map.get(query);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Helper specifically for resolving window components from 'windows' domain.
+     * Tries 'components' domain as fallback if not found in 'windows'.
+     */
+    resolveWindowComponent(query: string) {
+        // Try resolving in 'windows' domain first (e.g. wrapper components)
+        const windowComp = this.resolveEntry(query, 'windows');
+        if (windowComp) return windowComp;
+
+        // Fallback to 'components' domain (e.g. raw content components)
+        return this.resolveEntry(query, 'components');
+    }
+
     /** Get raw package manifests directly from runtimeIndex. */
     getPackages(): RegistryPackage[] {
         return Array.from(this.runtimeIndex.values()).map((item) => item.package);
@@ -135,31 +175,60 @@ class RegistryEngineSingleton {
     private async loadCorePackages() {
         console.group('📦 RegistryEngine: Auto-discovering core packages...');
 
-        // In a real generic implementation, this might look different.
-        // For now, we simulate finding entry.ts files.
-        const packageEntries = import.meta.glob('/src/core/packages/*/entry.ts', { eager: true });
+        // 1. Glob ALL manifests to find packages
+        const manifests = import.meta.glob('/src/core/packages/*/manifest.json', { eager: true });
         
-        for (const [path, mod] of Object.entries(packageEntries)) {
-            // Logic to extract package name from path
-            // e.g. /src/core/packages/system/entry.ts -> system
-            const match = path.match(/\/packages\/([^/]+)\/entry\.ts$/);
-            if (match && match[1]) {
-                const packageName = match[1];
-                // If the module exports a setup function or manifest, use it.
-                // Assuming the module does sidebar effects or we call a register function?
-                // The previous code had a default export function.
-                const module = mod as { default?: (args: { packageName: string }) => void };
-                if (typeof module.default === 'function') {
-                    module.default({ packageName });
-                }
+        // 2. Glob ALL source files across all core packages
+        const allModules = import.meta.glob('/src/core/packages/*/**/*.{ts,tsx}', { eager: true });
+
+        // Temporary storage to group modules by package folder name
+        const modulesByPackage: Record<string, Record<string, unknown>> = {};
+
+        // Helper: Extract package directory name from path
+        // e.g. /src/core/packages/system/widgets/A.tsx -> system
+        const getPackageDir = (path: string) => {
+            const match = path.match(/\/packages\/([^/]+)\//);
+            return match ? match[1] : null;
+        };
+
+        // Group the massive list of modules into their respective package buckets
+        for (const [path, mod] of Object.entries(allModules)) {
+            const pkgDir = getPackageDir(path);
+            if (pkgDir) {
+                if (!modulesByPackage[pkgDir]) modulesByPackage[pkgDir] = {};
+                modulesByPackage[pkgDir][path] = mod;
             }
         }
 
+        // Iterate through discovered manifests and register them
+        for (const [path, manifestMod] of Object.entries(manifests)) {
+            const pkgDir = getPackageDir(path); // This is the dir name, e.g. "system"
+            
+            // JSON modules usually export content as 'default'
+            const manifest = (manifestMod as any).default || manifestMod;
+
+            if (!manifest || !manifest.package_name) {
+                console.warn(`[RegistryEngine] Invalid manifest found at ${path}`);
+                continue;
+            }
+
+            // 1. Validate & Register Identity
+            this.registerPackage(manifest);
+
+            // 2. Register associated modules if any were found
+            if (pkgDir && modulesByPackage[pkgDir]) {
+                this.registerPackageModules(manifest.package_name, modulesByPackage[pkgDir]);
+                console.log(`   - Loaded: ${manifest.package_name}`);
+            }
+        }
+
+        console.log('📦 Core package discovery complete.');
         console.groupEnd();
     }
 
     /**
      * Register domain entries from an eager import map (import.meta.glob)
+     * Scans each file for 'default' (implementation) and 'registry' (metadata) exports.
      */
     registerPackageModules(packageName: string, modules: Record<string, unknown>) {
         const runtimePkg = this.runtimeIndex.get(packageName);
@@ -179,28 +248,42 @@ class RegistryEngineSingleton {
             return null;
         };
 
-        for (const [path, moduleValue] of Object.entries(modules)) {
+        for (const [path, moduleNamespace] of Object.entries(modules)) {
             const domain = inferDomainFromPath(path);
-            if (domain && moduleValue && typeof moduleValue === 'object') {
-                // Find the implementation (default export or specific named export)
-                // And any metadata
-                // This part depends on how the modules are structured.
-                // Assuming modules export the entry implementation.
+            
+            // We expect a Module Namespace Object with exports
+            if (domain && moduleNamespace && typeof moduleNamespace === 'object') {
+                const exports = moduleNamespace as { default?: any; registry?: any };
                 
-                // For simplified engine, we just assume the module IS the implementation or contains it.
-                // We need a name.
-                // Try to find name in module exports, or filename.
+                // 1. Detect 'registry' export (Identity/Metadata)
+                const registryData = exports.registry || {};
+                
+                // 2. Detect 'default' export (The Implementation)
+                const implementation = exports.default;
+
+                if (!implementation) {
+                    // Skip files that don't export a default implementation (utils, types, etc.)
+                    continue;
+                }
+
+                // 3. Determine Entry Name (ID)
+                // Priority: registry.name -> filename
                 const filename = path.split('/').pop()?.replace(/\.(ts|tsx|js|jsx)$/, '') || 'unknown';
                 
-                // Construct a partial entry
+                // Try to find the specific ID field for this domain (e.g. widget_name, tool_name)
+                const idField = DOMAIN_NAME_KEY[domain];
+                const explicitName = registryData[idField] || registryData.name || registryData.id;
+                const entryName = explicitName || filename;
+                
+                // 4. Construct Runtime Entry
                 const entry: RegistryDomainEntry = {
-                    implementation: moduleValue,
+                    implementation, // The React Component or Function
+                    metadata: registryData, // The exported registry constant
                     locator: { module_path: path }
                 };
 
-                // Add to aggregated
-                aggregated[domain][filename] = entry; 
-                // Note: Real implementation might look inside moduleValue for 'widget_name' etc. to use as key.
+                // Add to aggregated list
+                aggregated[domain][entryName] = entry; 
             }
         }
 

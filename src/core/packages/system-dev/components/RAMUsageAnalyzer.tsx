@@ -45,7 +45,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_ram_analyzer',
 };
 
-export function RAMUsageAnalyzer() {
+export default function RAMUsageAnalyzer() {
     const [stats, setStats] = useState<RAMStats>(() => StorageEngine.getRAMStats());
     const [procMem, setProcMem] = useState<ProcessMemory>({ rss_bytes: 0, vm_bytes: 0 });
 

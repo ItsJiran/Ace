@@ -17,7 +17,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_pipeline_registry',
 };
 
-export function PipelineRegistryList() {
+export default function PipelineRegistryList() {
     const runs = (useAceMemory<PipelineRun[]>('system:pipeline_registry') || []).slice().reverse();
 
     return (

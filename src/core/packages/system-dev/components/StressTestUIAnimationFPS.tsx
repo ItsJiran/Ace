@@ -18,7 +18,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_animation',
 };
 
-export function StressTestUIAnimationFPS() {
+export default function StressTestUIAnimationFPS() {
     const [isRunning, setIsRunning] = useState(false);
     const [dotCount, setDotCount] = useState(160);
     const [fps, setFps] = useState(0);

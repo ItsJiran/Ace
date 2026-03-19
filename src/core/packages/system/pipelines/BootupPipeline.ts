@@ -27,7 +27,7 @@ const InitCoreRuntimeBedStep: PipelineStep<void, void> = {
         const { EventBus } = await import('#/services/eventEngine');
         const { LoggerService } = await import('#/services/loggerService');
 
-        void Storage;
+        void StorageEngine;
         // await DBEngine.init();
         void EventBus;
         LoggerService.init();
@@ -90,13 +90,127 @@ const InitWindowLayerStep: PipelineStep<void, void> = {
 };
 
 /**
- * Phase 4: Layout Engine & Persistence
+ * Phase 4: Global Input Handlers
+ */
+const InitGlobalInputHandlersStep: PipelineStep<void, void> = {
+    name: 'Init Global Input Handlers',
+    execute: async () => {
+        const { GlobalStateManager } = await import('#/services/globalStateManager');
+        const { WindowEngine } = await import('#/services/windowEngine');
+        const { RegistryEngine } = await import('#/services/registryEngine');
+        const { StorageEngine } = await import('#/services/storageEngine');
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    WindowEngine.setOverlayMode('ambient');
+                }
+            });
+
+            let pointerRaf: number | null = null;
+            let pendingPointer: { x: number; y: number } | null = null;
+
+            window.addEventListener('pointermove', (e) => {
+                 pendingPointer = { x: e.clientX, y: e.clientY };
+                 if (pointerRaf !== null) return;
+                 pointerRaf = window.requestAnimationFrame(() => {
+                     pointerRaf = null;
+                     if (!pendingPointer) return;
+                     GlobalStateManager.setCursorPosition(pendingPointer.x, pendingPointer.y);
+                     GlobalStateManager.setPointerInside(true);
+                 });
+            });
+
+            window.addEventListener('pointerdown', () => {
+                GlobalStateManager.setPointerDown(true);
+                GlobalStateManager.setActiveElement(document.activeElement);
+            });
+
+            window.addEventListener('pointerup', () => {
+                GlobalStateManager.setPointerDown(false);
+            });
+
+            window.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+            }, { capture: true }); // Catch this early
+
+            window.addEventListener('focusin', (e) => {
+                GlobalStateManager.setPointerInside(true);
+                GlobalStateManager.setActiveElement((e.target as Element) ?? document.activeElement);
+            });
+
+            window.addEventListener('blur', () => {
+                GlobalStateManager.setPointerInside(false);
+                GlobalStateManager.setPointerDown(false);
+            });
+
+            window.addEventListener('focus', () => {
+                GlobalStateManager.setPointerInside(true);
+                GlobalStateManager.setActiveElement(document.activeElement);
+            });
+
+            console.log('[Boot] Phase 4: Global input handlers attached.');
+        }
+    }
+};
+
+/**
+ * Phase 5: Init Auto-Start Widgets
+ */
+const InitAutoStartWidgetsStep: PipelineStep<void, void> = {
+    name: 'Init Auto-Start Widgets',
+    execute: async () => {
+        const { RegistryEngine } = await import('#/services/registryEngine');
+        const currentEnv = import.meta.env.DEV ? 'dev' : 'prod';
+
+        console.group('[Boot] Phase 5: Initializing Auto-Start Widgets...');
+
+        const packages = RegistryEngine.getPackages();
+        for (const pkg of packages) {
+            const widgets = pkg.domains.widgets;
+            if (!widgets) continue;
+
+            for (const widgetEntry of Object.values(widgets)) {
+                const entry = widgetEntry as any;
+                const metadata = entry.metadata;
+                const widgetName = metadata.widget_name || 'unknown';
+
+                if (metadata.environment && !metadata.environment.includes(currentEnv)) continue;
+
+                if (metadata.autostart) {
+                    console.log(`   - Starting: ${widgetName}`);
+                    
+                    let activator = entry.implementation;
+                    
+                    // Unwrap default export if wrapped in module object
+                    if (activator && typeof activator === 'object' && activator.default) {
+                        activator = activator.default;
+                    }
+
+                    if (typeof activator === 'function') {
+                        try {
+                            await activator();
+                        } catch (e) {
+                            console.error(`❌ Failed to start widget ${widgetName}:`, e);
+                        }
+                    } else {
+                        console.warn(`⚠️ Widget ${widgetName} marked autostart but has no valid activator function.`);
+                    }
+                }
+            }
+        }
+        console.groupEnd();
+    }
+};
+
+/**
+ * Phase 6: Layout Engine & Persistence
  */
 const InitLayoutEngineStep: PipelineStep<void, void> = {
     name: 'Init Layout Engine',
     execute: async () => {
         await LayoutEngine.init();
-        console.log('[Boot] Phase 4: Layout engine initialized.');
+        console.log('[Boot] Phase 6: Layout engine initialized.');
     }
 };
 
@@ -106,7 +220,10 @@ export class BootupPipeline extends PipelineEngine<void, void> {
         this.addStep(InitCoreRuntimeBedStep);
         this.addStep(InitConfigAndGlobalStateStep);
         this.addStep(InitWindowLayerStep);
+        this.addStep(InitGlobalInputHandlersStep);
+        this.addStep(InitAutoStartWidgetsStep);
         this.addStep(InitLayoutEngineStep);
     }
 }
+
 export default BootupPipeline;

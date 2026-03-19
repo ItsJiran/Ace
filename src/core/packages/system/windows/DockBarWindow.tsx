@@ -1,5 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import { DockBar } from '../components/DockBar';
+import DockBar from '../components/DockBar';
 
 export const registry: AceRegistryType.Window = {
     name: 'dock_bar_window',

@@ -6,7 +6,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_fps_overlay',
 };
 
-export function FPSCounter() {
+export default function FPSCounter() {
     const [fps, setFps] = useState(0);
     const lastTsRef = useRef<number>(performance.now());
     const framesRef = useRef(0);

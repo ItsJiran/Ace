@@ -104,7 +104,7 @@ interface RegistryProps {
  * and mapping it to the actual React logic component. This decouples the core UI Shell
  * from the specific tooling interactions.
  */
-export function ComponentRegistry({ componentName, windowUid, payloadMemoryUid }: RegistryProps) {
+export default function ComponentRegistry({ componentName, windowUid, payloadMemoryUid }: RegistryProps) {
     const packageSummaries = useAceMemory<PackageSummary[]>('system:package_registry') ?? [];
     const domains = useAceMemory<RuntimeRegistryDomains>('system:registry_domains');
 

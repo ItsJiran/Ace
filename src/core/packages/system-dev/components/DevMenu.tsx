@@ -1,7 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge, Flame } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { WindowEngine } from '#/services/windowEngine';
 import type { GlobalOverlayState } from '#/schemas/window';
 
 export const registry: AceRegistryType.Component = {
@@ -29,7 +28,7 @@ interface RuntimeRegistryDomains {
     }>;
 }
 
-export function DevMenu() {
+export default function DevMenu() {
     const overlayState = window.ACE.memory.use<GlobalOverlayState>('system:overlay_state');
     const registryDomains = window.ACE.memory.use<RuntimeRegistryDomains>('system:registry_domains');
 

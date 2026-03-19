@@ -37,7 +37,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_prompt_bar_window',
 };
 
-export function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string }) {
+export default function StressTestPromptBarRealWindow({ windowUid }: { windowUid: string }) {
     const {
         animationState,
         playAnimation,

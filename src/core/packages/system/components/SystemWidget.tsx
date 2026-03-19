@@ -42,7 +42,7 @@ const TAB_LABELS: Record<SystemTab, string> = {
     install: 'Install',
 };
 
-export function SystemWidget() {
+export default function SystemWidget() {
     const [tab, setTab] = useState<SystemTab>('overview');
     const [toolManifest, setToolManifest] = useState<Array<{ name: string; description: string }>>([]);
     const [widgetSource, setWidgetSource] = useState('');

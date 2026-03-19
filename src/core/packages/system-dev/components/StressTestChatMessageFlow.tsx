@@ -43,7 +43,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_chat',
 };
 
-export function StressTestChatMessageFlow() {
+export default function StressTestChatMessageFlow() {
     const [isRunning, setIsRunning] = useState(false);
     const [fps, setFps] = useState(0);
     const [messages, setMessages] = useState<ChatMessage[]>([]);

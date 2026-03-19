@@ -53,7 +53,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_prompt_response',
 };
 
-export function StressTestPromptResponseLoad() {
+export default function StressTestPromptResponseLoad() {
     const [isRunning, setIsRunning] = useState(false);
     const [fps, setFps] = useState(0);
     const [chatCount, setChatCount] = useState(4);

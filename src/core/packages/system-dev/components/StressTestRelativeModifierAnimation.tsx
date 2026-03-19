@@ -9,7 +9,7 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'dev_stress_relative_anim',
 };
 
-export function StressTestRelativeModifierAnimation({ windowUid }: { windowUid: string }) {
+export default function StressTestRelativeModifierAnimation({ windowUid }: { windowUid: string }) {
     const {
         updateConfig,
         updateBounds,

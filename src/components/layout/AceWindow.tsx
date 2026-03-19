@@ -3,9 +3,13 @@ import { createPortal } from 'react-dom';
 import type { WindowConfig } from '#/schemas/window';
 import { useAceWindow } from '#/hooks/useAceWindow';
 import { GripHorizontal, X, Minus, Lock, Unlock, BringToFront, Layers } from 'lucide-react';
-import { ComponentRegistry } from '#/core/packages/system/components/ComponentRegistry';
 
-function AceWindowComponent({ config }: { config: WindowConfig }) {
+type RegistryComponentProps = {
+    windowUid: string;
+    payloadMemoryUid?: string;
+};
+
+function AceWindowComponent({ config, children }: { config: WindowConfig, children?: React.ReactNode }) {
     const window = useAceWindow(config);
     const isDraggingFocusedWindow = window.isDragging && window.isFocused;
 
@@ -80,11 +84,13 @@ function AceWindowComponent({ config }: { config: WindowConfig }) {
             )}
 
             <div className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'}`}>
-                <ComponentRegistry
-                    componentName={config.component_name}
-                    windowUid={config.window_uid}
-                    payloadMemoryUid={config.payload_memory_uid}
-                />
+                {children ? children : (
+                    <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
+                        <p>Unregistered Component Schema:</p>
+                        <span className="text-red-400 font-bold mt-1 text-sm">{config.component_name}</span>
+                        <p className="mt-4 text-zinc-600">Ensure this component is declared in package registry and loaded by RegistryEngine.</p>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -7,7 +7,7 @@ interface PackageDetailProps {
     onClose: () => void;
 }
 
-export function PackageDetail({ pkg, onClose }: PackageDetailProps) {
+export default function PackageDetail({ pkg, onClose }: PackageDetailProps) {
     return (
         <div className="absolute inset-0 bg-zinc-950/95 backdrop-blur-md flex flex-col z-50 animate-in slide-in-from-right-10 duration-200">
             {/* Header */}
@@ -139,3 +139,5 @@ export function PackageDetail({ pkg, onClose }: PackageDetailProps) {
         </div>
     );
 }
+
+export { PackageDetail };
