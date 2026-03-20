@@ -1,7 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
-import { StorageEngine } from '#/services/storageEngine';
 
 // A fixed key this component explicitly listens to — proving reactivity isolation.
 const WATCHED_KEY = 'stress:isolation:watched';
@@ -130,7 +129,7 @@ export default function StressTestRAMIsolation() {
 
         floodIntervalRef.current = setInterval(() => {
             const uid = `${FLOOD_PREFIX}${floodCountRef.current % 20}`; // recycle 20 slots
-            StorageEngine.dispatchRAMAction({
+            window.ACE.storage.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: uid,
                 payload: { seq: floodCountRef.current, data: getPadding(targetBytes) },
@@ -156,15 +155,15 @@ export default function StressTestRAMIsolation() {
             if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
             if (floodIntervalRef.current !== null) clearInterval(floodIntervalRef.current);
             for (let i = 0; i < 20; i++) {
-                StorageEngine.dispatchRAMAction({ action: 'delete_memory', memory_uid: `${FLOOD_PREFIX}${i}`, payload: null });
+                window.ACE.storage.dispatchRAMAction({ action: 'delete_memory', memory_uid: `${FLOOD_PREFIX}${i}`, payload: null });
             }
-            StorageEngine.dispatchRAMAction({ action: 'delete_memory', memory_uid: WATCHED_KEY, payload: null });
+            window.ACE.storage.dispatchRAMAction({ action: 'delete_memory', memory_uid: WATCHED_KEY, payload: null });
         };
     }, []);
 
     const writeWatchedKey = () => {
         watchedCounterRef.current += 1;
-        StorageEngine.dispatchRAMAction({
+        window.ACE.storage.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: WATCHED_KEY,
             payload: { counter: watchedCounterRef.current, ts: Date.now() },

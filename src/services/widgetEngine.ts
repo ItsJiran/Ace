@@ -14,24 +14,16 @@ class WidgetEngineSingleton {
      * Retrieve a specific widget definition from the registry.
      * Wraps RegistryEngine.getDomainEntry with 'widgets' domain preset.
      */
-    getRegistry({ packageName, name }: { packageName: string; name: string }) {
-        return RegistryEngine.getDomainEntry({
-            packageName,
-            domain: 'widgets',
-            name
-        });
+    getRegistry({ packageRef, slug }: { packageRef: string; slug: string }) {
+        return RegistryEngine.getDomainEntry(packageRef, 'widgets', slug);
     }
 
     /**
      * Retrieve a specific component definition from the registry.
      * Wraps RegistryEngine.getDomainEntry with 'components' domain preset.
      */
-    getComponent({ packageName, name }: { packageName: string; name: string }) {
-        return RegistryEngine.getDomainEntry({
-            packageName,
-            domain: 'components',
-            name
-        });
+    getComponent({ packageRef, slug }: { packageRef: string; slug: string }) {
+        return RegistryEngine.getDomainEntry(packageRef, 'components', slug);
     }
 
     /**

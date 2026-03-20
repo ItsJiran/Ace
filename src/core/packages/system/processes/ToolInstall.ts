@@ -1,7 +1,8 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Process = {
-    process_type: 'tool_install',
+    name: 'tool_install',
+    slug: 'tool-install',
     description: 'Background process for installing tool packages.',
     observable: true,
     cancellable: true,

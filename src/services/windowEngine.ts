@@ -41,12 +41,8 @@ class WindowEngineSingleton {
      * Retrieve a specific window entry from the registry.
      * Wraps RegistryEngine.getDomainEntry with 'windows' domain preset.
      */
-    getRegistry({ packageName, name }: { packageName: string; name: string }) {
-        return RegistryEngine.getDomainEntry({
-            packageName,
-            domain: 'windows',
-            name
-        });
+    getRegistry({ packageRef, slug }: { packageRef: string; slug: string }) {
+        return RegistryEngine.getDomainEntry(packageRef, 'windows', slug);
     }
 
     constructor() {
@@ -254,19 +250,40 @@ class WindowEngineSingleton {
             is_minimized: false
         };
 
-        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
+        // 1. Write Config to Granular RAM
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: `system:window:${window_uid}`,
+            payload: freshWindow,
+            classifications: ['system:windows']
+        });
 
+        // 2. Update Active Window Index for App.tsx
+        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string, component: string }> || []);
+        
+        // Prevent duplicates (though unique ID makes it unlikely)
+        if (!activeWindows.find(w => w.uid === window_uid)) {
+            const newIndex = [...activeWindows, { uid: window_uid, component: config.component_name }];
+            StorageEngine.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: 'system:active_windows',
+                payload: newIndex,
+                classifications: ['system:core']
+            });
+        }
+
+        // 3. Fallback: Update Monolith for compatibility (optional, but good for safety)
+        const currentWindows = (StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>) || {};
+        
         // Remove focus from all others
         Object.keys(currentWindows).forEach(key => {
             currentWindows[key].is_focused = false;
         });
 
-        // Add the new window
         currentWindows[window_uid] = freshWindow;
 
-        // Commit full state back to RAM
         StorageEngine.dispatchRAMAction({
-            action: 'create_memory',   // It overwrites if we use the same ID, or we can use update_memory
+            action: 'create_memory',
             memory_uid: 'system:windows',
             payload: currentWindows
         });
@@ -276,8 +293,25 @@ class WindowEngineSingleton {
     }
 
     closeWindow(window_uid: string) {
+        // 1. Remove from Active Index
+        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string, component: string }> || []);
+        const newIndex = activeWindows.filter(w => w.uid !== window_uid);
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:active_windows',
+            payload: newIndex,
+            classifications: ['system:core']
+        });
+
+        // 2. Remove Granular Config
+        StorageEngine.dispatchRAMAction({
+            action: 'delete_memory',
+            memory_uid: `system:window:${window_uid}`
+        });
+
+        // 3. Update Monolith
         const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        if (currentWindows[window_uid]) {
+        if (currentWindows && currentWindows[window_uid]) {
             const wasFocused = currentWindows[window_uid].is_focused;
             delete currentWindows[window_uid];
             StorageEngine.dispatchRAMAction({
@@ -297,36 +331,62 @@ class WindowEngineSingleton {
      * Useful for toggling lock state, opacity, etc.
      */
     updateWindowConfig(window_uid: string, updates: Partial<WindowConfig>) {
+        // 1. Update Granular Config
+        const granularKey = `system:window:${window_uid}`;
+        const currentGranular = StorageEngine.readMemory(granularKey) as WindowConfig | undefined;
+        
+        if (currentGranular) {
+            const nextConfig = { ...currentGranular, ...updates };
+            StorageEngine.dispatchRAMAction({
+                action: 'update_memory', // Use update to merge if supported, or create/overwrite
+                memory_uid: granularKey,
+                payload: nextConfig
+            });
+        }
+
+        // 2. Update Monolith (for backward compatibility until fully deprecated)
         const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        if (!currentWindows[window_uid]) return;
-
-        const updatedConfig = { ...currentWindows[window_uid], ...updates };
-        currentWindows[window_uid] = updatedConfig;
-
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:windows',
-            payload: currentWindows
-        });
+        if (currentWindows && currentWindows[window_uid]) {
+            currentWindows[window_uid] = { ...currentWindows[window_uid], ...updates };
+            StorageEngine.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: 'system:windows',
+                payload: currentWindows
+            });
+        }
     }
 
     focusWindow(window_uid: string) {
         if (!this.getMouseFocusEnabled()) return;
 
-        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        if (!currentWindows[window_uid]) return;
-
         this.highest_z_index += 1;
 
-        Object.keys(currentWindows).forEach(key => {
-            currentWindows[key].is_focused = (key === window_uid);
+        // 1. Update Granular
+        this.updateWindowConfig(window_uid, {
+            z_index: this.highest_z_index,
+            is_focused: true
         });
-        currentWindows[window_uid].z_index = this.highest_z_index;
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:windows',
-            payload: currentWindows
+        // 2. Unfocus others (Granularly)
+        // Note: Iterating all windows to unfocus is expensive if we do N writes.
+        // Optimally, we track "currently_focused_uid" in a separate memory.
+        // But for now, we leverage the monolith or active index to find them.
+        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string }> || []);
+        activeWindows.forEach(win => {
+            if (win.uid !== window_uid) {
+                // We only need to unset is_focused if it was true.
+                // We could read memory first to check, but blind write is okay for now.
+                // But wait, calling updateWindowConfig N times triggers N dual-writes.
+                // Maybe just update the monolith? NO, child components need to re-render to lose focus style.
+                // So yes, we must update granular configs for previous focused windows.
+                
+                // Optimization: Read granular first, only update if is_focused is true.
+                const key = `system:window:${win.uid}`;
+                const cfg = StorageEngine.readMemory(key) as WindowConfig | undefined;
+                if (cfg && cfg.is_focused) {
+                    this.updateWindowConfig(win.uid, { is_focused: false });
+                }
+            }
         });
 
         GlobalStateManager.setFocusedWindow(window_uid);

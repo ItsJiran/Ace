@@ -1,10 +1,11 @@
-import { PipelineEngine, type PipelineStep, type PipelineContext } from '#/services/pipelineEngine';
-import { LayoutEngine } from '#/services/layoutEngine';
+import { PipelineEngine } from '#/services/pipelineEngine';
+import type { PipelineStep, PipelineContext } from '#/services/pipelineEngine';
 import { getCurrentWindow, currentMonitor, PhysicalSize, PhysicalPosition } from '@tauri-apps/api/window';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Pipeline = {
-    pipeline_name: 'bootup_sequence',
+    name: 'bootup_sequence',
+    slug: 'bootup-sequence',
     description: 'Core boot sequence: runtime bed → config → window layer → layout engine.',
     step_names: ['Init Core Runtime Bed', 'Init Config And Global State', 'Init Window Layer', 'Init Layout Engine'],
     cancellable: false,
@@ -22,16 +23,10 @@ export interface BootupContext extends PipelineContext {
 const InitCoreRuntimeBedStep: PipelineStep<void, void> = {
     name: 'Init Core Runtime Bed',
     execute: async () => {
-        const { StorageEngine } = await import('#/services/storageEngine');
-        // const { DBEngine } = await import('#/services/dbEngine');
-        const { EventBus } = await import('#/services/eventEngine');
-        const { LoggerService } = await import('#/services/loggerService');
-
-        void StorageEngine;
-        // await DBEngine.init();
-        void EventBus;
-        LoggerService.init();
-
+        if (!window.ACE.storage || !window.ACE.event || !window.ACE.logger) {
+            throw new Error('Critical services missing on window.ACE');
+        }
+        window.ACE.logger.init();
         console.log('[Boot] Phase 1: Global RAM, DB storage, and Event Bus are ready.');
     }
 };
@@ -43,15 +38,37 @@ const InitCoreRuntimeBedStep: PipelineStep<void, void> = {
 const InitConfigAndGlobalStateStep: PipelineStep<void, void> = {
     name: 'Init Config And Global State',
     execute: async () => {
-        const { GlobalStateManager } = await import('#/services/globalStateManager');
-        const { ConfigEngine } = await import('#/services/configEngine');
-        const { RegistryEngine } = await import('#/services/registryEngine');
-        const { KeybindEngine } = await import('#/services/keybindEngine');
+        const ConfigEngine = window.ACE.config;
+        const RegistryEngine = window.ACE.registry;
+        const KeybindEngine = window.ACE.keybind;
+        const GlobalStateManager = window.ACE.global;
 
         void GlobalStateManager;
         await ConfigEngine.boot();
         await RegistryEngine.boot();
-        KeybindEngine.init();
+
+        const packages = RegistryEngine.getPackages();
+        console.group('[Boot] Registry Snapshot');
+        console.log('Installed packages:', packages.map((pkg: { package_name: string }) => pkg.package_name));
+
+        for (const pkg of packages) {
+            console.group(`[Package] ${pkg.package_name}`);
+
+            for (const [domainName, domainEntries] of Object.entries(pkg.domains)) {
+                const entryNames = domainEntries ? Object.keys(domainEntries) : [];
+                console.log(`[Domain] ${domainName}:`, entryNames);
+
+                for (const [entryName, domainEntry] of Object.entries(domainEntries ?? {})) {
+                    const metadata = (domainEntry as { metadata?: Record<string, unknown> }).metadata;
+                    console.log(`  - ${entryName}`, metadata ?? null);
+                }
+            }
+
+            console.groupEnd();
+        }
+
+        console.groupEnd();
+        (KeybindEngine as any).init();
 
         console.log('[Boot] Phase 2: Config engine, registry engine, global state, and keybind engine are ready.');
     }
@@ -63,8 +80,7 @@ const InitConfigAndGlobalStateStep: PipelineStep<void, void> = {
 const InitWindowLayerStep: PipelineStep<void, void> = {
     name: 'Init Window Layer',
     execute: async () => {
-        const { WindowEngine } = await import('#/services/windowEngine');
-        void WindowEngine;
+        const WindowEngine = window.ACE.window;
 
         try {
             const runtimeWindow = window as Window & { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown };
@@ -95,10 +111,8 @@ const InitWindowLayerStep: PipelineStep<void, void> = {
 const InitGlobalInputHandlersStep: PipelineStep<void, void> = {
     name: 'Init Global Input Handlers',
     execute: async () => {
-        const { GlobalStateManager } = await import('#/services/globalStateManager');
-        const { WindowEngine } = await import('#/services/windowEngine');
-        const { RegistryEngine } = await import('#/services/registryEngine');
-        const { StorageEngine } = await import('#/services/storageEngine');
+        const GlobalStateManager = window.ACE.global;
+        const WindowEngine = window.ACE.window;
 
         if (typeof window !== 'undefined') {
             window.addEventListener('keydown', (e) => {
@@ -160,7 +174,7 @@ const InitGlobalInputHandlersStep: PipelineStep<void, void> = {
 const InitAutoStartWidgetsStep: PipelineStep<void, void> = {
     name: 'Init Auto-Start Widgets',
     execute: async () => {
-        const { RegistryEngine } = await import('#/services/registryEngine');
+        const RegistryEngine = window.ACE.registry;
         const currentEnv = import.meta.env.DEV ? 'dev' : 'prod';
 
         console.group('[Boot] Phase 5: Initializing Auto-Start Widgets...');
@@ -209,7 +223,10 @@ const InitAutoStartWidgetsStep: PipelineStep<void, void> = {
 const InitLayoutEngineStep: PipelineStep<void, void> = {
     name: 'Init Layout Engine',
     execute: async () => {
-        await LayoutEngine.init();
+        const LayoutEngine = window.ACE.layout;
+        if (LayoutEngine && typeof (LayoutEngine as any).init === 'function') {
+            await (LayoutEngine as any).init();
+        }
         console.log('[Boot] Phase 6: Layout engine initialized.');
     }
 };

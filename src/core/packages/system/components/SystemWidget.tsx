@@ -1,7 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useState } from 'react';
-import { ToolEngine } from '#/services/toolEngine';
-import { ConfigEngine } from '#/services/configEngine';
 import type { ConfigItem } from '#/schemas/config';
 import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
@@ -59,7 +57,7 @@ export default function SystemWidget() {
 
     useEffect(() => {
         const refresh = () => {
-            setToolManifest(ToolEngine.getManifest() as Array<{ name: string; description: string }>);
+            setToolManifest(window.ACE.tool.getManifest() as Array<{ name: string; description: string }>);
         };
 
         refresh();
@@ -107,19 +105,19 @@ export default function SystemWidget() {
             const parsed = Number(rawValue);
             if (!Number.isNaN(parsed)) nextValue = parsed;
         }
-        await ConfigEngine.updateConfigItem(item.key, nextValue, item.category, item.description);
+        await window.ACE.config.updateConfigItem(item.key, nextValue, item.category, item.description);
     };
 
     const saveShortcut = async (bind: Keybind, draft?: string) => {
         const nextShortcut = (draft ?? shortcutDrafts[bind.keybind_uid] ?? bind.shortcut).trim();
         if (!nextShortcut) return;
         const next = keybinds.map((item) => item.keybind_uid === bind.keybind_uid ? { ...item, shortcut: nextShortcut } : item);
-        await ConfigEngine.saveKeybinds(next);
+        await window.ACE.config.saveKeybinds(next);
     };
 
     const toggleKeybind = async (bind: Keybind) => {
         const next = keybinds.map((item) => item.keybind_uid === bind.keybind_uid ? { ...item, enabled: !item.enabled } : item);
-        await ConfigEngine.saveKeybinds(next);
+        await window.ACE.config.saveKeybinds(next);
     };
 
     const buttonClass = 'rounded-lg border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 text-[11px] text-zinc-200 hover:bg-zinc-800 transition-colors';

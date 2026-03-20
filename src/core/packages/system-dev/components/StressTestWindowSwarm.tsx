@@ -1,6 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
-import { WindowEngine } from '#/services/windowEngine';
 
 type SwarmPattern = 'orbit' | 'bounce_grid' | 'scatter_spring';
 
@@ -41,7 +40,7 @@ export default function StressTestWindowSwarm({ windowUid: _controllerUid }: { w
     const spawnAndStart = () => {
         const uids: string[] = [];
         for (let i = 0; i < windowCount; i++) {
-            const uid = WindowEngine.spawnWindow({
+            const uid = window.ACE.window.spawnWindow({
                 component_name: 'loading_widget',
                 title: `Swarm ${i + 1}`,
                 x: 300 + i * 30,
@@ -62,7 +61,7 @@ export default function StressTestWindowSwarm({ windowUid: _controllerUid }: { w
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
         }
-        spawnedUidsRef.current.forEach((uid) => WindowEngine.closeWindow(uid));
+        spawnedUidsRef.current.forEach((uid) => window.ACE.window.closeWindow(uid));
         spawnedUidsRef.current = [];
         setSpawnedCount(0);
         setFps(0);
@@ -129,7 +128,7 @@ export default function StressTestWindowSwarm({ windowUid: _controllerUid }: { w
                     }
                 }
 
-                WindowEngine.updateWindowBounds(uid, Math.round(nx), Math.round(ny), nw, nh);
+                window.ACE.window.updateWindowBounds(uid, Math.round(nx), Math.round(ny), nw, nh);
             });
 
             fpsFramesRef.current += 1;

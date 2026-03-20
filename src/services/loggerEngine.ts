@@ -11,7 +11,7 @@ export interface LogEntry {
 
 const MAX_LOGS = 100;
 
-class LoggerServiceSingleton {
+class LoggerEngineSingleton {
     private originalConsole = {
         log: console.log,
         info: console.info,
@@ -48,7 +48,13 @@ class LoggerServiceSingleton {
         });
 
         this.isInitialized = true;
-        console.log('📖 LoggerService: Console interception active.');
+        console.log('📖 LoggerEngine: Console interception active.');
+    }
+
+    log(level: LogLevel, message: string) {
+        // Keep direct logging available for services that want explicit writes.
+        this.originalConsole[level](message);
+        this.addLog(level, message);
     }
 
     private addLog(level: LogLevel, message: string) {
@@ -71,4 +77,4 @@ class LoggerServiceSingleton {
     }
 }
 
-export const LoggerService = new LoggerServiceSingleton();
+export const LoggerEngine = new LoggerEngineSingleton();

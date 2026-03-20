@@ -1,7 +1,8 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Feature = {
-    feature_name: 'package_install_queue',
+    name: 'package_install_queue',
+    slug: 'package-install-queue',
     description: 'Manages queued package installation requests.',
 };
 

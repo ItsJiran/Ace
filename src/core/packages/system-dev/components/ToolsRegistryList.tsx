@@ -1,6 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
-import { ToolEngine } from '#/services/toolEngine';
 
 type ToolItem = {
     name: string;
@@ -17,7 +16,7 @@ export default function ToolsRegistryList() {
 
     useEffect(() => {
         const refresh = () => {
-            const manifest = ToolEngine.getManifest() as ToolItem[];
+            const manifest = window.ACE.tool.getManifest() as ToolItem[];
             setTools(manifest);
         };
 

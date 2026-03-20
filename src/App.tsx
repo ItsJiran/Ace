@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
-import type { GlobalOverlayState, WindowConfig } from '#/schemas/window';
+import type { GlobalOverlayState } from '#/schemas/window';
 import { RegistryEngine } from '#/services/registryEngine';
-import type { RegistryDomainEntry } from '#/schemas/registry';
 
 
 function App() {
@@ -21,8 +20,12 @@ function App() {
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
-  const windows = useAceMemory<Record<string, WindowConfig>>('system:windows');
-  if (!isBootReady || !overlayState || !windows) return null;
+  
+  // Refactored: App.tsx only watches the *list* of active windows, not their configs.
+  // This prevents the entire app from re-rendering when a single window drags (config changes).
+  const activeWindows = useAceMemory<Array<{ uid: string, component: string }>>('system:active_windows') || [];
+
+  if (!isBootReady || !overlayState) return null;
 
   const isAmbient = overlayState.mode === 'ambient';
 
@@ -35,19 +38,16 @@ function App() {
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.005)' }}
     >
       {/* Render semua window */}
-      {Object.values(windows).map(config => {
+      {activeWindows.map(entry => {
         // Resolve purely from windows domain, assuming window components handle their own shell
-        const entry = RegistryEngine.resolveEntry(config.component_name, 'windows') as RegistryDomainEntry | null;
-        const Component = entry?.implementation as React.ComponentType<{ config: WindowConfig; windowUid: string; payloadMemoryUid?: string }> | undefined;
+        const Component = RegistryEngine.resolveEntry(entry.component) as React.ComponentType<{ windowUid: string }> | undefined;
 
         if (!Component) return null;
 
         return (
           <Component 
-            key={config.window_uid} 
-            config={config}
-            windowUid={config.window_uid}
-            payloadMemoryUid={config.payload_memory_uid}
+            key={entry.uid} 
+            windowUid={entry.uid}
           />
         );
       })}

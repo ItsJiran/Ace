@@ -1,12 +1,10 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AceWindow } from '#/components/layout/AceWindow';
-import type { WindowConfig } from '#/schemas/window';
 import DevMenu from '../components/DevMenu';
 
 export const registry: AceRegistryType.Window = {
-    window_name: 'dev_menu',
+    name: 'dev_menu',
     default_config: {
-        component_name: 'dev_menu',
         x: 100,
         y: 100,
         width: 340,
@@ -18,9 +16,9 @@ export const registry: AceRegistryType.Window = {
     },
 };
 
-export default function DevKitWindow({ config }: { config: WindowConfig }) {
+export default function DevKitWindow({ windowUid }: { windowUid: string }) {
     return (
-        <AceWindow config={config}>
+        <AceWindow windowUid={windowUid}>
             <DevMenu />
         </AceWindow>
     );

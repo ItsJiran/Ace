@@ -1,14 +1,14 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
-    widget_name: 'dock_bar',
+    name: 'dock_bar',
     entry_id: 'dock_bar_main',
 };
 
 export default {
     component_name: 'dock_bar_window',
     window_profile: {
-        window_name: 'dock_bar_window',
+        name: 'dock_bar_window',
         restoration_strategy: 'fresh',
         default_window_preset: {
             component_name: 'dock_bar_window',

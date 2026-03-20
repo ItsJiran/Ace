@@ -1,6 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StorageEngine } from '#/services/storageEngine';
 
 type ChatStream = {
     id: string;
@@ -137,7 +136,7 @@ export default function StressTestPromptResponseLoad() {
                 };
 
                 if (writeToRam) {
-                    StorageEngine.dispatchRAMAction({
+                    window.ACE.storage.dispatchRAMAction({
                         action: 'create_memory',
                         memory_uid: `stress:prompt_response:${stream.id}`,
                         payload: {

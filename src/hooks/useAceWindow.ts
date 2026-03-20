@@ -82,14 +82,18 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     // Runtime Memory Subscriptions
     // -------------------------------------------------------------------------
 
-    const windows = useAceMemory<Record<string, WindowConfig>>('system:windows');
+    // Resolve runtime identity.
+    const windowUid = typeof input === 'string' ? input : input.window_uid;
+
+    // Granular Subscription: Listen only to this specific window's config
+    const memConfig = useAceMemory<WindowConfig>(`system:window:${windowUid}`);
+    
+    // Fallback: If input was a full object (initial prop from parent), use it until RAM syncs
+    // though ideally we rely on the RAM subscription for updates.
+    const config = memConfig || (typeof input !== 'string' ? input : undefined);
+
     const allAnimStates = useAceMemory<Record<string, AnimationRuntimeState>>('system:window_animations');
     const mouseFocusEnabled = useAceMemory<boolean>('system:mouse_focus_enabled') ?? true;
-
-    // Resolve runtime identity and config source.
-    // If caller passed only uid, config is read from `system:windows`.
-    const windowUid = typeof input === 'string' ? input : input.window_uid;
-    const config = typeof input === 'string' ? windows?.[input] : input;
 
     // -------------------------------------------------------------------------
     // Local Interaction State (transient, high-frequency)

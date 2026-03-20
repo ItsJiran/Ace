@@ -1,5 +1,4 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import { WindowEngine } from '#/services/windowEngine';
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_menu',
@@ -8,7 +7,7 @@ export const registry: AceRegistryType.Component = {
 
 export default function StressTestMenu() {
     const openUiAnimationFpsTest = () => {
-        WindowEngine.spawnWindow({
+        window.ACE.window.spawnWindow({
             component_name: 'stress_test_ui_animation_fps',
             title: 'Stress Test: UI Animation FPS',
             x: 180,
@@ -19,7 +18,7 @@ export default function StressTestMenu() {
     };
 
     const openPromptResponseLoadTest = () => {
-        WindowEngine.spawnWindow({
+        window.ACE.window.spawnWindow({
             component_name: 'stress_test_prompt_response_load',
             title: 'Stress Test: Prompt + AI Response Load',
             x: 200,

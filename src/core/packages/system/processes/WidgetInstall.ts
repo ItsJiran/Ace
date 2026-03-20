@@ -1,7 +1,8 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Process = {
-    process_type: 'widget_install',
+    name: 'widget_install',
+    slug: 'widget-install',
     description: 'Background process for installing widget packages.',
     observable: true,
     cancellable: true,

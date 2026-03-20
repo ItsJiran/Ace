@@ -1,9 +1,19 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { StorageEngine } from '#/services/storageEngine';
 
-type RAMStats = ReturnType<typeof StorageEngine.getRAMStats>;
+type RAMStats = {
+    memory_entries: number;
+    classification_entries: number;
+    socket_keys: number;
+    socket_listener_total: number;
+    approx_total_bytes: number;
+    approx_total_kb: number;
+    approx_total_mb: number;
+    largest_memories: Array<{ memory_uid: string; approx_bytes: number; type: string }>;
+    listeners_by_key: Array<{ key: string; listeners: number }>;
+    sampled_at: number;
+};
 
 type ProcessMemory = {
     rss_bytes: number;
@@ -46,12 +56,12 @@ export const registry: AceRegistryType.Component = {
 };
 
 export default function RAMUsageAnalyzer() {
-    const [stats, setStats] = useState<RAMStats>(() => StorageEngine.getRAMStats());
+    const [stats, setStats] = useState<RAMStats>(() => (window.ACE.storage as any).getRAMStats());
     const [procMem, setProcMem] = useState<ProcessMemory>({ rss_bytes: 0, vm_bytes: 0 });
 
     useEffect(() => {
         const refresh = async () => {
-            setStats(StorageEngine.getRAMStats());
+            setStats((window.ACE.storage as any).getRAMStats());
             setProcMem(await fetchProcessMemory());
         };
 

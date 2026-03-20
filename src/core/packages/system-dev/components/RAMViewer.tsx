@@ -1,6 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useState, useEffect } from 'react';
-import { StorageEngine } from '#/services/storageEngine';
 
 export const registry: AceRegistryType.Component = {
     name: 'ram_viewer',
@@ -152,8 +151,8 @@ export default function RAMViewer() {
     const [refreshedAt, setRefreshedAt] = useState<string>('');
 
     const refreshRAM = () => {
-        const globalRam = (StorageEngine as any).global_ram as Map<string, any>;
-        const classRam = (StorageEngine as any).classification_ram as Map<string, string[]>;
+const globalRam = (window.ACE.storage as any).global_ram as Map<string, any>;
+    const classRam = (window.ACE.storage as any).classification_ram as Map<string, string[]>;
 
         const sanitizedGlobal: Record<string, any> = {};
         for (const [k, v] of globalRam.entries()) {

@@ -4,6 +4,7 @@ import {
     type RegistryPackage,
     type RegistryDomainEntry,
 } from '../schemas/registry';
+import { LoggerEngine } from './loggerEngine';
 
 /**
  * ============================================================================
@@ -17,15 +18,15 @@ import {
 
 const INDEXED_DOMAINS = ['widgets', 'components', 'windows', 'tools', 'features', 'processes', 'pipelines', 'registries'] as const;
 
-const DOMAIN_NAME_KEY: Record<string, string> = {
-    widgets: 'widget_name',
-    components: 'component_name',
-    windows: 'window_name',
-    tools: 'tool_name',
-    features: 'feature_name',
-    processes: 'process_type',
-    pipelines: 'pipeline_name',
-    registries: 'registry_name',
+const DOMAIN_NAME_KEYS: Record<string, string[]> = {
+    widgets: ['name', 'widget_name', 'entry_id', 'id'],
+    components: ['name', 'component_name', 'id'],
+    windows: ['name', 'window_name', 'id'],
+    tools: ['name', 'tool_name', 'id'],
+    features: ['name', 'feature_name', 'id'],
+    processes: ['name', 'process_type', 'id'],
+    pipelines: ['name', 'pipeline_name', 'id'],
+    registries: ['name', 'registry_name', 'id'],
 };
 
 // ============================================================================
@@ -71,56 +72,78 @@ class RegistryEngineSingleton {
     /**
      * Get a package's indexed metadata + domain lookup maps.
      */
-    getPackage(packageName: string) {
-        return this.runtimeIndex.get(packageName);
+    getPackage(packageRef: string) {
+        return this.runtimeIndex.get(packageRef);
     }
 
     /**
      * Direct O(1) lookup: Retrieve a specific domain entry
      * Centralized lookup method used by other Engines.
      */
-    getDomainEntry({
-        packageName,
-        domain,
-        name
-    }: {
-        packageName: string;
-        domain: string;
-        name: string;
-    }): { metadata: any; entry: any } | null {
-        const pkg = this.runtimeIndex.get(packageName);
-        if (!pkg) return null;
+    getDomainEntry(packageRef: string, domain: string, slug: string): { metadata: any; entry: any } | null {
+        const pkg = this.runtimeIndex.get(packageRef);
+        if (!pkg) {
+            this.logRegistryMiss(`package not found`, { packageRef, domain, slug });
+            return null;
+        }
 
         const map = pkg.domains[domain];
-        const entry = map?.get(name);
-        return entry ? { metadata: pkg.metadata, entry } : null;
+        // If domain map doesn't exist, return null gracefully
+        if (!map) {
+            this.logRegistryMiss(`domain not found`, { packageRef, domain, slug });
+            return null;
+        }
+        
+        const entry = map.get(slug);
+        if (entry) {
+            return { metadata: pkg.metadata, entry };
+        }
+
+        this.logRegistryMiss(`entry not found`, { packageRef, domain, slug });
+        return null;
+    }
+
+    private logRegistryMiss(reason: string, ctx: { packageRef: string; domain: string; slug: string }) {
+        const message = `[RegistryEngine] ${reason}: ${ctx.packageRef}/${ctx.domain}/${ctx.slug}`;
+        console.warn(message);
+        LoggerEngine.log('warn', message);
     }
 
     /**
-     * Resolves a registry entry by string query "package:name" or just "name".
-     * @param query - The string to resolve (e.g., "system:SystemConsole" or "SystemConsole")
-     * @param domain - The domain to search in (default: 'components')
+     * Resolves a registry entry by string query.
+     * 
+     * STRICT QUERY FORMAT (required):
+     * "package:domain:target"
+     * Example: "itsjiran/ace-system:windows:system_center_window"
      */
-    resolveEntry(query: string, domain: string = 'components') {
-        if (!query) return null;
-
-        // 1. Direct Package Lookup (e.g. "system:Console")
-        if (query.includes(':')) {
-            const [pkgName, entryName] = query.split(':');
-            const result = this.getDomainEntry({ packageName: pkgName, domain, name: entryName });
-            return result ? result.entry : null;
+    findEntry(query: string): { metadata: any; entry: any } | null {
+        if (!query) {
+            const message = '[RegistryEngine] strict lookup failed: query is empty. Use package:domain:target.';
+            console.warn(message);
+            LoggerEngine.log('warn', message);
+            return null;
         }
 
-        // 2. Scan All Packages (e.g. "Console")
-        // Warning: This returns the first match found. Naming collisions are possible.
-        for (const pkg of this.runtimeIndex.values()) {
-            const map = pkg.domains[domain];
-            if (map?.has(query)) {
-                return map.get(query);
-            }
+        const parts = query.split(':');
+
+        if (parts.length !== 3) {
+            const message = `[RegistryEngine] strict lookup failed for "${query}". Expected format: package:domain:target.`;
+            console.warn(message);
+            LoggerEngine.log('warn', message);
+            return null;
         }
 
-        return null;
+        const [packageRef, domain, target] = parts;
+        return this.getDomainEntry(packageRef, domain, target);
+    }
+
+    /**
+     * Resolves and returns the implementation (default export) directly.
+     * Wrapper mainly used for React component resolution.
+     */
+    resolveEntry(query: string) {
+        const found = this.findEntry(query);
+        return found?.entry?.implementation ?? null;
     }
 
     /**
@@ -128,12 +151,7 @@ class RegistryEngineSingleton {
      * Tries 'components' domain as fallback if not found in 'windows'.
      */
     resolveWindowComponent(query: string) {
-        // Try resolving in 'windows' domain first (e.g. wrapper components)
-        const windowComp = this.resolveEntry(query, 'windows');
-        if (windowComp) return windowComp;
-
-        // Fallback to 'components' domain (e.g. raw content components)
-        return this.resolveEntry(query, 'components');
+        return this.resolveEntry(query);
     }
 
     /** Get raw package manifests directly from runtimeIndex. */
@@ -271,19 +289,24 @@ class RegistryEngineSingleton {
                 const filename = path.split('/').pop()?.replace(/\.(ts|tsx|js|jsx)$/, '') || 'unknown';
                 
                 // Try to find the specific ID field for this domain (e.g. widget_name, tool_name)
-                const idField = DOMAIN_NAME_KEY[domain];
-                const explicitName = registryData[idField] || registryData.name || registryData.id;
-                const entryName = explicitName || filename;
+                const idFields = DOMAIN_NAME_KEYS[domain] || ['name', 'id'];
+                const explicitName = idFields.map((field) => registryData[field]).find(Boolean);
+                const entrySlug = String(registryData.slug || explicitName || filename);
+                const normalizedMeta = {
+                    ...registryData,
+                    name: String(registryData.name || explicitName || filename),
+                    slug: entrySlug,
+                };
                 
                 // 4. Construct Runtime Entry
                 const entry: RegistryDomainEntry = {
                     implementation, // The React Component or Function
-                    metadata: registryData, // The exported registry constant
+                    metadata: normalizedMeta, // The exported registry constant
                     locator: { module_path: path }
                 };
 
                 // Add to aggregated list
-                aggregated[domain][entryName] = entry; 
+                aggregated[domain][entrySlug] = entry; 
             }
         }
 
@@ -325,7 +348,7 @@ class RegistryEngineSingleton {
         const normalizedDomains: Record<string, Record<string, any>> = {};
 
         INDEXED_DOMAINS.forEach(domain => {
-            const keyField = DOMAIN_NAME_KEY[domain] || 'id';
+            const keyFields = DOMAIN_NAME_KEYS[domain] || ['name', 'id'];
             // Check if domain exists in source (could be array or object)
             const rawDomain = domainsSrc[domain];
             
@@ -333,8 +356,10 @@ class RegistryEngineSingleton {
                 // Convert Array to Record
                 normalizedDomains[domain] = rawDomain.reduce((acc, item) => {
                     if (item && typeof item === 'object') {
-                        const name = item[keyField] || item.id || item.name || `${domain}_${Object.keys(acc).length}`;
-                        acc[name] = item;
+                        const rawEntry = item as Record<string, unknown>;
+                        const resolvedName = keyFields.map((field) => rawEntry[field]).find(Boolean);
+                        const slug = String(rawEntry.slug ?? resolvedName ?? `${domain}_${Object.keys(acc).length}`);
+                        acc[slug] = item;
                     }
                     return acc;
                 }, {} as Record<string, any>);

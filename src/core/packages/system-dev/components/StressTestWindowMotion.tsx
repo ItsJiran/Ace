@@ -1,7 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useRef, useState } from 'react';
-import { WindowEngine } from '#/services/windowEngine';
-import { StorageEngine } from '#/services/storageEngine';
 import type { WindowConfig } from '#/schemas/window';
 
 type AnimationType = 'bounce' | 'figure8' | 'pop_scale' | 'spring_snap';
@@ -44,7 +42,7 @@ export default function StressTestWindowMotion({ windowUid }: { windowUid: strin
     const frameTimeAccRef = useRef(0);
 
     const capture = () => {
-        const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig> | null;
+        const wins = window.ACE.storage.readMemory('system:windows') as Record<string, WindowConfig> | null;
         if (wins?.[windowUid]) {
             const w = wins[windowUid];
             baseRef.current = { x: w.x, y: w.y, width: w.width, height: w.height };
@@ -63,7 +61,7 @@ export default function StressTestWindowMotion({ windowUid }: { windowUid: strin
             rafRef.current = null;
         }
         const b = baseRef.current;
-        WindowEngine.updateWindowBounds(windowUid, b.x, b.y, b.width, b.height);
+        window.ACE.window.updateWindowBounds(windowUid, b.x, b.y, b.width, b.height);
     };
 
     useEffect(() => {
@@ -121,7 +119,7 @@ export default function StressTestWindowMotion({ windowUid }: { windowUid: strin
                 }
             }
 
-            WindowEngine.updateWindowBounds(
+            window.ACE.window.updateWindowBounds(
                 windowUid,
                 Math.round(nx),
                 Math.round(ny),

@@ -9,8 +9,18 @@ type RegistryComponentProps = {
     payloadMemoryUid?: string;
 };
 
-function AceWindowComponent({ config, children }: { config: WindowConfig, children?: React.ReactNode }) {
-    const window = useAceWindow(config);
+// Simplified: Now accepts either windowUid (preferred) or legacy config object
+function AceWindowComponent({ windowUid, config, children }: { windowUid?: string, config?: WindowConfig, children?: React.ReactNode }) {
+    // Determine source
+    const input = windowUid || config;
+    if (!input) return null;
+
+    const window = useAceWindow(input);
+    const resolvedConfig = window.config || config;
+    
+    // Safety check: if config isn't ready in RAM yet
+    if (!resolvedConfig) return null;
+
     const isDraggingFocusedWindow = window.isDragging && window.isFocused;
 
     return (
@@ -32,9 +42,9 @@ function AceWindowComponent({ config, children }: { config: WindowConfig, childr
                 >
                     <div className={`flex items-center gap-2 ${window.isFocused ? 'text-white/60' : 'text-white/30'}`}>
                         <GripHorizontal size={14} />
-                        <span className="text-xs font-semibold">{config.title || config.component_name}</span>
-                        {config.is_locked && <Lock size={10} className="text-amber-500" />}
-                        {config.always_on_top && <BringToFront size={10} className="text-emerald-500" />}
+                        <span className="text-xs font-semibold">{resolvedConfig.title || resolvedConfig.component_name}</span>
+                        {resolvedConfig.is_locked && <Lock size={10} className="text-amber-500" />}
+                        {resolvedConfig.always_on_top && <BringToFront size={10} className="text-emerald-500" />}
                     </div>
                     <div className="flex items-center gap-2">
                         <button data-window-action="true" className="text-white/40 hover:text-white transition-colors" title="Minimize">
@@ -55,15 +65,15 @@ function AceWindowComponent({ config, children }: { config: WindowConfig, childr
                     onContextMenu={(e) => e.preventDefault()}
                 >
                     <div className="px-3 py-1.5 text-zinc-500 font-semibold border-b border-zinc-800 mb-1">
-                        {config.title || config.component_name}
+                        {resolvedConfig.title || resolvedConfig.component_name}
                     </div>
                     <button data-window-action="true" onClick={window.toggleLock} className="mx-1 px-2 py-1.5 text-left hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors">
-                        {config.is_locked ? <Unlock size={12} className="text-amber-500" /> : <Lock size={12} />}
-                        {config.is_locked ? 'Unlock Position' : 'Lock Position'}
+                        {resolvedConfig.is_locked ? <Unlock size={12} className="text-amber-500" /> : <Lock size={12} />}
+                        {resolvedConfig.is_locked ? 'Unlock Position' : 'Lock Position'}
                     </button>
                     <button data-window-action="true" onClick={window.toggleAlwaysOnTop} className="mx-1 px-2 py-1.5 text-left hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors">
-                        {config.always_on_top ? <Layers size={12} className="text-emerald-500" /> : <BringToFront size={12} />}
-                        {config.always_on_top ? 'Disable Always-On-Top' : 'Always On Top'}
+                        {resolvedConfig.always_on_top ? <Layers size={12} className="text-emerald-500" /> : <BringToFront size={12} />}
+                        {resolvedConfig.always_on_top ? 'Disable Always-On-Top' : 'Always On Top'}
                     </button>
                     <div className="h-px bg-zinc-800 my-1 mx-2" />
                     <div className="px-3 py-1 text-zinc-500 font-medium text-[10px] uppercase tracking-wider">Opacity</div>
@@ -73,7 +83,7 @@ function AceWindowComponent({ config, children }: { config: WindowConfig, childr
                                 data-window-action="true"
                                 key={v}
                                 onClick={() => window.setOpacity(v)}
-                                className={`flex-1 h-6 rounded hover:bg-zinc-700 active:bg-zinc-600 flex items-center justify-center text-[10px] border border-zinc-700/50 ${config.opacity === v ? 'bg-zinc-700 text-white border-zinc-500' : 'bg-zinc-800/50'}`}
+                                className={`flex-1 h-6 rounded hover:bg-zinc-700 active:bg-zinc-600 flex items-center justify-center text-[10px] border border-zinc-700/50 ${resolvedConfig.opacity === v ? 'bg-zinc-700 text-white border-zinc-500' : 'bg-zinc-800/50'}`}
                             >
                                 {v * 100}
                             </button>
@@ -87,7 +97,7 @@ function AceWindowComponent({ config, children }: { config: WindowConfig, childr
                 {children ? children : (
                     <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
                         <p>Unregistered Component Schema:</p>
-                        <span className="text-red-400 font-bold mt-1 text-sm">{config.component_name}</span>
+                        <span className="text-red-400 font-bold mt-1 text-sm">{resolvedConfig.component_name}</span>
                         <p className="mt-4 text-zinc-600">Ensure this component is declared in package registry and loaded by RegistryEngine.</p>
                     </div>
                 )}
@@ -97,8 +107,17 @@ function AceWindowComponent({ config, children }: { config: WindowConfig, childr
 }
 
 export const AceWindow = React.memo(AceWindowComponent, (prev, next) => {
+    // Optimistic memo: if uids match, we trust the internal O(1) subscription of useAceWindow to handle updates.
+    // We only re-render the wrapper if the Window Identity changes (which never happens for same key).
+    // EXCEPT when children change, so we must be careful.
+    if (prev.windowUid && next.windowUid) {
+        return prev.windowUid === next.windowUid && prev.children === next.children;
+    }
+
     const a = prev.config;
     const b = next.config;
+
+    if (!a || !b) return false;
 
     return (
         a.window_uid === b.window_uid &&
@@ -116,6 +135,7 @@ export const AceWindow = React.memo(AceWindowComponent, (prev, next) => {
         a.drag_surface === b.drag_surface &&
         a.is_focused === b.is_focused &&
         a.is_minimized === b.is_minimized &&
-        a.title === b.title
+        a.title === b.title &&
+        prev.children === next.children
     );
 });

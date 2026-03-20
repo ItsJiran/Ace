@@ -1,7 +1,15 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import React, { useEffect, useRef } from 'react';
-import { type LogEntry } from '#/services/loggerService';
 import { Terminal } from 'lucide-react';
+
+export type LogLevel = 'log' | 'info' | 'warn' | 'error';
+
+export interface LogEntry {
+    timestamp: number;
+    level: LogLevel;
+    message: string;
+    id: string;
+}
 
 export const registry: AceRegistryType.Component = {
     name: 'system_console',

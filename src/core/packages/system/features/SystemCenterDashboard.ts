@@ -1,7 +1,8 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Feature = {
-    feature_name: 'system_center_dashboard',
+    name: 'system_center_dashboard',
+    slug: 'system-center-dashboard',
     description: 'Main system dashboard providing overview and settings access.',
 };
 

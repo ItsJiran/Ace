@@ -6,33 +6,29 @@ class ToolEngineSingleton {
      * Retrieve a specific tool definition from the registry.
      * Wraps RegistryEngine.getDomainEntry with 'tools' domain preset.
      */
-    getRegistry({ packageName, name }: { packageName: string; name: string }) {
-        return RegistryEngine.getDomainEntry({
-            packageName,
-            domain: 'tools',
-            name
-        });
+    getRegistry({ packageRef, slug }: { packageRef: string; slug: string }) {
+        return RegistryEngine.getDomainEntry(packageRef, 'tools', slug);
     }
 
     /**
      * Validates raw parameters against a tool's Zod schema.
      */
-    validate(packageName: string, toolName: string, parameters: unknown) {
-        const result = this.getRegistry({ packageName, name: toolName });
+    validate(packageRef: string, toolName: string, parameters: unknown) {
+        const result = this.getRegistry({ packageRef, slug: toolName });
         
         if (!result || !result.entry) {
-            throw new Error(`ToolEngine: Tool "${packageName}/${toolName}" not found in Registry.`);
+            throw new Error(`ToolEngine: Tool "${packageRef}/${toolName}" not found in Registry.`);
         }
 
         const toolDef = result.entry.implementation as ToolDefinition<any>;
         
         if (!toolDef || !toolDef.schema) {
-             throw new Error(`ToolEngine: Invalid tool implementation for "${packageName}/${toolName}". Missing schema.`);
+               throw new Error(`ToolEngine: Invalid tool implementation for "${packageRef}/${toolName}". Missing schema.`);
         }
 
         const parseResult = toolDef.schema.safeParse(parameters);
         if (!parseResult.success) {
-            throw new Error(`ToolEngine: Validation failed for "${packageName}/${toolName}": ${parseResult.error.message}`);
+            throw new Error(`ToolEngine: Validation failed for "${packageRef}/${toolName}": ${parseResult.error.message}`);
         }
 
         return parseResult.data;

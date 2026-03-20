@@ -1,6 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useState } from 'react';
-import { EventBus } from '#/services/eventEngine';
 
 type RouteItem = {
     route: string;
@@ -18,7 +17,7 @@ export default function EventRegistryList() {
 
     useEffect(() => {
         const refresh = () => {
-            const map = ((EventBus as unknown as { routes?: Map<string, Function[]> }).routes) || new Map();
+            const map = ((window.ACE.event as unknown as { routes?: Map<string, Function[]> }).routes) || new Map();
             const next: RouteItem[] = Array.from(map.entries()).map(([route, handlers]) => ({
                 route,
                 handlers: handlers.length,

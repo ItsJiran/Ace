@@ -12,7 +12,8 @@ export const registry: AceRegistryType.Widget = {
  */
 export default function activate() {
     // Resolve default window configuration from registry
-    const windowDef = window.ACE.registry.resolveEntry('dev_menu', 'windows');
+    // Use findEntry to get metadata access
+    const windowDef = window.ACE.registry.findEntry('itsjiran/ace-system-dev:windows:dev_menu');
     const default_config = windowDef?.metadata?.default_config;
 
     window.ACE.window.spawnWindow(default_config || {

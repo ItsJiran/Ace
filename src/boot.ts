@@ -6,6 +6,11 @@ import { WindowEngine } from '#/services/windowEngine';
 import { EventBus } from '#/services/eventEngine';
 import { StorageEngine } from '#/services/storageEngine';
 import { PipelineEngine } from '#/services/pipelineEngine';
+import { ConfigEngine } from '#/services/configEngine';
+import { LayoutEngine } from '#/services/layoutEngine';
+import { KeybindEngine } from '#/services/keybindEngine';
+import { GlobalStateManager } from '#/services/globalStateManager';
+import { LoggerEngine } from '#/services/loggerEngine';
 import type { PipelineContext } from '#/services/pipelineEngine';
 
 let bootPromise: Promise<void> | null = null;
@@ -33,7 +38,12 @@ export async function bootACE() {
                 window: WindowEngine,
                 event: EventBus,
                 storage: StorageEngine,
-                pipeline: PipelineEngine
+                pipeline: PipelineEngine,
+                config: ConfigEngine,
+                layout: LayoutEngine,
+                keybind: KeybindEngine,
+                global: GlobalStateManager,
+                logger: LoggerEngine
             };
             console.log('🔌 ACE Registry Bridge Initialized.');
         }
@@ -50,11 +60,11 @@ export async function bootACE() {
             await RegistryEngine.boot();
 
             // 2 & 3. Find Bootup Pipeline from System Package
-            const bootPipeline = RegistryEngine.getDomainEntry({
-                packageName: 'itsjiran/ace-system', 
-                domain: 'pipelines', 
-                name: 'bootup_sequence'
-            });
+            const bootPipeline = RegistryEngine.getDomainEntry(
+                'itsjiran/ace-system',
+                'pipelines',
+                'bootup-sequence'
+            );
             if (!bootPipeline) throw new Error('CRITICAL: Bootup pipeline not found in system package.');
             
             const bootPipelineEntry = bootPipeline.entry;

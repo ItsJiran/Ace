@@ -7,12 +7,8 @@ class ProcessEngineSingleton {
      * Retrieve a specific process definition from the registry.
      * Wraps RegistryEngine.getDomainEntry with 'processes' domain preset.
      */
-    getRegistry({ packageName, name }: { packageName: string; name: string }) {
-        return RegistryEngine.getDomainEntry({
-            packageName,
-            domain: 'processes',
-            name
-        });
+    getRegistry({ packageRef, slug }: { packageRef: string; slug: string }) {
+        return RegistryEngine.getDomainEntry(packageRef, 'processes', slug);
     }
 
     /* Lines 14-87 from original file */
