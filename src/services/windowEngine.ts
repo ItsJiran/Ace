@@ -257,12 +257,18 @@ class WindowEngineSingleton {
     /**
      * Spawns a physical Dumb Window UI block onto the screen.
      */
-    spawnWindow(config: Omit<WindowConfig, 'window_uid' | 'z_index' | 'is_focused' | 'is_minimized' | 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface' | 'hide_ring'> & Partial<Pick<WindowConfig, 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface' | 'hide_ring'>>) {
+    spawnWindow(config: Omit<WindowConfig, 'window_uid' | 'component' | 'z_index' | 'is_focused' | 'is_minimized' | 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface' | 'hide_ring'> & Partial<Pick<WindowConfig, 'opacity' | 'is_locked' | 'always_on_top' | 'chrome_style' | 'drag_surface' | 'hide_ring'>> & { 
+        package: string; 
+        window: string;
+    }) {
+        const entryRef = `${config.package}:windows:${config.window}`;
+
         const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
         this.highest_z_index += 1;
 
         const freshWindow: WindowConfig = {
-            ...config,
+            ...(config as any), // Type assertion to bypass strict Omit checks since we construct the full object
+            component: entryRef,
             opacity: config.opacity ?? 1,
             is_locked: config.is_locked ?? false,
             always_on_top: config.always_on_top ?? false,
@@ -288,7 +294,7 @@ class WindowEngineSingleton {
         
         // Prevent duplicates (though unique ID makes it unlikely)
         if (!activeWindows.find(w => w.uid === window_uid)) {
-            const newIndex = [...activeWindows, { uid: window_uid, component: config.component_name }];
+            const newIndex = [...activeWindows, { uid: window_uid, component: entryRef }];
             StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: 'system:active_windows',

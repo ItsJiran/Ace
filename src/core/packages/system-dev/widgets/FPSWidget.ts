@@ -1,7 +1,7 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
-    widget_name: 'fps_counter',
+    name: 'fps_counter',
     slug: 'fps-counter',
     entry_id: 'fps_counter_main',
     autostart: true,
@@ -10,7 +10,7 @@ export const registry: AceRegistryType.Widget = {
 
 export default function activate() {
     window.ACE.window.spawnWindow({
-        component_name: 'fps_counter',
+        name: 'fps_counter',
         title: 'FPS',
         chrome_style: 'borderless',
         always_on_top: true,

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Terminal, AlertTriangle, Info, XCircle, Play, Trash2 } from 'lucide-react';
 import { useAceMemory } from '#/hooks/useAceMemory';
-import { AceWindow } from '#/components/layout/AceWindow';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Component = {
@@ -19,15 +18,7 @@ export interface LogEntry {
     id: string;
 }
 
-export default function AceDevTools({ windowUid }: { windowUid: string }) {
-    return (
-        <AceWindow windowUid={windowUid}>
-            <AceDevToolsContent />
-        </AceWindow>
-    );
-}
-
-function AceDevToolsContent() {
+export default function AceDevTools() {
     const [filter, setFilter] = useState<string>('all');
     const [search, setSearch] = useState('');
     const [command, setCommand] = useState('');

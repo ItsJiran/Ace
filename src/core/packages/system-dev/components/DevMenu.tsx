@@ -18,7 +18,7 @@ interface RuntimeRegistryDomains {
         is_enabled?: boolean;
         display_name?: string;
         window_name?: string;
-        component_name?: string;
+        component?: string;
         default_window_preset?: {
             x?: number;
             y?: number;
@@ -37,11 +37,11 @@ export default function DevMenu() {
     const isAmbient = overlayState?.mode === 'ambient';
     const isDebugBg = overlayState?.debug_bg ?? false;
 
-    const openDevWindow = (component_name: string, title: string, x: number, y: number, width: number, height: number) => {
+    const openDevWindow = (pkg: string, windowId: string, title: string, x: number, y: number, width: number, height: number) => {
         window.ACE.events.emit({
             event_type: 'interaction',
             action: 'open_window',
-            payload: { component_name, title, x, y, width, height }
+            payload: { package: pkg, window: windowId, title, x, y, width, height }
         } as any);
     };
 

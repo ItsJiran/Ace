@@ -42,7 +42,7 @@ function AceWindowComponent({ windowUid, config, children }: { windowUid?: strin
                 >
                     <div className={`flex items-center gap-2 ${window.isFocused ? 'text-white/60' : 'text-white/30'}`}>
                         <GripHorizontal size={14} />
-                        <span className="text-xs font-semibold">{resolvedConfig.title || resolvedConfig.component_name}</span>
+                        <span className="text-xs font-semibold">{resolvedConfig.title || resolvedConfig.component}</span>
                         {resolvedConfig.is_locked && <Lock size={10} className="text-amber-500" />}
                         {resolvedConfig.always_on_top && <BringToFront size={10} className="text-emerald-500" />}
                     </div>
@@ -65,7 +65,7 @@ function AceWindowComponent({ windowUid, config, children }: { windowUid?: strin
                     onContextMenu={(e) => e.preventDefault()}
                 >
                     <div className="px-3 py-1.5 text-zinc-500 font-semibold border-b border-zinc-800 mb-1">
-                        {resolvedConfig.title || resolvedConfig.component_name}
+                        {resolvedConfig.title || resolvedConfig.component}
                     </div>
                     <button data-window-action="true" onClick={window.toggleLock} className="mx-1 px-2 py-1.5 text-left hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors">
                         {resolvedConfig.is_locked ? <Unlock size={12} className="text-amber-500" /> : <Lock size={12} />}
@@ -97,7 +97,7 @@ function AceWindowComponent({ windowUid, config, children }: { windowUid?: strin
                 {children ? children : (
                     <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
                         <p>Unregistered Component Schema:</p>
-                        <span className="text-red-400 font-bold mt-1 text-sm">{resolvedConfig.component_name}</span>
+                        <span className="text-red-400 font-bold mt-1 text-sm">{resolvedConfig.component}</span>
                         <p className="mt-4 text-zinc-600">Ensure this component is declared in package registry and loaded by RegistryEngine.</p>
                     </div>
                 )}
@@ -121,7 +121,7 @@ export const AceWindow = React.memo(AceWindowComponent, (prev, next) => {
 
     return (
         a.window_uid === b.window_uid &&
-        a.component_name === b.component_name &&
+        a.component === b.component &&
         a.payload_memory_uid === b.payload_memory_uid &&
         a.x === b.x &&
         a.y === b.y &&

@@ -23,9 +23,9 @@ export default function WindowRegistryList() {
                     <p className="text-xs text-zinc-500">No windows mounted.</p>
                 ) : rows.map((win) => (
                     <div key={win.window_uid} className="rounded border border-zinc-800 bg-zinc-900/60 p-2 text-[11px]">
-                        <div className="text-zinc-300">{win.title || win.component_name}</div>
+                        <div className="text-zinc-300">{win.title || win.component}</div>
                         <div className="text-zinc-500">uid: {win.window_uid}</div>
-                        <div className="text-zinc-500">component: {win.component_name} | z: {win.z_index}</div>
+                        <div className="text-zinc-500">component: {win.component} | z: {win.z_index}</div>
                         <div className="text-zinc-500">x:{win.x} y:{win.y} w:{win.width} h:{win.height}</div>
                     </div>
                 ))}

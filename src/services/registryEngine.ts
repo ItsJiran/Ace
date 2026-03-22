@@ -20,7 +20,7 @@ const INDEXED_DOMAINS = ['widgets', 'components', 'windows', 'tools', 'features'
 
 const DOMAIN_NAME_KEYS: Record<string, string[]> = {
     widgets: ['name', 'widget_name', 'entry_id', 'id'],
-    components: ['name', 'component_name', 'id'],
+    components: ['name', 'component', 'id'],
     windows: ['name', 'window_name', 'id'],
     tools: ['name', 'tool_name', 'id'],
     features: ['name', 'feature_name', 'id'],
@@ -128,7 +128,35 @@ class RegistryEngineSingleton {
      * Tries 'components' domain as fallback if not found in 'windows'.
      */
     resolveWindowComponent(query: string) {
-        return this.resolveEntry(query);
+        let entry = this.resolveEntry(query);
+
+        // Fallback: If not found in 'windows' domain (implied by query), try 'components' domain
+        if (!entry && query.includes(':windows:')) {
+            const componentQuery = query.replace(':windows:', ':components:');
+            entry = this.resolveEntry(componentQuery);
+        }
+
+        // If the entry is a config object (e.g. from a .ts file defining window props),
+        // try to resolve the underlying React component it references.
+        if (entry && typeof entry !== 'function' && typeof entry === 'object' && entry !== null) {
+            const config = entry as any;
+            const componentRef = config.component || config.component_name;
+            
+            if (componentRef && typeof componentRef === 'string') {
+                // If it's a full reference, resolve it
+                if (componentRef.includes(':')) {
+                    const resolved = this.resolveEntry(componentRef);
+                    if (resolved) return resolved;
+                } else {
+                    // Assume same package, 'components' domain
+                    const [pkg] = query.split(':');
+                    const resolved = this.resolveEntry(`${pkg}:components:${componentRef}`);
+                    if (resolved) return resolved;
+                }
+            }
+        }
+
+        return entry;
     }
 
     /** Get raw package manifests directly from runtimeIndex. */

@@ -63,7 +63,7 @@ class LayoutEngineSingleton {
             
             const entry: WindowLayoutEntry = {
                 window_uid: `restored-${crypto.randomUUID()}`, // New UID for next load vs preserving? Preserving might be better for state.
-                component_name: winConfig.component_name || 'UnknownWidget',
+                component: winConfig.component || 'UnknownWidget',
                 bounds: {
                     x: winConfig.x,
                     y: winConfig.y,
@@ -131,12 +131,15 @@ class LayoutEngineSingleton {
 
             // 2. Iterate and Spawn
             for (const entry of snapshot.windows) {
+                const [pkg, _category, windowId] = entry.component.split(':'); // e.g. "system:windows:SystemConsole"
+
                 // Emit open_window intent
                 EventBus.emit({
                     event_type: 'interaction',
                     action: 'open_window',
                     payload: {
-                        component_name: entry.component_name,
+                        package: pkg,
+                        window: windowId,
                         // Flatten bounds for WindowEngine compatibility
                         x: entry.bounds.x,
                         y: entry.bounds.y,

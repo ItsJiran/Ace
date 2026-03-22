@@ -12,7 +12,7 @@ export const WidgetStateSchema = z.record(z.any()).describe('Arbitrary widget st
  */
 export const WindowLayoutEntrySchema = z.object({
     window_uid: z.string().describe('Unique ID for this window instance (useful for restoration).'),
-    component_name: z.string().describe('The React component key (e.g. "NoteWidget").'),
+    component: z.string().describe('The React component key (e.g. "NoteWidget").'),
     
     // Position & Size
     bounds: z.object({

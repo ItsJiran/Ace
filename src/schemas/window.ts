@@ -26,7 +26,7 @@ export const WindowConfigSchema = z.object({
     window_uid: z.string(),
 
     /** The name of the registered React component to render inside this window */
-    component_name: z.string(),
+    component: z.string(),
 
     /** The memory_uid of the payload this component should read data from */
     payload_memory_uid: z.string().optional(),

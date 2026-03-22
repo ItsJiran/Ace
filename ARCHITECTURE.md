@@ -65,12 +65,12 @@ Each package is organized into domain-specific folders:
 **Widget Definition (`src/core/packages/system/widgets/MyWidget.ts`)**:
 ```typescript
 export const registry = {
-    widget_name: 'my_widget',
+    name: 'my_widget',
     entry_id: 'my_widget_main',
 };
 
 export default {
-    component_name: 'my_widget_window',
+    name: 'my_widget_window',
     launch_profile: { surfaces: ['start_menu'] },
     window_profile: { /* optional preset */ },
 };
@@ -150,7 +150,7 @@ graph TD
 1. A component emits `{ action: 'send_gateway' }`.
 2. `eventEngine` routes the request to `aiGatewayEngine`.
 3. The gateway resolves the active session/provider pair and streams output into session-local state plus RAM.
-4. The parser detects an executable block and emits `{ action: 'open_window', payload: { component_name: 'calendar_widget' } }`.
+4. The parser detects an executable block and emits `{ action: 'open_window', payload: { name: 'calendar_widget' } }`.
 5. `windowEngine` allocates a `WindowConfig` entry and writes it to `system:windows`.
 6. The overlay observes RAM and mounts the correct shell/component pair.
 
