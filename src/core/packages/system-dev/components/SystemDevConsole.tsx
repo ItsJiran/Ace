@@ -24,8 +24,7 @@ interface RuntimeRegistryDomains {
 }
 
 export const registry: AceRegistryType.Component = {
-    name: 'system_dev_console_ui',
-    react_behavior: 'dev_console',
+    name: 'system_dev_console_ui',    slug: 'system-dev-console-ui',    react_behavior: 'dev_console',
 };
 
 export default function SystemDevConsole() {

@@ -4,6 +4,7 @@ import type { ProcessRecord } from '#/schemas/process';
 
 export const registry: AceRegistryType.Component = {
     name: 'process_monitor',
+    slug: 'process-monitor',
     data_requirements: ['system:processes'],
     react_behavior: 'dev_process_monitor',
 };

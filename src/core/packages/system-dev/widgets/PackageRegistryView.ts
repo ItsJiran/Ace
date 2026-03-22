@@ -1,8 +1,7 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
-    widget_name: 'package_registry_view',
-    entry_id: 'package_registry_main',
+    widget_name: 'package_registry_view',    slug: 'package-registry-view',    entry_id: 'package_registry_main',
 };
 
 export default {

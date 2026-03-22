@@ -60,6 +60,7 @@ function buildDisruptionSequence(policy: Policy, loop: boolean): AnimationSequen
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_animation_interrupt_drag',
+    slug: 'stress-test-animation-interrupt-drag',
     react_behavior: 'dev_stress_anim_interrupt',
 };
 

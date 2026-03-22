@@ -3,6 +3,7 @@ import DockBar from '../components/DockBar';
 
 export const registry: AceRegistryType.Window = {
     name: 'dock_bar_window',
+    slug: 'dock-bar-window',
     react_behavior: 'window_shell',
 };
 

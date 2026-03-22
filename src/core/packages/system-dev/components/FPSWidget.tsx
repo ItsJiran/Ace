@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 export const registry: AceRegistryType.Component = {
     name: 'fps_widget_ui',
+    slug: 'fps-widget-ui',
     react_behavior: 'dev_fps_counter',
 };
 

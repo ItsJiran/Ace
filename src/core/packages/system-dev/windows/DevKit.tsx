@@ -4,6 +4,7 @@ import DevMenu from '../components/DevMenu';
 
 export const registry: AceRegistryType.Window = {
     name: 'dev_menu',
+    slug: 'dev-menu',
     default_config: {
         x: 100,
         y: 100,

@@ -3,8 +3,7 @@ import { Settings, Box, Bell, Terminal, Command } from 'lucide-react';
 import { useAceWindow } from '#/hooks/useAceWindow';
 
 export const registry: AceRegistryType.Component = {
-    name: 'dock_bar',
-    react_behavior: 'dock_bar_ui',
+    name: 'dock_bar',    slug: 'dock-bar',    react_behavior: 'dock_bar_ui',
 };
 
 export const DockBar = ({ windowUid }: { windowUid: string }) => {

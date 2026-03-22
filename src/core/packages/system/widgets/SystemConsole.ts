@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
     widget_name: 'system_console',
+    slug: 'system-console',
     entry_id: 'system_console_main',
 };
 

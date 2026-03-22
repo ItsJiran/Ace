@@ -110,39 +110,16 @@ class RegistryEngineSingleton {
     }
 
     /**
-     * Resolves a registry entry by string query.
-     * 
-     * STRICT QUERY FORMAT (required):
-     * "package:domain:target"
-     * Example: "itsjiran/ace-system:windows:system_center_window"
-     */
-    findEntry(query: string): { metadata: any; entry: any } | null {
-        if (!query) {
-            const message = '[RegistryEngine] strict lookup failed: query is empty. Use package:domain:target.';
-            console.warn(message);
-            LoggerEngine.log('warn', message);
-            return null;
-        }
-
-        const parts = query.split(':');
-
-        if (parts.length !== 3) {
-            const message = `[RegistryEngine] strict lookup failed for "${query}". Expected format: package:domain:target.`;
-            console.warn(message);
-            LoggerEngine.log('warn', message);
-            return null;
-        }
-
-        const [packageRef, domain, target] = parts;
-        return this.getDomainEntry(packageRef, domain, target);
-    }
-
-    /**
      * Resolves and returns the implementation (default export) directly.
      * Wrapper mainly used for React component resolution.
      */
     resolveEntry(query: string) {
-        const found = this.findEntry(query);
+        if (!query) return null;
+        const parts = query.split(':');
+        if (parts.length !== 3) return null;
+        
+        const [packageRef, domain, target] = parts;
+        const found = this.getDomainEntry(packageRef, domain, target);
         return found?.entry?.implementation ?? null;
     }
 
@@ -250,7 +227,7 @@ class RegistryEngineSingleton {
      */
     registerPackageModules(packageName: string, modules: Record<string, unknown>) {
         const runtimePkg = this.runtimeIndex.get(packageName);
-        if (!runtimePkg) {
+        if (!runtimePkg) {  
             console.warn(`[RegistryEngine] Cannot register domains for unknown package: ${packageName}`);
             return;
         }
@@ -285,13 +262,20 @@ class RegistryEngineSingleton {
                 }
 
                 // 3. Determine Entry Name (ID)
-                // Priority: registry.name -> filename
+                // Priority: registry.slug -> registry.name -> filename
                 const filename = path.split('/').pop()?.replace(/\.(ts|tsx|js|jsx)$/, '') || 'unknown';
                 
                 // Try to find the specific ID field for this domain (e.g. widget_name, tool_name)
                 const idFields = DOMAIN_NAME_KEYS[domain] || ['name', 'id'];
                 const explicitName = idFields.map((field) => registryData[field]).find(Boolean);
+
+                // Use the mandatory slug if present, otherwise fall back to explicit name or filename
                 const entrySlug = String(registryData.slug || explicitName || filename);
+                
+                if (!registryData.slug) {
+                     console.warn(`[RegistryEngine] Property 'slug' missing in ${path}. Using fallback: ${entrySlug}`);
+                }
+
                 const normalizedMeta = {
                     ...registryData,
                     name: String(registryData.name || explicitName || filename),

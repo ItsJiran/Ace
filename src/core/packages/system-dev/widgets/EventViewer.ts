@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
     widget_name: 'event_viewer',
+    slug: 'event-viewer',
     entry_id: 'event_viewer_main',
 };
 

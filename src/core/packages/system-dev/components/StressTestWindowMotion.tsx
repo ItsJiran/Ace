@@ -22,6 +22,7 @@ type BaseState = { x: number; y: number; width: number; height: number };
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_window_motion',
+    slug: 'stress-test-window-motion',
     react_behavior: 'dev_stress_window_motion',
 };
 

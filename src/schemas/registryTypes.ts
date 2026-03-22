@@ -19,7 +19,7 @@ import type { WindowConfig } from './window';
 export namespace AceRegistryType {
     export interface BaseIdentity {
         name: string;
-        slug?: string;
+        slug: string;
         description?: string;
     }
 

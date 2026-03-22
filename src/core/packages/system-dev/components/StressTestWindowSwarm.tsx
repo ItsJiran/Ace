@@ -17,6 +17,7 @@ const PATTERN_DESC: Record<SwarmPattern, string> = {
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_window_swarm',
+    slug: 'stress-test-window-swarm',
     react_behavior: 'dev_stress_window_swarm',
 };
 

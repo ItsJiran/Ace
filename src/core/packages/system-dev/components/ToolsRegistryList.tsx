@@ -8,6 +8,7 @@ type ToolItem = {
 
 export const registry: AceRegistryType.Component = {
     name: 'tools_registry_list',
+    slug: 'tools-registry-list',
     react_behavior: 'dev_tools_registry',
 };
 

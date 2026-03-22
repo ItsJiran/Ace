@@ -84,6 +84,31 @@ class WindowEngineSingleton {
                  if (payload.action === 'toggle_debug_bg') {
                      this.toggleDebugBg();
                  }
+                 if (payload.action === 'open_devtools') {
+                    // Only invoke in dev mode or if debug features are enabled
+                    // But keybind check is already dev-only.
+                    // Let's invoke the rust command.
+                    try {
+                        await invoke('open_devtools');
+                    } catch (e) {
+                        console.warn('[WindowEngine] Failed to open devtools:', e);
+                    }
+                 }
+                 if (payload.action === 'focus_devtools') {
+                    try {
+                        const appWindow = getCurrentWindow();
+                        // Relax always-on-top so devtools can be seen/focused
+                        if (this.alwaysOnTopIntervalId) {
+                            window.clearInterval(this.alwaysOnTopIntervalId);
+                            this.alwaysOnTopIntervalId = undefined;
+                        }
+                        await appWindow.setAlwaysOnTop(false);
+
+                        await invoke('focus_devtools');
+                    } catch (e) {
+                        console.warn('[WindowEngine] Failed to focus devtools:', e);
+                    }
+                 }
             }
 
             if (action === 'close_window') {

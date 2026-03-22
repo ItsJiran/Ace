@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Tool = {
     tool_name: 'install_widget_package',
+    slug: 'install-widget-package',
     description: 'Install a widget package from a source URL or path.',
     parameters: {
         type: 'object',

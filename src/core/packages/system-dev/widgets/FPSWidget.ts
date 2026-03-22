@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
     widget_name: 'fps_counter',
+    slug: 'fps-counter',
     entry_id: 'fps_counter_main',
     autostart: true,
     environment: ['dev']

@@ -3,6 +3,7 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 
 export const registry: AceRegistryType.Component = {
     name: 'event_viewer_ui',
+    slug: 'event-viewer-ui',
     react_behavior: 'dev_event_stream',
 };
 

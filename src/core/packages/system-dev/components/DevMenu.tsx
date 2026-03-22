@@ -5,6 +5,7 @@ import type { GlobalOverlayState } from '#/schemas/window';
 
 export const registry: AceRegistryType.Component = {
     name: 'dev_menu',
+    slug: 'dev-menu',
     react_behavior: 'dev_menu'
 };
 

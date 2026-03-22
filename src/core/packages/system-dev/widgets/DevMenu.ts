@@ -1,7 +1,8 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
-    widget_name: 'dev_menu',
+    name: 'dev_menu',
+    slug: 'dev-menu',
     entry_id: 'dev_menu_main',
     autostart: true,
     environment: ['dev']
@@ -12,8 +13,8 @@ export const registry: AceRegistryType.Widget = {
  */
 export default function activate() {
     // Resolve default window configuration from registry
-    // Use findEntry to get metadata access
-    const windowDef = window.ACE.registry.findEntry('itsjiran/ace-system-dev:windows:dev_menu');
+    // Use getDomainEntry to get metadata access
+    const windowDef = window.ACE.registry.getDomainEntry('itsjiran/ace-system-dev', 'windows', 'dev_menu');
     const default_config = windowDef?.metadata?.default_config;
 
     window.ACE.window.spawnWindow(default_config || {

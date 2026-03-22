@@ -3,9 +3,40 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { RegistryEngine } from '#/services/registryEngine';
 
-
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
+
+  // Block default browser devtools shortcuts (F12, Ctrl+Shift+I)
+  // And Bind Custom DevTools (Cmd+Shift+J)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Block Native DevTools
+      if (
+        e.key === 'F12' || 
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I')
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      // 2. Open ACE DevTools (Cmd+Shift+J)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'j') {
+          e.preventDefault();
+          // Spawn via Window Engine directly
+          if (window.ACE?.window) {
+              window.ACE.window.spawnWindow({
+                  component_name: 'itsjiran/ace-system-dev:components:ace-devtools',
+                  title: 'ACE DevTools',
+                  width: 800,
+                  height: 480,
+                  chrome_style: 'system',
+              });
+          }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true); // Capture phase
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
 
   // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
   useEffect(() => {

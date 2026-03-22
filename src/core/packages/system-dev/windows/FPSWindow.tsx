@@ -5,6 +5,7 @@ import type { WindowConfig } from '#/schemas/window';
 
 export const registry: AceRegistryType.Window = {
     window_name: 'fps_counter',
+    slug: 'fps-counter',
     default_config: {
         component_name: 'fps_counter',
         title: 'FPS',

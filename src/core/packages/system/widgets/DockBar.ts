@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Widget = {
     name: 'dock_bar',
+    slug: 'dock-bar',
     entry_id: 'dock_bar_main',
 };
 

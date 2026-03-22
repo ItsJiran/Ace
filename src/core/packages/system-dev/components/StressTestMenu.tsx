@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_menu',
+    slug: 'stress-test-menu',
     react_behavior: 'dev_stress_launcher',
 };
 

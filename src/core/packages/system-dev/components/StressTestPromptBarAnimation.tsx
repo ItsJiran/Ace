@@ -66,6 +66,7 @@ const TRANSITIONS: Record<Phase, string> = {
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_prompt_bar_animation',
+    slug: 'stress-test-prompt-bar-animation',
     react_behavior: 'dev_stress_prompt_bar',
 };
 

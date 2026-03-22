@@ -4,6 +4,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Window = {
     name: 'stress_test_prompt_bar_window',
+    slug: 'stress-test-prompt-bar-window',
     react_behavior: 'window_shell',
 };
 

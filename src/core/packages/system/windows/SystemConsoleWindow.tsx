@@ -4,6 +4,7 @@ import { useAceWindow } from '#/hooks/useAceWindow';
 
 export const registry: AceRegistryType.Window = {
     name: 'system_console_window',
+    slug: 'system-console-window',
     react_behavior: 'window_shell',
 };
 

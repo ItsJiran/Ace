@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 export const registry: AceRegistryType.Component = {
     name: 'fps_counter',
+    slug: 'fps-counter',
     react_behavior: 'dev_fps_overlay',
 };
 

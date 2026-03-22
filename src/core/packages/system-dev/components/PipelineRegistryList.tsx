@@ -13,6 +13,7 @@ type PipelineRun = {
 
 export const registry: AceRegistryType.Component = {
     name: 'pipeline_registry_list',
+    slug: 'pipeline-registry-list',
     data_requirements: ['system:pipeline_registry'],
     react_behavior: 'dev_pipeline_registry',
 };

@@ -40,6 +40,7 @@ const makeUserMessage = () => USER_PROMPTS[randomInt(0, USER_PROMPTS.length - 1)
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_chat_message_flow',
+    slug: 'stress-test-chat-message-flow',
     react_behavior: 'dev_stress_chat',
 };
 

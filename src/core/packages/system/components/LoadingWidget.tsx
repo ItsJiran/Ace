@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 
 export const registry: AceRegistryType.Component = {
     name: 'loading_widget',
+    slug: 'loading-widget',
     react_behavior: 'system_loading_state',
 };
 

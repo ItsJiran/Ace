@@ -6,6 +6,7 @@ import type { WindowConfig } from '#/schemas/window';
 
 export const registry: AceRegistryType.Component = {
     name: 'system_widget',
+    slug: 'system-widget',
     data_requirements: ['system:config', 'system:keybinds', 'system:windows', 'system:install_requests'],
     react_behavior: 'system_center',
 };

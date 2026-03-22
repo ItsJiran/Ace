@@ -7,8 +7,7 @@ type RouteItem = {
 };
 
 export const registry: AceRegistryType.Component = {
-    name: 'event_registry_list',
-    data_requirements: ['system:events'],
+    name: 'event_registry_list',    slug: 'event-registry-list',    data_requirements: ['system:events'],
     react_behavior: 'dev_event_registry',
 };
 

@@ -34,6 +34,7 @@ function buildPromptBarSequence(loop: boolean): AnimationSequence {
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_prompt_bar_real_window',
+    slug: 'stress-test-prompt-bar-real-window',
     react_behavior: 'dev_stress_prompt_bar_window',
 };
 

@@ -6,6 +6,7 @@ type BaseTarget = { x: number; y: number; width: number; height: number };
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_relative_modifier_animation',
+    slug: 'stress-test-relative-modifier-animation',
     react_behavior: 'dev_stress_relative_anim',
 };
 

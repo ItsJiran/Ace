@@ -5,6 +5,7 @@ interface HeadlessDragSurfaceDemoProps {
 
 export const registry: AceRegistryType.Component = {
     name: 'headless_drag_surface_demo',
+    slug: 'headless-drag-surface-demo',
     react_behavior: 'dev_drag_demo',
 };
 

@@ -2,8 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useState, useEffect } from 'react';
 
 export const registry: AceRegistryType.Component = {
-    name: 'ram_viewer',
-    react_behavior: 'dev_ram_viewer',
+    name: 'ram_viewer',    slug: 'ram-viewer',    react_behavior: 'dev_ram_viewer',
 };
 
 const MAX_STR_LEN = 300;

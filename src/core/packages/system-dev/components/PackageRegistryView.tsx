@@ -7,6 +7,7 @@ import { Search, Grid, List, Activity, Terminal, Layers, Codesandbox, Settings2,
 
 export const registry: AceRegistryType.Component = {
     name: 'package_registry_view',
+    slug: 'package-registry-view',
     react_behavior: 'dev_package_registry',
 };
 

@@ -15,6 +15,7 @@ const random = (min: number, max: number) => Math.random() * (max - min) + min;
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_ui_animation_fps',
+    slug: 'stress-test-ui-animation-fps',
     react_behavior: 'dev_stress_animation',
 };
 

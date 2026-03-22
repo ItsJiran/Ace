@@ -35,6 +35,11 @@ class KeybindEngineSingleton {
 
         StorageEngine.subscribe('system:keybinds', (binds: Keybind[] | undefined) => {
             this.allKeybinds = binds || [];
+            
+            if (import.meta.env.DEV) {
+                this.injectDevKeybinds();
+            }
+
             this.activeKeybinds = this.allKeybinds.filter((bind) => bind.enabled);
             void this.syncGlobalShortcutRegistrations();
 
@@ -83,7 +88,62 @@ class KeybindEngineSingleton {
     private syncActiveKeybinds() {
         const binds = StorageEngine.readMemory('system:keybinds') as Keybind[] | undefined;
         this.allKeybinds = binds || [];
+
+        if (import.meta.env.DEV) {
+            this.injectDevKeybinds();
+        }
+
         this.activeKeybinds = this.allKeybinds.filter((bind) => bind.enabled);
+    }
+
+    private injectDevKeybinds() {
+        const id1 = 'dev.open_devtools';
+        if (!this.allKeybinds.some(k => k.keybind_uid === id1)) {
+           this.allKeybinds.push({
+               keybind_uid: id1,
+               shortcut: 'F12',
+               description: 'Open Browser DevTools (Dev Mode Only)',
+               enabled: true,
+               intent: {
+                   event_type: 'interaction',
+                   action: 'debug_action',
+                   sub_action: 'open_devtools',
+                   payload: { action: 'open_devtools' }
+               }
+           });
+        }
+
+        const id2 = 'dev.open_devtools_secondary';
+        if (!this.allKeybinds.some(k => k.keybind_uid === id2)) {
+            this.allKeybinds.push({
+               keybind_uid: id2,
+               shortcut: 'CommandOrControl+Shift+I',
+               description: 'Open Browser DevTools (Dev Mode Only) Secondary',
+               enabled: true,
+               intent: {
+                   event_type: 'interaction',
+                   action: 'debug_action',
+                   sub_action: 'open_devtools',
+                   payload: { action: 'open_devtools' }
+               }
+           });
+        }
+        
+        const id3 = 'dev.focus_devtools';
+        if (!this.allKeybinds.some(k => k.keybind_uid === id3)) {
+            this.allKeybinds.push({
+               keybind_uid: id3,
+               shortcut: 'CommandOrControl+Shift+J',
+               description: 'Focus Browser DevTools (Dev Mode Only)',
+               enabled: true,
+               intent: {
+                   event_type: 'interaction',
+                   action: 'debug_action',
+                   sub_action: 'focus_devtools',
+                   payload: { action: 'focus_devtools' }
+               }
+           });
+        }
     }
 
     private async syncGlobalShortcutRegistrations() {

@@ -49,6 +49,7 @@ const createInitialStreams = (count: number): ChatStream[] => {
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_prompt_response_load',
+    slug: 'stress-test-prompt-response-load',
     react_behavior: 'dev_stress_prompt_response',
 };
 

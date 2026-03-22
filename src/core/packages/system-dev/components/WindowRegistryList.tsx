@@ -3,6 +3,7 @@ import type { WindowConfig } from '#/schemas/window';
 
 export const registry: AceRegistryType.Component = {
     name: 'window_registry_list',
+    slug: 'window-registry-list',
     data_requirements: ['system:windows'],
     react_behavior: 'dev_window_registry',
 };

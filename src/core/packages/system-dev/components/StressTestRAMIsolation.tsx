@@ -42,6 +42,7 @@ function WatchedMemoryDisplay() {
 
 export const registry: AceRegistryType.Component = {
     name: 'stress_test_ram_isolation',
+    slug: 'stress-test-ram-isolation',
     react_behavior: 'dev_stress_ram',
 };
 

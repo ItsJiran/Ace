@@ -13,6 +13,7 @@ export interface LogEntry {
 
 export const registry: AceRegistryType.Component = {
     name: 'system_console',
+    slug: 'system-console',
     data_requirements: ['system:logs'],
     react_behavior: 'system_log_console',
 };

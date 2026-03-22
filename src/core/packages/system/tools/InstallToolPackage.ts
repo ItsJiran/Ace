@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Tool = {
     tool_name: 'install_tool_package',
+    slug: 'install-tool-package',
     description: 'Install a tool package from a source URL or path.',
     parameters: {
         type: 'object',

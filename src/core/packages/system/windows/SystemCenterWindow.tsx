@@ -4,6 +4,7 @@ import { useAceWindow } from '#/hooks/useAceWindow';
 
 export const registry: AceRegistryType.Window = {
     name: 'system_center_window',
+    slug: 'system-center-window',
     react_behavior: 'window_shell',
 };
 

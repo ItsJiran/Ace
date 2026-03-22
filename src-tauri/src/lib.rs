@@ -53,6 +53,23 @@ fn get_process_memory() -> (u64, u64) {
     (0, 0)
 }
 
+#[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) {
+    if window.is_devtools_open() {
+        window.close_devtools();
+    } else {
+        window.open_devtools();
+    }
+}
+
+#[tauri::command]
+fn focus_devtools(window: tauri::WebviewWindow) {
+    if window.is_devtools_open() {
+        window.close_devtools();
+    }
+    window.open_devtools();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -61,7 +78,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
 
 
-        .invoke_handler(tauri::generate_handler![set_ignore_cursor_events, get_process_memory])
+        .invoke_handler(tauri::generate_handler![set_ignore_cursor_events, get_process_memory, open_devtools, focus_devtools])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
 
@@ -70,9 +87,9 @@ pub fn run() {
             setup_mac_overlay(&window);
 
             // Open devtools automatically in debug builds
-            if cfg!(debug_assertions) {
-                window.open_devtools();
-            }
+            // if cfg!(debug_assertions) {
+            //     window.open_devtools();
+            // }
             Ok(())
         })
         .run(tauri::generate_context!())

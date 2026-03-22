@@ -50,8 +50,7 @@ const labelColor = (rss: number) => {
 };
 
 export const registry: AceRegistryType.Component = {
-    name: 'ram_usage_analyzer',
-    data_requirements: ['system:ram'],
+    name: 'ram_usage_analyzer',    slug: 'ram-usage-analyzer',    data_requirements: ['system:ram'],
     react_behavior: 'dev_ram_analyzer',
 };
 

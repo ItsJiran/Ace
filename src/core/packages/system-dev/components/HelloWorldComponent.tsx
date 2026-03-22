@@ -1,7 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 export const registry: AceRegistryType.Component = {
-    name: 'hello_world_component',
-    react_behavior: 'dev_hello_world',
+    name: 'hello_world_component',    slug: 'hello-world-component',    react_behavior: 'dev_hello_world',
 };
 
 export default function HelloWorldComponent() {
