@@ -171,6 +171,11 @@ class WindowEngineSingleton {
             const windowList = Object.values(windows).filter((win) => !win.is_minimized);
 
             if (windowList.length === 0) {
+                // If NO windows are open, force ambient mode (click-through)
+                const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                if (overlayState?.mode !== 'ambient') {
+                    this.setOverlayMode('ambient');
+                }
                 return;
             }
 

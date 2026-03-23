@@ -87,8 +87,8 @@ pub fn run() {
             setup_mac_overlay(&window);
 
             // Open devtools automatically in debug builds
-            #[cfg(debug_assertions)]
-            window.open_devtools();
+            // #[cfg(debug_assertions)]
+            // window.open_devtools();
             Ok(())
         })
         .run(tauri::generate_context!())

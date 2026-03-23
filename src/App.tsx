@@ -12,18 +12,29 @@ function App() {
   useEffect(() => {
     console.log('trying to block native devtools and bind custom devtools shortcut');
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 1. Block Native DevTools (F12, Ctrl+Shift+I) - DISABLED by user request
-      /*
+      // 1. Block Native DevTools (F12, Ctrl+Shift+I) & Remap to Custom DevTools
       if (
         e.key === 'F12' || 
         ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I')
       ) {
         e.preventDefault();
         e.stopPropagation();
+        
+        // Open Custom ACE DevTools instead
+        if (window.ACE?.window) {
+          console.log('Spawning ACE DevTools Window');
+            window.ACE.window.spawnWindow({
+                package: 'itsjiran/ace-system-dev',
+                window: 'ace-devtools-window',
+                title: 'ACE DevTools',
+                width: 800,
+                height: 480,
+                chrome_style: 'system',
+            });
+        }
       }
-      */
 
-      // 2. Open ACE DevTools (Cmd+Shift+J)
+      // 2. Open ACE DevTools (Cmd+Shift+J) - Secondary Shortcut
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'j') {
           e.preventDefault();
           // Spawn via Window Engine directly
