@@ -10,8 +10,12 @@ export const registry: AceRegistryType.Window = {
 
 export default function FPSCounterWindow({ windowUid }: { windowUid: string }) {
     return (
-        <AceWindow windowUid={windowUid}>
-            <FPSCounter />
+        <AceWindow windowUid={windowUid} headless>
+            {({ dragHandleProps }) => (
+                <div {...dragHandleProps} className="w-full h-full cursor-grab active:cursor-grabbing">
+                    <FPSCounter />
+                </div>
+            )}
         </AceWindow>
     );
 }

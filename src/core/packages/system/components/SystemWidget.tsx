@@ -4,6 +4,7 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 import type { ConfigItem } from '#/schemas/config';
 import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
+import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 
 export const registry: AceRegistryType.Component = {
     name: 'system_widget',
@@ -133,8 +134,9 @@ export default function SystemWidget() {
     const buttonClass = 'rounded-lg border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 text-[11px] text-zinc-200 hover:bg-zinc-800 transition-colors';
 
     return (
-        <div className="h-full w-full bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.14),transparent_28%),linear-gradient(180deg,rgba(9,12,18,0.98),rgba(12,16,24,0.96))] text-zinc-100 flex flex-col">
-            <div className="border-b border-zinc-800/90 px-4 py-3 bg-zinc-950/70 backdrop-blur-sm">
+        <div className="h-full w-full bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.14),transparent_28%),linear-gradient(180deg,rgba(9,12,18,0.98),rgba(12,16,24,0.96))] text-zinc-100 flex flex-col relative">
+            <RenderCounterBadge componentName="SystemWidget" />
+            <div className="border-b border-zinc-800/90 px-4 py-3 bg-zinc-950/70">
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <p className="text-sm font-semibold text-sky-200">System Widget</p>

@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import React, { useEffect, useRef } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { Terminal } from 'lucide-react';
+import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
 
@@ -39,7 +40,8 @@ export const SystemConsole: React.FC = () => {
     };
 
     return (
-        <div className="w-full h-full flex flex-col bg-zinc-950/20">
+        <div className="w-full h-full flex flex-col bg-zinc-950/20 relative">
+            <RenderCounterBadge componentName="SystemConsole" />
             <div
                 ref={scrollRef}
                 className="flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed space-y-1 selection:bg-blue-500/30"

@@ -30,7 +30,7 @@ export default function SystemSettingsWindow({ windowUid }: { windowUid: string 
                     >
                         {/* Custom Header */}
                         <div
-                            className="h-12 flex items-center justify-between px-5 select-none shrink-0 border-b border-[#E3E7F0] dark:border-[#2A3142] bg-white/50 dark:bg-[#171C27]/50 backdrop-blur-sm cursor-grab active:cursor-grabbing group transition-colors hover:bg-white/80 dark:hover:bg-[#171C27]/80"
+                            className={`h-12 flex items-center justify-between px-5 select-none shrink-0 border-b border-[#E3E7F0] dark:border-[#2A3142] bg-white/50 dark:bg-[#171C27]/50 cursor-grab active:cursor-grabbing group transition-colors hover:bg-white/80 dark:hover:bg-[#171C27]/80`}
                             onMouseDown={dragHandleProps.onMouseDown}
                         >
                             <div className="flex items-center gap-3">

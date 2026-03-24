@@ -78,6 +78,15 @@ export class CursorBridge {
                 });
 
                 const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                
+                // If Dev mode is active and we are locked or debugging background boundaries, force interactive.
+                if (import.meta.env.DEV && (overlayState?.debug_bg || overlayState?.is_overlay_locked)) {
+                    if (overlayState?.mode !== 'interactive') {
+                        this.onOverlayModeChange('interactive');
+                    }
+                    return;
+                }
+
                 const currentMode = overlayState?.mode ?? 'ambient';
 
                 // Re-enable interaction when cursor enters any overlay window bounds.

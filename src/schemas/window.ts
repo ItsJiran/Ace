@@ -17,7 +17,12 @@ export const GlobalOverlayStateSchema = z.object({
     mouse_x: z.number(),
     mouse_y: z.number(),
     /** Developer flag to show the physical bounds of the Transparent Layer */
-    debug_bg: z.boolean()
+    debug_bg: z.boolean(),
+    /** 
+     * If true, the overlay is forced into interactive mode regardless of mouse position.
+     * Useful for debugging or temporary interaction with non-window elements (like DevTools).
+     */
+    is_overlay_locked: z.boolean().default(false)
 });
 
 export type GlobalOverlayState = z.infer<typeof GlobalOverlayStateSchema>;

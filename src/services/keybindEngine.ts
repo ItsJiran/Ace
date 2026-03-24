@@ -144,6 +144,22 @@ class KeybindEngineSingleton {
                }
            });
         }
+
+        const id4 = 'dev.toggle_lock';
+        if (!this.allKeybinds.some(k => k.keybind_uid === id4)) {
+            this.allKeybinds.push({
+               keybind_uid: id4,
+               shortcut: 'F9',
+               description: 'Toggle Interactive Lock Mode (Forces Overlay Interactive)',
+               enabled: true,
+               intent: {
+                   event_type: 'interaction',
+                   action: 'debug_action',
+                   sub_action: 'toggle_overlay_lock',
+                   payload: { action: 'toggle_overlay_lock' }
+               }
+           });
+        }
     }
 
     private async syncGlobalShortcutRegistrations() {

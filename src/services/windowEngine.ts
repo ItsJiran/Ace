@@ -143,6 +143,16 @@ class WindowEngineSingleton {
          if (payload.action === 'toggle_debug_bg') {
              this.toggleDebugBg();
          }
+         if (payload.action === 'toggle_overlay_lock') {
+             const state = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+             if (state) {
+                 StorageEngine.dispatchRAMAction({
+                     action: 'update_memory',
+                     memory_uid: 'system:overlay_state',
+                     payload: { is_overlay_locked: !state.is_overlay_locked }
+                 });
+             }
+         }
          if (payload.action === 'open_devtools') {
             try {
                 await invoke('open_devtools');
@@ -407,7 +417,7 @@ class WindowEngineSingleton {
      * 4. Decoupling: This allows "Headless" management. A window can exist in logic (e.g., minimized tray icon)
      *    without being rendered in the DOM at all, yet still have bounds ready for its return.
      */
-    updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number) {
+    updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number, skipMonolith = false) {
         // 1. Update Granular Config for subscribed components
         const granularKey = `system:window:${window_uid}`;
         const currentGranular = StorageEngine.readMemory(granularKey) as WindowConfig | undefined;
@@ -426,15 +436,17 @@ class WindowEngineSingleton {
             });
         }
 
-        // 2. Update Monolith (Backward Compat)
-        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        if (currentWindows[window_uid]) {
-            currentWindows[window_uid] = { ...currentWindows[window_uid], x, y, width, height };
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: 'system:windows',
-                payload: currentWindows
-            });
+        // 2. Update Monolith (Backward Compat) -> Can be skipped for high-frequency updates
+        if (!skipMonolith) {
+             const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
+             if (currentWindows[window_uid]) {
+                 currentWindows[window_uid] = { ...currentWindows[window_uid], x, y, width, height };
+                 StorageEngine.dispatchRAMAction({
+                     action: 'create_memory',
+                     memory_uid: 'system:windows',
+                     payload: currentWindows
+                 });
+             }
         }
     }
 

@@ -15,6 +15,7 @@ type AceWindowProps = {
 
 // Simplified: Now accepts either windowUid (preferred) or legacy config object
 function AceWindowComponent({ windowUid, config, headless, className, style, children }: AceWindowProps) {
+
     // Determine source
     const input = windowUid || config;
     if (!input) return null;
@@ -36,6 +37,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         return (
             <div
                 {...window.rootProps}
+                ref={window.ref}
                 className={`absolute top-0 left-0 flex flex-col ${pointerEventsClass} ${className || ''}`}
                 style={{
                     ...window.rootStyle,
@@ -55,6 +57,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
     return (
         <div
             {...window.rootProps}
+            ref={window.ref}
             className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${className || ''}`}
             style={{
                 ...window.rootStyle,
@@ -63,8 +66,22 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                     : (window.isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)'),
                 boxShadow: isDraggingFocusedWindow ? 'none' : undefined,
                 ...style,
+                // Ensure initial position is set if rootStyle lacks transform, but `useEffect` handles it.
+                // However, for first paint before useEffect fires, we might want fallback?
+                // The rootStyle now returns `display: none` if no config, so we are safe.
+                // For non-drag state, useEffect sets it.
+                // Wait, useEffect runs AFTER paint. First paint might be at (0,0) if we don't include transform here.
+                // We SHOULD include transform here for initial render, BUT use the Ref one for updates?
+                // No, just let React set it initially.
+                // Let's modify `useAceWindow` to return transform in rootStyle but `useMemo` ignores drag?
+                // NO. The previous committed change REMOVED transform from rootStyle entirely.
+                // This means React will NOT render `transform`.
+                // The `useEffect` will handle it.
+                // Is this causing FOUC (Flash of Unstyled Content)?
+                // `opacity-0` animation handles the entry, so it should be fine.
             }}
         >
+
             {!window.isBorderless && (
                 <div
                     className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-colors relative ${window.isFocused ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}

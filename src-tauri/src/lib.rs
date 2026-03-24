@@ -55,7 +55,9 @@
 
     #[tauri::command]
     fn open_devtools(window: tauri::WebviewWindow) {
-        window.open_devtools();
+        if cfg!(debug_assertions) {
+            window.open_devtools();
+        }
     }
 
     #[cfg_attr(mobile, tauri::mobile_entry_point)]

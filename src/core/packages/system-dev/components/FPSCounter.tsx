@@ -42,7 +42,7 @@ export default function FPSCounter() {
     else if (fps < 55) colorClass = 'text-yellow-500';
 
     return (
-        <div className="flex items-center justify-center w-full h-full bg-black/80 text-xs font-mono select-none rounded backdrop-blur-sm border border-white/10 shadow-lg">
+        <div className="flex items-center justify-center w-full h-full bg-black/80 text-xs font-mono select-none rounded border border-white/10 shadow-lg">
             <span className={`font-bold ${colorClass}`}>{fps}</span>
             <span className="text-zinc-500 ml-0.5 text-[0.6rem]">FPS</span>
         </div>

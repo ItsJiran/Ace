@@ -10,7 +10,7 @@ export const registry: AceRegistryType.Component = {
 
 export const LoadingWidget: React.FC = () => {
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl overflow-hidden">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-black/80 border border-white/10 rounded-2xl p-6 shadow-2xl overflow-hidden">
             <div className="relative flex items-center justify-center">
                 <div className="absolute w-24 h-24 bg-blue-500/20 rounded-full blur-2xl animate-pulse" />
                 <div className="absolute w-16 h-16 border border-blue-500/30 rounded-full animate-ping" />

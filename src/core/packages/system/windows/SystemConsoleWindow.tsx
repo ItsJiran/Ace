@@ -12,12 +12,17 @@ export const registry: AceRegistryType.Window = {
 export default function SystemConsoleWindow({ windowUid }: { windowUid: string }) {
     return (
         <AceWindow windowUid={windowUid} headless>
-            {({ dragHandleProps, close, isFocused }) => (
-                <div className={`w-full h-full flex flex-col transition-colors rounded-xl overflow-hidden backdrop-blur-xl ${
-                    isFocused 
-                        ? 'bg-zinc-950/90 shadow-black/50 ring-1 ring-white/10' 
-                        : 'bg-zinc-950/70 shadow-black/20 ring-1 ring-white/5'
-                }`}>
+            {({ dragHandleProps, close, isFocused, isDragging }) => (
+                <div 
+                    className={`w-full h-full flex flex-col transition-colors rounded-xl overflow-hidden ${
+                         // PERF: Disable expensive backdrop blur completely
+                        isDragging ? 'bg-zinc-950/95' : ''
+                    } ${
+                        isFocused 
+                            ? 'bg-zinc-950/90 shadow-black/50 ring-1 ring-white/10' 
+                            : 'bg-zinc-950/70 shadow-black/20 ring-1 ring-white/5'
+                    }`}
+                >
                     {/* Window Chrome / Titlebar */}
                     <div 
                         {...dragHandleProps}

@@ -1,8 +1,9 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { AceRegistryType } from '#/schemas/registryTypes';
+import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 
 export const registry: AceRegistryType.Component = {
     name: 'dev_menu',
@@ -12,7 +13,7 @@ export const registry: AceRegistryType.Component = {
 
 export default function DevMenu() {
     const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
-
+    
     const isAmbient = overlayState?.mode === 'ambient';
 
     const spawnSystemSettings = () => {
@@ -34,6 +35,18 @@ export default function DevMenu() {
             height: 400,
             x: 360,
             y: 240
+        });
+    };
+
+    const spawnStressTest = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'stress-test-window',
+            title: 'Stress Test Suite',
+            width: 380,
+            height: 480,
+            x: 200,
+            y: 100
         });
     };
 
@@ -68,8 +81,11 @@ export default function DevMenu() {
     const buttonClass = 'flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 duration-75 text-zinc-300';
 
     return (
-        <div className="flex flex-col gap-2 w-full h-full p-2">
-            <div className="text-xs font-semibold text-zinc-500 mb-1">Developer Controls</div>
+        <div className="flex flex-col gap-2 w-full h-full p-2 relative">
+            <RenderCounterBadge componentName="DevMenu" />
+            <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">
+                Development Kit
+            </div>
 
             <button onClick={spawnSystemSettings} className={buttonClass}>
                 <Settings size={14} className="text-blue-400" />
@@ -89,6 +105,11 @@ export default function DevMenu() {
             <button onClick={openDevTools} className={buttonClass}>
                 <Bug size={14} className="text-emerald-400" />
                 Open DevTools
+            </button>
+
+            <button onClick={spawnStressTest} className={buttonClass}>
+                <Activity size={14} className="text-rose-400" />
+                Spawn Stress Test Widget
             </button>
 
             <button

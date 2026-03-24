@@ -1,6 +1,7 @@
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { RegistryPackage } from '#/schemas/registry';
 import type { AceRegistryType } from '#/schemas/registryTypes';
+import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 
 // Define AceRegistryType for this component
 export const registry: AceRegistryType.Component = {
@@ -15,7 +16,8 @@ export default function SystemSettings() {
     const keybinds = useAceMemory<any[]>('system:keybinds') || [];
 
     return (
-        <div className="h-full w-full flex flex-col bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-slate-200 overflow-hidden font-sans">
+        <div className="h-full w-full flex flex-col bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-slate-200 overflow-hidden font-sans relative">
+            <RenderCounterBadge componentName="SystemSettings" />
             <header className="px-6 py-5 border-b border-slate-200 dark:border-zinc-800 flex-shrink-0">
                 <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">System Settings</h1>
                 <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">Manage packages, keybinds, and system configuration.</p>

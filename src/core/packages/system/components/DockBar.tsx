@@ -8,7 +8,7 @@ export const registry: AceRegistryType.Component = {
 
 export const DockBar = ({ windowUid }: { windowUid: string }) => {
     // Component consumes hook directly because it is a custom borderless shell deeply integrated with drag
-    const { dragHandleProps } = useAceWindow(windowUid);
+    const { dragHandleProps, isDragging } = useAceWindow(windowUid);
 
     const items = [
         { id: 'launcher', icon: <Command size={18} />, label: 'Launcher' },
@@ -22,7 +22,7 @@ export const DockBar = ({ windowUid }: { windowUid: string }) => {
         <div className="flex h-full w-full items-center justify-center p-2">
             <div 
                 {...dragHandleProps}
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/60 p-2 backdrop-blur-xl shadow-2xl transition-all hover:bg-zinc-900/80 hover:scale-[1.01] cursor-grab active:cursor-grabbing"
+                className={`flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/60 p-2 shadow-2xl transition-all hover:bg-zinc-900/80 hover:scale-[1.01] cursor-grab active:cursor-grabbing`}
             >
                 {items.map((item) => (
                     <button

@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { RegistryEngine } from '#/services/registryEngine';
+import { useRenderCount } from '#/hooks/useRenderCount';
+import { MemoizedWindowItem } from '#/components/layout/MemoizedWindowItem';
 
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
+  const renderCount = useRenderCount('GlobalOverlay');
 
   // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
   useEffect(() => {
@@ -27,26 +30,38 @@ function App() {
     // 🚀 THE MAGIC WRAPPER
     // Di Tauri, bg-transparent biasanya cukup, tapi 0.005 tetap aman digunakan
     <div
-      className="absolute inset-0 w-screen h-screen overflow-hidden pointer-events-none"
+     
       onContextMenu={(e) => e.preventDefault()}
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.005)' }}
+     style={{
+        width: "100vw",
+        height: "100vh",
+        background: "transparent",
+        position: "relative",
+        pointerEvents: "none",
+      }}
     >
       {/* Render semua window */}
-      {activeWindows.map(entry => {
-        // Resolve purely from windows domain, assuming window components handle their own shell
-        const Component = RegistryEngine.resolveWindowComponent(entry.component) as React.ComponentType<{ windowUid: string }> | undefined;
-
-        if (!Component) return null;
-
-        return (
-          <Component 
+      {activeWindows.map(entry => (
+        <MemoizedWindowItem 
             key={entry.uid} 
-            windowUid={entry.uid}
-          />
-        );
-      })}
+            uid={entry.uid}
+            component={entry.component}
+        />
+      ))}
 
       {/* Developer Feedback UI */}
+      {import.meta.env.DEV && (
+        <div className="fixed bottom-1 left-1 bg-black/50 text-white text-[10px] pointer-events-none z-[9999] px-2 py-1 rounded">
+          Global Overlay Renders: {renderCount}
+        </div>
+      )}
+
+      {overlayState.is_overlay_locked && (
+        <div className="absolute top-2 left-2 text-xs text-amber-400 font-mono pointer-events-none bg-black/50 px-2 py-1 rounded z-[99999] border border-amber-500/50">
+          [LOCKED INTERACTIVE] F9 to unlock.
+        </div>
+      )}
+
       {isAmbient ? (
         <div className="absolute top-2 left-2 text-xs text-zinc-600 font-mono pointer-events-none">
           [Ambient Mode] Click-Through enabled.
