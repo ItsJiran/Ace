@@ -25,8 +25,8 @@ type RootProps = {
     id: string;
     onMouseDown: (e: ReactMouseEvent<HTMLDivElement>) => void;
     onContextMenu: (e: ReactMouseEvent<HTMLDivElement>) => void;
-    onMouseEnter: () => void;
-    onMouseLeave: () => void;
+    onMouseEnter?: () => void;
+    onMouseLeave?: () => void;
 };
 
 export type UseAceWindowResult = {
@@ -41,6 +41,7 @@ export type UseAceWindowResult = {
     isBorderless: boolean;
     isFullDrag: boolean;
     isFocused: boolean;
+    isHovered: boolean;
     isLocked: boolean;
     isDragging: boolean;
     isMounted: boolean;
@@ -60,7 +61,7 @@ export type UseAceWindowResult = {
     cancelAnimation: () => void;
     retargetAnimation: (to: BoundsAnchor) => void;
     isAnimationLocked: boolean;
-    ref: React.RefObject<HTMLDivElement>;
+    ref: React.RefObject<HTMLDivElement | null>;
 };
 
 /**
@@ -97,6 +98,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     // Previously, every AceWindow re-rendered whenever ANY window animated.
     // We now fetch animation state on-demand during interactions, or rely on specific visual keys if needed.
     const mouseFocusEnabled = useAceMemory<boolean>('system:mouse_focus_enabled') ?? true;
+    const focusedWindowUid = useAceMemory<string | null>('system:focused_window_uid');
 
     // -------------------------------------------------------------------------
     // Local Interaction State (transient, high-frequency)
@@ -104,6 +106,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
 
     const [isMounted, setIsMounted] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
     const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
     const dragPositionRef = useRef<{ x: number; y: number } | null>(null);
     const elementRef = useRef<HTMLDivElement | null>(null);
@@ -140,6 +143,22 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
         }
     }, [isDragging]);
 
+    useEffect(() => {
+        const el = elementRef.current;
+        if (!el) return;
+
+        const onMouseEnter = () => setIsHovered(true);
+        const onMouseLeave = () => setIsHovered(false);
+
+        el.addEventListener('mouseenter', onMouseEnter);
+        el.addEventListener('mouseleave', onMouseLeave);
+
+        return () => {
+            el.removeEventListener('mouseenter', onMouseEnter);
+            el.removeEventListener('mouseleave', onMouseLeave);
+        };
+    }, [windowUid]);
+
     // -------------------------------------------------------------------------
     // Derived Runtime Flags
     // -------------------------------------------------------------------------
@@ -149,7 +168,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     const animationState: AnimationRuntimeState | undefined = undefined; 
     const isAnimationLocked = false; // Simplified; we check this imperatively during interactions now.
 
-    const isFocused = config?.is_focused ?? false;
+    const isFocused = focusedWindowUid === windowUid;
     const isLocked = config?.is_locked ?? false;
     const chromeStyle = config?.chrome_style ?? 'standard';
     const dragSurface = config?.drag_surface ?? 'header';
@@ -339,11 +358,18 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             const onMouseMove = (moveEvent: MouseEvent) => {
                 const dx = moveEvent.clientX - startX;
                 const dy = moveEvent.clientY - startY;
+                const nextTargetX = initialX + dx;
+                const nextTargetY = initialY + dy;
+
+                // Skip no-op mousemove frames.
+                if (nextTargetX === targetX && nextTargetY === targetY) {
+                    return;
+                }
                 
                 // Update the TARGET, not the current position directly.
                 // The physics loop will chase this target.
-                targetX = initialX + dx;
-                targetY = initialY + dy;
+                targetX = nextTargetX;
+                targetY = nextTargetY;
 
                 if (rafId === null) {
                     lastTime = performance.now();
@@ -424,8 +450,6 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                 e.stopPropagation();
                 setContextMenu({ x: e.clientX, y: e.clientY });
             },
-            onMouseEnter: () => WindowEngine.enterWindowSurface(windowUid),
-            onMouseLeave: () => WindowEngine.leaveWindowSurface(windowUid),
         }),
         [beginDrag, focus, isFullDrag, windowUid]
     );
@@ -457,6 +481,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
         isBorderless,
         isFullDrag,
         isFocused,
+        isHovered,
         isLocked,
         isDragging,
         isMounted,

@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Play, Square, X, Activity } from 'lucide-react';
 import { AceWindow } from '#/components/layout/AceWindow';
-import type { AnimationSequence, AnimationSegment, BoundsAnchor, LiteralBounds } from '#/schemas/animation';
+import type { AnimationSequence, AnimationSegment, LiteralBounds } from '#/schemas/animation';
 
 export const registry: AceRegistryType.Window = {
     name: 'Stress Test Window',
@@ -34,7 +34,7 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
     const spawnedUidsRef = useRef<string[]>([]);
     
     // Helper to generate sequences
-    const createSequence = (uid: string, index: number, total: number, pattern: SwarmPattern): AnimationSequence => {
+    const createSequence = (index: number, total: number, pattern: SwarmPattern): AnimationSequence => {
         const segments: AnimationSegment[] = [];
         const duration = Math.max(200, 2000 / speed); 
         
@@ -64,6 +64,7 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                     from: 'current', // crucial for relative start
                     to: { ...orderedPts[(i + 1) % 4], width: 180, height: 100 } as LiteralBounds,
                     easing: 'linear',
+                    hold_ms: 0,
                 });
             }
         } else if (pattern === 'bounce_grid') {
@@ -81,6 +82,7 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                 from: 'current',
                 to: { x: baseX, y: baseY + 100, width: 180, height: 100 },
                 easing: 'ease_in_out',
+                hold_ms: 0,
             });
             // Up
             segments.push({
@@ -89,6 +91,7 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                 from: 'current',
                 to: { x: baseX, y: baseY, width: 180, height: 100 },
                 easing: 'ease_in_out',
+                hold_ms: 0,
             });
         } else if (pattern === 'scatter_loop') {
             // 5 Random points
@@ -104,15 +107,17 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                         height: 100 
                     },
                     easing: 'ease_in_out',
+                    hold_ms: 0,
                 });
             }
         }
 
         return {
-            pattern_id: `stress:${pattern}:${uid}`,
+            pattern_id: `stress:${pattern}:${index}`,
             positioning_mode: 'stateful_fixed',
             interrupt_policy: 'retarget',
             loop: true,
+            on_complete: 'idle',
             segments,
         };
     };
@@ -150,21 +155,13 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                 height: 100,
                 x: startX,
                 y: startY,
+                animation_sequence: createSequence(i, windowCount, pattern),
             });
             if (uid) uids.push(uid);
         }
         spawnedUidsRef.current = uids;
         setSpawnedCount(uids.length);
         setIsRunning(true);
-        
-        // Start Animations
-        // Short delay to ensure windows are registered in engine
-        setTimeout(() => {
-            uids.forEach((uid, idx) => {
-                const seq = createSequence(uid, idx, uids.length, pattern);
-                window.ACE.window.playAnimation(uid, seq);
-            });
-        }, 50);
     };
 
     const stopAndClose = () => {
@@ -181,7 +178,7 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
     useEffect(() => {
         if (isRunning && spawnedUidsRef.current.length > 0) {
             spawnedUidsRef.current.forEach((uid, idx) => {
-                const seq = createSequence(uid, idx, spawnedUidsRef.current.length, pattern);
+                const seq = createSequence(idx, spawnedUidsRef.current.length, pattern);
                 window.ACE.window.playAnimation(uid, seq);
             });
         }

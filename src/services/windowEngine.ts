@@ -17,6 +17,7 @@ export interface SpawnWindowOptions {
      */
     package?: string;
     window?: string;
+    component_name?: string;
 
     // Overrides
     title?: string;
@@ -31,6 +32,7 @@ export interface SpawnWindowOptions {
     drag_surface?: 'header' | 'full';
     hide_ring?: boolean;
     z_index?: number;
+    animation_sequence?: AnimationSequence;
 }
 
 /**
@@ -69,13 +71,27 @@ class WindowEngineSingleton {
      */
     private animationController: WindowAnimationController;
 
+    /**
+     * Spawn Queue: prevents crashes when many windows are spawned at once.
+     * Each entry is processed with a small delay between spawns.
+     */
+    private spawnQueue: SpawnWindowOptions[] = [];
+    private spawnQueueTimer: ReturnType<typeof setTimeout> | null = null;
+    private static readonly SPAWN_QUEUE_INTERVAL_MS = 30;
+
+    /**
+     * Deferred animation requests for windows that are not yet spawned
+     * (common when spawn queue is active and client calls playAnimation immediately).
+     */
+    private pendingAnimations = new Map<string, AnimationSequence>();
+
     constructor() {
         this.cursorBridge = new CursorBridge((mode) => this.setOverlayMode(mode));
         this.alwaysOnTopBridge = new AlwaysOnTopBridge();
 
         
         this.animationController = new WindowAnimationController(
-            (uid, x, y, w, h) => this.updateWindowBounds(uid, x, y, w, h),
+            (uid, x, y, w, h) => this.updateWindowBounds(uid, x, y, w, h, true),
             (uid) => this.closeWindow(uid)
         );
 
@@ -97,7 +113,8 @@ class WindowEngineSingleton {
                 focused_window_uid: null,
                 mouse_x: 0,
                 mouse_y: 0,
-                debug_bg: import.meta.env?.DEV ? false : false
+                debug_bg: import.meta.env?.DEV ? false : false,
+                is_overlay_locked: false,
             } satisfies GlobalOverlayState,
             classifications: ['system:core']
         });
@@ -211,7 +228,37 @@ class WindowEngineSingleton {
 
     // ─── Window Lifecycle ───────────────────────────────────────────────────────
 
-    spawnWindow(options: SpawnWindowOptions) {
+    /**
+     * Public entry point: enqueues a spawn request.
+     * Spawns are staggered by SPAWN_QUEUE_INTERVAL_MS to prevent simultaneous
+     * React tree reconciliation explosions when many windows are created at once.
+     */
+    spawnWindow(options: SpawnWindowOptions): string | null {
+        // Allocate the UID immediately so callers can track it if needed
+        const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
+        this.spawnQueue.push({ ...options, _reserved_uid: window_uid } as any);
+        this.flushSpawnQueue();
+        return window_uid;
+    }
+
+    private flushSpawnQueue(): void {
+        if (this.spawnQueueTimer !== null) return; // Already scheduled
+        if (this.spawnQueue.length === 0) return;
+
+        this.spawnQueueTimer = setTimeout(() => {
+            this.spawnQueueTimer = null;
+            const next = this.spawnQueue.shift();
+            if (next) {
+                this.spawnWindowImmediate(next);
+                // Schedule the next entry if any remain
+                if (this.spawnQueue.length > 0) {
+                    this.flushSpawnQueue();
+                }
+            }
+        }, WindowEngineSingleton.SPAWN_QUEUE_INTERVAL_MS);
+    }
+
+    private spawnWindowImmediate(options: SpawnWindowOptions & { _reserved_uid?: string }): string | null {
         // Resolve package/window names to a unique entry reference
         let entryRef = '';
         
@@ -227,7 +274,7 @@ class WindowEngineSingleton {
             return null;
         }
 
-        const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
+        const window_uid = options._reserved_uid ?? ('win-' + Math.random().toString(36).substring(2, 9));
         this.highest_z_index += 1;
 
         const freshWindow: WindowConfig = {
@@ -287,12 +334,26 @@ class WindowEngineSingleton {
         });
 
         this.focusWindow(window_uid);
+
+        // Engine-centered animation orchestration: if spawn request carries an animation,
+        // run it immediately after spawn commit. If a pending animation exists, flush it.
+        if (options.animation_sequence) {
+            this.playAnimation(window_uid, options.animation_sequence);
+        } else {
+            const pendingSeq = this.pendingAnimations.get(window_uid);
+            if (pendingSeq) {
+                this.pendingAnimations.delete(window_uid);
+                this.animationController.playAnimation(window_uid, pendingSeq);
+            }
+        }
+
         return window_uid;
     }
 
     closeWindow(window_uid: string) {
         // Stop any running animations
         this.animationController.cancelAnimation(window_uid);
+        this.pendingAnimations.delete(window_uid);
 
         // 1. Remove from Active Index
         const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string, component: string }> || []);
@@ -354,23 +415,32 @@ class WindowEngineSingleton {
     focusWindow(window_uid: string) {
         if (!this.getMouseFocusEnabled()) return;
 
+        const focusedWindowUid = (StorageEngine.readMemory('system:focused_window_uid') as string | null | undefined)
+            ?? ((StorageEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
+
+        const targetKey = `system:window:${window_uid}`;
+        const targetCfg = StorageEngine.readMemory(targetKey) as WindowConfig | undefined;
+        if (!targetCfg) return;
+
+        // No-op fast path: already focused and on top.
+        if (focusedWindowUid === window_uid && targetCfg.is_focused && targetCfg.z_index >= this.highest_z_index) {
+            return;
+        }
+
         this.highest_z_index += 1;
         this.updateWindowConfig(window_uid, {
             z_index: this.highest_z_index,
             is_focused: true
         });
 
-        // Unfocus others
-        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string }> || []);
-        activeWindows.forEach(win => {
-            if (win.uid !== window_uid) {
-                const key = `system:window:${win.uid}`;
-                const cfg = StorageEngine.readMemory(key) as WindowConfig | undefined;
-                if (cfg && cfg.is_focused) {
-                    this.updateWindowConfig(win.uid, { is_focused: false });
-                }
+        // Unfocus only previously focused window (O(1) instead of O(N)).
+        if (focusedWindowUid && focusedWindowUid !== window_uid) {
+            const prevKey = `system:window:${focusedWindowUid}`;
+            const prevCfg = StorageEngine.readMemory(prevKey) as WindowConfig | undefined;
+            if (prevCfg?.is_focused) {
+                this.updateWindowConfig(focusedWindowUid, { is_focused: false });
             }
-        });
+        }
 
         GlobalStateManager.setFocusedWindow(window_uid);
         GlobalStateManager.setOverlayMode('interactive');
@@ -436,17 +506,17 @@ class WindowEngineSingleton {
             });
         }
 
-        // 2. Update Monolith (Backward Compat) -> Can be skipped for high-frequency updates
+        // 2. Update Monolith (Backward Compat)
         if (!skipMonolith) {
-             const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-             if (currentWindows[window_uid]) {
-                 currentWindows[window_uid] = { ...currentWindows[window_uid], x, y, width, height };
-                 StorageEngine.dispatchRAMAction({
-                     action: 'create_memory',
-                     memory_uid: 'system:windows',
-                     payload: currentWindows
-                 });
-             }
+            const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
+            if (currentWindows && currentWindows[window_uid]) {
+                currentWindows[window_uid] = { ...currentWindows[window_uid], x, y, width, height };
+                StorageEngine.dispatchRAMAction({
+                    action: 'create_memory',
+                    memory_uid: 'system:windows',
+                    payload: currentWindows
+                });
+            }
         }
     }
 
@@ -457,6 +527,13 @@ class WindowEngineSingleton {
     }
 
     playAnimation(window_uid: string, sequence: AnimationSequence): void {
+        const exists = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        if (!exists) {
+            this.pendingAnimations.set(window_uid, sequence);
+            return;
+        }
+
+        this.pendingAnimations.delete(window_uid);
         this.animationController.playAnimation(window_uid, sequence);
     }
 

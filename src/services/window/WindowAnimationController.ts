@@ -10,72 +10,288 @@ import type {
 import type { WindowConfig } from '#/schemas/window';
 
 /**
+ * Per-window animation state held entirely in JS memory (no store).
+ * Only committed to the store on animation end/cancel.
+ */
+interface AnimationSlot {
+    sequence: AnimationSequence;
+    segIdx: number;
+    segStartTime: number;
+    segFrom: LiteralBounds | null;
+    segTo: LiteralBounds | null;
+    holdUntil: number;
+    cycles: number;
+    retarget: LiteralBounds | null;
+    // Cached DOM element reference — avoids getElementById per frame
+    element: HTMLElement | null;
+}
+
+/**
  * Handles complex window animation sequences (tweening, easing, retargeting).
- * Decoupled from the main WindowEngine to reduce complexity.
+ * 
+ * PERF ARCHITECTURE (v2 — Unified Loop):
+ * - One single RAF loop ticks ALL active animations.
+ * - Zero store writes during animation (pure DOM manipulation).
+ * - DOM element refs are cached per-window.
+ * - Runtime state (for DevKit observability) is throttled globally.
  */
 export class WindowAnimationController {
-    // Animation runtime state — keyed by window_uid
-    private animationRafs = new Map<string, number>();
-    private animationSeqs = new Map<string, AnimationSequence>();
-    private animationCycles = new Map<string, number>();
-    private animationSegmentIndex = new Map<string, number>();
-    private animationRetargets = new Map<string, LiteralBounds>();
+    // ─── Core Animation State ───────────────────────────────────────────────
+    private slots = new Map<string, AnimationSlot>();
+    private liveBounds = new Map<string, LiteralBounds>();
 
-    // Callback to update window bounds in the main store
-    private updateWindowBounds: (uid: string, x: number, y: number, w: number, h: number) => void;
-    // Callback to close a window if animation dictates
-    private closeWindow: (uid: string) => void;
+    // ─── Unified Loop ───────────────────────────────────────────────────────
+    private loopRaf: number | null = null;
+    private lastRuntimeWriteTime = 0;
+    private static readonly RUNTIME_STATE_THROTTLE_MS = 500;
+
+    // ─── Callbacks ──────────────────────────────────────────────────────────
+    private commitWindowBounds: (uid: string, x: number, y: number, w: number, h: number) => void;
+    private closeWindowCb: (uid: string) => void;
 
     constructor(
-        updateWindowBoundsCallback: (uid: string, x: number, y: number, w: number, h: number) => void,
+        commitWindowBoundsCallback: (uid: string, x: number, y: number, w: number, h: number) => void,
         closeWindowCallback: (uid: string) => void
     ) {
-        this.updateWindowBounds = updateWindowBoundsCallback;
-        this.closeWindow = closeWindowCallback;
+        this.commitWindowBounds = commitWindowBoundsCallback;
+        this.closeWindowCb = closeWindowCallback;
     }
 
-    /**
-     * Returns true if `window_uid` currently has a running animation with
-     * `interrupt_policy: 'lock'`.
-     */
+    // ─── Public API ─────────────────────────────────────────────────────────
+
     public isAnimationLocked(window_uid: string): boolean {
-        const seq = this.animationSeqs.get(window_uid);
-        return seq?.interrupt_policy === 'lock';
+        const slot = this.slots.get(window_uid);
+        return slot?.sequence.interrupt_policy === 'lock';
+    }
+
+    public playAnimation(window_uid: string, sequence: AnimationSequence): void {
+        const existing = this.slots.get(window_uid);
+        if (existing) {
+            if (existing.sequence.interrupt_policy === 'lock') return;
+            this.cancelAnimation(window_uid);
+        }
+
+        // Verify window exists
+        const granular = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        if (!granular) {
+            const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
+            if (!wins[window_uid]) return;
+        }
+
+        // Cache the DOM element reference upfront
+        const element = document.getElementById(`window-${window_uid}`);
+
+        const slot: AnimationSlot = {
+            sequence,
+            segIdx: 0,
+            segStartTime: -1,
+            segFrom: null,
+            segTo: null,
+            holdUntil: -1,
+            cycles: 0,
+            retarget: null,
+            element,
+        };
+
+        this.slots.set(window_uid, slot);
+        this.ensureLoopRunning();
+    }
+
+    public cancelAnimation(window_uid: string): void {
+        this.finalizeSlot(window_uid);
+    }
+
+    public retargetAnimation(window_uid: string, newTo: BoundsAnchor): void {
+        const slot = this.slots.get(window_uid);
+        if (!slot) return;
+        if (slot.sequence.interrupt_policy === 'lock') return;
+
+        const live = this.getLiveBounds(window_uid);
+        slot.retarget = this.resolveAnchor(newTo, live);
+    }
+
+    // ─── Unified RAF Loop ───────────────────────────────────────────────────
+
+    private ensureLoopRunning(): void {
+        if (this.loopRaf !== null) return;
+        this.loopRaf = requestAnimationFrame((now) => this.tick(now));
+    }
+
+    private tick(now: number): void {
+        this.loopRaf = null;
+
+        if (this.slots.size === 0) return; // No animations → stop loop
+
+        // Collect UIDs where the non-looping sequence completed this frame
+        const toComplete: Array<{ uid: string; onComplete: AnimationSequence['on_complete'] }> = [];
+
+        // ── Single pass: advance all slots ──
+        for (const [uid, slot] of this.slots) {
+            // Re-acquire element if missing or unmounted.
+            // If not yet in DOM (e.g. spawn queue not flushed), skip this frame —
+            // do NOT finalize; the element may appear on the next tick.
+            if (!slot.element || !slot.element.isConnected) {
+                slot.element = document.getElementById(`window-${uid}`);
+                if (!slot.element) continue; // Wait for next frame
+            }
+
+            const result = this.advanceSlot(uid, slot, now);
+            if (result === 'done') {
+                toComplete.push({ uid, onComplete: slot.sequence.on_complete });
+            }
+        }
+
+        // ── Post-loop: finalize completed animations ──
+        for (const { uid, onComplete } of toComplete) {
+            // Commit final bounds
+            const bounds = this.getLiveBounds(uid);
+            this.commitWindowBounds(uid, bounds.x, bounds.y, bounds.width, bounds.height);
+            this.removeSlot(uid);
+
+            if (onComplete === 'close_window') {
+                this.closeWindowCb(uid);
+            } else if (typeof onComplete === 'object' && 'emit_event' in onComplete) {
+                EventBus.emit({
+                    event_type: 'interaction',
+                    action: onComplete.emit_event,
+                    window_uid: uid,
+                    payload: {},
+                });
+            }
+        }
+
+        // ── Throttled runtime state write (one batch for all windows) ──
+        if (now - this.lastRuntimeWriteTime >= WindowAnimationController.RUNTIME_STATE_THROTTLE_MS && this.slots.size > 0) {
+            this.lastRuntimeWriteTime = now;
+            this.writeAllRuntimeStates();
+        }
+
+        // Continue loop if there are still active animations
+        if (this.slots.size > 0) {
+            this.loopRaf = requestAnimationFrame((t) => this.tick(t));
+        }
     }
 
     /**
-     * Resolves a BoundsAnchor (semantic string, "current", or literal) to a
-     * concrete LiteralBounds at the moment it is evaluated.
+     * Advance a single animation slot by one frame.
+     * Returns 'done' if the sequence has completed (non-loop), otherwise 'continue'.
      */
-    private resolveAnchor(anchor: BoundsAnchor, currentBounds: LiteralBounds): LiteralBounds {
-        if (typeof anchor === 'object') {
-            return anchor;
+    private advanceSlot(uid: string, slot: AnimationSlot, now: number): 'continue' | 'done' {
+        const { sequence } = slot;
+        const segments = sequence.segments;
+
+        // ── End-of-segments check ──
+        if (slot.segIdx >= segments.length) {
+            if (sequence.loop) {
+                slot.segIdx = 0;
+                slot.cycles += 1;
+            } else {
+                return 'done';
+            }
         }
 
-        if (anchor === 'current') {
-            return { ...currentBounds };
+        // ── Apply pending retarget ──
+        if (slot.retarget) {
+            slot.segFrom = { ...this.getLiveBounds(uid) };
+            slot.segTo = slot.retarget;
+            slot.segStartTime = now;
+            slot.retarget = null;
+            slot.holdUntil = -1;
         }
+
+        const seg = segments[slot.segIdx];
+
+        // ── Initialize segment on first frame ──
+        if (slot.segStartTime < 0 || slot.segFrom === null || slot.segTo === null) {
+            const live = this.getLiveBounds(uid);
+            slot.segFrom = this.resolveAnchor(seg.from, live);
+            slot.segTo = this.resolveAnchor(seg.to, { ...slot.segFrom });
+            slot.segStartTime = now;
+            slot.holdUntil = -1;
+            this.applyBounds(uid, slot, slot.segFrom);
+        }
+
+        // ── Hold phase ──
+        if (slot.holdUntil > 0) {
+            if (now < slot.holdUntil) return 'continue';
+            // Hold done → advance
+            slot.segIdx += 1;
+            slot.segFrom = null;
+            slot.segTo = null;
+            slot.segStartTime = -1;
+            slot.holdUntil = -1;
+            return 'continue';
+        }
+
+        // ── Interpolation ──
+        const rawT = Math.min((now - slot.segStartTime) / seg.duration_ms, 1);
+        const easedT = applyEasing(seg.easing, rawT);
+        const bounds = this.lerpBounds(slot.segFrom!, slot.segTo!, easedT);
+        this.applyBounds(uid, slot, bounds);
+
+        // ── Segment completion ──
+        if (rawT >= 1) {
+            if (seg.hold_ms > 0) {
+                slot.holdUntil = now + seg.hold_ms;
+            } else {
+                slot.segIdx += 1;
+                slot.segFrom = null;
+                slot.segTo = null;
+                slot.segStartTime = -1;
+            }
+        }
+
+        return 'continue';
+    }
+
+    // ─── DOM & Bounds ───────────────────────────────────────────────────────
+
+    /**
+     * Apply bounds to DOM element directly. Zero store writes.
+     * Caches bounds in liveBounds map for retarget / live reads.
+     */
+    private applyBounds(uid: string, slot: AnimationSlot, bounds: LiteralBounds): void {
+        this.liveBounds.set(uid, bounds);
+
+        const el = slot.element;
+        if (el) {
+            el.style.transform = `translate3d(${bounds.x}px, ${bounds.y}px, 0)`;
+            el.style.width = `${bounds.width}px`;
+            el.style.height = `${bounds.height}px`;
+        }
+    }
+
+    private getLiveBounds(window_uid: string): LiteralBounds {
+        const cached = this.liveBounds.get(window_uid);
+        if (cached) return { ...cached };
+
+        const granular = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        if (granular) return { x: granular.x, y: granular.y, width: granular.width, height: granular.height };
+
+        const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
+        const win = wins[window_uid];
+        return win ? { x: win.x, y: win.y, width: win.width, height: win.height } : { x: 0, y: 0, width: 56, height: 56 };
+    }
+
+    // ─── Anchors & Math ─────────────────────────────────────────────────────
+
+    private resolveAnchor(anchor: BoundsAnchor, currentBounds: LiteralBounds): LiteralBounds {
+        if (typeof anchor === 'object') return anchor;
+        if (anchor === 'current') return { ...currentBounds };
 
         const vw = window.innerWidth;
         const vh = window.innerHeight;
+        const { width, height } = currentBounds;
 
         switch (anchor) {
-            case 'screen:center':
-                return { x: Math.round((vw - currentBounds.width) / 2), y: Math.round((vh - currentBounds.height) / 2), width: currentBounds.width, height: currentBounds.height };
-            case 'screen:bottom_center':
-                return { x: Math.round((vw - currentBounds.width) / 2), y: Math.round(vh - currentBounds.height - 90), width: currentBounds.width, height: currentBounds.height };
-            case 'screen:top_center':
-                return { x: Math.round((vw - currentBounds.width) / 2), y: 32, width: currentBounds.width, height: currentBounds.height };
-            case 'screen:bottom_left':
-                return { x: 32, y: Math.round(vh - currentBounds.height - 32), width: currentBounds.width, height: currentBounds.height };
-            case 'screen:bottom_right':
-                return { x: Math.round(vw - currentBounds.width - 32), y: Math.round(vh - currentBounds.height - 32), width: currentBounds.width, height: currentBounds.height };
-            case 'screen:top_left':
-                return { x: 32, y: 32, width: currentBounds.width, height: currentBounds.height };
-            case 'screen:top_right':
-                return { x: Math.round(vw - currentBounds.width - 32), y: 32, width: currentBounds.width, height: currentBounds.height };
-            default:
-                return { ...currentBounds };
+            case 'screen:center':        return { x: Math.round((vw - width) / 2), y: Math.round((vh - height) / 2), width, height };
+            case 'screen:bottom_center': return { x: Math.round((vw - width) / 2), y: Math.round(vh - height - 90), width, height };
+            case 'screen:top_center':    return { x: Math.round((vw - width) / 2), y: 32, width, height };
+            case 'screen:bottom_left':   return { x: 32, y: Math.round(vh - height - 32), width, height };
+            case 'screen:bottom_right':  return { x: Math.round(vw - width - 32), y: Math.round(vh - height - 32), width, height };
+            case 'screen:top_left':      return { x: 32, y: 32, width, height };
+            case 'screen:top_right':     return { x: Math.round(vw - width - 32), y: 32, width, height };
+            default:                     return { ...currentBounds };
         }
     }
 
@@ -88,9 +304,46 @@ export class WindowAnimationController {
         };
     }
 
-    private writeAnimationRuntimeState(state: AnimationRuntimeState) {
+    // ─── Runtime State (Observability / DevKit) ─────────────────────────────
+
+    private writeAllRuntimeStates(): void {
+        const payload: Record<string, AnimationRuntimeState> = {};
+        for (const [uid, slot] of this.slots) {
+            const seg = slot.sequence.segments[slot.segIdx] ?? slot.sequence.segments[slot.sequence.segments.length - 1];
+            payload[uid] = {
+                window_uid: uid,
+                pattern_id: slot.sequence.pattern_id,
+                positioning_mode: slot.sequence.positioning_mode,
+                interrupt_policy: slot.sequence.interrupt_policy,
+                current_phase: seg?.phase_label ?? 'unknown',
+                segment_index: slot.segIdx,
+                total_segments: slot.sequence.segments.length,
+                loop: slot.sequence.loop,
+                cycles: slot.cycles,
+                is_running: true,
+            };
+        }
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:window_animations',
+            payload,
+        });
+    }
+
+    private writeCompletionState(uid: string, slot: AnimationSlot): void {
         const existing = (StorageEngine.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined) ?? {};
-        existing[state.window_uid] = state;
+        existing[uid] = {
+            window_uid: uid,
+            pattern_id: slot.sequence.pattern_id,
+            positioning_mode: slot.sequence.positioning_mode,
+            interrupt_policy: slot.sequence.interrupt_policy,
+            current_phase: 'done',
+            segment_index: slot.sequence.segments.length - 1,
+            total_segments: slot.sequence.segments.length,
+            loop: slot.sequence.loop,
+            cycles: slot.cycles,
+            is_running: false,
+        };
         StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:window_animations',
@@ -108,187 +361,24 @@ export class WindowAnimationController {
         });
     }
 
-    private getCurrentLiveBounds(window_uid: string): LiteralBounds {
-        const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        const win = wins[window_uid];
-        return win ? { x: win.x, y: win.y, width: win.width, height: win.height } : { x: 0, y: 0, width: 56, height: 56 };
-    }
+    // ─── Lifecycle ──────────────────────────────────────────────────────────
 
-    public playAnimation(window_uid: string, sequence: AnimationSequence): void {
-        const existing = this.animationSeqs.get(window_uid);
-
-        if (existing) {
-            if (existing.interrupt_policy === 'lock') return;
-            this.cancelAnimation(window_uid);
+    private finalizeSlot(uid: string): void {
+        const slot = this.slots.get(uid);
+        if (slot) {
+            this.writeCompletionState(uid, slot);
         }
 
-        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        if (!currentWindows[window_uid]) return;
+        // Commit final position to stores
+        const bounds = this.getLiveBounds(uid);
+        this.commitWindowBounds(uid, bounds.x, bounds.y, bounds.width, bounds.height);
 
-        this.animationSeqs.set(window_uid, sequence);
-        this.animationCycles.set(window_uid, 0);
-        this.animationSegmentIndex.set(window_uid, 0);
-        this.animationRetargets.delete(window_uid);
-
-        let segIdx = 0;
-        let segStartTime = -1;
-        let segFrom: LiteralBounds | null = null;
-        let segTo: LiteralBounds | null = null;
-        let holdUntil = -1;
-        let rafHandle = 0;
-
-        const step = (now: number) => {
-            const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-            if (!wins[window_uid]) {
-                this.cleanupAnimation(window_uid);
-                return;
-            }
-
-            const segments = sequence.segments;
-
-            if (segIdx >= segments.length) {
-                if (sequence.loop) {
-                    segIdx = 0;
-                    this.animationCycles.set(window_uid, (this.animationCycles.get(window_uid) ?? 0) + 1);
-                } else {
-                    const cycles = this.animationCycles.get(window_uid) ?? 0;
-                    this.writeAnimationRuntimeState({
-                        window_uid,
-                        pattern_id: sequence.pattern_id,
-                        positioning_mode: sequence.positioning_mode,
-                        interrupt_policy: sequence.interrupt_policy,
-                        current_phase: 'done',
-                        segment_index: segments.length - 1,
-                        total_segments: segments.length,
-                        loop: sequence.loop,
-                        cycles,
-                        is_running: false,
-                    });
-                    this.cleanupAnimation(window_uid);
-
-                    if (sequence.on_complete === 'close_window') {
-                        this.closeWindow(window_uid);
-                    } else if (typeof sequence.on_complete === 'object' && 'emit_event' in sequence.on_complete) {
-                        EventBus.emit({
-                            event_type: 'interaction',
-                            action: sequence.on_complete.emit_event,
-                            window_uid,
-                            payload: {},
-                        });
-                    }
-                    return;
-                }
-            }
-
-            // Apply pending retarget (from retargetAnimation call)
-            const retarget = this.animationRetargets.get(window_uid);
-            if (retarget) {
-                segFrom = { ...this.getCurrentLiveBounds(window_uid) };
-                segTo = retarget;
-                segStartTime = now;
-                this.animationRetargets.delete(window_uid);
-                holdUntil = -1;
-            }
-
-            const seg = segments[segIdx];
-            const liveBounds = this.getCurrentLiveBounds(window_uid);
-
-            // Initialize segment on first frame
-            if (segStartTime < 0 || segFrom === null || segTo === null) {
-                segFrom = this.resolveAnchor(seg.from, liveBounds);
-                segTo = this.resolveAnchor(seg.to, { ...segFrom });
-                segStartTime = now;
-                holdUntil = -1;
-                // Important: Update immediately so there's no frame gap
-                this.updateWindowBounds(window_uid, segFrom.x, segFrom.y, segFrom.width, segFrom.height);
-            }
-
-            // Hold phase after segment completes
-            if (holdUntil > 0) {
-                if (now < holdUntil) {
-                    rafHandle = requestAnimationFrame(step);
-                    this.animationRafs.set(window_uid, rafHandle);
-                    return;
-                }
-                // Hold done, advance segment
-                segIdx += 1;
-                this.animationSegmentIndex.set(window_uid, segIdx);
-                segFrom = null;
-                segTo = null;
-                segStartTime = -1;
-                holdUntil = -1;
-                rafHandle = requestAnimationFrame(step);
-                this.animationRafs.set(window_uid, rafHandle);
-                return;
-            }
-
-            const rawT = Math.min((now - segStartTime) / seg.duration_ms, 1);
-            const easedT = applyEasing(seg.easing, rawT);
-            const nextBounds = this.lerpBounds(segFrom, segTo!, easedT);
-
-            this.updateWindowBounds(window_uid, nextBounds.x, nextBounds.y, nextBounds.width, nextBounds.height);
-
-            this.writeAnimationRuntimeState({
-                window_uid,
-                pattern_id: sequence.pattern_id,
-                positioning_mode: sequence.positioning_mode,
-                interrupt_policy: sequence.interrupt_policy,
-                current_phase: seg.phase_label,
-                segment_index: segIdx,
-                total_segments: segments.length,
-                loop: sequence.loop,
-                cycles: this.animationCycles.get(window_uid) ?? 0,
-                is_running: true,
-            });
-
-            if (rawT >= 1) {
-                if (seg.hold_ms > 0) {
-                    holdUntil = now + seg.hold_ms;
-                } else {
-                    segIdx += 1;
-                    this.animationSegmentIndex.set(window_uid, segIdx);
-                    segFrom = null;
-                    segTo = null;
-                    segStartTime = -1;
-                }
-            }
-
-            rafHandle = requestAnimationFrame(step);
-            this.animationRafs.set(window_uid, rafHandle);
-        }
-
-        rafHandle = requestAnimationFrame(step);
-        this.animationRafs.set(window_uid, rafHandle);
+        this.removeSlot(uid);
     }
 
-    public cancelAnimation(window_uid: string): void {
-        this.cleanupAnimation(window_uid);
-    }
-
-    public retargetAnimation(window_uid: string, newTo: BoundsAnchor): void {
-        const seq = this.animationSeqs.get(window_uid);
-        if (!seq) return;
-        if (seq.interrupt_policy === 'lock') return;
-
-        const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        const win = wins[window_uid];
-        if (!win) return;
-
-        const liveBounds: LiteralBounds = { x: win.x, y: win.y, width: win.width, height: win.height };
-        const resolved = this.resolveAnchor(newTo, liveBounds);
-        this.animationRetargets.set(window_uid, resolved);
-    }
-
-    private cleanupAnimation(window_uid: string): void {
-        const raf = this.animationRafs.get(window_uid);
-        if (raf !== undefined) {
-            cancelAnimationFrame(raf);
-            this.animationRafs.delete(window_uid);
-        }
-        this.animationSeqs.delete(window_uid);
-        this.animationCycles.delete(window_uid);
-        this.animationSegmentIndex.delete(window_uid);
-        this.animationRetargets.delete(window_uid);
-        this.clearAnimationRuntimeState(window_uid);
+    private removeSlot(uid: string): void {
+        this.slots.delete(uid);
+        this.liveBounds.delete(uid);
+        this.clearAnimationRuntimeState(uid);
     }
 }

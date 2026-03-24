@@ -1,8 +1,10 @@
-import React, { ReactNode } from 'react';
+import React from 'react';
+import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { WindowConfig } from '#/schemas/window';
 import { useAceWindow, type UseAceWindowResult } from '#/hooks/useAceWindow';
 import { GripHorizontal, X, Minus, Lock, Unlock, BringToFront, Layers } from 'lucide-react';
+import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 
 type AceWindowProps = {
     windowUid?: string;
@@ -27,6 +29,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
     if (!resolvedConfig) return null;
 
     const isDraggingFocusedWindow = window.isDragging && window.isFocused;
+    const isActiveVisual = window.isFocused || window.isHovered;
     const baseTransitionClass = isDraggingFocusedWindow ? 'duration-0' : 'duration-150';
     const pointerEventsClass = window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none';
 
@@ -46,6 +49,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                     transitionDuration: window.isDragging ? '0ms' : undefined,
                 }}
             >
+                <RenderCounterBadge componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`} />
                 {typeof children === 'function' ? children(window) : children}
             </div>
         );
@@ -58,12 +62,12 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         <div
             {...window.rootProps}
             ref={window.ref}
-            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${className || ''}`}
+            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (isActiveVisual ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${className || ''}`}
             style={{
                 ...window.rootStyle,
                 backgroundColor: window.isBorderless
                     ? 'transparent'
-                    : (window.isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)'),
+                    : (isActiveVisual ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)'),
                 boxShadow: isDraggingFocusedWindow ? 'none' : undefined,
                 ...style,
                 // Ensure initial position is set if rootStyle lacks transform, but `useEffect` handles it.
@@ -84,14 +88,18 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
 
             {!window.isBorderless && (
                 <div
-                    className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-colors relative ${window.isFocused ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}
+                    className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-colors relative ${isActiveVisual ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}
                     onMouseDown={window.dragHandleProps.onMouseDown}
                 >
-                    <div className={`flex items-center gap-2 ${window.isFocused ? 'text-white/60' : 'text-white/30'}`}>
+                    <div className={`flex items-center gap-2 ${isActiveVisual ? 'text-white/60' : 'text-white/30'}`}>
                         <GripHorizontal size={14} />
                         <span className="text-xs font-semibold">{resolvedConfig.title || resolvedConfig.component}</span>
                         {resolvedConfig.is_locked && <Lock size={10} className="text-amber-500" />}
                         {resolvedConfig.always_on_top && <BringToFront size={10} className="text-emerald-500" />}
+                        <RenderCounterBadge
+                            componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`}
+                            className="!static !opacity-100 !rounded text-[9px] ml-1"
+                        />
                     </div>
                     <div className="flex items-center gap-2">
                         <button data-window-action="true" className="text-white/40 hover:text-white transition-colors" title="Minimize">
@@ -141,7 +149,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             )}
 
             <div className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'}`}>
-                {children ? children : (
+                {typeof children === 'function' || children ? (typeof children === 'function' ? children(window) : children) : (
                     <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
                         <p>Unregistered Component Schema:</p>
                         <span className="text-red-400 font-bold mt-1 text-sm">{resolvedConfig.component}</span>

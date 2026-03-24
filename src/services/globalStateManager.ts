@@ -30,6 +30,7 @@ const DEFAULT_GLOBAL_STATE: GlobalState = {
 };
 
 const MOUSE_FOCUS_MEMORY_UID = 'system:mouse_focus_enabled';
+const FOCUSED_WINDOW_MEMORY_UID = 'system:focused_window_uid';
 
 class GlobalStateManagerSingleton {
     constructor() {
@@ -49,6 +50,16 @@ class GlobalStateManagerSingleton {
                 action: 'create_memory',
                 memory_uid: MOUSE_FOCUS_MEMORY_UID,
                 payload: true,
+                classifications: ['system:core'],
+            });
+        }
+
+        const focusedWindowExisting = StorageEngine.readMemory(FOCUSED_WINDOW_MEMORY_UID);
+        if (typeof focusedWindowExisting !== 'string' && focusedWindowExisting !== null) {
+            StorageEngine.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: FOCUSED_WINDOW_MEMORY_UID,
+                payload: null,
                 classifications: ['system:core'],
             });
         }
@@ -139,6 +150,13 @@ class GlobalStateManagerSingleton {
         }));
 
         this.syncOverlayState({ focused_window_uid });
+
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: FOCUSED_WINDOW_MEMORY_UID,
+            payload: focused_window_uid,
+            classifications: ['system:core'],
+        });
     }
 
     setFocusedWidget(focused_widget_uid: string | null) {

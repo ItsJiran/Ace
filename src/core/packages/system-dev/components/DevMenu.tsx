@@ -1,4 +1,4 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
@@ -47,6 +47,18 @@ export default function DevMenu() {
             height: 480,
             x: 200,
             y: 100
+        });
+    };
+
+    const spawnRamMonitor = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'ram-monitor-window',
+            title: 'RAM Monitor',
+            width: 520,
+            height: 580,
+            x: 160,
+            y: 120,
         });
     };
 
@@ -110,6 +122,11 @@ export default function DevMenu() {
             <button onClick={spawnStressTest} className={buttonClass}>
                 <Activity size={14} className="text-rose-400" />
                 Spawn Stress Test Widget
+            </button>
+
+            <button onClick={spawnRamMonitor} className={buttonClass}>
+                <MemoryStick size={14} className="text-cyan-400" />
+                RAM Monitor
             </button>
 
             <button
