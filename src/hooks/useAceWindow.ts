@@ -128,24 +128,32 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     // Hover state is only used for visual styling, doesn't need React render cycle
     const isHoveredRef = useRef(false);
 
-    // Initialize local position from config once on mount
+    // Initialize local position when config first becomes available.
+    // Important: config for string input may arrive AFTER mount from RAM sync.
     useEffect(() => {
         if (config && localX === null && localY === null) {
             setLocalX(config.x);
             setLocalY(config.y);
         }
-    }, []); // Only run once on mount
+    }, [config, localX, localY]);
     
     // Resync with config after drag completes (to catch config updates from other sources)
     useEffect(() => {
-        if (config && !isDragging && localX !== null && localY !== null) {
-            // Check if config position differs significantly (not just floating point noise)
-            if (Math.abs(config.x - localX) > 0.5 || Math.abs(config.y - localY) > 0.5) {
-                setLocalX(config.x);
-                setLocalY(config.y);
-            }
+        if (!config || isDragging) return;
+
+        // If local state is uninitialized, hydrate immediately from config.
+        if (localX === null || localY === null) {
+            setLocalX(config.x);
+            setLocalY(config.y);
+            return;
         }
-    }, [config?.x, config?.y, isDragging]);
+
+        // Check if config position differs significantly (not just floating point noise)
+        if (Math.abs(config.x - localX) > 0.5 || Math.abs(config.y - localY) > 0.5) {
+            setLocalX(config.x);
+            setLocalY(config.y);
+        }
+    }, [config?.x, config?.y, isDragging, localX, localY]);
 
     useEffect(() => {
         const id = window.setTimeout(() => setIsMounted(true), 10);

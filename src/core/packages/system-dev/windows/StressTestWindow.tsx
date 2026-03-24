@@ -3,6 +3,8 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Play, Square, X, Activity } from 'lucide-react';
 import { AceWindow } from '#/components/layout/AceWindow';
 import type { AnimationSequence, AnimationSegment, LiteralBounds } from '#/schemas/animation';
+import { StorageEngine } from '#/services/storageEngine';
+import type { WindowConfig } from '#/schemas/window';
 
 export const registry: AceRegistryType.Window = {
     name: 'Stress Test Window',
@@ -10,26 +12,33 @@ export const registry: AceRegistryType.Window = {
     react_behavior: 'window_shell',
 };
 
-type SwarmPattern = 'orbit' | 'bounce_grid' | 'scatter_loop';
+type SwarmPattern = 'orbit' | 'bounce_grid' | 'scatter_loop' | 'prompt_bar_morph';
 
 const PATTERN_LABELS: Record<SwarmPattern, string> = {
     orbit: 'Orbit Loop (4-Point)',
     bounce_grid: 'Bounce Grid (Vertical)',
     scatter_loop: 'Scatter Loop (Random)',
+    prompt_bar_morph: 'Prompt Bar Morph',
 };
 
 const PATTERN_DESC: Record<SwarmPattern, string> = {
     orbit: 'Windows cycle through 4 waypoints around center. Uses engine animation loop.',
     bounce_grid: 'Grid layout bouncing up/down. Tests multiple concurrent distinct sequences.',
     scatter_loop: 'Windows traverse 5 random points in a loop. Tests chaotic movement.',
+    prompt_bar_morph: 'Small rounded surfaces expand into long prompt bars near the bottom-center. Tests width/height morphs plus staggered launch timing.',
 };
 
 export default function StressTestWindow({ windowUid }: { windowUid: string }) {
+    const initialConfig = (StorageEngine.readMemory(`system:window:${windowUid}`) as WindowConfig | undefined) ?? undefined;
+    const initialPattern: SwarmPattern = initialConfig?.title?.toLowerCase().includes('prompt bar')
+        ? 'prompt_bar_morph'
+        : 'orbit';
+
     const [isRunning, setIsRunning] = useState(false);
     const [spawnedCount, setSpawnedCount] = useState(0);
     const [windowCount, setWindowCount] = useState(4);
     const [speed, setSpeed] = useState(1.0);
-    const [pattern, setPattern] = useState<SwarmPattern>('orbit');
+    const [pattern, setPattern] = useState<SwarmPattern>(initialPattern);
 
     const spawnedUidsRef = useRef<string[]>([]);
     
@@ -110,6 +119,57 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                     hold_ms: 0,
                 });
             }
+        } else if (pattern === 'prompt_bar_morph') {
+            const row = Math.floor(index / 3);
+            const lane = (index % 3) - 1;
+            const compactSize = 56;
+            const expandedWidth = 620;
+            const expandedHeight = 64;
+            const centerX = 960 + (lane * 160);
+            const baseY = 860 - (row * 88);
+            const compactBounds: LiteralBounds = {
+                x: centerX - compactSize / 2,
+                y: baseY,
+                width: compactSize,
+                height: compactSize,
+            };
+            const barBounds: LiteralBounds = {
+                x: centerX - expandedWidth / 2,
+                y: baseY - 4,
+                width: expandedWidth,
+                height: expandedHeight,
+            };
+            const settleBounds: LiteralBounds = {
+                x: centerX - 680 / 2,
+                y: baseY - 6,
+                width: 680,
+                height: 66,
+            };
+
+            segments.push({
+                phase_label: 'prompt_expand',
+                duration_ms: Math.max(220, 900 / speed),
+                from: 'current',
+                to: barBounds,
+                easing: 'spring_back',
+                hold_ms: 180,
+            });
+            segments.push({
+                phase_label: 'prompt_settle',
+                duration_ms: Math.max(180, 650 / speed),
+                from: 'current',
+                to: settleBounds,
+                easing: 'ease_out',
+                hold_ms: 220,
+            });
+            segments.push({
+                phase_label: 'prompt_collapse',
+                duration_ms: Math.max(220, 820 / speed),
+                from: 'current',
+                to: compactBounds,
+                easing: 'ease_in_out',
+                hold_ms: 100,
+            });
         }
 
         return {
@@ -126,6 +186,7 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
         const uids: string[] = [];
         const cx = 960 - 90;
         const cy = 540 - 50;
+        const targetWindow = pattern === 'prompt_bar_morph' ? 'prompt-morph-window' : 'system-console-window';
 
         for (let i = 0; i < windowCount; i++) {
             // Calculate initial position based on pattern so they don't fly in from 0,0
@@ -145,16 +206,27 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                 const row = Math.floor(i / cols);
                 startX = 400 + col * 200;
                 startY = 300 + row * 150;
+            } else if (pattern === 'prompt_bar_morph') {
+                const row = Math.floor(i / 3);
+                const lane = (i % 3) - 1;
+                const compactSize = 56;
+                const centerX = 960 + (lane * 160);
+                const baseY = 860 - (row * 88);
+                startX = centerX - compactSize / 2;
+                startY = baseY;
             }
 
             const uid = window.ACE.window.spawnWindow({
-                package: 'itsjiran/ace-system',
-                window: 'system-console-window', 
-                title: `Swarm Unit ${i + 1}`,
-                width: 180,
-                height: 100,
+                package: pattern === 'prompt_bar_morph' ? 'itsjiran/ace-system-dev' : 'itsjiran/ace-system',
+                window: targetWindow,
+                title: pattern === 'prompt_bar_morph' ? `Prompt Surface ${i + 1}` : `Swarm Unit ${i + 1}`,
+                width: pattern === 'prompt_bar_morph' ? 56 : 180,
+                height: pattern === 'prompt_bar_morph' ? 56 : 100,
                 x: startX,
                 y: startY,
+                chrome_style: pattern === 'prompt_bar_morph' ? 'borderless' : 'standard',
+                drag_surface: pattern === 'prompt_bar_morph' ? 'full' : 'header',
+                hide_ring: pattern === 'prompt_bar_morph',
                 animation_sequence: createSequence(i, windowCount, pattern),
             });
             if (uid) uids.push(uid);

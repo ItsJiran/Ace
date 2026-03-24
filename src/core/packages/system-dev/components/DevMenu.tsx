@@ -1,4 +1,4 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
@@ -57,6 +57,60 @@ export default function DevMenu() {
             height: 480,
             x: 200,
             y: 100
+        });
+    };
+
+    const spawnPromptMorphWindow = () => {
+        const viewportWidth = window.innerWidth || 1920;
+        const viewportHeight = window.innerHeight || 1080;
+
+        const compactSize = 56;
+        const expandedWidth = Math.min(680, Math.max(420, Math.floor(viewportWidth * 0.52)));
+        const expandedHeight = 66;
+
+        // Keep it visible across different monitor sizes
+        const compactX = Math.round((viewportWidth - compactSize) / 2);
+        const compactY = Math.max(24, viewportHeight - 140);
+        const expandedX = Math.round((viewportWidth - expandedWidth) / 2);
+        const expandedY = Math.max(20, viewportHeight - 148);
+
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'prompt-morph-window',
+            title: 'Prompt Morph',
+            width: compactSize,
+            height: compactSize,
+            x: compactX,
+            y: compactY,
+            chrome_style: 'borderless',
+            drag_surface: 'full',
+            hide_ring: true,
+            always_on_top: true,
+            animation_sequence: {
+                pattern_id: 'anim:prompt_bar:devmenu_morph:stateful_fixed:v1',
+                positioning_mode: 'stateful_fixed',
+                interrupt_policy: 'retarget',
+                loop: false,
+                on_complete: 'idle',
+                segments: [
+                    {
+                        phase_label: 'expand',
+                        duration_ms: 520,
+                        from: 'current',
+                        to: { x: expandedX, y: expandedY, width: expandedWidth, height: 64 },
+                        easing: 'spring_back',
+                        hold_ms: 120,
+                    },
+                    {
+                        phase_label: 'settle',
+                        duration_ms: 360,
+                        from: 'current',
+                        to: { x: expandedX, y: expandedY, width: expandedWidth, height: expandedHeight },
+                        easing: 'ease_out',
+                        hold_ms: 0,
+                    },
+                ],
+            },
         });
     };
 
@@ -137,6 +191,11 @@ export default function DevMenu() {
             <button onClick={spawnStressTest} className={buttonClass}>
                 <Activity size={14} className="text-rose-400" />
                 Spawn Stress Test Widget
+            </button>
+
+            <button onClick={spawnPromptMorphWindow} className={buttonClass}>
+                <Wand2 size={14} className="text-fuchsia-400" />
+                Spawn Prompt Morph
             </button>
 
             <button onClick={spawnRamMonitor} className={buttonClass}>
