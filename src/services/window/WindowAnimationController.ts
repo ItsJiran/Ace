@@ -73,10 +73,7 @@ export class WindowAnimationController {
 
         // Verify window exists
         const granular = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
-        if (!granular) {
-            const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-            if (!wins[window_uid]) return;
-        }
+        if (!granular) return;
 
         // Cache the DOM element reference upfront
         const element = document.getElementById(`window-${window_uid}`);
@@ -268,9 +265,7 @@ export class WindowAnimationController {
         const granular = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
         if (granular) return { x: granular.x, y: granular.y, width: granular.width, height: granular.height };
 
-        const wins = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        const win = wins[window_uid];
-        return win ? { x: win.x, y: win.y, width: win.width, height: win.height } : { x: 0, y: 0, width: 56, height: 56 };
+        return { x: 0, y: 0, width: 56, height: 56 };
     }
 
     // ─── Anchors & Math ─────────────────────────────────────────────────────

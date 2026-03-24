@@ -188,7 +188,6 @@ export const AceWindow = React.memo(AceWindowComponent, (prev, next) => {
         a.always_on_top === b.always_on_top &&
         a.chrome_style === b.chrome_style &&
         a.drag_surface === b.drag_surface &&
-        a.is_focused === b.is_focused &&
         a.is_minimized === b.is_minimized &&
         a.title === b.title &&
         prev.children === next.children

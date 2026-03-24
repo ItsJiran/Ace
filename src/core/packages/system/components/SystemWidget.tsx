@@ -9,7 +9,7 @@ import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 export const registry: AceRegistryType.Component = {
     name: 'system_widget',
     slug: 'system-widget',
-    data_requirements: ['system:config', 'system:keybinds', 'system:windows', 'system:install_requests'],
+    data_requirements: ['system:config', 'system:keybinds', 'system:active_windows', 'system:install_requests'],
     react_behavior: 'system_center',
 };
 
@@ -54,9 +54,10 @@ export default function SystemWidget() {
 
     const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
     const keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
-    const windows = useAceMemory<Record<string, WindowConfig>>('system:windows') ?? {};
+    const activeWindowsIndex = useAceMemory<Array<{ uid: string; component: string }>>('system:active_windows') ?? [];
     const installQueue = useAceMemory<InstallRequest[]>('system:install_requests') ?? [];
     const packageSummaries = useAceMemory<PackageSummary[]>('system:package_registry') ?? [];
+    const [openWindows, setOpenWindows] = useState<WindowConfig[]>([]);
 
     useEffect(() => {
         const refresh = () => {
@@ -67,6 +68,20 @@ export default function SystemWidget() {
         const id = window.setInterval(refresh, 1000);
         return () => window.clearInterval(id);
     }, []);
+
+    useEffect(() => {
+        const refreshWindows = () => {
+            const nextWindows = activeWindowsIndex
+                .map((entry) => window.ACE.storage.readMemory(`system:window:${entry.uid}`) as WindowConfig | undefined)
+                .filter((win): win is WindowConfig => Boolean(win))
+                .sort((a, b) => b.z_index - a.z_index);
+            setOpenWindows(nextWindows);
+        };
+
+        refreshWindows();
+        const id = window.setInterval(refreshWindows, 500);
+        return () => window.clearInterval(id);
+    }, [activeWindowsIndex]);
 
     const configByCategory = useMemo(() => {
         const grouped = new Map<string, ConfigItem[]>();
@@ -80,7 +95,6 @@ export default function SystemWidget() {
     }, [configItems]);
 
     const widgetModules = useMemo(() => packageSummaries, [packageSummaries]);
-    const openWindows = useMemo(() => Object.values(windows).sort((a, b) => b.z_index - a.z_index), [windows]);
 
     const queueInstallRequest = (kind: 'widget' | 'tool', source: string, note: string) => {
         const trimmed = source.trim();
@@ -191,10 +205,10 @@ export default function SystemWidget() {
 
                             <SectionCard title="System Actions" subtitle="Jump to related system surfaces">
                                 <div className="grid grid-cols-1 gap-2">
-                                    <button data-window-action="true" onClick={() => window.ACE.events.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'tools_registry_list', title: 'Tools Registry', x: 180, y: 120, width: 520, height: 380 } })} className={buttonClass}>Open Tools Registry</button>
-                                    <button data-window-action="true" onClick={() => window.ACE.events.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'window_registry_list', title: 'Window Registry', x: 240, y: 160, width: 520, height: 380 } })} className={buttonClass}>Open Window Registry</button>
-                                    <button data-window-action="true" onClick={() => window.ACE.events.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'process_monitor', title: 'Process Monitor', x: 300, y: 200, width: 560, height: 420 } })} className={buttonClass}>Open Process Monitor</button>
-                                    <button data-window-action="true" onClick={() => window.ACE.events.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'stress_test_menu', title: 'Stress Test Menu', x: 360, y: 100, width: 440, height: 340 } })} className={buttonClass}>Open Stress Test Menu</button>
+                                    <button data-window-action="true" onClick={() => window.ACE.event.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'tools_registry_list', title: 'Tools Registry', x: 180, y: 120, width: 520, height: 380 } } as any)} className={buttonClass}>Open Tools Registry</button>
+                                    <button data-window-action="true" onClick={() => window.ACE.event.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'window_registry_list', title: 'Window Registry', x: 240, y: 160, width: 520, height: 380 } } as any)} className={buttonClass}>Open Window Registry</button>
+                                    <button data-window-action="true" onClick={() => window.ACE.event.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'process_monitor', title: 'Process Monitor', x: 300, y: 200, width: 560, height: 420 } } as any)} className={buttonClass}>Open Process Monitor</button>
+                                    <button data-window-action="true" onClick={() => window.ACE.event.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'stress_test_menu', title: 'Stress Test Menu', x: 360, y: 100, width: 440, height: 340 } } as any)} className={buttonClass}>Open Stress Test Menu</button>
                                 </div>
                             </SectionCard>
                         </div>
@@ -286,8 +300,8 @@ export default function SystemWidget() {
                                 <MiniList
                                     title="Windows"
                                     rows={openWindows.map((win) => ({
-                                        title: win.title || win.component_name,
-                                        detail: `${win.component_name} • x:${win.x} y:${win.y} w:${win.width} h:${win.height}`,
+                                        title: win.title || win.component,
+                                            detail: `${win.component} • x:${win.x} y:${win.y} w:${win.width} h:${win.height}`,
                                     }))}
                                     emptyText="No windows mounted."
                                 />
@@ -433,9 +447,3 @@ function MiniList({ title, rows, emptyText }: { title: string; rows: Array<{ tit
     );
 }
 
-function formatWidgetRegistryRow(pkg: PackageSummary) {
-    return {
-        title: pkg.display_name || pkg.package_name,
-        detail: `${pkg.version} • widgets:${pkg.counts.widgets} • components:${pkg.counts.components} • windows:${pkg.counts.windows}`,
-    };
-}

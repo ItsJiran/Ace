@@ -96,8 +96,10 @@ class StorageEngineSingleton {
                 this.global_ram.delete(memory_uid);
 
                 // 2. Remove from Classification RAM
+                const affectedTags: string[] = [];
                 for (const [tag, uids] of this.classification_ram.entries()) {
                     if (uids.includes(memory_uid)) {
+                        affectedTags.push(tag);
                         const filtered = uids.filter(id => id !== memory_uid);
                         if (filtered.length === 0) {
                             this.classification_ram.delete(tag);
@@ -109,6 +111,12 @@ class StorageEngineSingleton {
 
                 // 3. Fire socket to let components know data was deleted
                 this.fireSockets(memory_uid, null);
+
+                // 4. Fire classification sockets so index subscribers update too
+                affectedTags.forEach((tag) => {
+                    const tagArray = this.classification_ram.get(tag);
+                    this.fireSockets(tag, tagArray ? [...tagArray] : []);
+                });
                 return true;
             }
         }

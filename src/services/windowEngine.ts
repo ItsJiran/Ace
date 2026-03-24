@@ -119,13 +119,13 @@ class WindowEngineSingleton {
             classifications: ['system:core']
         });
 
-        // 2. Initialize the Windows Dictionary
         StorageEngine.dispatchRAMAction({
             action: 'create_memory',
-            memory_uid: 'system:windows',
-            payload: {} as Record<string, WindowConfig>,
+            memory_uid: 'system:active_windows',
+            payload: [] as Array<{ uid: string; component: string }>,
             classifications: ['system:core']
         });
+
     }
 
     private registerEventHandlers() {
@@ -208,6 +208,16 @@ class WindowEngineSingleton {
         if (overlayState?.mode === mode) return;
 
         GlobalStateManager.setOverlayMode(mode);
+        
+        // Update storage so CursorBridge sees the new mode on next poll
+        if (overlayState) {
+            StorageEngine.dispatchRAMAction({
+                action: 'update_memory',
+                memory_uid: 'system:overlay_state',
+                payload: { mode }
+            });
+        }
+        
         invoke('set_ignore_cursor_events', { ignore: mode === 'ambient' }).catch(console.error);
     }
 
@@ -296,7 +306,7 @@ class WindowEngineSingleton {
             hide_ring: options.hide_ring ?? false,
             
             // State
-            is_focused: true,
+            is_focused: false,
             is_minimized: false
         };
 
@@ -308,29 +318,12 @@ class WindowEngineSingleton {
             classifications: ['system:windows']
         });
 
-        // 2. Update Active Window Index
-        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string, component: string }> || []);
-        if (!activeWindows.find(w => w.uid === window_uid)) {
-            const newIndex = [...activeWindows, { uid: window_uid, component: entryRef }];
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: 'system:active_windows',
-                payload: newIndex,
-                classifications: ['system:core']
-            });
-        }
-
-        // 3. Update Monolith (Backward Compat)
-        const currentWindows = (StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>) || {};
-        Object.keys(currentWindows).forEach(key => {
-            currentWindows[key].is_focused = false;
-        });
-        currentWindows[window_uid] = freshWindow;
-        
+        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
         StorageEngine.dispatchRAMAction({
             action: 'create_memory',
-            memory_uid: 'system:windows',
-            payload: currentWindows
+            memory_uid: 'system:active_windows',
+            payload: [...activeWindows, { uid: window_uid, component: entryRef }],
+            classifications: ['system:core']
         });
 
         this.focusWindow(window_uid);
@@ -355,36 +348,24 @@ class WindowEngineSingleton {
         this.animationController.cancelAnimation(window_uid);
         this.pendingAnimations.delete(window_uid);
 
-        // 1. Remove from Active Index
-        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string, component: string }> || []);
-        const newIndex = activeWindows.filter(w => w.uid !== window_uid);
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:active_windows',
-            payload: newIndex,
-            classifications: ['system:core']
-        });
-
-        // 2. Remove Granular Config
+        // 1. Remove Granular Config
         StorageEngine.dispatchRAMAction({
             action: 'delete_memory',
             memory_uid: `system:window:${window_uid}`
         });
 
-        // 3. Update Monolith
-        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        if (currentWindows && currentWindows[window_uid]) {
-            const wasFocused = currentWindows[window_uid].is_focused;
-            delete currentWindows[window_uid];
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: 'system:windows',
-                payload: currentWindows
-            });
+        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:active_windows',
+            payload: activeWindows.filter((entry) => entry.uid !== window_uid),
+            classifications: ['system:core']
+        });
 
-            if (wasFocused) {
-                GlobalStateManager.setFocusedWindow(null);
-            }
+        const focusedWindowUid = (StorageEngine.readMemory('system:focused_window_uid') as string | null | undefined)
+            ?? ((StorageEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
+        if (focusedWindowUid === window_uid) {
+            GlobalStateManager.setFocusedWindow(null);
         }
     }
 
@@ -400,16 +381,6 @@ class WindowEngineSingleton {
                 payload: nextConfig
             });
         }
-
-        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        if (currentWindows && currentWindows[window_uid]) {
-            currentWindows[window_uid] = { ...currentWindows[window_uid], ...updates };
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: 'system:windows',
-                payload: currentWindows
-            });
-        }
     }
 
     focusWindow(window_uid: string) {
@@ -423,24 +394,14 @@ class WindowEngineSingleton {
         if (!targetCfg) return;
 
         // No-op fast path: already focused and on top.
-        if (focusedWindowUid === window_uid && targetCfg.is_focused && targetCfg.z_index >= this.highest_z_index) {
+        if (focusedWindowUid === window_uid && targetCfg.z_index >= this.highest_z_index) {
             return;
         }
 
         this.highest_z_index += 1;
         this.updateWindowConfig(window_uid, {
-            z_index: this.highest_z_index,
-            is_focused: true
+            z_index: this.highest_z_index
         });
-
-        // Unfocus only previously focused window (O(1) instead of O(N)).
-        if (focusedWindowUid && focusedWindowUid !== window_uid) {
-            const prevKey = `system:window:${focusedWindowUid}`;
-            const prevCfg = StorageEngine.readMemory(prevKey) as WindowConfig | undefined;
-            if (prevCfg?.is_focused) {
-                this.updateWindowConfig(focusedWindowUid, { is_focused: false });
-            }
-        }
 
         GlobalStateManager.setFocusedWindow(window_uid);
         GlobalStateManager.setOverlayMode('interactive');
@@ -453,8 +414,8 @@ class WindowEngineSingleton {
             this.setOverlayMode('ambient');
             return;
         }
-        const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-        if (!currentWindows[window_uid]) return;
+        const currentWindow = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        if (!currentWindow) return;
 
         invoke('set_ignore_cursor_events', { ignore: false }).catch(console.error);
     }
@@ -487,7 +448,7 @@ class WindowEngineSingleton {
      * 4. Decoupling: This allows "Headless" management. A window can exist in logic (e.g., minimized tray icon)
      *    without being rendered in the DOM at all, yet still have bounds ready for its return.
      */
-    updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number, skipMonolith = false) {
+    updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number, _skipMonolith = false) {
         // 1. Update Granular Config for subscribed components
         const granularKey = `system:window:${window_uid}`;
         const currentGranular = StorageEngine.readMemory(granularKey) as WindowConfig | undefined;
@@ -504,19 +465,6 @@ class WindowEngineSingleton {
                 memory_uid: granularKey,
                 payload: nextConfig
             });
-        }
-
-        // 2. Update Monolith (Backward Compat)
-        if (!skipMonolith) {
-            const currentWindows = StorageEngine.readMemory('system:windows') as Record<string, WindowConfig>;
-            if (currentWindows && currentWindows[window_uid]) {
-                currentWindows[window_uid] = { ...currentWindows[window_uid], x, y, width, height };
-                StorageEngine.dispatchRAMAction({
-                    action: 'create_memory',
-                    memory_uid: 'system:windows',
-                    payload: currentWindows
-                });
-            }
         }
     }
 

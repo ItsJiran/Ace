@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { GlobalOverlayState } from '#/schemas/window';
-import { RegistryEngine } from '#/services/registryEngine';
 import { useRenderCount } from '#/hooks/useRenderCount';
 import { MemoizedWindowItem } from '#/components/layout/MemoizedWindowItem';
 
@@ -14,7 +13,7 @@ function App() {
     import('./boot').then(({ bootACE }) => {
       bootACE().then(() => {
         setIsBootReady(true);
-      }).catch((err) => {
+      }).catch(() => {
         setIsBootReady(false);
       });
     });
@@ -22,8 +21,8 @@ function App() {
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
-  const activeWindows = useAceMemory<Array<{ uid: string, component: string }>>('system:active_windows');
-  if (!isBootReady || !overlayState || !activeWindows) return null;
+  const activeWindows = useAceMemory<Array<{ uid: string; component: string }>>('system:active_windows') ?? [];
+  if (!isBootReady || !overlayState) return null;
   const isAmbient = overlayState.mode === 'ambient';
 
   return (
@@ -41,13 +40,15 @@ function App() {
       }}
     >
       {/* Render semua window */}
-      {activeWindows.map(entry => (
-        <MemoizedWindowItem 
-            key={entry.uid} 
-            uid={entry.uid}
-            component={entry.component}
-        />
-      ))}
+      {activeWindows.map((entry) => {
+        return (
+          <MemoizedWindowItem 
+              key={entry.uid} 
+              uid={entry.uid}
+              component={entry.component}
+          />
+        );
+      })}
 
       {/* Developer Feedback UI */}
       {import.meta.env.DEV && (

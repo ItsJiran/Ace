@@ -45,8 +45,8 @@ class LayoutEngineSingleton {
      * @param name The display name of the layout
      */
     async saveLayout(name: string) {
-        const windows = StorageEngine.readMemory('system:windows') as Record<string, any>;
-        if (!windows) {
+        const activeWindowUids = (StorageEngine.readClassification('system:windows') as string[] | undefined) || [];
+        if (activeWindowUids.length === 0) {
             console.warn('[LayoutEngine] No windows to save.');
             return;
         }
@@ -54,7 +54,10 @@ class LayoutEngineSingleton {
         const entries: WindowLayoutEntry[] = [];
 
         // 1. Iterate over all active windows in RAM
-        for (const [window_uid, winConfig] of Object.entries(windows)) {
+        for (const window_uid of activeWindowUids) {
+            const winConfig = StorageEngine.readMemory(`system:window:${window_uid}`) as Record<string, any> | undefined;
+            if (!winConfig) continue;
+
             // Skip ephemeral/tooltip windows if necessary
             if (winConfig.is_ephemeral) continue;
 
