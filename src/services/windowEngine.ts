@@ -9,6 +9,7 @@ import type { AnimationSequence, BoundsAnchor } from '#/schemas/animation';
 import { CursorBridge } from './window/CursorBridge';
 import { AlwaysOnTopBridge } from './window/AlwaysOnTopBridge';
 import { WindowAnimationController } from './window/WindowAnimationController';
+import SpawnQueueWorker from '#/workers/spawnQueueWorker?worker';
 
 export interface SpawnWindowOptions {
     /** 
@@ -46,6 +47,41 @@ class WindowEngineSingleton {
     // Sub-systems
     
     /**
+     * Spawn Queue Worker: Manages spawn queueing in a separate thread.
+     * Prevents main UI thread blocking from delaying spawn operations.
+     */
+    private spawnQueueWorker: Worker;
+    
+    /**
+     * Map of pending spawn requests by UID (for tracking/cancellation)
+     */
+    private pendingSpawnRequests = new Map<string, SpawnWindowOptions>();
+
+    /**
+     * ARCHITECTURE: Debounce focus updates to prevent cascading subscriptions
+     * When 50 windows check focus simultaneously, threads block.
+     * This batches focus updates to avoid thrashing subscription evaluations.
+     */
+    private pendingFocusWindow: string | null = null;
+    private focusUpdateScheduled = false;
+
+    /**
+     * Deferred Memory Write Queue: applies storage writes one-by-one using timeout.
+      * Delay adapts based on RAF frame time + queue pressure.
+     */
+    private deferredWrites: Array<() => void> = [];
+    private writeScheduled = false;
+     private static readonly WRITE_DELAY_MIN_MS = 10;
+     private static readonly WRITE_DELAY_MAX_MS = 50;
+
+     /**
+      * RAF performance sampling for adaptive spawn pacing.
+      */
+     private frameTimeEmaMs = 16.67;
+     private currentFrameTimeMs = 16.67;
+     private lastRafTs = 0;
+     private static readonly CURRENT_FPS_WEIGHT = 0.6;
+    /**
      * Bridges the native OS Cursor interactions with the Overlay state.
      * 
      * Rationale:
@@ -72,12 +108,24 @@ class WindowEngineSingleton {
     private animationController: WindowAnimationController;
 
     /**
-     * Spawn Queue: prevents crashes when many windows are spawned at once.
-     * Each entry is processed with a small delay between spawns.
+     * Rendering Queue: separates logical window creation from DOM rendering.
+     * 
+     * Problem: Writing to system:active_windows at 50ms intervals causes React
+     * to re-render the App component 40 times when spawning 40 windows.
+     * Each re-render tries to reconcile new MemoizedWindowItems in the DOM,
+     * freezing the main thread for multiple frames.
+     * 
+     * Solution: Batch DOM insertions every 150-200ms instead.
+     * - Logical: Windows added to system:active_windows immediately (50ms)
+     * - Rendering: Windows added to system:rendered_windows in batches (150ms)
+     * - App.tsx subscribes to system:rendered_windows only
+     * 
+     * Result: Smooth spawn animation (~40-60 FPS) with batched DOM insertion.
      */
-    private spawnQueue: SpawnWindowOptions[] = [];
-    private spawnQueueTimer: ReturnType<typeof setTimeout> | null = null;
-    private static readonly SPAWN_QUEUE_INTERVAL_MS = 30;
+    private renderingQueue: string[] = [];  // Window UIDs pending DOM insertion
+    private renderingQueueTimer: ReturnType<typeof setTimeout> | null = null;
+    private static readonly RENDERING_QUEUE_INTERVAL_MS = 120;  // Frequent smaller batches to reduce burst cost
+    private static readonly RENDERING_BATCH_SIZE = 2;  // Smaller batch avoids heavy reconciliation spikes
 
     /**
      * Deferred animation requests for windows that are not yet spawned
@@ -94,6 +142,22 @@ class WindowEngineSingleton {
             (uid, x, y, w, h) => this.updateWindowBounds(uid, x, y, w, h, true),
             (uid) => this.closeWindow(uid)
         );
+
+        // Initialize spawn queue worker
+        this.spawnQueueWorker = new SpawnQueueWorker();
+        this.spawnQueueWorker.onmessage = (event: MessageEvent) => {
+            const { type, payload } = event.data;
+            if (type === 'spawn') {
+                const { id } = payload;
+                const spawnOptions = this.pendingSpawnRequests.get(id);
+                if (spawnOptions) {
+                    this.pendingSpawnRequests.delete(id);
+                    this.spawnWindowImmediate(spawnOptions);
+                }
+            }
+        };
+
+        this.startAdaptivePacingLoop();
 
         this.initializeState();
         this.registerEventHandlers();
@@ -126,6 +190,14 @@ class WindowEngineSingleton {
             classifications: ['system:core']
         });
 
+        // Separate memory for DOM rendering (batched, slower rate)
+        // App.tsx subscribes to this instead of system:active_windows
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:rendered_windows',
+            payload: [] as Array<{ uid: string; component: string }>,
+            classifications: ['system:core']
+        });
     }
 
     private registerEventHandlers() {
@@ -236,36 +308,184 @@ class WindowEngineSingleton {
         GlobalStateManager.setCursorPosition(x, y);
     }
 
+    /**
+     * Enqueues one storage write and processes writes at timed intervals.
+     * Delay starts at 80ms and applies exponential backoff under heavy queue load.
+     */
+    private enqueueDeferredWrite(writeAction: () => void): void {
+        this.deferredWrites.push(writeAction);
+        if (!this.writeScheduled) {
+            this.writeScheduled = true;
+            this.scheduleNextDeferredWrite();
+        }
+    }
+
+    private scheduleNextDeferredWrite(): void {
+        const delay = this.getAdaptiveWriteDelayMs();
+
+        setTimeout(() => {
+            this.processNextDeferredWrite();
+        }, delay);
+    }
+
+    private processNextDeferredWrite(): void {
+        const write = this.deferredWrites.shift();
+
+        try {
+            write?.();
+        } catch (e) {
+            console.error('[WindowEngine] Deferred write failed:', e);
+        }
+
+        const pending = this.deferredWrites.length;
+        if (pending === 0) {
+            this.writeScheduled = false;
+            return;
+        }
+
+        this.scheduleNextDeferredWrite();
+    }
+
+    private getAdaptiveWriteDelayMs(): number {
+        const pending = this.deferredWrites.length;
+        // Parameter 1: EMA frame-time
+        // Parameter 2: queue pressure
+        // Parameter 3: weighted current frame-time (instantaneous FPS contribution)
+        const weightedFrameMs =
+            this.frameTimeEmaMs * (1 - WindowEngineSingleton.CURRENT_FPS_WEIGHT)
+            + this.currentFrameTimeMs * WindowEngineSingleton.CURRENT_FPS_WEIGHT;
+        const frameBased = Math.round(weightedFrameMs * 1.05);
+
+        // Aggressive queue pressure penalty during burst spawns
+        const pressurePenalty = pending >= 16 ? 22 : pending >= 10 ? 14 : pending >= 6 ? 8 : pending >= 3 ? 4 : 0;
+
+        const candidate = frameBased + pressurePenalty;
+        return Math.max(
+            WindowEngineSingleton.WRITE_DELAY_MIN_MS,
+            Math.min(WindowEngineSingleton.WRITE_DELAY_MAX_MS, candidate)
+        );
+    }
+
+    private startAdaptivePacingLoop(): void {
+        const tick = (ts: number) => {
+            if (this.lastRafTs > 0) {
+                const delta = ts - this.lastRafTs;
+                // Clamp outliers to avoid spikes from tab switches.
+                const clamped = Math.max(8, Math.min(80, delta));
+                this.currentFrameTimeMs = clamped;
+                // Faster EMA response so throttling reacts earlier to frame drops.
+                this.frameTimeEmaMs = this.frameTimeEmaMs * 0.75 + clamped * 0.25;
+
+                this.publishSpawnTelemetry();
+            }
+
+            this.lastRafTs = ts;
+            requestAnimationFrame(tick);
+        };
+
+        requestAnimationFrame(tick);
+    }
+
+    private publishSpawnTelemetry(): void {
+        const activeSpawnLoad = this.pendingSpawnRequests.size + this.deferredWrites.length + this.renderingQueue.length;
+        if (activeSpawnLoad === 0) return;
+
+        const currentFps = Math.max(1, Math.min(240, 1000 / this.currentFrameTimeMs));
+        const emaFps = Math.max(1, Math.min(240, 1000 / this.frameTimeEmaMs));
+
+        this.spawnQueueWorker.postMessage({
+            type: 'set_telemetry',
+            payload: {
+                current_fps: currentFps,
+                ema_fps: emaFps,
+                pressure: activeSpawnLoad,
+            },
+        });
+    }
     // ─── Window Lifecycle ───────────────────────────────────────────────────────
 
     /**
-     * Public entry point: enqueues a spawn request.
-     * Spawns are staggered by SPAWN_QUEUE_INTERVAL_MS to prevent simultaneous
-     * React tree reconciliation explosions when many windows are created at once.
+     * Public entry point: enqueues a spawn request to the worker.
+     * 
+     * The spawn worker manages queueing and spawns windows at a steady 80ms interval
+     * in a separate thread, preventing main UI thread blocking.
      */
     spawnWindow(options: SpawnWindowOptions): string | null {
+        // Prime worker with freshest telemetry before enqueueing new burst items.
+        this.publishSpawnTelemetry();
+
         // Allocate the UID immediately so callers can track it if needed
         const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
-        this.spawnQueue.push({ ...options, _reserved_uid: window_uid } as any);
-        this.flushSpawnQueue();
+        const spawnOptions = { ...options, _reserved_uid: window_uid } as any;
+        
+        // Store the request for when worker tells us to spawn
+        this.pendingSpawnRequests.set(window_uid, spawnOptions);
+        
+        // Send to worker for queueing
+        this.spawnQueueWorker.postMessage({
+            type: 'enqueue',
+            payload: {
+                id: window_uid,
+                options: spawnOptions,
+            },
+        });
+        
         return window_uid;
     }
 
-    private flushSpawnQueue(): void {
-        if (this.spawnQueueTimer !== null) return; // Already scheduled
-        if (this.spawnQueue.length === 0) return;
+    /**
+     * Flushes the rendering queue: batches pending window UIDs into system:rendered_windows
+     * at a slower rate than spawn operations (150ms batch rate).
+     * 
+     * This prevents React from re-rendering the App component 40 times when spawning 40 windows.
+     * Instead, it batches 3 windows per 150ms increment, resulting in smooth DOM insertion
+     * without frame drops.
+     */
+    private flushRenderingQueue(): void {
+        if (this.renderingQueueTimer !== null) return; // Already scheduled
+        if (this.renderingQueue.length === 0) return;
 
-        this.spawnQueueTimer = setTimeout(() => {
-            this.spawnQueueTimer = null;
-            const next = this.spawnQueue.shift();
-            if (next) {
-                this.spawnWindowImmediate(next);
-                // Schedule the next entry if any remain
-                if (this.spawnQueue.length > 0) {
-                    this.flushSpawnQueue();
-                }
+        this.renderingQueueTimer = setTimeout(() => {
+            this.renderingQueueTimer = null;
+
+            // Take up to BATCH_SIZE windows from the queue and add to rendered list
+            const batch = this.renderingQueue.splice(0, WindowEngineSingleton.RENDERING_BATCH_SIZE);
+            if (batch.length > 0) {
+                const renderedWindows = (StorageEngine.readMemory('system:rendered_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
+                
+                // Build new rendered list with batch appended
+                const newRenderedList = [
+                    ...renderedWindows,
+                    ...batch.map((uid) => {
+                        const windowCfg = StorageEngine.readMemory(`system:window:${uid}`) as WindowConfig | undefined;
+                        return { uid, component: windowCfg?.component ?? '' };
+                    })
+                ];
+
+                StorageEngine.dispatchRAMAction({
+                    action: 'create_memory',
+                    memory_uid: 'system:rendered_windows',
+                    payload: newRenderedList,
+                    classifications: ['system:core']
+                });
+
+                // Start pending animations exactly when windows become rendered.
+                // This keeps spawn visual and animation in sync.
+                requestAnimationFrame(() => {
+                    for (const uid of batch) {
+                        const pendingSeq = this.pendingAnimations.get(uid);
+                        if (!pendingSeq) continue;
+                        this.pendingAnimations.delete(uid);
+                        this.animationController.playAnimation(uid, pendingSeq);
+                    }
+                });
             }
-        }, WindowEngineSingleton.SPAWN_QUEUE_INTERVAL_MS);
+
+            // Schedule the next batch if any remain
+            if (this.renderingQueue.length > 0) {
+                this.flushRenderingQueue();
+            }
+        }, WindowEngineSingleton.RENDERING_QUEUE_INTERVAL_MS);
     }
 
     private spawnWindowImmediate(options: SpawnWindowOptions & { _reserved_uid?: string }): string | null {
@@ -310,34 +530,39 @@ class WindowEngineSingleton {
             is_minimized: false
         };
 
-        // 1. Write Config to Granular RAM
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: `system:window:${window_uid}`,
-            payload: freshWindow,
-            classifications: ['system:windows']
+        // Defer heavy storage writes to run one-by-one with timeout pacing
+        this.enqueueDeferredWrite(() => {
+            StorageEngine.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: `system:window:${window_uid}`,
+                payload: freshWindow,
+                classifications: ['system:windows']
+            });
         });
 
-        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:active_windows',
-            payload: [...activeWindows, { uid: window_uid, component: entryRef }],
-            classifications: ['system:core']
+        this.enqueueDeferredWrite(() => {
+            const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
+            StorageEngine.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: 'system:active_windows',
+                payload: [...activeWindows, { uid: window_uid, component: entryRef }],
+                classifications: ['system:core']
+            });
         });
 
-        this.focusWindow(window_uid);
+        // Queue for rendering and focus after active_windows is updated
+        this.enqueueDeferredWrite(() => {
+            // Queue window for DOM rendering in batches (separate from logical active_windows)
+            // This prevents React from re-rendering App 40 times when spawning 40 windows
+            this.renderingQueue.push(window_uid);
+            this.flushRenderingQueue();
 
-        // Engine-centered animation orchestration: if spawn request carries an animation,
-        // run it immediately after spawn commit. If a pending animation exists, flush it.
+            this.focusWindow(window_uid);
+        });
+
+        // Store spawn animation until window is actually rendered.
         if (options.animation_sequence) {
-            this.playAnimation(window_uid, options.animation_sequence);
-        } else {
-            const pendingSeq = this.pendingAnimations.get(window_uid);
-            if (pendingSeq) {
-                this.pendingAnimations.delete(window_uid);
-                this.animationController.playAnimation(window_uid, pendingSeq);
-            }
+            this.pendingAnimations.set(window_uid, options.animation_sequence);
         }
 
         return window_uid;
@@ -347,6 +572,12 @@ class WindowEngineSingleton {
         // Stop any running animations
         this.animationController.cancelAnimation(window_uid);
         this.pendingAnimations.delete(window_uid);
+
+        // Remove from rendering queue if pending
+        const queueIndex = this.renderingQueue.indexOf(window_uid);
+        if (queueIndex !== -1) {
+            this.renderingQueue.splice(queueIndex, 1);
+        }
 
         // 1. Remove Granular Config
         StorageEngine.dispatchRAMAction({
@@ -359,6 +590,15 @@ class WindowEngineSingleton {
             action: 'create_memory',
             memory_uid: 'system:active_windows',
             payload: activeWindows.filter((entry) => entry.uid !== window_uid),
+            classifications: ['system:core']
+        });
+
+        // Also remove from rendered windows (DOM)
+        const renderedWindows = (StorageEngine.readMemory('system:rendered_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:rendered_windows',
+            payload: renderedWindows.filter((entry) => entry.uid !== window_uid),
             classifications: ['system:core']
         });
 
@@ -398,6 +638,33 @@ class WindowEngineSingleton {
             return;
         }
 
+        // ARCHITECTURE: Queue focus update instead of executing immediately
+        // This prevents cascading subscription evaluations across 50 windows
+        // Defer to next event loop to let mouse handler complete first
+        this.pendingFocusWindow = window_uid;
+        
+        if (!this.focusUpdateScheduled) {
+            this.focusUpdateScheduled = true;
+            // Use setTimeout(..., 0) to push to macrotask queue
+            // This gives the current frame time to complete rendering
+            setTimeout(() => {
+                this.flushPendingFocus();
+            }, 0);
+        }
+    }
+
+    private flushPendingFocus() {
+        const window_uid = this.pendingFocusWindow;
+        this.pendingFocusWindow = null;
+        this.focusUpdateScheduled = false;
+        
+        if (!window_uid) return;
+
+        const targetKey = `system:window:${window_uid}`;
+        const targetCfg = StorageEngine.readMemory(targetKey) as WindowConfig | undefined;
+        if (!targetCfg) return;
+
+        // Now apply the actual focus update
         this.highest_z_index += 1;
         this.updateWindowConfig(window_uid, {
             z_index: this.highest_z_index

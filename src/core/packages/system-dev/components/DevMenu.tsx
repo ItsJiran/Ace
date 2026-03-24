@@ -26,6 +26,16 @@ export default function DevMenu() {
         });
     };
 
+    const spawnMockSettings = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system',
+            window: 'mock-settings-window',
+            title: 'Mock Settings (Local State Test)',
+            width: 1000,
+            height: 700
+        });
+    };
+
     const spawnSystemConsole = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system',
@@ -90,7 +100,7 @@ export default function DevMenu() {
         });
     };
 
-    const buttonClass = 'flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 duration-75 text-zinc-300';
+    const buttonClass = 'flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 text-zinc-300';
 
     return (
         <div className="flex flex-col gap-2 w-full h-full p-2 relative">
@@ -102,6 +112,11 @@ export default function DevMenu() {
             <button onClick={spawnSystemSettings} className={buttonClass}>
                 <Settings size={14} className="text-blue-400" />
                 System Settings
+            </button>
+
+            <button onClick={spawnMockSettings} className={buttonClass}>
+                <Settings size={14} className="text-purple-400" />
+                Mock Settings (Pure Local)
             </button>
 
             <button onClick={toggleFPS} className={buttonClass}>

@@ -21,7 +21,7 @@ function App() {
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
-  const activeWindows = useAceMemory<Array<{ uid: string; component: string }>>('system:active_windows') ?? [];
+  const renderedWindows = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
   if (!isBootReady || !overlayState) return null;
   const isAmbient = overlayState.mode === 'ambient';
 
@@ -40,7 +40,7 @@ function App() {
       }}
     >
       {/* Render semua window */}
-      {activeWindows.map((entry) => {
+      {renderedWindows.map((entry) => {
         return (
           <MemoizedWindowItem 
               key={entry.uid} 

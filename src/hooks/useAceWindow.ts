@@ -5,7 +5,7 @@ import type { AnimationRuntimeState, AnimationSequence, BoundsAnchor } from '#/s
 import { WindowEngine } from '#/services/windowEngine';
 import { StorageEngine } from '#/services/storageEngine';
 import { GlobalStateManager } from '#/services/globalStateManager';
-import { useAceMemory } from '#/hooks/useAceMemory';
+import { useAceMemory, useAceMemorySelector } from '#/hooks/useAceMemory';
 
 // -----------------------------------------------------------------------------
 // Hook Contract Types
@@ -98,7 +98,15 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     // Previously, every AceWindow re-rendered whenever ANY window animated.
     // We now fetch animation state on-demand during interactions, or rely on specific visual keys if needed.
     const mouseFocusEnabled = useAceMemory<boolean>('system:mouse_focus_enabled') ?? true;
-    const focusedWindowUid = useAceMemory<string | null>('system:focused_window_uid');
+
+    // Focus selector optimization:
+    // Subscribe to focused uid but derive a per-window boolean snapshot.
+    // This way, only the previously focused and newly focused windows re-render.
+    // Other windows keep false -> false and skip re-render.
+    const isFocused = useAceMemorySelector<string | null, boolean>(
+        'system:focused_window_uid',
+        (focusedUid) => focusedUid === windowUid
+    );
 
     // -------------------------------------------------------------------------
     // Local Interaction State (transient, high-frequency)
@@ -106,27 +114,55 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
 
     const [isMounted, setIsMounted] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
-    const [isHovered, setIsHovered] = useState(false);
     const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
-    const dragPositionRef = useRef<{ x: number; y: number } | null>(null);
     const elementRef = useRef<HTMLDivElement | null>(null);
+    
+    // ARCHITECTURE: Window position is LOCAL state, not subscribed from global
+    // This completely isolates position updates from global cascades.
+    // Initialize once from config, then manage locally during interactions.
+    // Only commit to global on drag-end.
+    const [localX, setLocalX] = useState<number | null>(null);
+    const [localY, setLocalY] = useState<number | null>(null);
+
+    // Use ref for hover tracking instead of state to avoid re-renders on hover
+    // Hover state is only used for visual styling, doesn't need React render cycle
+    const isHoveredRef = useRef(false);
+
+    // Initialize local position from config once on mount
+    useEffect(() => {
+        if (config && localX === null && localY === null) {
+            setLocalX(config.x);
+            setLocalY(config.y);
+        }
+    }, []); // Only run once on mount
+    
+    // Resync with config after drag completes (to catch config updates from other sources)
+    useEffect(() => {
+        if (config && !isDragging && localX !== null && localY !== null) {
+            // Check if config position differs significantly (not just floating point noise)
+            if (Math.abs(config.x - localX) > 0.5 || Math.abs(config.y - localY) > 0.5) {
+                setLocalX(config.x);
+                setLocalY(config.y);
+            }
+        }
+    }, [config?.x, config?.y, isDragging]);
 
     useEffect(() => {
         const id = window.setTimeout(() => setIsMounted(true), 10);
         return () => window.clearTimeout(id);
     }, []);
 
-    // SYNC position from config to DOM when NOT dragging
-    // This allows React/Store updates to move the window, but lets RAF loop take over during drag.
+    // SYNC local position to DOM
+    // This is the ONLY thing that drives transform during renders.
+    // During drag: RAF updates local state -> this effect applies transform
+    // After drag: position persists from local state, no global subscription needed
     useLayoutEffect(() => {
-        if (!elementRef.current || !config || isDragging) return;
+        if (!elementRef.current) return;
         
-        // Direct DOM write to avoid React render cycle for position
-        elementRef.current.style.transform = `translate3d(${config.x}px, ${config.y}px, 0)`;
-        
-        // Also update transparency/z-index here if needed, or leave those to React style prop?
-        // Let's leave static props to React, only transform is hot.
-    }, [config?.x, config?.y, isDragging]);
+        const x = localX ?? 0;
+        const y = localY ?? 0;
+        elementRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    }, [localX, localY]);
 
     useEffect(() => {
         const closeMenu = () => setContextMenu(null);
@@ -138,17 +174,20 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     }, [contextMenu]);
 
     useEffect(() => {
-        if (!isDragging) {
-            dragPositionRef.current = null;
-        }
-    }, [isDragging]);
-
-    useEffect(() => {
         const el = elementRef.current;
         if (!el) return;
 
-        const onMouseEnter = () => setIsHovered(true);
-        const onMouseLeave = () => setIsHovered(false);
+        // Skip hover class during drag to avoid CSS recalculations
+        // isDragging tracks actual drag state, separate from hover visual state
+        const onMouseEnter = () => {
+            if (!isDragging) {
+                el.classList.add('is-hovered');
+            }
+        };
+        
+        const onMouseLeave = () => {
+            el.classList.remove('is-hovered');
+        };
 
         el.addEventListener('mouseenter', onMouseEnter);
         el.addEventListener('mouseleave', onMouseLeave);
@@ -156,19 +195,23 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
         return () => {
             el.removeEventListener('mouseenter', onMouseEnter);
             el.removeEventListener('mouseleave', onMouseLeave);
+            el.classList.remove('is-hovered');
         };
-    }, [windowUid]);
+    }, [windowUid, isDragging]);
 
     // -------------------------------------------------------------------------
     // Derived Runtime Flags
     // -------------------------------------------------------------------------
     
+    // For backward compatibility, derive isHovered from ref
+    // In practice, this will always be false during renders (ref updates don't trigger renders)
+    // Components should use CSS class "is-hovered" for styling instead
+    const isHovered = isHoveredRef.current;
     // We no longer have real-time access to animation state via hooks to prevent re-renders.
     // If a component needs to visually react to animation state, it should subscribe to a specific key.
     const animationState: AnimationRuntimeState | undefined = undefined; 
     const isAnimationLocked = false; // Simplified; we check this imperatively during interactions now.
 
-    const isFocused = focusedWindowUid === windowUid;
     const isLocked = config?.is_locked ?? false;
     const chromeStyle = config?.chrome_style ?? 'standard';
     const dragSurface = config?.drag_surface ?? 'header';
@@ -269,13 +312,16 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             e.preventDefault();
             e.stopPropagation();
 
-            focus();
+            // SKIP: focus() already called in rootProps.onMouseDown above this
+            // Avoid double-firing storage updates during drag initiation
             GlobalStateManager.setPointerDown(true);
 
             const startX = e.clientX;
             const startY = e.clientY;
-            const initialX = config.x;
-            const initialY = config.y;
+            // Use current local position, not global config
+            // This ensures we start from where we visually are, not where global says we are
+            const initialX = localX ?? config.x;
+            const initialY = localY ?? config.y;
             setIsDragging(true);
 
             let rafId: number | null = null;
@@ -310,14 +356,17 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                 currentX += vx * dt;
                 currentY += vy * dt;
 
-                // Apply transform
+                // OPTIMIZATION: Apply transform directly to DOM (bypasses React)
                 const el = elementRef.current || document.getElementById(elementId);
                 if (el) {
                     el.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
                 }
                 
-                // Track for commit
-                dragPositionRef.current = { x: currentX, y: currentY };
+                // ARCHITECTURE CHANGE: Update local state (not global!)
+                // This allows motion updates without triggering global subscriptions.
+                // Only this window's component will render, not all 50 windows.
+                setLocalX(currentX);
+                setLocalY(currentY);
 
                 // Continue loop if not settled
                 const settled = Math.abs(vx) < precision && Math.abs(vy) < precision && 
@@ -332,7 +381,12 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                     if (el) {
                         el.style.transform = `translate3d(${targetX}px, ${targetY}px, 0)`;
                     }
-                    // Commit to store if we haven't already
+                    
+                    // Update local state to final position
+                    setLocalX(targetX);
+                    setLocalY(targetY);
+                    
+                    // NOW (at drag-end only) commit to global store
                     WindowEngine.updateWindowBounds(
                         config.window_uid,
                         targetX,
@@ -403,7 +457,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             window.addEventListener('mousemove', onMouseMove);
             window.addEventListener('mouseup', onMouseUp);
         },
-        [canCapturePointer, config, focus]
+        [canCapturePointer, config, focus, localX, localY]
     );
 
     // -------------------------------------------------------------------------

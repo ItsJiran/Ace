@@ -15,6 +15,37 @@ class StorageEngineSingleton {
     // Lightweight cache for UTF-8 encoder used by memory size estimation.
     private textEncoder = new TextEncoder();
 
+    private isShallowEqual(a: any, b: any) {
+        if (Object.is(a, b)) return true;
+
+        if (Array.isArray(a) && Array.isArray(b)) {
+            if (a.length !== b.length) return false;
+            for (let i = 0; i < a.length; i += 1) {
+                if (!Object.is(a[i], b[i])) return false;
+            }
+            return true;
+        }
+
+        if (
+            a && b &&
+            typeof a === 'object' &&
+            typeof b === 'object' &&
+            !Array.isArray(a) &&
+            !Array.isArray(b)
+        ) {
+            const aKeys = Object.keys(a);
+            const bKeys = Object.keys(b);
+            if (aKeys.length !== bKeys.length) return false;
+            for (const key of aKeys) {
+                if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+                if (!Object.is(a[key], b[key])) return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
     // ==========================================
     // 🔌 SOCKET METHODS (Listening to Data)
     // ==========================================
@@ -85,6 +116,12 @@ class StorageEngineSingleton {
                 const existingPayload = this.global_ram.get(memory_uid);
                 const mergedPayload = { ...existingPayload, ...payload };
 
+                // No-op guard: if payload didn't actually change and no new classifications,
+                // skip write + socket fan-out to avoid unnecessary rerenders.
+                if (this.isShallowEqual(existingPayload, mergedPayload) && (!classifications || classifications.length === 0)) {
+                    return true;
+                }
+
                 this.writeMemory(memory_uid, mergedPayload, classifications);
                 return true;
             }
@@ -126,6 +163,22 @@ class StorageEngineSingleton {
      * Internal write function that instantly fires the reactive sockets.
      */
     private writeMemory(uid: string, payload: any, classifications: string[] = []) {
+        const existingPayload = this.global_ram.get(uid);
+
+        // 1) Determine whether classification index truly changes.
+        const changedTags: string[] = [];
+        classifications.forEach(tag => {
+            const current = this.classification_ram.get(tag) || [];
+            if (!current.includes(uid)) {
+                changedTags.push(tag);
+            }
+        });
+
+        // 2) No-op write guard: no payload change and no new classification link.
+        if (this.isShallowEqual(existingPayload, payload) && changedTags.length === 0) {
+            return;
+        }
+
         // Clone the payload to guarantee a new memory reference for React's useSyncExternalStore Object.is() comparison
         const immutablePayload = payload && typeof payload === 'object'
             ? Array.isArray(payload) ? [...payload] : { ...payload }
@@ -147,7 +200,7 @@ class StorageEngineSingleton {
         // 3. FIRE THE SOCKETS!
         this.fireSockets(uid, immutablePayload);
 
-        classifications.forEach(tag => {
+        changedTags.forEach(tag => {
             // Clone the tag array for immutability as well
             const tagArray = this.classification_ram.get(tag);
             this.fireSockets(tag, tagArray ? [...tagArray] : []);

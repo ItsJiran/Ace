@@ -27,14 +27,14 @@ To prevent UI chaos, the Host enforces a strict rendering hierarchy with clear r
 **Terminology (from Package Ecosystem model):**
 
 - **Widget** — UI entry point identity that tells the system *what* to show and *when* (Start Menu, auto-start, command palette, etc.). Declares intent only (`widget_name`, `entry_id`). Configuration about windows and launch surfaces belongs to the window preset system or launcher config — not the Widget file itself.
-- **Window** — Shell wrapper that binds a component to the window lifecycle (`useAceWindow`). Manages bounds, drag, focus, and spawn/close events. One per spawnable window type.
+- **Window** — Shell wrapper that binds a component to the window lifecycle. The default path uses `useAceWindow`, but a window may also own a fully local runtime shell for hot interaction state as long as it still obeys host spawn/close and durable state contracts. One per spawnable window type.
 - **Component** — Pure React UI content rendered inside a window. Owns its own visual logic and state. Does not manage window state or bounds.
 
 **Rendering hierarchy:**
 
 ```
 Widget (entry point — declares the intent)
-  └── Window (shell — manages lifecycle via useAceWindow)
+    └── Window (shell — default `useAceWindow`, optional local runtime)
         └── Component (content — pure React UI)
 ```
 
@@ -137,7 +137,7 @@ When a Widget is activated (clicked in Start Menu, auto-spawn, etc.), the Host o
 1. **Widget activation** — User clicks widget or system auto-triggers it.
 2. **Window spawn** — Host looks up the window preset for that widget, creates window instance via `WindowEngine`.
 3. **Component resolution** — Host resolves the `component_name` for that window via `ComponentRegistry`.
-4. **Component mount** — Component is rendered inside the window shell (which calls `useAceWindow`).
+4. **Component mount** — Component is rendered inside the window shell (which usually calls `useAceWindow`, or a local runtime shell for performance-critical cases).
 
 The `ComponentRegistry` is the runtime resolver:
 
@@ -160,7 +160,7 @@ const AceWindow = ({ windowConfig }) => {
 **Key points:**
 - **Widget** only declares intent (name, id). It has no knowledge of windows.
 - **Window** knows which component to render (`component_name`) and manages the window lifecycle.
-- **Component** is pure UI — it receives `windowUid` to call `useAceWindow` if needed, but doesn't own the window.
+- **Component** is pure UI — it should not own the shared window lifecycle. If it receives `windowUid`, that is for shell-level integration only, not to turn the content component into the window runtime itself.
 - Errors crash only the window, not the whole app (via `ErrorBoundary`).
 
 ---

@@ -280,8 +280,8 @@ RegistryEngine.boot() → registerPackage (register core)
 ## Runtime Behavior Model
 
 1. Window layer is generic — it renders whatever `component_name` is registered in the `windows` domain.
-2. `App.tsx` iterates `system:windows` from RAM, resolves the entry, and renders it.
-3. The package's Window component is responsible for wrapping its content in `<AceWindow>` to provide the shell.
+2. `App.tsx` iterates `system:rendered_windows`, resolves the entry, and renders it.
+3. The package's Window component is responsible for providing the shell, usually via `<AceWindow>` / `useAceWindow`, but it may also implement a fully local runtime shell when strict render isolation is required.
 4. `RegistryEngine` resolves component/window names to implementations at runtime.
 5. Package logic operates via `EventEngine` + `StorageEngine` patterns.
 6. Tool execution is governed by domain engines with optional process observability.
@@ -450,7 +450,7 @@ export default function NotepadUI() {
 ### `windows/NotepadWindow.tsx` — Window Shell
 
 Jembatan antara WindowEngine (drag, resize, lifecycle) dan UI component.  
-Package bertanggung jawab membungkus kontennya dengan `<AceWindow>` (atau menggunakan `useAceWindow` hook secara manual untuk custom shell).  
+Package bertanggung jawab membungkus kontennya dengan `<AceWindow>` (atau menggunakan `useAceWindow` hook secara manual untuk custom shell). Untuk window yang sangat sensitif terhadap performa, package boleh memakai shell lokal penuh dan menganggap RAM sebagai bootstrap + durable commit state, bukan loop render per-frame.  
 Default export = React component yang menerima properties `windowUid`.
 
 ```tsx

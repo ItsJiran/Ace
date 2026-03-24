@@ -6,15 +6,16 @@ The application is structured into **5 distinct layers** to preserve decoupling,
 The absolute base of the application. It is a single fullscreen Tauri window configured to be transparent and click-through by default. Runtime config, especially `window.mouse_focus_enabled`, decides when the overlay may capture pointer interaction.
 
 ## 2. Global Storage RAM & Classification
-The single source of truth for heavy payloads.
+The shared source of truth for heavy payloads and durable cross-system state.
 - **RAM Store**: Maps a `memory_uid` directly to a payload.
 - **Classification Index**: Groups related memory keys for fast category lookup.
-- **Contract**: UI reacts through storage subscriptions, not through direct EventBus responses.
+- **Contract**: UI reacts through storage subscriptions for shared data, but high-frequency local interaction loops must stay out of RAM.
 
 ## 3. Window (The Spatial Shell)
 The physical containers floating on the transparent layer.
 - **Responsibilities**: X/Y, width/height, z-index, focus, opacity, lock state, always-on-top, and chrome metadata.
 - **Presentation Modes**: `standard` framed shell and `borderless` shell.
+- **Hot-State Rule**: Hover, drag frames, spring motion, and other per-frame interaction state should be owned locally by the window runtime and only committed to RAM when durable state changes.
 - **Rule**: The shell never owns widget business logic.
 
 ## 4. Component (The Active UI)
@@ -98,6 +99,8 @@ export default function MyWidgetWindow({ windowUid }) {
 }
 ```
 
+For performance-sensitive shells, a package may also implement a fully local runtime shell and treat RAM as spawn/bootstrap plus durable commit storage rather than the per-frame render driver.
+
 **Isolated Dependencies / Plugins**: External packages should provide a single entry bundle (for example `dist/index.js`) that calls `window.ACE.registry.registerPackage(...)` and `window.ACE.registry.add(...)` at boot. The bundle should use `window.ACE.react` instead of shipping its own React.
 
 ```mermaid
@@ -105,7 +108,7 @@ graph TD
     subgraph "Frontend / Renderer"
         W1[React Widget A]
         W2[React Widget B]
-        Shell[BaseWindow Shell]
+        Shell[AceWindow or Local Shell]
         W1 --> Shell
         W2 --> Shell
     end
@@ -151,13 +154,13 @@ graph TD
 2. `eventEngine` routes the request to `aiGatewayEngine`.
 3. The gateway resolves the active session/provider pair and streams output into session-local state plus RAM.
 4. The parser detects an executable block and emits `{ action: 'open_window', payload: { name: 'calendar_widget' } }`.
-5. `windowEngine` allocates a `WindowConfig` entry and writes it to `system:windows`.
-6. The overlay observes RAM and mounts the correct shell/component pair.
+5. `windowEngine` allocates `system:window:<uid>`, appends the window to `system:active_windows`, and batches DOM mounting through `system:rendered_windows`.
+6. The overlay observes `system:rendered_windows` and mounts the correct shell/component pair.
 
 ## Example Workflow: Saving a Layout
 
 1. UI or tooling calls `LayoutEngine.saveLayout(name)`.
-2. `layoutEngine` snapshots `system:windows`.
+2. `layoutEngine` snapshots the active window set and each `system:window:<uid>` config.
 3. The snapshot is validated with Zod.
 4. The JSON file is written to AppConfig `layouts/`.
 5. `system:available_layouts` is refreshed for the UI.

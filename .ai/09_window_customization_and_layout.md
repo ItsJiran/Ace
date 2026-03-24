@@ -4,18 +4,25 @@ This document describes the current window runtime and the next target state for
 
 ## Current Runtime State
 
-The project currently runs a **hybrid window shell**:
+The project currently runs a **hybrid window shell** with a default shared runtime path and an emerging local-first path for performance-sensitive windows:
 
-1. `BaseWindow` owns spatial behavior, focus, drag commit, context menu, and default shell rendering.
-2. Widgets remain business-logic-only components mounted through the registry.
-3. Window presentation is metadata-driven through RAM:
+1. `AceWindow` + `useAceWindow` own the default spatial behavior, focus, drag commit, context menu, and default shell rendering.
+2. Some windows may bypass `AceWindow` entirely and run a fully local shell if they need stricter render isolation.
+3. Widgets remain business-logic-only components mounted through the registry.
+4. Window presentation is metadata-driven through RAM:
    - `chrome_style: 'standard' | 'borderless'`
    - `drag_surface: 'header' | 'full'`
    - `opacity`
    - `is_locked`
    - `always_on_top`
 
-This means the system already supports both framed windows and borderless experiments without changing the orchestration model.
+This means the system already supports both framed windows and borderless experiments, while moving toward local-first runtime ownership for hot interaction state.
+
+## Runtime Principle
+
+- RAM stores shared durable window metadata, spawn/bootstrap config, and persisted layout state.
+- Local window runtime owns hover, drag frames, spring motion, and other high-frequency interaction state.
+- Commits back to RAM happen when durable state changes, not on every pointer frame.
 
 ## Window Shell Modes
 
@@ -61,7 +68,7 @@ Each `WindowLayoutEntry` can persist:
 - `restoration_strategy`
 
 ### Current Save/Load Flow
-1. `saveLayout(name)` snapshots the current `system:windows` RAM state.
+1. `saveLayout(name)` snapshots `system:active_windows` plus each active `system:window:<uid>` config.
 2. The snapshot is validated with Zod.
 3. The snapshot is serialized to a JSON file in AppConfig.
 4. `loadLayout(name)` reads and validates the JSON.
@@ -91,7 +98,7 @@ The intended high-fidelity snapshot flow remains:
 ## Development Status
 
 Implemented:
-- Hybrid `BaseWindow` shell
+- `AceWindow` default shell
 - Right-click runtime context menu
 - Lock / always-on-top / opacity runtime controls
 - Borderless full-drag test window in Dev Kit
@@ -101,6 +108,7 @@ Implemented:
 Pending:
 - `useWindowContext` for child-owned chrome actions
 - Resize primitives for fully custom widgets
+- First-class `LocalWindowShell` contract for production windows that should bypass shared runtime subscriptions
 - Widget-level snapshot contract (`getSnapshot()` or equivalent)
 - Save/load layout UI in Dev Kit or production settings
 - `WindowEngine` action wrappers for layout operations

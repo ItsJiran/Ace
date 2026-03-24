@@ -52,7 +52,7 @@ window.ACE.registry.registerPackageModules(manifest.name, modules);
 All core functionality is now exposed via dedicated engines (WidgetEngine, ToolEngine, etc.) which act as facades over the central Registry. Packages should use these engines to interact with the system.
 
 ### 4. React-First Window Management
-Windows are **React Components** that manage their own spatial state using the `useAceWindow` hook provided by the bridge. This allows for full customizability of the window frame and behavior.
+Windows are **React Components** that typically manage their lifecycle via `useAceWindow` / `AceWindow`, but the current principle is stricter: hot interaction state belongs to local window state, while RAM stores shared durable metadata and snapshots. This allows custom shells without forcing every frame through global storage.
 
 ---
 
@@ -297,10 +297,11 @@ As package ecosystem becomes the main extension model, ACE needs one stable brid
 
 The old `BaseWindow` pattern mixed runtime orchestration and ACE-specific styling. We now formalize a hook-first approach where package authors can keep custom UI while still speaking the same runtime protocol.
 
-#### Primary Hook: `useAceWindow(config: WindowConfig)`
+#### Primary Hook: `useAceWindow(windowUid | config)`
 
 `useAceWindow` is the headless window bridge for package developers.
 It contains no style opinions and no required DOM structure.
+It is the default runtime path, not a requirement that every hot interaction frame be driven from RAM.
 
 It exposes:
 1. Window runtime state (`position`, `size`, `isFocused`, `isLocked`, `isDragging`, `isMounted`)
@@ -320,12 +321,13 @@ Animation bridge API target:
 4. `retargetAnimation(to)`
 5. `isAnimationLocked` (derived from interrupt policy and running state)
 
-This makes `StressTestPromptBarRealWindow`-style flows reusable without coupling package UIs to `BaseWindow` internals.
+This makes `StressTestPromptBarRealWindow`-style flows reusable without coupling package UIs to the old monolithic shell internals.
 
 #### Window Wrapper Direction
 
 `AceWindow` is now the system wrapper built on top of `useAceWindow`.
 Package developers can skip `AceWindow` entirely and render their own shell while preserving the same app-level runtime behavior.
+Current principle: shared durable state belongs in RAM, while hot interaction state such as hover, drag frames, and spring motion should remain local to the window runtime.
 
 #### Cross-Domain Hook Strategy (Future)
 

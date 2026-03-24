@@ -64,8 +64,8 @@ Before reading the cases, developers must understand the two unbreachable laws o
 2. **Route:** The `eventEngine` matches this command to the `windowEngine`'s listener.
 3. **Spatial/OS Update:** The `windowEngine` takes over.
     * It allocates a `WindowConfig` with bounds, z-index, focus, and optional metadata such as `opacity`, `is_locked`, `always_on_top`, `chrome_style`, and `drag_surface`.
-    * It writes the new config into `system:windows`.
-4. **React:** The root `App.tsx` (Window Shell) observes the RAM layout change and immediately mounts the `<CalendarWindow />` dumb frame onto the screen.
+    * It writes the config into `system:window:<uid>`, appends the instance to `system:active_windows`, then batches visual mounting through `system:rendered_windows`.
+4. **React:** The root `App.tsx` observes `system:rendered_windows` and mounts the `<CalendarWindow />` shell onto the screen.
 
 ---
 

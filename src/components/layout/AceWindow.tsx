@@ -29,7 +29,6 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
     if (!resolvedConfig) return null;
 
     const isDraggingFocusedWindow = window.isDragging && window.isFocused;
-    const isActiveVisual = window.isFocused || window.isHovered;
     const baseTransitionClass = isDraggingFocusedWindow ? 'duration-0' : 'duration-150';
     const pointerEventsClass = window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none';
 
@@ -62,36 +61,23 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         <div
             {...window.rootProps}
             ref={window.ref}
-            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (isActiveVisual ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${className || ''}`}
+            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden transition-[background-color,opacity] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${className || ''}`}
             style={{
                 ...window.rootStyle,
                 backgroundColor: window.isBorderless
                     ? 'transparent'
-                    : (isActiveVisual ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)'),
+                    : (window.isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)'),
                 boxShadow: isDraggingFocusedWindow ? 'none' : undefined,
                 ...style,
-                // Ensure initial position is set if rootStyle lacks transform, but `useEffect` handles it.
-                // However, for first paint before useEffect fires, we might want fallback?
-                // The rootStyle now returns `display: none` if no config, so we are safe.
-                // For non-drag state, useEffect sets it.
-                // Wait, useEffect runs AFTER paint. First paint might be at (0,0) if we don't include transform here.
-                // We SHOULD include transform here for initial render, BUT use the Ref one for updates?
-                // No, just let React set it initially.
-                // Let's modify `useAceWindow` to return transform in rootStyle but `useMemo` ignores drag?
-                // NO. The previous committed change REMOVED transform from rootStyle entirely.
-                // This means React will NOT render `transform`.
-                // The `useEffect` will handle it.
-                // Is this causing FOUC (Flash of Unstyled Content)?
-                // `opacity-0` animation handles the entry, so it should be fine.
             }}
         >
 
             {!window.isBorderless && (
                 <div
-                    className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-colors relative ${isActiveVisual ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}
+                    className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-colors relative ${window.isFocused ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}
                     onMouseDown={window.dragHandleProps.onMouseDown}
                 >
-                    <div className={`flex items-center gap-2 ${isActiveVisual ? 'text-white/60' : 'text-white/30'}`}>
+                    <div className={`flex items-center gap-2 ${window.isFocused ? 'text-white/60' : 'text-white/30'}`}>
                         <GripHorizontal size={14} />
                         <span className="text-xs font-semibold">{resolvedConfig.title || resolvedConfig.component}</span>
                         {resolvedConfig.is_locked && <Lock size={10} className="text-amber-500" />}
@@ -114,7 +100,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
 
             {window.contextMenu && createPortal(
                 <div
-                    className="fixed z-[99999] bg-zinc-900 border border-zinc-700/80 rounded-lg shadow-xl py-1 text-xs w-48 text-zinc-300 flex flex-col pointer-events-auto ring-1 ring-black/50"
+                    className="fixed z-[99999] bg-zinc-900 border border-zinc-700/80 rounded-lg py-1 text-xs w-48 text-zinc-300 flex flex-col pointer-events-auto ring-1 ring-black/50"
                     style={{ top: window.contextMenu.y, left: window.contextMenu.x }}
                     onMouseDown={(e) => e.stopPropagation()}
                     onContextMenu={(e) => e.preventDefault()}

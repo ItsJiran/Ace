@@ -1,6 +1,6 @@
 # UI & Window Lifecycle Patterns
 
-This document details how external events and internal interactions drive the visual state of the ACE environment, focusing on the relationship between the **Window Engine**, **Global RAM**, and **React Components**.
+This document details how external events and internal interactions drive the visual state of the ACE environment, focusing on the relationship between the **Window Engine**, **Global RAM**, local window runtime state, and **React Components**.
 
 ## 🪟 The Dumb Window Lifecycle
 *Purpose: Controlling the spatial containers on the Transparent Layer.*
@@ -12,14 +12,14 @@ The window layer is governed by runtime config and global state, especially `win
 2. **Routing**: The `EventBus` routes it to the `WindowEngine`.
 3. **Allocation**: `WindowEngine` generates a unique `window_uid`, assigns a `z_index`, and creates a `WindowConfig` entry.
 4. **Metadata**: The config may include `opacity`, `is_locked`, `always_on_top`, `chrome_style`, and `drag_surface`.
-5. **RAM Commitment**: The new window is added to the `system:windows` map in **Global RAM**.
-6. **UI Rendering**: The main overlay React component detects the new entry and renders the corresponding `BaseWindow` shell.
+5. **RAM Commitment**: The new window config is stored at `system:window:<uid>`, the logical index is appended to `system:active_windows`, and DOM rendering is batched into `system:rendered_windows`.
+6. **UI Rendering**: The main overlay React component detects the rendered entry and mounts the corresponding `AceWindow` shell or a custom local-state shell.
 
 ### 2. Physical State Updates (Resize/Move)
 1. **Direct Manipulation**: User drags a window.
 2. **Transient Update**: Dragging is tracked in local React state to avoid RAM write floods.
 3. **Commit**: On mouse-up, `WindowEngine.updateWindowBounds` is called with final bounds.
-4. **Broadcasting**: The updated bounds are written to RAM. All components observing that window re-render immediately via `useSyncExternalStore`.
+4. **Broadcasting**: Only the durable final bounds are written to RAM. Per-frame drag motion should remain local to the window runtime so unrelated windows never enter the hot render path.
 
 ### 3. Mouse Focus Governance
 1. **Ambient Default**: The transparent layer starts in click-through mode so the user can still click the external target app.
@@ -54,11 +54,11 @@ The system avoids long-lived props or deep nesting. Instead, it uses **Dependenc
 ## ⚖️ Architectural Guardrails
 - **No Direct Props for Data**: Never pass heavy data objects as props to windows. Only pass `memory_uid` strings.
 - **Window Blindness**: A window must never contain logic that depends on the specific widget it is holding.
-- **Single Source of Truth**: The committed visual state (X/Y, focused, lock, opacity, chrome mode) lives in RAM. Transient drag frames may live in local React state until committed.
+- **Shared Durable State**: RAM holds committed cross-window metadata and durable bounds. High-frequency motion, hover, and pointer-local interaction state must stay local.
 - **Mouse Transparency First**: The overlay should assume click-through behavior by default unless runtime config explicitly allows mouse capture for windows.
 
 ## Current Window Runtime Notes
 
-- `BaseWindow` is currently a hybrid shell, not a fully invisible provider. It supports `standard` framed mode and `borderless` mode.
+- `AceWindow` is the default shell wrapper over `useAceWindow`, but performance-sensitive windows may implement a fully local shell and use RAM only for spawn/bootstrap plus durable commits.
 - Right-click opens a portal-based window context menu with lock, always-on-top, and opacity controls.
 - `is_locked` means manual dragging is disabled, but buttons, inputs, focus, and context menu interaction remain active.

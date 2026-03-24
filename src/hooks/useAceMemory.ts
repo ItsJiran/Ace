@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useCallback } from 'react';
+import { useSyncExternalStore, useCallback, useRef } from 'react';
 import { StorageEngine } from '../services/storageEngine';
 
 /**
@@ -29,5 +29,48 @@ export function useAceMemory<T = any>(key: string): T | undefined {
     }, [key]);
 
     // 3. React 18 completely handles the pinpoint O(1) rendering for us
+    return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+/**
+ * Selector variant for granular subscriptions.
+ * Only re-renders when selected value changes by `isEqual` comparator.
+ */
+export function useAceMemorySelector<T = any, S = T>(
+    key: string,
+    selector: (value: T | undefined) => S,
+    isEqual: (a: S, b: S) => boolean = Object.is
+): S {
+    const subscribe = useCallback(
+        (onStoreChange: () => void) => {
+            return StorageEngine.subscribe(key, onStoreChange);
+        },
+        [key]
+    );
+
+    const getRawValue = useCallback(() => {
+        const memoryPayload = StorageEngine.readMemory(key);
+        if (memoryPayload !== undefined) return memoryPayload as T;
+
+        const classificationPayload = StorageEngine.readClassification(key);
+        return classificationPayload as T;
+    }, [key]);
+
+    const selectedRef = useRef<S | undefined>(undefined);
+    const hasSelectedRef = useRef(false);
+
+    const getSnapshot = useCallback(() => {
+        const raw = getRawValue();
+        const nextSelected = selector(raw);
+
+        if (hasSelectedRef.current && isEqual(selectedRef.current as S, nextSelected)) {
+            return selectedRef.current as S;
+        }
+
+        selectedRef.current = nextSelected;
+        hasSelectedRef.current = true;
+        return nextSelected;
+    }, [getRawValue, isEqual, selector]);
+
     return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

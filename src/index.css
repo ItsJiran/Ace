@@ -47,6 +47,27 @@
     --input: 240 3.7% 15.9%;
     --ring: 240 4.9% 83.9%;
   }
+
+  /**
+   * GLOBAL HOVER POLICY
+   * 
+   * Disable all default Tailwind hover effects globally.
+   * Hover behavior must be explicitly defined per-component.
+   * This prevents performance degradation from automatic CSS generation.
+   */
+  * {
+    /* Remove any inherited transition on hover unless explicitly set */
+    @apply transition-none;
+  }
+
+  button:not([class*="transition-"]),
+  a:not([class*="transition-"]),
+  [role="button"]:not([class*="transition-"]) {
+    /* No default hover transitions - must be explicitly defined */
+    &:hover {
+      transition: none !important;
+    }
+  }
 }
 
 @layer base {

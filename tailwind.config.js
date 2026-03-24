@@ -59,4 +59,9 @@ export default {
         },
     },
     plugins: [require("tailwindcss-animate")],
+    corePlugins: {
+        // Disable default Tailwind hover variants to prevent automatic CSS generation
+        // All hover behavior must be explicitly defined in component styles
+        hover: false,
+    },
 }
