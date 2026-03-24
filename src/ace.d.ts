@@ -11,6 +11,16 @@ import type { LayoutEngine } from './services/layoutEngine';
 import type { KeybindEngine } from './services/keybindEngine';
 import type { GlobalStateManager } from './services/globalStateManager';
 import type { LoggerEngine } from './services/loggerEngine';
+import type { Notification, NotificationCreateInput } from './schemas/notification';
+
+interface ACENotificationAPI {
+  push: (input: NotificationCreateInput) => Notification;
+  remove: (uid: string) => boolean;
+  markRead: (uid: string, value?: boolean) => boolean;
+  clear: () => void;
+  list: () => Notification[];
+  memory_uid: string;
+}
 
 declare global {
   interface Window {
@@ -28,6 +38,7 @@ declare global {
       keybind: KeybindEngine;
       global: GlobalStateManager;
       logger: LoggerEngine;
+      notification?: ACENotificationAPI;
     };
   }
 }

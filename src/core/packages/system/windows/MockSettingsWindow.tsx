@@ -10,6 +10,7 @@ import { WindowEngine } from '#/services/windowEngine';
 export const registry: AceRegistryType.Window = {
     name: 'Mock Settings Window',
     slug: 'mock-settings-window',
+    icon_slug: 'layout-dashboard',
     react_behavior: 'window_shell',
 };
 
@@ -19,6 +20,7 @@ type WindowShellProps = {
     isMounted: boolean;
     isFocused: boolean;
     close: () => void;
+    minimize: () => void;
     onDragStart: (e: ReactMouseEvent<HTMLDivElement>) => void;
 };
 
@@ -28,6 +30,7 @@ function MockSettingsShell({
     isMounted,
     isFocused,
     close,
+    minimize,
     onDragStart,
 }: WindowShellProps) {
     return (
@@ -60,6 +63,7 @@ function MockSettingsShell({
                 </div>
                 <div className={`flex items-center gap-2 ${isDragging ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`} style={{ transitionDuration: isDragging ? '0ms' : '200ms' }}>
                     <button
+                        onClick={minimize}
                         className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-slate-400 dark:text-slate-400"
                         title="Minimize"
                     >
@@ -115,6 +119,10 @@ export default function MockSettingsWindow({ windowUid }: { windowUid: string })
 
     const close = useCallback(() => {
         WindowEngine.closeWindow(windowUid);
+    }, [windowUid]);
+
+    const minimize = useCallback(() => {
+        WindowEngine.minimizeWindow(windowUid);
     }, [windowUid]);
 
     const beginDrag = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
@@ -177,6 +185,7 @@ export default function MockSettingsWindow({ windowUid }: { windowUid: string })
                 isMounted={isMounted}
                 isFocused={isFocused}
                 close={close}
+                minimize={minimize}
                 onDragStart={beginDrag}
             />
         </div>

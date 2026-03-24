@@ -133,6 +133,15 @@ class WindowEngineSingleton {
      */
     private pendingAnimations = new Map<string, AnimationSequence>();
 
+    /**
+     * Fix A: Debounce guard for set_ignore_cursor_events IPC.
+     * Prevents redundant native IPC calls when multiple code paths fire the same
+     * mode in quick succession (e.g. CursorBridge + flushPendingFocus + enterWindowSurface).
+     */
+    private lastCursorEventsIgnore: boolean | null = null;
+    private lastCursorEventsAt = 0;
+    private static readonly CURSOR_EVENTS_DEBOUNCE_MS = 250;
+
     constructor() {
         this.cursorBridge = new CursorBridge((mode) => this.setOverlayMode(mode));
         this.alwaysOnTopBridge = new AlwaysOnTopBridge();
@@ -167,6 +176,23 @@ class WindowEngineSingleton {
         this.alwaysOnTopBridge.start();
     }
 
+    /**
+     * Fix A: Deduplicating wrapper around set_ignore_cursor_events.
+     * Skips the IPC call if the same value was sent within the debounce window.
+     */
+    private fireSetIgnoreCursorEvents(ignore: boolean): void {
+        const now = performance.now();
+        if (
+            this.lastCursorEventsIgnore === ignore &&
+            now - this.lastCursorEventsAt < WindowEngineSingleton.CURSOR_EVENTS_DEBOUNCE_MS
+        ) {
+            return;
+        }
+        this.lastCursorEventsIgnore = ignore;
+        this.lastCursorEventsAt = now;
+        invoke('set_ignore_cursor_events', { ignore }).catch(console.error);
+    }
+
     private initializeState() {
         // 1. Initialize the root Overlay State
         StorageEngine.dispatchRAMAction({
@@ -198,6 +224,15 @@ class WindowEngineSingleton {
             payload: [] as Array<{ uid: string; component: string }>,
             classifications: ['system:core']
         });
+
+        // Fix C: Prewarm the native IPC bridge at boot so the first spawn
+        // does not pay the cold-path cost of the first-ever Tauri invoke.
+        invoke('set_ignore_cursor_events', { ignore: true })
+            .then(() => {
+                this.lastCursorEventsIgnore = true;
+                this.lastCursorEventsAt = performance.now();
+            })
+            .catch(() => {});
     }
 
     private registerEventHandlers() {
@@ -290,7 +325,7 @@ class WindowEngineSingleton {
             });
         }
         
-        invoke('set_ignore_cursor_events', { ignore: mode === 'ambient' }).catch(console.error);
+        this.fireSetIgnoreCursorEvents(mode === 'ambient');
     }
 
     toggleDebugBg() {
@@ -674,7 +709,7 @@ class WindowEngineSingleton {
         // Eliminates duplicate writes to system:global_state and system:overlay_state.
         GlobalStateManager.setFocusedWindowInteractive(window_uid);
 
-        invoke('set_ignore_cursor_events', { ignore: false }).catch(console.error);
+        this.fireSetIgnoreCursorEvents(false);
     }
 
     enterWindowSurface(window_uid: string) {
@@ -685,7 +720,7 @@ class WindowEngineSingleton {
         const currentWindow = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
         if (!currentWindow) return;
 
-        invoke('set_ignore_cursor_events', { ignore: false }).catch(console.error);
+        this.fireSetIgnoreCursorEvents(false);
     }
 
     leaveWindowSurface(_window_uid: string) {
@@ -694,6 +729,28 @@ class WindowEngineSingleton {
             return;
         }
         // Cursor bridge controls transitions
+    }
+
+    minimizeWindow(window_uid: string) {
+        const cfg = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        if (!cfg || cfg.is_minimized) return;
+
+        this.updateWindowConfig(window_uid, { is_minimized: true });
+
+        // If the minimized window was focused, clear focus + return to ambient
+        const focusedUid = StorageEngine.readMemory('system:focused_window_uid') as string | null | undefined;
+        if (focusedUid === window_uid) {
+            GlobalStateManager.setFocusedWindow(null);
+            this.setOverlayMode('ambient');
+        }
+    }
+
+    restoreWindow(window_uid: string) {
+        const cfg = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        if (!cfg) return;
+
+        this.updateWindowConfig(window_uid, { is_minimized: false });
+        this.focusWindow(window_uid);
     }
 
     /**

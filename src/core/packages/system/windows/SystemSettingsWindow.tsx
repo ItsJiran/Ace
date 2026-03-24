@@ -7,6 +7,7 @@ import type { WindowConfig } from '#/schemas/window';
 export const registry: AceRegistryType.Window = {
     name: 'System Settings Window',
     slug: 'system-settings-window',
+    icon_slug: 'settings-2',
     react_behavior: 'window_shell',
 };
 
@@ -16,6 +17,7 @@ type WindowShellProps = {
     isMounted: boolean;
     isFocused: boolean;
     close: () => void;
+    minimize: () => void;
     onDragStart: (e: React.MouseEvent<HTMLDivElement>) => void;
 };
 
@@ -25,6 +27,7 @@ function SystemSettingsShell({
     isMounted,
     isFocused,
     close,
+    minimize,
     onDragStart,
 }: WindowShellProps) {
     return (
@@ -57,6 +60,7 @@ function SystemSettingsShell({
                 </div>
                 <div className={`flex items-center gap-2 ${isDragging ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`} style={{ transitionDuration: isDragging ? '0ms' : '200ms' }}>
                     <button
+                        onClick={minimize}
                         className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-slate-400 text-slate-400 dark:text-slate-400"
                         title="Minimize"
                     >
@@ -83,7 +87,7 @@ function SystemSettingsShell({
 export default function SystemSettingsWindow({ windowUid }: { windowUid: string }) {
     return (
         <AceWindow windowUid={windowUid} headless>
-            {({ config, dragHandleProps, isDragging, isMounted, isFocused, close }) => {
+            {({ config, dragHandleProps, isDragging, isMounted, isFocused, close, minimize }) => {
                 if (!config) return null;
                 return (
                     <SystemSettingsShell
@@ -92,6 +96,7 @@ export default function SystemSettingsWindow({ windowUid }: { windowUid: string 
                         isMounted={isMounted}
                         isFocused={isFocused}
                         close={close}
+                        minimize={minimize}
                         onDragStart={dragHandleProps.onMouseDown as unknown as (e: React.MouseEvent<HTMLDivElement>) => void}
                     />
                 );

@@ -12,6 +12,13 @@ class EventEngineSingleton {
     private routes = new Map<string, Array<ProcessCallback | SyncProcessCallback>>();
     private readonly maxEventLogs = 300;
 
+    // Log batching: buffer entries and flush in bulk instead of writing per-emit.
+    // Converts 3 StorageEngine writes per emit() → 1 write per LOG_FLUSH_MS interval.
+    private logBuffer: Array<Record<string, unknown>> = [];
+    private logFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    private static readonly LOG_FLUSH_MS = 200;
+    private static readonly LOG_FLUSH_THRESHOLD = 15;
+
     /**
      * A background Process (The Chef) "mounts" itself to listen for a specific action.
      * @param routeKey Can be an action like 'send' or a specific action:sub_action like 'send:send_gateway'.
@@ -101,8 +108,34 @@ class EventEngineSingleton {
             payload: interaction.payload,
         };
 
-        const current = (StorageEngine.readMemory('system:event_stream') as any[] | undefined) || [];
-        const next = [...current, entry].slice(-this.maxEventLogs);
+        this.logBuffer.push(entry);
+
+        // Flush immediately on threshold to prevent unbounded buffer growth
+        if (this.logBuffer.length >= EventEngineSingleton.LOG_FLUSH_THRESHOLD) {
+            this.flushLogBuffer();
+            return;
+        }
+
+        // Schedule a deferred flush if not already pending
+        if (!this.logFlushTimer) {
+            this.logFlushTimer = setTimeout(
+                () => this.flushLogBuffer(),
+                EventEngineSingleton.LOG_FLUSH_MS
+            );
+        }
+    }
+
+    private flushLogBuffer() {
+        if (this.logFlushTimer !== null) {
+            clearTimeout(this.logFlushTimer);
+            this.logFlushTimer = null;
+        }
+
+        if (this.logBuffer.length === 0) return;
+
+        const toFlush = this.logBuffer.splice(0);
+        const current = (StorageEngine.readMemory('system:event_stream') as any[] | undefined) ?? [];
+        const next = [...current, ...toFlush].slice(-this.maxEventLogs);
 
         StorageEngine.dispatchRAMAction({
             action: 'create_memory',

@@ -6,6 +6,7 @@ import SystemConsole from '../components/SystemConsole';
 export const registry: AceRegistryType.Window = {
     name: 'System Console Window',
     slug: 'system-console-window',
+    icon_slug: 'terminal',
     react_behavior: 'window_shell',
 };
 

@@ -56,7 +56,36 @@ Windows are **React Components** that typically manage their lifecycle via `useA
 
 ---
 
-## �🚀 Development Roadmap
+## 🔥 Current Focus
+
+### ✅ Recently Completed
+- [x] `BaseWindow` → `AceWindow` + `useAceWindow` migration (headless hook architecture)
+- [x] Animation bridge integrated into `useAceWindow` (`playAnimation`, `cancelAnimation`, `retargetAnimation`)
+- [x] Window state principle enforced: RAM = durable shared state, hot interaction state = local
+- [x] `system:window:<uid>` granular pattern + `system:active_windows` + `system:rendered_windows`
+- [x] `spawnQueueWorker` — FPS-gated spawn queue offloaded to Web Worker
+- [x] `PromptMorphWindow` created and styled (white overlay, hover/focus opacity states)
+- [x] `StressTestWindow` — `prompt_bar_morph` swarm pattern added
+- [x] DevMenu direct-spawn button for `prompt-morph-window` with self-register fallback
+- [x] `useAceWindow` position hydration bug fixed (was `[]` deps, now reactive)
+- [x] **Fix B:** `setFocusedWindowInteractive()` — eliminated double write to `system:global_state` and `system:overlay_state` on every spawn focus (4 writes → 3 writes, removes 2 synchronous socket fan-out cascades)
+
+### 🚧 In Progress — Performance
+- [x] **Fix A:** Debounce `invoke('set_ignore_cursor_events')` — added `fireSetIgnoreCursorEvents()` helper with 250ms dedup guard; skips redundant IPC when CursorBridge + `flushPendingFocus` + `enterWindowSurface` all fire the same mode in quick succession
+- [x] **Fix C:** Prewarm native IPC bridge at boot — `initializeState()` fires `invoke('set_ignore_cursor_events', { ignore: true })` during startup so first spawn doesn't pay cold-path IPC cost
+- [x] **CursorBridge bounds cache** — replaced N StorageEngine reads/tick with reactive subscriptions; `rebuildWindowSubscriptions()` subscribes per-window, `updateCachedWindow()` patches bounds on config change; poll loop uses `cachedWindowList` directly (zero reads per tick for bounds)
+- [x] **Event log batching** — `logEvent()` now pushes to `logBuffer` and flushes every 200ms (or on threshold=15 entries); converts 3 writes per `emit()` → 1 batched write per 200ms interval
+
+### 🚧 In Progress — UI Shell
+- [ ] **Prompt Bar Widget** — floating pill input bar for AI interaction (user-facing, not dev tool)
+- [ ] **Dock Bar Widget** — minimal system dock for Settings, Tools, and modes
+- [ ] **Settings Window** — keybinds, config, tools list, widget list
+- [ ] **Notifications Widget** — toast/notification system for system alerts and tool outputs
+- [ ] **Theme System** — global design tokens (light/dark) applied to System/Prompt/Console widgets
+
+---
+
+## 🚀 Development Roadmap
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor
 - [ ] **Post-Migration Architecture Debug & Correction**: Comprehensive debugging and architecture fixes following the recent Host-Guest and package ecosystem migrations. (Main Goal)

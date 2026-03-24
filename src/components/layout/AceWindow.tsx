@@ -88,7 +88,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                         />
                     </div>
                     <div className="flex items-center gap-2">
-                        <button data-window-action="true" className="text-white/40 hover:text-white transition-colors" title="Minimize">
+                        <button data-window-action="true" className="text-white/40 hover:text-white transition-colors" title="Minimize" onClick={window.minimize}>
                             <Minus size={14} />
                         </button>
                         <button data-window-action="true" className="text-white/40 hover:text-red-400 transition-colors" onClick={window.close} title="Close">

@@ -65,6 +65,8 @@ export namespace AceRegistryType {
         /** Used as initial state when WindowEngine.spawnWindow creates a window instance */
         default_config?: Partial<WindowConfig>;
         react_behavior: 'window_shell' | (string & {});
+        /** Lucide icon slug shown in dock / launcher (e.g. 'settings-2', 'terminal') */
+        icon_slug?: string;
     }
 
     // -----------------------------------------------------------------------

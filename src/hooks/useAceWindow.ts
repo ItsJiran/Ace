@@ -52,6 +52,7 @@ export type UseAceWindowResult = {
     openContextMenu: (x: number, y: number) => void;
     focus: () => void;
     close: () => void;
+    minimize: () => void;
     toggleLock: () => void;
     toggleAlwaysOnTop: () => void;
     setOpacity: (opacity: number) => void;
@@ -239,6 +240,10 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
 
     const close = useCallback(() => {
         WindowEngine.closeWindow(windowUid);
+    }, [windowUid]);
+
+    const minimize = useCallback(() => {
+        WindowEngine.minimizeWindow(windowUid);
     }, [windowUid]);
 
     const toggleLock = useCallback(() => {
@@ -481,6 +486,18 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
 
         // PERF: We do NOT provide `transform` here anymore unless it's the very first render.
         // The `elementRef` effect handles positioning to avoid React fighting the drag RAF loop.
+        if (config.is_minimized) {
+            return {
+                width: config.width,
+                height: config.height,
+                zIndex: -1,
+                opacity: 0,
+                visibility: 'hidden' as const,
+                pointerEvents: 'none' as const,
+                willChange: 'transform',
+            };
+        }
+
         return {
             width: config.width,
             height: config.height,
@@ -554,6 +571,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
         openContextMenu: (x: number, y: number) => setContextMenu({ x, y }),
         focus,
         close,
+        minimize,
         toggleLock,
         toggleAlwaysOnTop,
         setOpacity,

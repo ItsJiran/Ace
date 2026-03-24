@@ -5,6 +5,8 @@ import DevMenu from '../components/DevMenu';
 export const registry: AceRegistryType.Window = {
     name: 'dev_menu',
     slug: 'dev-menu',
+    icon_slug: 'sparkles',
+    react_behavior: 'window_shell',
     default_config: {
         x: 100,
         y: 100,

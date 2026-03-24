@@ -1,4 +1,4 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2 } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
@@ -126,6 +126,32 @@ export default function DevMenu() {
         });
     };
 
+    const pushNotificationSample = () => {
+        const notifier = window.ACE.notification;
+        if (!notifier) {
+            console.warn('[DevMenu] Notification API not ready yet.');
+            return;
+        }
+
+        notifier.push({
+            title: 'DevMenu Trigger',
+            message: 'Sample notification pushed from Dev Menu.',
+            level: 'info',
+            target: { type: 'global' },
+            payload: {
+                source: 'dev-menu',
+                test: true,
+                monitor_width: window.innerWidth,
+                monitor_height: window.innerHeight,
+            },
+            source: {
+                package: 'itsjiran/ace-system-dev',
+                action: 'devmenu_push_notification',
+            },
+            ttl_ms: 8000,
+        });
+    };
+
     const toggleOverlayMode = () => {
         // Use direct WindowEngine call for synchronicity
         window.ACE.window.setOverlayMode(isAmbient ? 'interactive' : 'ambient');
@@ -201,6 +227,11 @@ export default function DevMenu() {
             <button onClick={spawnRamMonitor} className={buttonClass}>
                 <MemoryStick size={14} className="text-cyan-400" />
                 RAM Monitor
+            </button>
+
+            <button onClick={pushNotificationSample} className={buttonClass}>
+                <BellRing size={14} className="text-orange-400" />
+                Push Notification
             </button>
 
             <button
