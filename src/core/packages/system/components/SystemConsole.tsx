@@ -1,5 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import React, { useEffect, useRef } from 'react';
+import { useAceMemory } from '#/hooks/useAceMemory';
 import { Terminal } from 'lucide-react';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
@@ -19,7 +20,7 @@ export const registry: AceRegistryType.Component = {
 };
 
 export const SystemConsole: React.FC = () => {
-    const logs = window.ACE.memory.use<LogEntry[]>('system:logs') || [];
+    const logs = useAceMemory<LogEntry[]>('system:logs') || [];
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -38,12 +39,7 @@ export const SystemConsole: React.FC = () => {
     };
 
     return (
-        <div className="w-full h-full flex flex-col bg-zinc-950/90 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-white/5">
-                <Terminal size={14} className="text-zinc-400" />
-                <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">System Logs</span>
-            </div>
-
+        <div className="w-full h-full flex flex-col bg-zinc-950/20">
             <div
                 ref={scrollRef}
                 className="flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed space-y-1 selection:bg-blue-500/30"

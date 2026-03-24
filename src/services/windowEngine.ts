@@ -18,12 +18,6 @@ export interface SpawnWindowOptions {
     package?: string;
     window?: string;
 
-    /** 
-     * Legacy/Shorthand: Try to resolve from component slug. 
-     * @deprecated Use package/window instead. 
-     */
-    component_name?: string;
-
     // Overrides
     title?: string;
     x?: number;
@@ -38,8 +32,6 @@ export interface SpawnWindowOptions {
     hide_ring?: boolean;
     z_index?: number;
 }
-
-type WindowBounds = { x: number; y: number; width: number; height: number };
 
 /**
  * The WindowEngine is responsible for managing the logical boundaries, focus, and state

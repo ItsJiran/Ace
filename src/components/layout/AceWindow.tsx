@@ -1,16 +1,20 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { WindowConfig } from '#/schemas/window';
-import { useAceWindow } from '#/hooks/useAceWindow';
+import { useAceWindow, type UseAceWindowResult } from '#/hooks/useAceWindow';
 import { GripHorizontal, X, Minus, Lock, Unlock, BringToFront, Layers } from 'lucide-react';
 
-type RegistryComponentProps = {
-    windowUid: string;
-    payloadMemoryUid?: string;
+type AceWindowProps = {
+    windowUid?: string;
+    config?: WindowConfig;
+    headless?: boolean;
+    className?: string;
+    style?: React.CSSProperties;
+    children?: ReactNode | ((props: UseAceWindowResult) => ReactNode);
 };
 
 // Simplified: Now accepts either windowUid (preferred) or legacy config object
-function AceWindowComponent({ windowUid, config, children }: { windowUid?: string, config?: WindowConfig, children?: React.ReactNode }) {
+function AceWindowComponent({ windowUid, config, headless, className, style, children }: AceWindowProps) {
     // Determine source
     const input = windowUid || config;
     if (!input) return null;
@@ -22,17 +26,43 @@ function AceWindowComponent({ windowUid, config, children }: { windowUid?: strin
     if (!resolvedConfig) return null;
 
     const isDraggingFocusedWindow = window.isDragging && window.isFocused;
+    const baseTransitionClass = isDraggingFocusedWindow ? 'duration-0' : 'duration-150';
+    const pointerEventsClass = window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none';
 
+    // -------------------------------------------------------------------------
+    // HEADLESS MODE
+    // -------------------------------------------------------------------------
+    if (headless) {
+        return (
+            <div
+                {...window.rootProps}
+                className={`absolute top-0 left-0 flex flex-col ${pointerEventsClass} ${className || ''}`}
+                style={{
+                    ...window.rootStyle,
+                    ...style,
+                    // Enforce 0 duration on transform during drag for performance, unless user overrides via style
+                    transitionDuration: window.isDragging ? '0ms' : undefined,
+                }}
+            >
+                {typeof children === 'function' ? children(window) : children}
+            </div>
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // STANDARD MODE
+    // -------------------------------------------------------------------------
     return (
         <div
             {...window.rootProps}
-            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${isDraggingFocusedWindow ? 'duration-0' : 'duration-150'} ${window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none'} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'}`}
+            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden shadow-2xl transition-[transform,box-shadow,background-color,opacity] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50 shadow-blue-900/20' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${className || ''}`}
             style={{
                 ...window.rootStyle,
                 backgroundColor: window.isBorderless
                     ? 'transparent'
                     : (window.isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)'),
                 boxShadow: isDraggingFocusedWindow ? 'none' : undefined,
+                ...style,
             }}
         >
             {!window.isBorderless && (

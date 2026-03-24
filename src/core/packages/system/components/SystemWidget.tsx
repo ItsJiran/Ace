@@ -1,5 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useState } from 'react';
+import { useAceMemory } from '#/hooks/useAceMemory';
 import type { ConfigItem } from '#/schemas/config';
 import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
@@ -50,11 +51,11 @@ export default function SystemWidget() {
     const [toolNote, setToolNote] = useState('');
     const [shortcutDrafts, setShortcutDrafts] = useState<Record<string, string>>({});
 
-    const configItems = window.ACE.memory.use<ConfigItem[]>('system:config') ?? [];
-    const keybinds = window.ACE.memory.use<Keybind[]>('system:keybinds') ?? [];
-    const windows = window.ACE.memory.use<Record<string, WindowConfig>>('system:windows') ?? {};
-    const installQueue = window.ACE.memory.use<InstallRequest[]>('system:install_requests') ?? [];
-    const packageSummaries = window.ACE.memory.use<PackageSummary[]>('system:package_registry') ?? [];
+    const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
+    const keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
+    const windows = useAceMemory<Record<string, WindowConfig>>('system:windows') ?? {};
+    const installQueue = useAceMemory<InstallRequest[]>('system:install_requests') ?? [];
+    const packageSummaries = useAceMemory<PackageSummary[]>('system:package_registry') ?? [];
 
     useEffect(() => {
         const refresh = () => {
@@ -93,11 +94,19 @@ export default function SystemWidget() {
             created_at: Date.now(),
         };
 
-        window.ACE.memory.write('system:install_requests', [...installQueue, nextRequest]);
+        window.ACE.storage.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:install_requests',
+            payload: [...installQueue, nextRequest]
+        });
     };
 
     const removeInstallRequest = (id: string) => {
-        window.ACE.memory.write('system:install_requests', installQueue.filter((item) => item.id !== id));
+        window.ACE.storage.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: 'system:install_requests',
+            payload: installQueue.filter((item) => item.id !== id)
+        });
     };
 
     const updateConfigValue = async (item: ConfigItem, rawValue: string | boolean) => {
@@ -261,40 +270,73 @@ export default function SystemWidget() {
                 )}
 
                 {tab === 'registries' && (
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                        <SectionCard title="Tool Registry" subtitle="Live manifest from ToolEngine service">
-                            <MiniList
-                                title="Tools"
-                                rows={toolManifest.map((tool) => ({ title: tool.name, detail: tool.description }))}
-                                emptyText="No tools registered."
-                            />
-                        </SectionCard>
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                            <SectionCard title="Tool Registry (Runtime)" subtitle="Live manifest from ToolEngine service">
+                                <MiniList
+                                    title="Tools"
+                                    rows={toolManifest.map((tool) => ({ title: tool.name, detail: tool.description }))}
+                                    emptyText="No tools registered."
+                                />
+                            </SectionCard>
 
-                        <SectionCard title="Widget Registry" subtitle="Registered packages from RegistryEngine">
-                            <MiniList
-                                title="Modules"
-                                rows={widgetModules.map((pkg) => formatWidgetRegistryRow(pkg))}
-                                emptyText="No widget packages registered."
-                            />
-                        </SectionCard>
+                            <SectionCard title="Active Windows (Runtime)" subtitle="Current open windows from RAM">
+                                <MiniList
+                                    title="Windows"
+                                    rows={openWindows.map((win) => ({
+                                        title: win.title || win.component_name,
+                                        detail: `${win.component_name} • x:${win.x} y:${win.y} w:${win.width} h:${win.height}`,
+                                    }))}
+                                    emptyText="No windows mounted."
+                                />
+                            </SectionCard>
+                        </div>
 
-                        <SectionCard title="Window Registry" subtitle="Current open windows from RAM">
-                            <MiniList
-                                title="Windows"
-                                rows={openWindows.map((win) => ({
-                                    title: win.title || win.component_name,
-                                    detail: `${win.component_name} • x:${win.x} y:${win.y} w:${win.width} h:${win.height}`,
-                                }))}
-                                emptyText="No windows mounted."
-                            />
-                        </SectionCard>
-
-                        <SectionCard title="Config/Keyboard Status" subtitle="Current persisted counts">
-                            <div className="grid grid-cols-2 gap-3">
-                                <SummaryCard label="Config Items" value={configItems.length} tone="sky" compact />
-                                <SummaryCard label="Keybinds" value={keybinds.length} tone="emerald" compact />
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
+                                <p className="text-sm font-semibold text-sky-200">Package Registry Explorer</p>
+                                <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">{widgetModules.length} packages</span>
                             </div>
-                        </SectionCard>
+                            
+                            {widgetModules.map((pkg: any) => (
+                                <div key={pkg.manifest?.package_name || 'unknown'} className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+                                     <div className="bg-zinc-950/50 px-4 py-2 border-b border-zinc-800 flex justify-between items-center">
+                                        <div>
+                                            <p className="text-[13px] font-medium text-zinc-200">{pkg.manifest?.display_name || pkg.manifest?.package_name}</p>
+                                            <p className="text-[10px] text-zinc-500 font-mono">{pkg.manifest?.package_name}@{pkg.manifest?.version}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {Object.entries(pkg.domains || {}).map(([d, entries]: [string, any]) => {
+                                                const count = Object.keys(entries || {}).length;
+                                                if (count === 0) return null;
+                                                return <span key={d} className="text-[10px] text-zinc-500 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">{d}:{count}</span>
+                                            })}
+                                        </div>
+                                     </div>
+                                     
+                                     <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {Object.entries(pkg.domains || {}).map(([domain, entries]: [string, any]) => {
+                                            const entryList = Object.keys(entries || {});
+                                            if (entryList.length === 0) return null;
+                                            
+                                            return (
+                                                <div key={domain} className="space-y-1.5">
+                                                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-1">{domain}</p>
+                                                    <div className="space-y-1">
+                                                        {entryList.sort().map(slug => (
+                                                            <div key={slug} className="flex items-center gap-2 rounded bg-zinc-950/40 px-2 py-1.5 border border-zinc-800/50">
+                                                                <div className={`h-1.5 w-1.5 rounded-full ${domain === 'widgets' ? 'bg-sky-500' : domain === 'windows' ? 'bg-rose-500' : domain === 'components' ? 'bg-indigo-500' : 'bg-zinc-600'}`} />
+                                                                <span className="text-[11px] text-zinc-300 font-mono truncate">{slug}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                     </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
 
