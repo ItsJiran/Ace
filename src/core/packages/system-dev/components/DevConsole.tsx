@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge, Flame } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
+import { useAceMemory } from '#/hooks/useAceMemory';
 
 interface RuntimeRegistryDomains {
     windows?: Array<{
@@ -13,6 +14,8 @@ interface RuntimeRegistryDomains {
         display_name?: string;
         window_name?: string;
         component_name?: string;
+        name?: string;
+        slug?: string;
         default_window_preset?: {
             x?: number;
             y?: number;
@@ -28,15 +31,15 @@ export const registry: AceRegistryType.Component = {
 };
 
 export default function SystemDevConsole() {
-    const overlayState = window.ACE.memory.use<GlobalOverlayState>('system:overlay_state');
-    const registryDomains = window.ACE.memory.use<RuntimeRegistryDomains>('system:registry_domains');
+    const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
+    const registryDomains = useAceMemory<RuntimeRegistryDomains>('system:registry_domains');
 
     // Fallbacks just in case the engine isn't ready
     const isAmbient = overlayState?.mode === 'ambient';
     const isDebugBg = overlayState?.debug_bg ?? false;
 
     const openDevWindow = (component_name: string, title: string, x: number, y: number, width: number, height: number) => {
-        window.ACE.events.emit({
+        window.ACE.event.emit({
             event_type: 'interaction',
             action: 'open_window',
             payload: { component_name, title, x, y, width, height }
@@ -44,7 +47,7 @@ export default function SystemDevConsole() {
     };
 
     const toggleOverlayMode = () => {
-        window.ACE.events.emit({
+        window.ACE.event.emit({
             event_type: 'interaction',
             action: 'set_overlay_mode',
             payload: { mode: isAmbient ? 'interactive' : 'ambient' }
@@ -52,7 +55,7 @@ export default function SystemDevConsole() {
     };
 
     const toggleDebugBg = () => {
-        window.ACE.events.emit({
+        window.ACE.event.emit({
             event_type: 'interaction',
             action: 'debug_action',
             payload: { action: 'toggle_debug_bg' }
@@ -67,7 +70,7 @@ export default function SystemDevConsole() {
 
     const corePackageWindows = (registryDomains?.windows ?? [])
         .filter((entry) => entry.owner_scope === 'core' && entry.source_scope === 'core' && entry.is_enabled !== false)
-        .filter((entry) => entry.component_name && entry.component_name !== 'dev_menu')
+        .filter((entry) => entry.name && entry.name !== 'dev_menu' && entry.slug !== 'dev-menu')
         .sort((a, b) => (a.display_name ?? a.window_name ?? '').localeCompare(b.display_name ?? b.window_name ?? ''));
 
     return (
@@ -209,8 +212,9 @@ export default function SystemDevConsole() {
             <div className="text-xs font-semibold text-zinc-500 mb-1 px-1">Window & Layout Tests</div>
 
             <button
-                onClick={() => WindowEngine.spawnWindow({
-                    component_name: 'system_console',
+                onClick={() => window.ACE.window.spawnWindow({
+                    package: 'itsjiran/ace-system',
+                    window: 'system_console',
                     title: 'Locked Terminal',
                     x: 100,
                     y: 100,
@@ -225,8 +229,9 @@ export default function SystemDevConsole() {
             </button>
 
             <button
-                onClick={() => WindowEngine.spawnWindow({
-                    component_name: 'system_console',
+                onClick={() => window.ACE.window.spawnWindow({
+                    package: 'itsjiran/ace-system',
+                    window: 'system_console',
                     title: 'Ghost Terminal (50%)',
                     x: 150,
                     y: 150,
@@ -241,8 +246,9 @@ export default function SystemDevConsole() {
             </button>
 
              <button
-                onClick={() => WindowEngine.spawnWindow({
-                    component_name: 'system_console',
+                onClick={() => window.ACE.window.spawnWindow({
+                    package: 'itsjiran/ace-system',
+                    window: 'system_console',
                     title: 'Always On Top',
                     x: 200,
                     y: 200,
@@ -257,8 +263,9 @@ export default function SystemDevConsole() {
             </button>
 
             <button
-                onClick={() => WindowEngine.spawnWindow({
-                    component_name: 'headless_drag_surface_demo',
+                onClick={() => window.ACE.window.spawnWindow({
+                    package: 'itsjiran/ace-system-dev',
+                    window: 'headless-drag-surface-demo',
                     title: 'Headless Drag Surface',
                     x: 280,
                     y: 140,

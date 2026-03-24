@@ -1,7 +1,7 @@
 import { StorageEngine } from './storageEngine';
+import { invoke } from '@tauri-apps/api/core';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
-
 export interface LogEntry {
     timestamp: number;
     level: LogLevel;
@@ -24,7 +24,7 @@ class LoggerEngineSingleton {
     init() {
         if (this.isInitialized) return;
 
-        // 1. Create the memory store in Global RAM
+        // 1. Create the memory store
         StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: 'system:logs',
@@ -34,8 +34,8 @@ class LoggerEngineSingleton {
 
         // 2. Intercept console calls
         (Object.keys(this.originalConsole) as LogLevel[]).forEach((level) => {
-            (console as any)[level] = (...args: any[]) => {
-                // Call original console
+            (console as any)[level] = async (...args: any[]) => {
+                // Call original console immediately
                 this.originalConsole[level](...args);
 
                 // Format the message
@@ -44,11 +44,22 @@ class LoggerEngineSingleton {
                 ).join(' ');
 
                 this.addLog(level, message);
+
+                // Write to debug.log file via Rust
+                const timestamp = new Date().toISOString();
+                const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+                try {
+                    await invoke('log_to_file', { line: logLine });
+                } catch (err) {
+                    // Silently fail if Rust backend isn't ready or IPC fails, to avoid loops
+                }
             };
         });
 
         this.isInitialized = true;
-        console.log('📖 LoggerEngine: Console interception active.');
+        
+        // Use original console to confirm init without triggering infinite loop if bug exists
+        this.originalConsole.log('📖 LoggerEngine: Console interception active + File Logging.');
     }
 
     log(level: LogLevel, message: string) {

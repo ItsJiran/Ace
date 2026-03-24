@@ -2,6 +2,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge, Flame } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
+import { useAceMemory } from '#/hooks/useAceMemory';
 
 export const registry: AceRegistryType.Component = {
     name: 'dev_menu',
@@ -19,6 +20,9 @@ interface RuntimeRegistryDomains {
         display_name?: string;
         window_name?: string;
         component?: string;
+        name?: string;
+        slug?: string;
+        component_name?: string;
         default_window_preset?: {
             x?: number;
             y?: number;
@@ -30,15 +34,15 @@ interface RuntimeRegistryDomains {
 }
 
 export default function DevMenu() {
-    const overlayState = window.ACE.memory.use<GlobalOverlayState>('system:overlay_state');
-    const registryDomains = window.ACE.memory.use<RuntimeRegistryDomains>('system:registry_domains');
+    const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
+    const registryDomains = useAceMemory<RuntimeRegistryDomains>('system:registry_domains');
 
     // Fallbacks just in case the engine isn't ready
     const isAmbient = overlayState?.mode === 'ambient';
     const isDebugBg = overlayState?.debug_bg ?? false;
 
     const openDevWindow = (pkg: string, windowId: string, title: string, x: number, y: number, width: number, height: number) => {
-        window.ACE.events.emit({
+        window.ACE.event.emit({
             event_type: 'interaction',
             action: 'open_window',
             payload: { package: pkg, window: windowId, title, x, y, width, height }
@@ -46,7 +50,7 @@ export default function DevMenu() {
     };
 
     const toggleOverlayMode = () => {
-        window.ACE.events.emit({
+        window.ACE.event.emit({
             event_type: 'interaction',
             action: 'set_overlay_mode',
             payload: { mode: isAmbient ? 'interactive' : 'ambient' }
@@ -54,7 +58,7 @@ export default function DevMenu() {
     };
 
     const toggleDebugBg = () => {
-        window.ACE.events.emit({
+        window.ACE.event.emit({
             event_type: 'interaction',
             action: 'debug_action',
             payload: { action: 'toggle_debug_bg' }
@@ -62,14 +66,14 @@ export default function DevMenu() {
     };
 
     const spawnRAMViewer = () => {
-        openDevWindow('ram_viewer', 'Global RAM Monitor', 50, 50, 400, 500);
+        openDevWindow('itsjiran/ace-system-dev', 'ram-viewer', 'Global RAM Monitor', 50, 50, 400, 500);
     };
 
     const buttonClass = 'flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 duration-75';
 
     const corePackageWindows = (registryDomains?.windows ?? [])
         .filter((entry) => entry.owner_scope === 'core' && entry.source_scope === 'core' && entry.is_enabled !== false)
-        .filter((entry) => entry.component_name && entry.component_name !== 'dev_menu')
+        .filter((entry) => entry.name && entry.name !== 'dev_menu' && entry.slug !== 'dev-menu')
         .sort((a, b) => (a.display_name ?? a.window_name ?? '').localeCompare(b.display_name ?? b.window_name ?? ''));
 
     return (
@@ -89,12 +93,12 @@ export default function DevMenu() {
                 const height = preset?.height ?? 520;
                 const x = preset?.x ?? 120 + (index * 36);
                 const y = preset?.y ?? 70 + (index * 24);
-                const componentName = entry.component_name ?? 'system_widget';
+                const windowName = entry.window_name ?? entry.name ?? entry.slug ?? 'unknown';
 
                 return (
                     <button
-                        key={entry.id ?? `${componentName}-${index}`}
-                        onClick={() => openDevWindow(componentName, title, x, y, width, height)}
+                        key={entry.id ?? `${windowName}-${index}`}
+                        onClick={() => openDevWindow(entry.package_name || 'itsjiran/ace-system', windowName, title, x, y, width, height)}
                         className={buttonClass}
                     >
                         <HardDrive size={14} className="text-sky-300" />
@@ -104,7 +108,7 @@ export default function DevMenu() {
             })}
 
             <button
-                onClick={() => openDevWindow('event_viewer', 'Event Viewer', 60, 60, 620, 420)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'event-viewer', 'Event Viewer', 60, 60, 620, 420)}
                 className={buttonClass}
             >
                 <Activity size={14} className="text-cyan-400" />
@@ -120,7 +124,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('ram_usage_analyzer', 'RAM Usage Analyzer', 90, 80, 700, 460)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'ram-usage-analyzer', 'RAM Usage Analyzer', 90, 80, 700, 460)}
                 className={buttonClass}
             >
                 <HardDrive size={14} className="text-cyan-400" />
@@ -128,7 +132,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('event_registry_list', 'Event Registry', 110, 90, 520, 420)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'event-registry-list', 'Event Registry', 110, 90, 520, 420)}
                 className={buttonClass}
             >
                 <ListTree size={14} className="text-purple-400" />
@@ -136,7 +140,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('process_monitor', 'Process Monitor', 160, 120, 560, 420)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'process-monitor', 'Process Monitor', 160, 120, 560, 420)}
                 className={buttonClass}
             >
                 <Workflow size={14} className="text-emerald-400" />
@@ -144,7 +148,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('tools_registry_list', 'Tools Registry', 210, 150, 520, 380)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'tools-registry-list', 'Tools Registry', 210, 150, 520, 380)}
                 className={buttonClass}
             >
                 <Wrench size={14} className="text-amber-400" />
@@ -152,7 +156,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('pipeline_registry_list', 'Pipeline Registry', 260, 180, 560, 400)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'pipeline-registry-list', 'Pipeline Registry', 260, 180, 560, 400)}
                 className={buttonClass}
             >
                 <Layers size={14} className="text-sky-400" />
@@ -160,7 +164,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('window_registry_list', 'Window Registry', 310, 210, 520, 380)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'window-registry-list', 'Window Registry', 310, 210, 520, 380)}
                 className={buttonClass}
             >
                 <PanelTop size={14} className="text-rose-400" />
@@ -168,7 +172,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('fps_widget', 'FPS Counter', 420, 120, 280, 170)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'fps-counter', 'FPS Counter', 420, 120, 280, 170)}
                 className={buttonClass}
             >
                 <Gauge size={14} className="text-lime-400" />
@@ -176,7 +180,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('stress_test_menu', 'Stress Test Menu', 460, 100, 440, 300)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'stress-test-menu', 'Stress Test Menu', 460, 100, 440, 300)}
                 className={buttonClass}
             >
                 <Flame size={14} className="text-fuchsia-400" />
@@ -184,7 +188,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('package_registry_view', 'Package Registry', 360, 120, 800, 500)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'package-registry-view', 'Package Registry', 360, 120, 800, 500)}
                 className={buttonClass}
             >
                 <Workflow size={14} className="text-teal-400" />
@@ -192,7 +196,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('hello_world_component', 'Hello World (Example Package)', 420, 180, 480, 320)}
+                onClick={() => openDevWindow('itsjiran/ace-system-dev', 'hello-world-component', 'Hello World (Example Package)', 420, 180, 480, 320)}
                 className={buttonClass}
             >
                 <Activity size={14} className="text-emerald-300" />
@@ -200,7 +204,7 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => openDevWindow('system_console', 'System Console', 360, 240, 620, 400)}
+                onClick={() => openDevWindow('itsjiran/ace-system', 'system-console', 'System Console', 360, 240, 620, 400)}
                 className={buttonClass}
             >
                 <HardDrive size={14} className="text-indigo-400" />
@@ -211,8 +215,9 @@ export default function DevMenu() {
             <div className="text-xs font-semibold text-zinc-500 mb-1 px-1">Window & Layout Tests</div>
 
             <button
-                onClick={() => WindowEngine.spawnWindow({
-                    component_name: 'system_console',
+                onClick={() => window.ACE.window.spawnWindow({
+                    package: 'itsjiran/ace-system',
+                    window: 'system_console',
                     title: 'Locked Terminal',
                     x: 100,
                     y: 100,
@@ -227,8 +232,9 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => WindowEngine.spawnWindow({
-                    component_name: 'system_console',
+                onClick={() => window.ACE.window.spawnWindow({
+                    package: 'itsjiran/ace-system',
+                    window: 'system_console',
                     title: 'Ghost Terminal (50%)',
                     x: 150,
                     y: 150,
@@ -243,8 +249,9 @@ export default function DevMenu() {
             </button>
 
              <button
-                onClick={() => WindowEngine.spawnWindow({
-                    component_name: 'system_console',
+                onClick={() => window.ACE.window.spawnWindow({
+                    package: 'itsjiran/ace-system',
+                    window: 'system_console',
                     title: 'Always On Top',
                     x: 200,
                     y: 200,
@@ -259,8 +266,9 @@ export default function DevMenu() {
             </button>
 
             <button
-                onClick={() => WindowEngine.spawnWindow({
-                    component_name: 'headless_drag_surface_demo',
+                onClick={() => window.ACE.window.spawnWindow({
+                    package: 'itsjiran/ace-system-dev',
+                    window: 'headless-drag-surface-demo',
                     title: 'Headless Drag Surface',
                     x: 280,
                     y: 140,

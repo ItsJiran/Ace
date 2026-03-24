@@ -16,6 +16,7 @@
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
+        "skipTaskbar": true,
         "fullscreen": false,
         "resizable": true,
         "width": 200000,

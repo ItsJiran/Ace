@@ -111,59 +111,25 @@ const InitWindowLayerStep: PipelineStep<void, void> = {
 const InitGlobalInputHandlersStep: PipelineStep<void, void> = {
     name: 'Init Global Input Handlers',
     execute: async () => {
-        const GlobalStateManager = window.ACE.global;
         const WindowEngine = window.ACE.window;
 
         if (typeof window !== 'undefined') {
+            // 1. Global ESC Failsafe: Always allow returning to ambient mode
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     WindowEngine.setOverlayMode('ambient');
                 }
             });
 
-            let pointerRaf: number | null = null;
-            let pendingPointer: { x: number; y: number } | null = null;
-
-            window.addEventListener('pointermove', (e) => {
-                 pendingPointer = { x: e.clientX, y: e.clientY };
-                 if (pointerRaf !== null) return;
-                 pointerRaf = window.requestAnimationFrame(() => {
-                     pointerRaf = null;
-                     if (!pendingPointer) return;
-                     GlobalStateManager.setCursorPosition(pendingPointer.x, pendingPointer.y);
-                     GlobalStateManager.setPointerInside(true);
-                 });
-            });
-
-            window.addEventListener('pointerdown', () => {
-                GlobalStateManager.setPointerDown(true);
-                GlobalStateManager.setActiveElement(document.activeElement);
-            });
-
-            window.addEventListener('pointerup', () => {
-                GlobalStateManager.setPointerDown(false);
-            });
-
+            // 2. Global Context Menu Block: Prevent native browser context menu
             window.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-            }, { capture: true }); // Catch this early
+                // Allow if targeted explicitly by our components, otherwise block
+                if (!(e.target as HTMLElement).closest('[data-context-menu]')) {
+                    e.preventDefault();
+                }
+            }, { capture: true });
 
-            window.addEventListener('focusin', (e) => {
-                GlobalStateManager.setPointerInside(true);
-                GlobalStateManager.setActiveElement((e.target as Element) ?? document.activeElement);
-            });
-
-            window.addEventListener('blur', () => {
-                GlobalStateManager.setPointerInside(false);
-                GlobalStateManager.setPointerDown(false);
-            });
-
-            window.addEventListener('focus', () => {
-                GlobalStateManager.setPointerInside(true);
-                GlobalStateManager.setActiveElement(document.activeElement);
-            });
-
-            console.log('[Boot] Phase 4: Global input handlers attached.');
+            console.log('[Boot] Phase 4: Global input handlers attached (Minimal).');
         }
     }
 };
