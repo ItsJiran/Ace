@@ -670,8 +670,9 @@ class WindowEngineSingleton {
             z_index: this.highest_z_index
         });
 
-        GlobalStateManager.setFocusedWindow(window_uid);
-        GlobalStateManager.setOverlayMode('interactive');
+        // Atomic: combines setFocusedWindow + setOverlayMode into one pass.
+        // Eliminates duplicate writes to system:global_state and system:overlay_state.
+        GlobalStateManager.setFocusedWindowInteractive(window_uid);
 
         invoke('set_ignore_cursor_events', { ignore: false }).catch(console.error);
     }

@@ -159,6 +159,42 @@ class GlobalStateManagerSingleton {
         });
     }
 
+    /**
+     * Atomically sets focused window + interactive overlay mode in a single pass.
+     * Replaces calling setFocusedWindow() + setOverlayMode() separately, which
+     * would write system:global_state and system:overlay_state twice each.
+     */
+    setFocusedWindowInteractive(focused_window_uid: string) {
+        const state = this.readState();
+        const alreadyFocused = state.focus.focused_window_uid === focused_window_uid;
+        const alreadyInteractive = state.focus.overlay_mode === 'interactive';
+
+        if (alreadyFocused && alreadyInteractive) return;
+
+        // Single updateState → one write to system:global_state
+        this.updateState((s) => ({
+            ...s,
+            focus: {
+                ...s.focus,
+                focused_window_uid,
+                overlay_mode: 'interactive',
+            },
+        }));
+
+        // Single syncOverlayState → one write to system:overlay_state
+        this.syncOverlayState({ focused_window_uid, mode: 'interactive' });
+
+        // Separate write for consumers that subscribe only to this key
+        if (!alreadyFocused) {
+            StorageEngine.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: FOCUSED_WINDOW_MEMORY_UID,
+                payload: focused_window_uid,
+                classifications: ['system:core'],
+            });
+        }
+    }
+
     setFocusedWidget(focused_widget_uid: string | null) {
         this.updateState((state) => ({
             ...state,

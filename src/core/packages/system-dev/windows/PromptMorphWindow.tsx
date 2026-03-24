@@ -18,10 +18,10 @@ export default function PromptMorphWindow({ windowUid }: { windowUid: string }) 
                 <div
                     onMouseEnter={() => setIsHovered(true)}
                     onMouseLeave={() => setIsHovered(false)}
-                    className={`h-full w-full overflow-hidden bg-white rounded-full border backdrop-blur-md transition-colors ${
+                    className={`h-full w-full overflow-hidden bg-white rounded-full border transition-colors ${
                         (isFocused || isHovered)
-                            ? 'border-white/90 bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.24)]'
-                            : 'border-white/50 bg-white/58 shadow-[0_12px_28px_rgba(15,23,42,0.16)]'
+                            ? 'border-white/90 bg-white/92 '
+                            : 'border-white/50 bg-white/58 '
                     }`}
                 >
                     <div className="relative flex h-full w-full items-center gap-3 px-4">
