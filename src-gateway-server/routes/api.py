@@ -45,17 +45,17 @@ async def extract_bearer_token(request: Request) -> str:
 
 
 @router.get("/health")
-async def health(request: Request) -> HealthResponse:
+async def health(request: Request) -> dict:
     """Health check endpoint.
     
     Returns:
-        HealthResponse with gateway status and loaded adapters
+        Dict with gateway status and loaded adapters
     """
     if gateway is None:
         return HealthResponse(
             ok=False,
             error_message="Gateway not initialized"
-        )
+        ).to_dict()
 
     base_url = f"http://{runtime_host}:{runtime_port}"
 
@@ -66,7 +66,7 @@ async def health(request: Request) -> HealthResponse:
         base_url=base_url,
         port=runtime_port,
         loaded_adapters=gateway.get_loaded_adapters(),
-    )
+    ).to_dict()
 
 
 @router.get("/models/{sdk}")
