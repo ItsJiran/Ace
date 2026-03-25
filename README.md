@@ -4,6 +4,14 @@ A local-first, overlay-based personal assistant powered by Tauri and AI, designe
 ## AI Instructions
 Before writing code, proposing architectural changes, or executing commands, read the context files in `.ai/` first.
 
+## Gateway + Context Mechanism
+
+For the latest end-to-end flow of AI gateway streaming, composed prompt context, parser `context` blocks, and RAG references, read:
+
+- `docs/GATEWAY_CONTEXT_MECHANISM.md`
+
+This document is the canonical reference for runtime AI context behavior.
+
 Architecture pillars:
 1. `.ai/01_project_overview.md`
 2. `.ai/02_ui_and_registry.md`
@@ -31,7 +39,9 @@ Notes:
 - [x] `ToolDefinition<T>` constraint relaxed from `ZodObject<any>` → `ZodTypeAny` (supports discriminated unions)
 - [x] `FsTool.ts` — consolidated single fs-tool with `z.discriminatedUnion` on `action` field (`read_file | write_file | list_directory | create_directory | delete_file`)
 - [x] EventBus `execute_tool` route registered in BootupPipeline Phase 7
+- [x] EventBus `execute_tool` payload compatibility fix: supports both envelope form (`payload`) and flat form (`...args`)
 - [x] `FSEngine.readRaw`, `deleteFile`, `trackedRead`, `trackedWrite`, `trackedSave` added
+- [x] `FSEngine.resolveAppConfigPath()` + `FsTool` absolute path output for read/write/create/delete responses
 - [x] `PipelineEngine.tracked` context option — wraps entire pipeline in `ProcessEngine.track`
 
 ### Shell Engine
@@ -42,8 +52,11 @@ Notes:
 
 ### Dev UI
 - [x] `ToolRunnerDev` component — list tools, edit JSON payload, run via EventBus or direct execute, show result
+- [x] `ToolRunnerDev` schema inspector — field path/type/required/default/description + union/discriminated-union variants + auto example payload
 - [x] `ToolRunnerDevWindow` — 620×540, chrome_style standard, slug `tool-runner-dev-window`
 - [x] DevMenu `Tool Runner` button (Wrench icon, amber-400)
+- [x] DevMenu `EventBus Monitor` + `Process Monitor` buttons
+- [x] `EventBusMonitorWindow` + `ProcessMonitorDevWindow` (system-dev)
 
 ---
 
@@ -73,7 +86,7 @@ Notes:
 - [ ] Scrollable message history with timestamps
 
 #### Tooling Mechanism
-- [x] EventBus `execute_tool` route: parser → EventEngine dispatch → ToolEngine.execute
+- [x] EventBus `execute_tool` route: parser → EventEngine dispatch → ToolEngine.execute (envelope + flat payload support)
 - [ ] Tool result write-back to RAM -> resume session context
 - [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
 - [x] Native OS tools: File System (`FsTool.ts`), Shell Executor (`ShellEngine` + `ShellTool.ts`)
@@ -81,12 +94,12 @@ Notes:
 - [ ] Context builder pipeline before prompt send
 
 #### AI Context Engine (NEW)
-- [ ] ContextCore: define AIContextEngine core contract (`buildContext`, `ingestTurn`, `attachSession`, `evictContext`)
-- [ ] ContextSession: session-scoped context model (each session has independent timeline + references)
-- [ ] ContextParser: add parser block type `context` for per-turn summary payload
+- [x] ContextCore: define AIContextEngine core contract (`buildContext`, `ingestTurn`, `attachSession`, `evictContext`)
+- [x] ContextSession: session-scoped context model (each session has independent timeline + references)
+- [x] ContextParser: parser block type `context` for per-turn summary payload
 - [ ] ContextSchema: define context block schema (`summary`, `intent`, `constraints`, `decisions`, `next_actions`, `confidence`)
-- [ ] ContextMerge: merge latest `context` block with previous session summary state
-- [ ] ContextPromptPolicy: use compact historical summary by default, avoid raw transcript flooding
+- [x] ContextMerge: latest `context` summary block replaces previous canonical summary
+- [x] ContextPromptPolicy: composed prompt now injects default app-bridge + parser protocol + compact context
 
 #### Context Layers (Design Tasks)
 - [ ] ContextLayerHistorical: compact rolling summary per session (lightweight memory for prompting)

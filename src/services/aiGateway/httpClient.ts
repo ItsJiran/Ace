@@ -10,7 +10,7 @@ const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
  * response token-by-token into RAM via handleSessionStreamChunk.
  *
  * @param session           The active session object (mutated for status tracking).
- * @param prompt            User prompt to send.
+ * @param prompt            Final composed prompt to send to the gateway.
  * @param replyToRamKey     RAM key where the response is written.
  * @param gatewayConfig     Current gateway config (used to look up API key).
  * @param ensureGatewayServerUrl  Callback to resolve (or rediscover) the gateway base URL.
@@ -21,6 +21,10 @@ export async function sendToSession(
     replyToRamKey: string,
     gatewayConfig: AIGatewayConfig,
     ensureGatewayServerUrl: () => Promise<string | null>,
+    metadata?: {
+        original_prompt?: string;
+        used_contexts?: unknown[];
+    },
 ): Promise<void> {
     console.log(`[AIGatewayEngine] [${session.sessionId}] Sending: "${prompt}"`);
     session.status = 'streaming';
@@ -31,7 +35,9 @@ export async function sendToSession(
         action: 'create_memory',
         memory_uid: replyToRamKey,
         payload: {
+            original_prompt: metadata?.original_prompt ?? prompt,
             prompt,
+            used_contexts: metadata?.used_contexts ?? [],
             text: '',
             raw_response: '',
             blocks: [],

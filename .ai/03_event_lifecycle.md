@@ -1,5 +1,7 @@
 # ACE Event Lifecycle & Use Case Flows (Robust Edition)
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 This document outlines the step-by-step lifecycle of data and events across the ACE (Autonomous Cognitive Entity) architecture. All flows strictly adhere to the **CQRS (Command Query Responsibility Segregation)** and **Event-Driven** principles.
 
 ## 🏛️ The Golden Rules of the Flow

@@ -1,5 +1,7 @@
 # UI Engine & Registry Architecture
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 ## React UI Philosophy
 
 1. **Dumb UI**: The UI layer should contain no domain execution logic. It captures user intent, emits `InteractionSchema`, and observes RAM.

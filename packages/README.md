@@ -2,6 +2,14 @@
 
 This directory contains resources for developing external packages for ACE.
 
+## Runtime AI Bridge Note
+
+If your package interacts with AI sessions or emits AI-compatible structured blocks, follow the canonical mechanism in:
+
+- `docs/GATEWAY_CONTEXT_MECHANISM.md`
+
+This keeps package behavior aligned with parser and context-engine expectations.
+
 ## Architecture Overview
 
 ACE uses a **Host-Guest Architecture**. 

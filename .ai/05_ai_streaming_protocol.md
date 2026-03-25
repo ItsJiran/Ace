@@ -1,5 +1,11 @@
 # Protocol & AI Streaming Schema
 
+## Current Canonical Runtime
+
+This file explains parser concepts. For the full current implementation flow (gateway + parser + context + RAG), refer to:
+
+- `docs/GATEWAY_CONTEXT_MECHANISM.md`
+
 Because AI responses arrive asynchronously via streaming tokens, waiting for a massive, strictly typed JSON Array to close before the UI can react creates a horribly sluggish User Experience.
 
 If the AI decides to perform three actions (look up a repository, open a tab, and send a message), the Gateway issues a specialized **Markdown-style Event Block** format.

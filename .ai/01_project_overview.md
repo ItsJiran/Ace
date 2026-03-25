@@ -1,5 +1,7 @@
 # Project Overview & Philosophy
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 ## 🎯 Core Concept
 This project is an AI-powered personal assistant overlay designed for extreme modularity. Rather than a monolithic React app containing all LLM logic, it strictly separates **Human Interaction (Frontend)** from **AI Execution (Backend)**.
 

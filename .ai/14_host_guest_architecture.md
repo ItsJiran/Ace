@@ -1,5 +1,7 @@
 # Host-Guest Architecture & Inversion of Control
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 This document defines the architectural contract between the ACE core (Host) and any package (Guest).
 
 See also: `11_package_ecosystem_and_submission.md` for the full package structure and submission model.

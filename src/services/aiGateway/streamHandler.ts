@@ -1,5 +1,6 @@
 import { StorageEngine } from '../storageEngine';
 import { EventBus } from '../eventEngine';
+import { AIContextEngine } from '../aiContextEngine';
 import { parseAIStreamChunk } from '#/services/aiParser';
 import type { AIMessageBlock } from '#/services/aiParser';
 import type { AISession, ParsedBatchEvent, ParserBatchRecord } from './types';
@@ -75,6 +76,14 @@ export function handleSessionStreamChunk(
     session.activeEventBuffer = '';
 
     const { blocks, events, textToPrint } = parseAIStreamChunk(fullStream);
+
+    // Direct parser -> context bridge:
+    // any complete `context` block from aiParser is immediately ingested.
+    blocks.forEach((block) => {
+        if (block.type !== 'context' || !block.is_complete) return;
+        if (!block.payload_json) return;
+        AIContextEngine.ingestContextBlock(session.sessionId, block.payload_json);
+    });
 
     const memoryState = (StorageEngine.readMemory(ramKey) || {}) as {
         text?: string;

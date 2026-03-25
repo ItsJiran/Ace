@@ -59,6 +59,18 @@ export default function DevMenu() {
         });
     };
 
+    const spawnAIStressTest = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'ai-stress-test-window',
+            title: 'AI Stress Test',
+            width: 600,
+            height: 500,
+            x: 200,
+            y: 100
+        });
+    };
+
     const spawnPromptMorphWindow = () => {
         const viewportWidth = window.innerWidth || 1920;
         const viewportHeight = window.innerHeight || 1080;
@@ -288,6 +300,11 @@ export default function DevMenu() {
             <button onClick={spawnStressTest} className={buttonClass}>
                 <Activity size={14} className="text-rose-400" />
                 Spawn Stress Test Widget
+            </button>
+
+            <button onClick={spawnAIStressTest} className={buttonClass}>
+                <Activity size={14} className="text-pink-400" />
+                Spawn AI Stress Test
             </button>
 
             <button onClick={spawnPromptMorphWindow} className={buttonClass}>

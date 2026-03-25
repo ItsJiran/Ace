@@ -37,6 +37,7 @@ import { sendToSession as _sendToSession } from './aiGateway/httpClient';
 import { AIConfigManager } from './aiGateway/configManager';
 import { HealthProbe } from './aiGateway/healthProbe';
 import { fetchModels as _fetchModels, testResponse as _testResponse } from './aiGateway/providerClient';
+import { AIContextEngine } from './aiContextEngine';
 import type {
     AIGatewayFetchModelsResult,
     AIGatewayResponseResult,
@@ -75,6 +76,7 @@ class AIGatewayEngineSingleton {
         if (this.isBooted) return;
 
         this.bindEventRoutes();
+        AIContextEngine.boot();
         await AIConfigManager.load();
 
         const health = await HealthProbe.probe();
@@ -169,12 +171,16 @@ class AIGatewayEngineSingleton {
 
     /** Creates a new isolated session bound to a specific SDK + model. */
     async createSession(sdk: SDKProvider, model: string): Promise<string> {
-        return AISessionManager.create(sdk, model);
+        const sessionId = await AISessionManager.create(sdk, model);
+        AIContextEngine.attachSession(sessionId);
+        AIContextEngine.buildContext(sessionId, '', { sdk, model });
+        return sessionId;
     }
 
     /** Closes and removes a session from the active session map. */
     closeSession(sessionId: string): void {
         AISessionManager.close(sessionId);
+        AIContextEngine.evictContext(sessionId);
     }
 
     /**
@@ -182,7 +188,17 @@ class AIGatewayEngineSingleton {
      * Intended for Dev Menu monitoring panels — not for runtime logic.
      */
     listSessions(): AISessionSnapshot[] {
-        return AISessionManager.list();
+        return AISessionManager.list().map((snapshot) => {
+            const contextState = AIContextEngine.getSessionContext(snapshot.sessionId);
+            return {
+                ...snapshot,
+                used_contexts: contextState?.used_contexts ?? [],
+                context_updated_at: contextState?.updated_at,
+                summary: contextState?.summary,
+                turns: contextState?.turns ?? [],
+                context_blocks: contextState?.context_blocks ?? [],
+            };
+        });
     }
 
     /**
@@ -194,9 +210,43 @@ class AIGatewayEngineSingleton {
     async sendToSession(sessionId: string, prompt: string, reply_to_ram_key: string): Promise<void> {
         const session = AISessionManager.get(sessionId);
         if (!session) throw new Error(`Session ${sessionId} not found.`);
-        await _sendToSession(session, prompt, reply_to_ram_key, AIConfigManager.get(), () =>
-            HealthProbe.ensure(),
+
+        AIContextEngine.attachSession(sessionId);
+
+        // Build the outbound prompt from the session context BEFORE appending the
+        // current user turn into history. This avoids duplicating the same user
+        // prompt in both [RECENT_TURNS] and [USER_PROMPT].
+        const contextBuild = AIContextEngine.buildContext(sessionId, prompt, {
+            sdk: session.sdk,
+            model: session.model,
+        });
+
+        // Persist the user turn after prompt composition so future requests can
+        // still see it in historical context.
+        AIContextEngine.ingestTurn(sessionId, { at: Date.now(), role: 'user', text: prompt });
+
+        await _sendToSession(
+            session,
+            contextBuild.composed_prompt,
+            reply_to_ram_key,
+            AIConfigManager.get(),
+            () => HealthProbe.ensure(),
+            {
+                original_prompt: prompt,
+                used_contexts: contextBuild.used_contexts,
+            },
         );
+
+        const responseMemory = StorageEngine.readMemory(reply_to_ram_key) as { text?: unknown } | undefined;
+        const responseText = typeof responseMemory?.text === 'string' ? responseMemory.text : '';
+        if (responseText.trim().length > 0) {
+            AIContextEngine.ingestTurn(sessionId, {
+                at: Date.now(),
+                role: 'assistant',
+                text: responseText,
+            });
+            AIContextEngine.buildContext(sessionId, prompt, { sdk: session.sdk, model: session.model });
+        }
     }
 
     // ── Health / Discovery ────────────────────────────────────────────────────

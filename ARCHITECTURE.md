@@ -1,5 +1,13 @@
 # Project Architecture: The 5-Layer Ecosystem
 
+## Gateway + Context Runtime Reference
+
+The practical runtime details for AI gateway streaming and session context composition are maintained in:
+
+- `docs/GATEWAY_CONTEXT_MECHANISM.md`
+
+Use this architecture file for layer boundaries, and the gateway-context doc for request/stream/context internals.
+
 The application is structured into **5 distinct layers** to preserve decoupling, high performance, and clean separation between UI orchestration and AI execution.
 
 ## 1. Global Transparent Layer

@@ -23,6 +23,14 @@ export interface BaseExecutionBlock {
     is_complete: boolean;
 }
 
+export interface ContextBlock {
+    type: 'context';
+    payload_raw: string;
+    payload_json: Record<string, unknown> | null;
+    payload_parse_error?: string;
+    is_complete: boolean;
+}
+
 /**
  * Ordered segment model for one stream chunk.
  * This is the core format UI/state managers should consume.
@@ -31,6 +39,7 @@ export type AIMessageBlock =
     | { type: 'paragraph'; content: string }
     | { type: 'event'; event: BufferedAIEvent }
     | BaseExecutionBlock
+    | ContextBlock
     | {
         // Future-proof fallback for upcoming fenced directives
         type: 'directive';
@@ -68,6 +77,59 @@ function parseJsonLoose(raw: string): {
     } catch (error) {
         return { json: null, error: error instanceof Error ? error.message : String(error) };
     }
+}
+
+function normalizeContextPayload(
+    payload: Record<string, unknown> | null,
+    rawBody: string,
+): Record<string, unknown> | null {
+    if (!payload) {
+        const fallback = rawBody.trim();
+        return fallback
+            ? {
+                type: 'context_note',
+                text: fallback,
+            }
+            : null;
+    }
+
+    const normalized: Record<string, unknown> = { ...payload };
+    const nestedContext = payload.context;
+
+    // Accept wrapper shapes like { context: { summary, intent, ... } }
+    if (
+        nestedContext &&
+        typeof nestedContext === 'object' &&
+        !Array.isArray(nestedContext)
+    ) {
+        const nested = nestedContext as Record<string, unknown>;
+        if (typeof normalized.summary !== 'string' && typeof nested.summary === 'string') {
+            normalized.summary = nested.summary;
+        }
+        if (typeof normalized.context_summary !== 'string' && typeof nested.context_summary === 'string') {
+            normalized.context_summary = nested.context_summary;
+        }
+        if (typeof normalized.intent !== 'string' && typeof nested.intent === 'string') {
+            normalized.intent = nested.intent;
+        }
+        if (typeof normalized.type !== 'string' && typeof nested.type === 'string') {
+            normalized.type = nested.type;
+        }
+        if (typeof normalized.kind !== 'string' && typeof nested.kind === 'string') {
+            normalized.kind = nested.kind;
+        }
+        if (typeof normalized.text !== 'string' && typeof nested.text === 'string') {
+            normalized.text = nested.text;
+        }
+        if (
+            typeof normalized.replace_summary !== 'string' &&
+            typeof nested.replace_summary === 'string'
+        ) {
+            normalized.replace_summary = nested.replace_summary;
+        }
+    }
+
+    return normalized;
 }
 
 function normalizeStatus(value: unknown): ExecutionBlockStatus {
@@ -226,6 +288,15 @@ export function parseAIStreamChunk(chunk: string): AIParseResult {
             }
         } else if (rawTag === 'execute_tool' || rawTag === 'execute_storage') {
             result.blocks.push(extractExecutionBlock(rawTag, body, hasCloseFence));
+        } else if (rawTag === 'context') {
+            const parsed = parseJsonLoose(body);
+            result.blocks.push({
+                type: 'context',
+                payload_raw: body,
+                payload_json: normalizeContextPayload(parsed.json, body),
+                payload_parse_error: parsed.error,
+                is_complete: hasCloseFence,
+            });
         } else {
             // Unknown fenced directives are still structured for forward compatibility.
             result.blocks.push({

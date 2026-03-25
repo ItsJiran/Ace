@@ -28,6 +28,17 @@ export interface AISessionSnapshot {
     activeOutputRamKey?: string;
     isInsideEventBlock: boolean;
     activeEventBufferLength: number;
+    summary?: string;
+    turns?: Array<{ at: number; role: 'user' | 'assistant' | 'system'; text: string }>;
+    context_blocks?: Array<{ at: number; payload: Record<string, unknown> }>;
+    used_contexts?: Array<{
+        key: string;
+        label: string;
+        kind: string;
+        detail?: string;
+        token_estimate?: number;
+    }>;
+    context_updated_at?: number;
 }
 
 /** A single parsed event block from an AI stream chunk */

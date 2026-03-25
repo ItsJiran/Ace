@@ -1,5 +1,7 @@
 ## 🚀 The ACE Bootup Sequence (Initialization Flow)
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 Because ACE relies on a strict decoupling of state, routing, and UI, the application cannot simply "render React" on load. The bootup sequence must be meticulously ordered to prevent race conditions, ghost events, or UI crashes. 
 
 The bootup sequence operates in **4 Strict Phases**, executed through the boot pipeline before post-boot UI effects are allowed to run.

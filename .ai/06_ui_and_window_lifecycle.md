@@ -1,5 +1,7 @@
 # UI & Window Lifecycle Patterns
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 This document details how external events and internal interactions drive the visual state of the ACE environment, focusing on the relationship between the **Window Engine**, **Global RAM**, local window runtime state, and **React Components**.
 
 ## 🪟 The Dumb Window Lifecycle

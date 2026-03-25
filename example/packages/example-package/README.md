@@ -2,6 +2,14 @@
 
 This is a minimal ACE package example. Use it as a starting point for building your own package.
 
+## AI Runtime Interop Note
+
+When building package features that interact with gateway/context runtime, follow:
+
+- `docs/GATEWAY_CONTEXT_MECHANISM.md`
+
+Especially for parser block shapes (`event`, `execute_tool`, `context`) and context-summary updates.
+
 ## Structure
 
 ```

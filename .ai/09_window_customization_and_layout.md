@@ -1,5 +1,7 @@
 # Window Customization & Layout Strategy
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 This document describes the current window runtime and the next target state for component-driven window presentation.
 
 ## Current Runtime State

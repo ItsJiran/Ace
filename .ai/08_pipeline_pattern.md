@@ -1,5 +1,7 @@
 # Pipeline Engine Pattern (Linear Execution)
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 While the **Event Bus** handles asynchronous **Intents** (one-to-many), the **Pipeline Engine** handles synchronous **Execution** (one-to-one, step-by-step).
 
 ## 🛡️ Event Bus vs. Pipeline

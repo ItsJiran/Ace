@@ -1,5 +1,7 @@
 # Package Ecosystem & Submission Model
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 This document formalizes how ACE treats packages as first-class modular products.
 
 ## Terminology

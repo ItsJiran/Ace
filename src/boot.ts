@@ -11,8 +11,10 @@ import { LayoutEngine } from '#/services/layoutEngine';
 import { KeybindEngine } from '#/services/keybindEngine';
 import { GlobalStateManager } from '#/services/globalStateManager';
 import { LoggerEngine } from '#/services/loggerEngine';
-import { AIGatewayEngine } from '#/services/aiGatewayEngine';
+import { AIGatewayEngine } from './services/aiGatewayEngine';
 import { ShellEngine } from '#/services/shellEngine';
+import { AIContextEngine } from '#/services/aiContextEngine';
+import { AIContextRagEngine } from '#/services/aiContextRagEngine';
 import type { PipelineContext } from '#/services/pipelineEngine';
 
 let bootPromise: Promise<void> | null = null;
@@ -48,6 +50,8 @@ export async function bootACE() {
                 logger: LoggerEngine,
                 ai_gateway: AIGatewayEngine,
                 shell: ShellEngine,
+                context: AIContextEngine,
+                context_rag: AIContextRagEngine,
             };
             console.log('🔌 ACE Registry Bridge Initialized.');
         }

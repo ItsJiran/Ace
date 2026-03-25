@@ -1,5 +1,11 @@
 # ACE AI Gateway Server
 
+## Related Runtime Docs
+
+Gateway-side behavior documented here is consumed by app-side context composition and parser ingestion. See:
+
+- `docs/GATEWAY_CONTEXT_MECHANISM.md`
+
 Multi-provider LLM gateway sidecar that manages connectivity to OpenAI, Google Gemini, and Anthropic Claude APIs.
 
 ## Overview

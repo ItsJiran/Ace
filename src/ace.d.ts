@@ -12,6 +12,8 @@ import type { KeybindEngine } from './services/keybindEngine';
 import type { GlobalStateManager } from './services/globalStateManager';
 import type { LoggerEngine } from './services/loggerEngine';
 import type { ShellEngine } from './services/shellEngine';
+import type { AIContextEngine } from './services/aiContextEngine';
+import type { AIContextRagEngine } from './services/aiContextRagEngine';
 import type { Notification, NotificationCreateInput } from './schemas/notification';
 import type {
   AIGatewayConfig,
@@ -31,6 +33,18 @@ interface AIGatewaySessionSnapshot {
   activeOutputRamKey?: string;
   isInsideEventBlock: boolean;
   activeEventBufferLength: number;
+  // Enhanced monitoring fields
+  summary?: string;
+  turns?: Array<{ at: number; role: 'user' | 'assistant' | 'system'; text: string }>;
+  context_blocks?: Array<{ at: number; payload: Record<string, unknown> }>;
+  used_contexts?: Array<{
+    key: string;
+    label: string;
+    kind: 'summary' | 'history' | 'runtime' | 'tooling' | 'input';
+    detail?: string;
+    token_estimate?: number;
+  }>;
+  context_updated_at?: number;
 }
 
 interface ACENotificationAPI {
@@ -80,6 +94,8 @@ declare global {
       logger: LoggerEngine;
       ai_gateway: ACEAIGatewayAPI;
       shell: ShellEngine;
+      context: AIContextEngine;
+      context_rag: AIContextRagEngine;
       notification?: ACENotificationAPI;
     };
   }

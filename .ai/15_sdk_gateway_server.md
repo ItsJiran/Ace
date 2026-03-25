@@ -1,5 +1,11 @@
 # ACE SDK Gateway Server
 
+## Current Canonical Runtime
+
+Use this file for sidecar-specific details. For the integrated app-side mechanism (composed prompt context, parser `context` blocks, and context-engine summary policy), refer to:
+
+- `docs/GATEWAY_CONTEXT_MECHANISM.md`
+
 This document describes the Python sidecar that provides multi-provider AI connectivity to the ACE assistant. It covers the full lifecycle from process startup to in-app auto-discovery and the HTTP contract between the sidecar and `aiGatewayEngine`.
 
 ---

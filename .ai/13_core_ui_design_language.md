@@ -1,5 +1,7 @@
 # Core Widget Design Language
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 This document defines the visual direction for ACE core widgets.
 It focuses on a calm, premium, assistive interface that stays readable and lightweight in both light and dark mode.
 

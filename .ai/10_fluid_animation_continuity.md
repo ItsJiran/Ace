@@ -1,5 +1,7 @@
 # Fluid Animation Continuity Pattern
 
+Canonical runtime note: gateway + parser + context + RAG mechanism is documented in `docs/GATEWAY_CONTEXT_MECHANISM.md`.
+
 This document defines the animation philosophy for ACE UI transitions so motion feels fluid, responsive, and physically coherent.
 
 The reference mindset is continuity-first motion inspired by modern Apple platform behavior and the Liquid Glass visual language.
