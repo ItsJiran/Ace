@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev:vite": "vite",
+    "dev:gateway": "python3 src-gateway-server/main.py",
+    "dev:with-gateway": "sh -c 'python3 src-gateway-server/main.py & GATEWAY_PID=$!; trap \"kill $GATEWAY_PID\" EXIT; npm run dev'",
     "build:vite": "tsc -b && vite build",
     "dev": "env -u GTK_PATH -u GIO_MODULE_DIR -u GDK_PIXBUF_MODULEDIR -u GDK_PIXBUF_MODULE_FILE -u LD_LIBRARY_PATH PATH=$HOME/.cargo/bin:$PATH tauri dev",
     "build": "env -u GTK_PATH -u GIO_MODULE_DIR -u GDK_PIXBUF_MODULEDIR -u GDK_PIXBUF_MODULE_FILE -u LD_LIBRARY_PATH PATH=$HOME/.cargo/bin:$PATH tauri build",

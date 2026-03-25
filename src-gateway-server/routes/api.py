@@ -1,0 +1,185 @@
+"""HTTP route handlers for the gateway server."""
+
+from typing import Optional
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from core.gateway import GatewayFacade
+from models import HealthResponse
+
+
+router = APIRouter()
+
+# Global gateway instance
+gateway: Optional[GatewayFacade] = None
+runtime_host: str = "127.0.0.1"
+runtime_port: int = 8888
+
+
+def init_gateway(gw: GatewayFacade, host: str = "127.0.0.1", port: int = 8888) -> None:
+    """Initialize the gateway facade for routes.
+    
+    Args:
+        gw: GatewayFacade instance
+    """
+    global gateway
+    global runtime_host
+    global runtime_port
+    gateway = gw
+    runtime_host = host
+    runtime_port = port
+
+
+async def extract_bearer_token(request: Request) -> str:
+    """Extract API key from Bearer token in Authorization header.
+    
+    Args:
+        request: FastAPI request object
+        
+    Returns:
+        API key string or empty string if not found
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:]  # Remove "Bearer " prefix
+    return ""
+
+
+@router.get("/health")
+async def health(request: Request) -> HealthResponse:
+    """Health check endpoint.
+    
+    Returns:
+        HealthResponse with gateway status and loaded adapters
+    """
+    if gateway is None:
+        return HealthResponse(
+            ok=False,
+            error_message="Gateway not initialized"
+        )
+
+    base_url = f"http://{runtime_host}:{runtime_port}"
+
+    return HealthResponse(
+        ok=True,
+        gateway_name="ace-sdk-gateway-server",
+        gateway_contract_version="1.0.0",
+        base_url=base_url,
+        port=runtime_port,
+        loaded_adapters=gateway.get_loaded_adapters(),
+    )
+
+
+@router.get("/models/{sdk}")
+async def fetch_models(sdk: str, request: Request) -> JSONResponse:
+    """Fetch available models for an SDK.
+    
+    Expects Bearer token with API key in Authorization header.
+    
+    Args:
+        sdk: Provider ID ("openai", "google", "anthropic")
+        request: FastAPI request to extract API key
+        
+    Returns:
+        ModelsResponse as JSON
+    """
+    if gateway is None:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "error_message": "Gateway not initialized"
+            }
+        )
+
+    api_key = await extract_bearer_token(request)
+    if not api_key:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "ok": False,
+                "error_message": "Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>"
+            }
+        )
+
+    # Load/reload adapter with the provided API key
+    if not gateway.load_adapter(sdk, api_key):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error_message": f"Unsupported SDK: {sdk}. Supported: openai, google, anthropic"
+            }
+        )
+
+    result = await gateway.fetch_models(sdk)
+    return JSONResponse(content=result.to_dict())
+
+
+@router.post("/test/{sdk}")
+async def test_response(sdk: str, request: Request) -> JSONResponse:
+    """Test a completion with an SDK.
+    
+    Expects Bearer token with API key in Authorization header.
+    Body should be JSON with "model" and "prompt" fields.
+    
+    Args:
+        sdk: Provider ID ("openai", "google", "anthropic")
+        request: FastAPI request to extract API key and body
+        
+    Returns:
+        TestResponseResult as JSON
+    """
+    if gateway is None:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "error_message": "Gateway not initialized"
+            }
+        )
+
+    api_key = await extract_bearer_token(request)
+    if not api_key:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "ok": False,
+                "error_message": "Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>"
+            }
+        )
+
+    # Load/reload adapter with the provided API key
+    if not gateway.load_adapter(sdk, api_key):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error_message": f"Unsupported SDK: {sdk}. Supported: openai, google, anthropic"
+            }
+        )
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error_message": f"Invalid JSON body: {str(e)}"
+            }
+        )
+
+    model = body.get("model", "")
+    prompt = body.get("prompt", "")
+
+    if not model:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error_message": "Missing required field: model"
+            }
+        )
+
+    result = await gateway.test_response(sdk, model, prompt)
+    return JSONResponse(content=result.to_dict())

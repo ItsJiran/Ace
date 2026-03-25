@@ -68,6 +68,11 @@ Windows are **React Components** that typically manage their lifecycle via `useA
 - [x] `StressTestWindow` — `prompt_bar_morph` swarm pattern added
 - [x] DevMenu direct-spawn button for `prompt-morph-window` with self-register fallback
 - [x] `useAceWindow` position hydration bug fixed (was `[]` deps, now reactive)
+- [x] **AI Gateway Refactor:** Per-SDK schema (`gateway.json` v2) with simplified config (API key + models, no endpoints)
+- [x] **AIGatewayEngine Methods:** Implemented `fetchModels(sdk)`, `testResponse(sdk, model, prompt)`, `setActiveSDK()`, `setActiveModel()`, `setSDKApiKey()`
+- [x] **Gateway Server Architecture Decision:** App communicates only with `sdk-gateway-server` sidecar; gateway handles all provider endpoints internally
+- [x] **Python AI Gateway Server Implementation:** Multi-provider sidecar with OpenAI, Google Gemini, Anthropic adapters; FastAPI server; Bearer token auth; `/health`, `/models/{sdk}`, `/test/{sdk}` endpoints ready
+- [x] **Gateway Server Adapters:** BaseProviderAdapter interface with OpenAI, Google, and Anthropic implementations; async aiohttp with 9s timeouts; error normalization
 - [x] **Fix B:** `setFocusedWindowInteractive()` — eliminated double write to `system:global_state` and `system:overlay_state` on every spawn focus (4 writes → 3 writes, removes 2 synchronous socket fan-out cascades)
 
 ### 🚧 In Progress — Performance
@@ -78,29 +83,138 @@ Windows are **React Components** that typically manage their lifecycle via `useA
 
 ### 🚧 In Progress — UI Shell
 - [ ] **Prompt Bar Widget** — floating pill input bar for AI interaction (user-facing, not dev tool)
-- [ ] **Dock Bar Widget** — minimal system dock for Settings, Tools, and modes
-- [ ] **Settings Window** — keybinds, config, tools list, widget list
-- [ ] **Notifications Widget** — toast/notification system for system alerts and tool outputs
-- [ ] **Theme System** — global design tokens (light/dark) applied to System/Prompt/Console widgets
+- [x] **Dock Bar Widget** — borderless pill/horizontal/vertical dock; pill expand direction (left/center/right); state dot inside icon; window icons via `icon_slug` registry lookup; context menu with auto-dismiss
+- [x] **Settings Window** — spawnable borderless window; `icon_slug: 'settings-2'` registered in DockBar ICON_MAP
+- [x] **Notifications Widget** — `system:notifications` fixed RAM key; `window.ACE.notification` API (`push/remove/markRead/clear/list`); `NotificationWindow` pill UI with hover overflow panel; unread badge; per-item dismiss + age formatter
+- [~] **Theme System** — design tokens defined; remaining: apply to core package widgets (System/Prompt/Console)
+- [x] **CursorBridge selective hit-test** — `isSelectiveHitTestWindow` + `isCursorOnInteractiveNode` DOM-based test for transparent-host windows (DockBar, NotificationWindow); transparent areas no longer block desktop click-through
+- [x] **DevMenu notification trigger** — "Push Notification" button calling `window.ACE.notification.push()` with sample payload
+
+### 🚧 In Progress — AI & Tooling (Current Sprint)
+
+**Priority order: System Settings Gateway UI → Gateway Connectivity Testing → Gateway Core Runtime (Session/Stream) → Parser → PromptBar/ChatBar → Tooling**
+
+#### 0. System Settings — AI Gateway Manager *(First Focus)*
+- [ ] Add **AI Gateway Settings** section in System Settings as top-priority delivery
+- [ ] Per-SDK sections in Settings UI: **OpenAI**, **Google (Gemini)**, **Anthropic**
+- [ ] Each SDK section: API key field, model list display
+- [ ] **Fetch Models** button per SDK: calls `sdk-gateway-server` to fetch provider models (also serves as SDK connectivity + auth test)
+- [ ] Active SDK + active model selection (global active choice across SDKs)
+- [ ] Persist all gateway settings via `fsEngine` to `gateway.json` (v2 per-SDK schema, no endpoints)
+- [ ] Future extensibility: custom/local SDK slots — gateway server will handle custom provider endpoint configs
+
+##### ✅ `gateway.json` v2 Schema (Implemented)
+```json
+{
+  "version": 2,
+  "active_sdk": "openai",
+  "active_model": "gpt-4o",
+  "sdks": {
+    "openai": {
+      "api_key": "sk-...",
+      "models": []
+    },
+    "google": {
+      "api_key": "AIza...",
+      "models": []
+    },
+    "anthropic": {
+      "api_key": "sk-ant-...",
+      "models": []
+    }
+  }
+}
+```
+- `active_sdk` + `active_model`: global selection for which SDK and model to use in sessions
+- `sdks.<provider>.api_key`: single API key per SDK provider (passed to `sdk-gateway-server` for API calls)
+- `sdks.<provider>.models`: populated by fetching model list from `sdk-gateway-server` — doubles as SDK health check
+- **Host endpoints managed by `sdk-gateway-server`:** App talks only to sidecar, never directly to provider APIs. Gateway server handles all provider endpoint logic internally.
+- Future: `sdks.custom` slot for local/self-hosted providers (will need custom host + model discovery in gateway config)
+
+#### 1. ✅ AI Gateway Engine — Testing & Model Discovery (Implemented)
+- [x] Implement `fetchModels(sdk)` method: calls `sdk-gateway-server` model list endpoint, returns model array
+- [x] Model list fetch doubles as connectivity/auth test — if models come back, SDK is working
+- [x] Implement `testResponse(sdk, model, prompt)` method: calls gateway server to test completion with selected model
+- [x] Return structured test result payload (`ok`, `latency_ms`, `status_code`, `error_message?`)
+- [x] Persist fetched models back into `gateway.json` per SDK entry
+- [x] Active SDK + model selection API: `setActiveSDK(sdk)`, `setActiveModel(sdk, model)`, `setSDKApiKey(sdk, key)`
+- [ ] Wire Settings **Fetch Models** button to `fetchModels()` per SDK via gateway server (pending UI implementation)
+
+#### 1.5. Python AI SDK Gateway Server Layer *(New Requirement)*
+  - [x] Build a Python layer that runs AI SDK calls as a dedicated gateway server process
+  - [x] Primary strategy: package/compile gateway server as a standalone sidecar artifact (separate from main app binary)
+  - [x] Runtime contract: app starts sidecar process and communicates via stable gateway API contract
+  - [x] Update strategy: ship updater to replace sidecar artifact/package without rebuilding main app
+  - [x] Restart behavior: on app restart, app loads the latest installed sidecar build automatically
+  - [x] Add health/version endpoint from Python server so System Settings can verify loaded SDK build
+
+  ##### ✅ Implemented Structure: `src-gateway-server/` (Python)
+  - [x] Create `src-gateway-server/` as a dedicated multi-provider gateway runtime layer
+  - [x] Add provider adapter interface (`BaseProviderAdapter`) so all SDKs follow one contract
+  - [x] Implement adapters for `openai`, `google`, `anthropic`, and extensible custom providers
+  - [x] Gateway facade exposes one unified API while routing internally to provider-specific SDK adapters
+  - [x] Keep provider-specific auth/config isolated in adapter modules (avoid leaking provider logic to app core)
+
+  ##### ✅ Implemented `src-gateway-server/` Layout
+  - [x] `src-gateway-server/main.py` — bootstrap HTTP/FastAPI server + lifecycle
+  - [x] `src-gateway-server/routes/api.py` — `/health`, `/models/{sdk}`, `/test/{sdk}` endpoints
+  - [x] `src-gateway-server/adapters/` — `base_adapter.py`, `openai_adapter.py`, `google_adapter.py`, `anthropic_adapter.py`
+  - [x] `src-gateway-server/core/gateway.py` — gateway facade, adapter registry, contract mapping, error normalization
+  - [x] `src-gateway-server/models/__init__.py` — request/response DTO schemas for stable cross-runtime contract
+  - [x] `src-gateway-server/runtime/` — placeholder for sidecar process runtime/launcher (future)
+  - [x] `src-gateway-server/config/` — placeholder for provider registry and runtime config loading (future)
+  - [x] `src-gateway-server/requirements.txt` — FastAPI, aiohttp, provider SDK dependencies
+  - [x] `src-gateway-server/README.md` — complete documentation with install, API reference, integration guide
+
+##### Multi-SDK Contract Rules (Boundary Enforcement)
+- [ ] Main app talks only to gateway endpoints (never directly to provider SDK)
+- [ ] Standardize normalized response shape across providers (`text`, `tool_call`, `usage`, `errors`)
+- [ ] Standardize streaming event envelope across providers (provider-specific chunks mapped to one schema)
+- [ ] Enforce versioned contract (`gateway_contract_version`) for app ↔ sidecar compatibility checks
+- [ ] Add capability map per provider (`supports_stream`, `supports_tools`, `supports_vision`, etc.)
+
+#### 2. AI Gateway Engine — Core Runtime *(After Testing Stable)*
+- [ ] Finalize provider transport layer (OpenAI-compatible HTTP streaming)
+- [ ] Session lifecycle: create, resume, abort, expire
+- [ ] Stream pipeline: raw SSE → token buffer → RAM write (`system:session:<uid>:stream`)
+- [ ] Gateway status RAM key: `system:session:<uid>:status` (`idle | thinking | streaming | done | error`)
+- [ ] Error handling: timeout, provider error, malformed stream
+- [ ] Wire gateway runtime to read selected target from `gateway.json` before opening stream
+
+#### 3. AI Parser *(After Gateway Runtime)*
+- [ ] Token stream reader: consume `system:session:<uid>:stream` reactively
+- [ ] Text block detection: accumulate plain text tokens into message chunks
+- [ ] Tool call detection: intercept ` ```event ` / JSON-encoded tool call blocks mid-stream
+- [ ] Emit structured `ParsedAIEvent` to EventEngine on completion of each block
+- [ ] Handle partial/incomplete blocks across chunk boundaries
+
+#### 4. Prompt Bar & Chat Bar UI *(After Parser)*
+- [ ] **PromptBar window** — floating pill input; submit fires `send_gateway` event; shows thinking state
+- [ ] **ChatBar / reply surface** — streaming bubble layout; user + AI message history from RAM; typing indicator
+- [ ] Session RAM subscription: reactively render tokens as they arrive
+- [ ] Input state: idle / composing / waiting / streaming (drives pill animation)
+- [ ] History view: scrollable message list with timestamps
+
+#### 5. Tooling Mechanism *(After Parser)*
+- [ ] Tool call intercept from AI parser → EventEngine dispatch
+- [ ] Tool result write-back to RAM → resume session context
+- [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
 
 ---
 
 ## 🚀 Development Roadmap
 
 ### 🛡️ Phase 2: Engine Alignment & Schema Refactor
-- [ ] **Post-Migration Architecture Debug & Correction**: Comprehensive debugging and architecture fixes following the recent Host-Guest and package ecosystem migrations. (Main Goal)
-- [ ] **Defining AI Parser**: Implement the AI parser to parse the AI response into a structured format. (postpone for now since we need a robust event and ui and correct gateway so we can get the correct feedback)
-- [ ] **Formalize Schemas (Remaining)**: Widget snapshot contracts and restoration-specific widget config schemas.
-- [ ] **Align Storage Engine**: Enforce Pre-Allocation Protocol for all results.
-- [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results.
+- [x] **Post-Migration Architecture Debug & Correction**: Comprehensive debugging and architecture fixes following the recent Host-Guest and package ecosystem migrations.
+- [ ] **AI Parser**: Parse AI response stream into structured event tokens (tool calls, text blocks, metadata). **(Current Focus)**
+- [x] **Formalize Schemas (Remaining)**: Widget snapshot contracts and restoration-specific widget config schemas.
+- [x] **Align Storage Engine**: Enforce Pre-Allocation Protocol for all results.
+- [ ] **Align Tools Engine**: Enforce Pre-Allocation Protocol for all results. **(Current Focus)**
 
 ### 🧩 Phase 3: The Development UI Kit
-- [ ] **Widget Filesystem Explorer / Diagnostics**: Expose mirrored widget registry directories (`core`, `local widgets`, `config`) in Dev Kit for validation and debugging.
-- [ ] **Package Ecosystem Explorer**: Add Dev Kit panel to inspect package identity, included domains, and validation status.
-- [~] **Window Customization Strategy**:
-  - [ ] Migrate production widgets to own their chrome/frame styling.
-  - [ ] Define a package-facing window trait so custom package windows can keep the same runtime contract without being forced to render through `AceWindow`.
-  - [ ] Separate `launch strategy` from `window trait`, so a package can open as a boxed widget, loading shell, custom borderless surface, or other presentation without redefining window lifecycle rules.
+- [x] **Widget Filesystem Explorer / Diagnostics**: Expose mirrored widget registry directories (`core`, `local widgets`, `config`) in Dev Kit for validation and debugging.
+- [x] **Package Ecosystem Explorer**: Dev Kit panel to inspect package identity, included domains, and validation status.
+- [x] **Window Customization Strategy**: Borderless custom surfaces, package-facing window trait, and launch strategy decoupled from window trait.
 - [~] **Layout Persistence**:
   - [ ] Add `save_layout` and `load_layout` actions to `WindowEngine`.
   - [ ] Create UI for managing saved layouts.
@@ -143,22 +257,85 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 - [ ] **Tauri Transparent Layer**: Configure the borderless, click-through fullscreen window (Layer 1).
 - [ ] **Base Dumb Components**: Build the UI primitives (e.g., `<CommandInput />`, `<ChatBubble />`, `<WindowFrame />`) using Shadcn & Tailwind.
 - [ ] **Settings Window**: Create a settings window for keybinds and configuration and tools list, and widget list.
+- [ ] **AI Gateway Configuration Panel (System Settings)**: Per-SDK gateway management (OpenAI, Google, Anthropic) with API key per SDK, model list discovery via gateway server, and active SDK + model selection — persisted to `gateway.json` v2 via `fsEngine`.
 - [ ] **Theme System (Light/Dark) for Core Widgets**: Implement global design tokens from `.ai/13_core_widget_design_language.md` and apply to System/Prompt/Console widgets.
 - [ ] **Core Chat Surface Styling**: Implement AI/user bubble styling rules, floating pill input bar, and soft multi-layer shadows based on design language pillar.
 - [ ] **Motion Polish Pass**: Add subtle fade-in and typing indicator motion primitives (non-flashy) and standardize easing/duration tokens.
 
 #### Core System Widgets (New Tasks)
 - [ ] **Prompt Bar Widget**: The floating input bar for interacting with the assistant.
-- [ ] **Dock Bar Widget**: A minimal system dock for accessing Settings, Tools, and specialized modes.
-- [ ] **Notifications Widget**: A robust toast/notification system for system alerts and tool outputs.
+- [x] **Dock Bar Widget**: Borderless always-on-top dock with pill/horizontal/vertical modes, expand direction setting, window icon resolution, and context menu.
+- [x] **Notifications Widget**: Fixed RAM key `system:notifications`, `window.ACE.notification` API, `NotificationWindow` pill with hover panel, unread badge, and per-item actions.
 
-### 🧠 Phase 6: The AI Gateway & Autonomous Tooling (The Brain)
-*Goal: Connect the local Client to the remote LLM and establish the autonomous ReAct loop.*
-- [~] **AI Gateway Engine**: Session-based provider registry and isolated session buffering are in place; transport/provider completion is still ongoing.
-- [ ] **The Stream Bypass**: Implement direct RAM writing for high-frequency token streaming (bypassing the Event Bus).
-- [ ] **Tool/Event Parser**: Build the logic to intercept tool-call JSONs from the LLM stream and emit them to the `eventEngine`.
-- [ ] **Native OS Tools**: Implement the actual Rust/TypeScript logic for core tools (Obsidian Reader, Shell Executor, File System).
-- [ ] **Context Builder Pipeline**: Implement the process-engine context-building pipeline to gather chat history and active screen context before sending prompts.
+### 🧠 Phase 6: The AI Gateway, Parser & Chat Surface *(Current Phase)*
+*Goal: Build incrementally from configuration and connectivity verification first, then expand into full gateway runtime, parsing, and chat rendering.*
+
+#### ✅ Step 0 — System Settings: AI Gateway Manager Foundation (Schema Ready)
+- [x] **Schema & Engine Ready:** `gateway.json` v2 schema refactored to per-SDK (API key + models only, no endpoints)
+- [x] Engine methods prepared: `fetchModels(sdk)`, `testResponse()`, `setActiveSDK()`, `setActiveModel()`, `setSDKApiKey()`
+- [ ] Settings UI (Next Phase): OpenAI, Google (Gemini), Anthropic tabs/sections
+- [ ] Settings UI: API key input + Fetch Models button per SDK
+- [ ] Settings UI: Active SDK/model selectors (cross-SDK global choice)
+- [ ] Future: custom/local SDK slots — gateway server will manage custom provider configs
+
+#### ✅ Step 1 — AI Gateway Engine: Model Discovery & Testing (Implemented)
+- [x] Implement `fetchModels(sdk)` — calls `sdk-gateway-server` /models endpoint for given SDK
+- [x] Model list response doubles as connectivity/auth validation (models returned = SDK+auth working)
+- [x] Implement `testResponse(sdk, model, prompt)` for completion smoke test via gateway server
+- [x] Standardize result contract (`ok`, `latency_ms`, `status_code`, `error_message?`)
+- [x] Persist fetched model list back to `gateway.json` per SDK entry
+- [x] Active selection API: `setActiveSDK(sdk)`, `setActiveModel(sdk, model)`, `setSDKApiKey(sdk, key)`
+- [ ] Wire Settings UI per-SDK actions to engine methods (pending UI implementation)
+
+#### Step 1.5 — Python AI SDK Server (Sidecar Packaging First)
+- [ ] Implement Python-based AI Gateway SDK server process (separate from main app binary)
+- [ ] Keep main app binary untouched while gateway updates are delivered by replacing sidecar package/artifact
+- [ ] Provide updater script flow: download/replace sidecar runtime safely
+- [ ] On restart, app resolves and launches the newest sidecar build automatically
+- [ ] Optional extension path: dynamic linking mode for SDK libs when required by specific provider/runtime needs
+- [ ] Add diagnostics endpoint for loaded SDK version/path for quick verification from Settings/DevKit
+
+#### Step 1.6 — Multi-SDK Gateway Aggregation Plan (`src-gateway-server`)
+- [ ] Build provider adapter registry so one gateway can serve multiple SDKs (`openai`, `google`, `anthropic`, others)
+- [ ] Gateway server internally manages all provider endpoints — app never talks to provider APIs directly
+- [ ] Implement `/models`, `/test_response` endpoints in gateway facade (shared logic, adapter-specific execution)
+- [ ] Implement unified streaming relay: provider stream → normalized event stream for app parser
+- [ ] Add fallback strategy per adapter (primary provider fails -> optional fallback provider)
+- [ ] Add per-provider SDK diagnostics and version telemetry for Settings/DevKit observability
+
+#### Step 1.7 — Sidecar Process Integration (App Runtime)
+- [ ] Add `GatewaySidecarManager` in app runtime to spawn/check/restart Python gateway process
+- [ ] Boot flow: ensure sidecar running before gateway tests/session APIs are used
+- [ ] Add health handshake (`contract version`, `sdk versions`, `loaded adapters`) before enabling UI actions
+- [ ] Add graceful shutdown/restart handling and stale process cleanup
+
+#### Step 2 — AI Gateway Engine: Runtime & Streaming
+- [ ] Session API: communicate with `sdk-gateway-server` for create/resume/abort/expire operations
+- [ ] Read active SDK + model from `gateway.json` before opening session
+- [ ] Stream pipeline: gateway server SSE → token buffer → `system:session:<uid>:stream` RAM write
+- [ ] Status key: `system:session:<uid>:status` (`idle | thinking | streaming | done | error`)
+- [ ] Error handling: timeout, malformed stream, provider error, retry policy, gateway server down
+
+#### Step 3 — AI Parser
+- [ ] Reactive stream reader: subscribe to `system:session:<uid>:stream`
+- [ ] Plain text block accumulation into message chunks
+- [ ] Tool call block detection from ` ```event ` / inline JSON mid-stream
+- [ ] Emit `ParsedAIEvent` (text | tool_call | metadata) to EventEngine on block completion
+- [ ] Handle partial blocks across chunk boundaries gracefully
+
+#### Step 4 — Prompt Bar & Chat Bar UI
+- [ ] **PromptBar window** — floating pill input bar; submit fires `send_gateway`; thinking state animation
+- [ ] **ChatBar / reply surface** — streaming bubble layout; user + AI history from RAM; typing indicator
+- [ ] Session RAM subscription: tokens render reactively as they arrive
+- [ ] Input states: idle / composing / waiting / streaming (drives pill visual)
+- [ ] Scrollable message history with timestamps
+
+#### Step 5 — Tooling Mechanism
+- [ ] Tool call intercept from parser → EventEngine dispatch → tool execution
+- [ ] Tool result write-back to RAM → resume session context for next AI turn
+- [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
+- [ ] **Native OS Tools**: Rust/TypeScript core tools (File System, Shell Executor, Obsidian Reader)
+- [ ] **Context Builder Pipeline**: gather chat history + active screen context before each prompt send
 
 ### 📦 Phase 7: Host-Guest Package Ecosystem (The Plugin Architecture)
 *Goal: Implement a strict Host-Guest architecture where the App (Host) controls the lifecycle, and Plugins (Guests) simply register capabilities via a secure Bridge.*

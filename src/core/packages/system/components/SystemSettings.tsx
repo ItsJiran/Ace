@@ -2,6 +2,12 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 import type { RegistryPackage } from '#/schemas/registry';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ConfigItem } from '#/schemas/config';
+import type {
+    AIGatewayConfig,
+    AIGatewayResponseResult,
+    AIGatewaySidecarHealthResult,
+    AIGatewayRadarScanResult,
+} from '#/schemas/ai_gateway';
 import { memo, useState, useEffect, useRef } from 'react';
 import { Package, Keyboard, Wrench, Settings2, ChevronDown, ChevronRight, Box, Cpu, Layers, GitBranch, Activity } from 'lucide-react';
 import { StorageEngine } from '#/services/storageEngine';
@@ -11,17 +17,18 @@ export const registry: AceRegistryType.Component = {
     name: 'System Settings',
     slug: 'system-settings',
     react_behavior: 'system_settings_ui',
-    data_requirements: ['system:package_registry', 'system:keybinds', 'system:config']
+    data_requirements: ['system:package_registry', 'system:keybinds', 'system:config', 'system:ai_gateway_config']
 };
 
 // ─── Tab Definitions ─────────────────────────────────────────────────────────
 
-type TabId = 'packages' | 'keybinds' | 'tools' | 'general' | 'performance';
+type TabId = 'packages' | 'keybinds' | 'tools' | 'ai_gateway' | 'general' | 'performance';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'packages',    label: 'Packages',    icon: <Package size={14} /> },
     { id: 'keybinds',    label: 'Keybinds',    icon: <Keyboard size={14} /> },
     { id: 'tools',       label: 'Tools',       icon: <Wrench size={14} /> },
+    { id: 'ai_gateway',  label: 'AI Gateway',  icon: <Cpu size={14} /> },
     { id: 'general',     label: 'General',     icon: <Settings2 size={14} /> },
     { id: 'performance', label: 'Performance', icon: <Activity size={14} /> },
 ];
@@ -382,6 +389,308 @@ function GeneralTab({ configItems }: { configItems: ConfigItem[] }) {
     );
 }
 
+// ─── Tab: AI Gateway ─────────────────────────────────────────────────────────
+
+type SDKProvider = 'openai' | 'google' | 'anthropic';
+
+const SDK_OPTIONS: SDKProvider[] = ['openai', 'google', 'anthropic'];
+
+function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
+    const [testPrompt, setTestPrompt] = useState('ping');
+    const [feedback, setFeedback] = useState('');
+    const [savingSDK, setSavingSDK] = useState<SDKProvider | null>(null);
+    const [fetchingSDK, setFetchingSDK] = useState<SDKProvider | null>(null);
+    const [testingSDK, setTestingSDK] = useState<SDKProvider | null>(null);
+    const [checkingSidecar, setCheckingSidecar] = useState(false);
+    const [scanningPorts, setScanningPorts] = useState(false);
+    const [sidecarHealth, setSidecarHealth] = useState<AIGatewaySidecarHealthResult | null>(null);
+    const [scanResult, setScanResult] = useState<AIGatewayRadarScanResult | null>(null);
+    const [apiKeys, setApiKeys] = useState<Record<SDKProvider, string>>({
+        openai: config.sdks.openai?.api_key ?? '',
+        google: config.sdks.google?.api_key ?? '',
+        anthropic: config.sdks.anthropic?.api_key ?? '',
+    });
+
+    useEffect(() => {
+        setApiKeys({
+            openai: config.sdks.openai?.api_key ?? '',
+            google: config.sdks.google?.api_key ?? '',
+            anthropic: config.sdks.anthropic?.api_key ?? '',
+        });
+    }, [config.sdks.openai?.api_key, config.sdks.google?.api_key, config.sdks.anthropic?.api_key]);
+
+    const runHealthCheck = async (baseUrl?: string) => {
+        setCheckingSidecar(true);
+        try {
+            const result = await window.ACE.ai_gateway.healthCheckSidecar(baseUrl);
+            setSidecarHealth(result);
+            return result;
+        } finally {
+            setCheckingSidecar(false);
+        }
+    };
+
+    const runRadarScan = async () => {
+        setScanningPorts(true);
+        try {
+            const result = await window.ACE.ai_gateway.radarScanPorts(8888, 8930);
+            setScanResult(result);
+            if (result.active_base_url) {
+                await runHealthCheck(result.active_base_url);
+            } else {
+                await runHealthCheck();
+            }
+            return result;
+        } finally {
+            setScanningPorts(false);
+        }
+    };
+
+    useEffect(() => {
+        let alive = true;
+
+        const radarTick = async () => {
+            const result = await window.ACE.ai_gateway.radarScanPorts(8888, 8930);
+            if (!alive) return;
+            setScanResult(result);
+
+            const health = await window.ACE.ai_gateway.healthCheckSidecar(result.active_base_url ?? undefined);
+            if (!alive) return;
+            setSidecarHealth(health);
+        };
+
+        void radarTick();
+        const id = setInterval(() => {
+            void radarTick();
+        }, 5000);
+
+        return () => {
+            alive = false;
+            clearInterval(id);
+        };
+    }, []);
+
+    const summarizeResponse = (result: AIGatewayResponseResult) => {
+        if (!result.ok) {
+            return `Response test failed (${result.status_code ?? 'n/a'}): ${result.error_message ?? 'unknown error'}`;
+        }
+        const preview = result.response_text ? ` | "${result.response_text.slice(0, 120)}"` : '';
+        return `Response OK (${result.status_code ?? 'n/a'}) ${result.latency_ms}ms${preview}`;
+    };
+
+    const onSaveApiKey = async (sdk: SDKProvider) => {
+        setSavingSDK(sdk);
+        setFeedback('');
+        try {
+            await window.ACE.ai_gateway.setSDKApiKey(sdk, apiKeys[sdk]);
+            setFeedback(`${sdk} API key saved to gateway.json.`);
+        } catch (error) {
+            setFeedback(error instanceof Error ? error.message : 'Failed to save API key.');
+        } finally {
+            setSavingSDK(null);
+        }
+    };
+
+    const onSetActiveSDK = async (sdk: SDKProvider) => {
+        setFeedback('');
+        await window.ACE.ai_gateway.setActiveSDK(sdk);
+        setFeedback(`Active SDK set to ${sdk}.`);
+    };
+
+    const onFetchModels = async (sdk: SDKProvider) => {
+        setFetchingSDK(sdk);
+        setFeedback('');
+        try {
+            await window.ACE.ai_gateway.setSDKApiKey(sdk, apiKeys[sdk]);
+            const result = await window.ACE.ai_gateway.fetchModels(sdk);
+            if (!result.ok) {
+                setFeedback(`Fetch models failed for ${sdk}: ${result.error_message ?? 'unknown error'}`);
+                return;
+            }
+            setFeedback(`Fetched ${result.models.length} model(s) from ${sdk}.`);
+        } catch (error) {
+            setFeedback(error instanceof Error ? error.message : 'Failed to fetch models.');
+        } finally {
+            setFetchingSDK(null);
+        }
+    };
+
+    const onSetActiveModel = async (sdk: SDKProvider, model: string) => {
+        setFeedback('');
+        await window.ACE.ai_gateway.setActiveSDK(sdk);
+        await window.ACE.ai_gateway.setActiveModel(model);
+        setFeedback(`Active model set to ${model} (${sdk}).`);
+    };
+
+    const onTestResponse = async (sdk: SDKProvider) => {
+        setTestingSDK(sdk);
+        setFeedback('');
+        try {
+            const sdkModels = config.sdks[sdk]?.models ?? [];
+            const selectedModel = config.active_sdk === sdk
+                ? config.active_model ?? sdkModels[0]?.id
+                : sdkModels[0]?.id;
+
+            if (!selectedModel) {
+                setFeedback(`No model selected for ${sdk}. Fetch models first.`);
+                return;
+            }
+
+            await window.ACE.ai_gateway.setSDKApiKey(sdk, apiKeys[sdk]);
+            const result = await window.ACE.ai_gateway.testResponse(sdk, selectedModel, testPrompt.trim() || 'ping');
+            setFeedback(summarizeResponse(result));
+        } catch (error) {
+            setFeedback(error instanceof Error ? error.message : 'Failed to test model response.');
+        } finally {
+            setTestingSDK(null);
+        }
+    };
+
+    return (
+        <div className="space-y-5">
+            <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
+                <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">Gateway Server Integration</div>
+                <div className="text-xs text-slate-500 dark:text-zinc-400">
+                    Configure per-SDK API keys and model lists in gateway.json, then run tests through the local sidecar.
+                </div>
+                <div className="rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-950 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Sidecar Healthcheck</div>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${sidecarHealth?.ok ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'}`}>
+                            {sidecarHealth?.ok ? 'ONLINE' : 'OFFLINE'}
+                        </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono break-all">
+                        Base URL: {sidecarHealth?.base_url ?? window.ACE.ai_gateway.getGatewayBaseUrl()}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400">
+                        Verifier: {sidecarHealth?.gateway_name ?? 'n/a'} · Contract: {sidecarHealth?.gateway_contract_version ?? 'n/a'} · Latency: {sidecarHealth?.latency_ms ?? 0}ms
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400">
+                        Radar scan range: 8888-8930 · Found ports: {(scanResult?.found_ports ?? []).length > 0 ? (scanResult?.found_ports ?? []).join(', ') : 'none'}
+                    </div>
+                    {!sidecarHealth?.ok && sidecarHealth?.error_message && (
+                        <div className="text-[11px] text-rose-600 dark:text-rose-400">{sidecarHealth.error_message}</div>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                        <button
+                            onClick={() => { void runHealthCheck(); }}
+                            disabled={checkingSidecar}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-60 text-xs"
+                        >
+                            {checkingSidecar ? 'Checking...' : 'Health Check'}
+                        </button>
+                        <button
+                            onClick={() => { void runRadarScan(); }}
+                            disabled={scanningPorts}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 dark:bg-zinc-700 dark:hover:bg-zinc-600 disabled:opacity-60 text-white text-xs"
+                        >
+                            {scanningPorts ? 'Scanning...' : 'Radar Scan Ports'}
+                        </button>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                    <input
+                        value={testPrompt}
+                        onChange={(e) => setTestPrompt(e.target.value)}
+                        placeholder="Prompt untuk test response (default: ping)"
+                        className="px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
+                    <div className="text-xs text-slate-500 dark:text-zinc-400 flex items-center px-2">
+                        Active: {config.active_sdk ?? 'none'} / {config.active_model ?? 'none'}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+                {SDK_OPTIONS.map((sdk) => {
+                    const sdkConfig = config.sdks[sdk];
+                    const models = sdkConfig?.models ?? [];
+                    const isActiveSDK = config.active_sdk === sdk;
+                    const selectedModel = isActiveSDK ? config.active_model : null;
+
+                    return (
+                        <div key={sdk} className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase">{sdk}</div>
+                                    <div className="text-xs text-slate-500 dark:text-zinc-400">
+                                        {models.length} model{models.length === 1 ? '' : 's'} cached
+                                    </div>
+                                </div>
+                                {isActiveSDK && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium">
+                                        Active SDK
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-2">
+                                <input
+                                    value={apiKeys[sdk]}
+                                    onChange={(e) => setApiKeys((prev) => ({ ...prev, [sdk]: e.target.value }))}
+                                    placeholder="API key"
+                                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
+                                />
+                                <button
+                                    onClick={() => { void onSaveApiKey(sdk); }}
+                                    disabled={savingSDK === sdk}
+                                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-60 text-xs"
+                                >
+                                    {savingSDK === sdk ? 'Saving...' : 'Save Key'}
+                                </button>
+                                <button
+                                    onClick={() => { void onFetchModels(sdk); }}
+                                    disabled={fetchingSDK === sdk}
+                                    className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs"
+                                >
+                                    {fetchingSDK === sdk ? 'Fetching...' : 'Fetch Models'}
+                                </button>
+                                <button
+                                    onClick={() => { void onSetActiveSDK(sdk); }}
+                                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-xs"
+                                >
+                                    Set Active SDK
+                                </button>
+                            </div>
+
+                            {models.length > 0 ? (
+                                <div className="space-y-2">
+                                    <select
+                                        value={selectedModel ?? ''}
+                                        onChange={(e) => { void onSetActiveModel(sdk, e.target.value); }}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
+                                    >
+                                        <option value="">Select active model</option>
+                                        {models.map((model) => (
+                                            <option key={model.id} value={model.id}>{model.name || model.id}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={() => { void onTestResponse(sdk); }}
+                                        disabled={testingSDK === sdk}
+                                        className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs"
+                                    >
+                                        {testingSDK === sdk ? 'Testing...' : 'Test Response'}
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-xs text-slate-400 dark:text-zinc-500">No models cached yet. Use "Fetch Models".</div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {feedback && (
+                <div className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-3 py-2 text-xs text-slate-600 dark:text-zinc-300">
+                    {feedback}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Tab: Performance ────────────────────────────────────────────────────────
 
 function formatBytes(b: number): string {
@@ -641,11 +950,22 @@ function SystemSettingsComponent() {
     const packages  = useAceMemory<RegistryPackage[]>('system:package_registry') ?? [];
     const keybinds  = useAceMemory<any[]>('system:keybinds') ?? [];
     const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
+    const gatewayConfig = useAceMemory<AIGatewayConfig>('system:ai_gateway_config') ?? {
+        version: 2,
+        active_sdk: null,
+        active_model: null,
+        sdks: {
+            openai: { api_key: '', models: [] },
+            google: { api_key: '', models: [] },
+            anthropic: { api_key: '', models: [] },
+        },
+    };
 
     const counts: Record<TabId, number | null> = {
         packages:    packages.length,
         keybinds:    keybinds.length,
         tools:       packages.flatMap((p) => Object.keys(p.domains?.tools ?? {})).length,
+        ai_gateway:  SDK_OPTIONS.filter((sdk) => (gatewayConfig.sdks[sdk]?.api_key ?? '').length > 0).length,
         general:     configItems.length,
         performance: null,
     };
@@ -694,6 +1014,7 @@ function SystemSettingsComponent() {
                 {activeTab === 'packages'    && <PackagesTab packages={packages} />}
                 {activeTab === 'keybinds'    && <KeybindsTab keybinds={keybinds} />}
                 {activeTab === 'tools'       && <ToolsTab packages={packages} />}
+                {activeTab === 'ai_gateway'  && <AIGatewayTab config={gatewayConfig} />}
                 {activeTab === 'general'     && <GeneralTab configItems={configItems} />}
                 {activeTab === 'performance' && <PerformanceTab />}
             </div>

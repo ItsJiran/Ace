@@ -42,9 +42,11 @@ const InitConfigAndGlobalStateStep: PipelineStep<void, void> = {
         const RegistryEngine = window.ACE.registry;
         const KeybindEngine = window.ACE.keybind;
         const GlobalStateManager = window.ACE.global;
+        const AIGatewayEngine = window.ACE.ai_gateway;
 
         void GlobalStateManager;
         await ConfigEngine.boot();
+        await AIGatewayEngine.boot();
         await RegistryEngine.boot();
 
         const packages = RegistryEngine.getPackages();
@@ -70,7 +72,7 @@ const InitConfigAndGlobalStateStep: PipelineStep<void, void> = {
         console.groupEnd();
         (KeybindEngine as any).init();
 
-        console.log('[Boot] Phase 2: Config engine, registry engine, global state, and keybind engine are ready.');
+        console.log('[Boot] Phase 2: Config, AI gateway config, registry engine, global state, and keybind engine are ready.');
     }
 };
 

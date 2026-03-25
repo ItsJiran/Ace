@@ -12,6 +12,15 @@ import type { KeybindEngine } from './services/keybindEngine';
 import type { GlobalStateManager } from './services/globalStateManager';
 import type { LoggerEngine } from './services/loggerEngine';
 import type { Notification, NotificationCreateInput } from './schemas/notification';
+import type {
+  AIGatewayConfig,
+  AIGatewayFetchModelsResult,
+  AIGatewayResponseResult,
+  AIGatewaySidecarHealthResult,
+  AIGatewayRadarScanResult,
+} from './schemas/ai_gateway';
+
+type SDKProvider = 'openai' | 'google' | 'anthropic';
 
 interface ACENotificationAPI {
   push: (input: NotificationCreateInput) => Notification;
@@ -20,6 +29,25 @@ interface ACENotificationAPI {
   clear: () => void;
   list: () => Notification[];
   memory_uid: string;
+}
+
+interface ACEAIGatewayAPI {
+  memory_uid: string;
+  boot: () => Promise<void>;
+  getConfig: () => AIGatewayConfig;
+  getActiveSDK: () => SDKProvider | null;
+  getActiveModel: () => string | null;
+  setActiveSDK: (sdk: SDKProvider | null) => Promise<boolean>;
+  setActiveModel: (model: string | null) => Promise<boolean>;
+  setSDKApiKey: (sdk: SDKProvider, apiKey: string) => Promise<boolean>;
+  getGatewayBaseUrl: () => string;
+  healthCheckSidecar: (baseUrl?: string) => Promise<AIGatewaySidecarHealthResult>;
+  radarScanPorts: (startPort?: number, endPort?: number) => Promise<AIGatewayRadarScanResult>;
+  fetchModels: (sdk: SDKProvider) => Promise<AIGatewayFetchModelsResult>;
+  testResponse: (sdk: SDKProvider, model: string, prompt: string) => Promise<AIGatewayResponseResult>;
+  createSession: (sdk: SDKProvider, model: string) => Promise<string>;
+  closeSession: (sessionId: string) => void;
+  sendToSession: (sessionId: string, prompt: string, reply_to_ram_key: string) => Promise<void>;
 }
 
 declare global {
@@ -38,6 +66,7 @@ declare global {
       keybind: KeybindEngine;
       global: GlobalStateManager;
       logger: LoggerEngine;
+      ai_gateway: ACEAIGatewayAPI;
       notification?: ACENotificationAPI;
     };
   }
