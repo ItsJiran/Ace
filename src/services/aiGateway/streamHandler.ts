@@ -1,10 +1,60 @@
 import { StorageEngine } from '../storageEngine';
 import { EventBus } from '../eventEngine';
-import { parseAIStreamChunk } from '../aiParser';
+import { parseAIStreamChunk } from '#/services/aiParser';
+import type { AIMessageBlock } from '#/services/aiParser';
 import type { AISession, ParsedBatchEvent, ParserBatchRecord } from './types';
 import type { Interaction } from '../../schemas/events';
 
 const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
+
+function mergeBlocks(
+    previous: AIMessageBlock[],
+    incoming: AIMessageBlock[],
+): AIMessageBlock[] {
+    const merged = [...previous];
+
+    incoming.forEach((block) => {
+        if (block.type === 'paragraph') {
+            if (!block.content) return;
+            const last = merged[merged.length - 1];
+            if (last?.type === 'paragraph') {
+                last.content += block.content;
+                return;
+            }
+            merged.push(block);
+            return;
+        }
+
+        // For execute blocks in looped responses, update the latest block sharing
+        // the same memory identity instead of always appending duplicates.
+        if (block.type === 'execute_tool' || block.type === 'execute_storage') {
+            const identity = block.memory_uid || block.result_memory_uid;
+            if (identity) {
+                for (let i = merged.length - 1; i >= 0; i -= 1) {
+                    const candidate = merged[i];
+                    if (
+                        (candidate.type === 'execute_tool' || candidate.type === 'execute_storage') &&
+                        candidate.type === block.type &&
+                        (candidate.memory_uid === identity || candidate.result_memory_uid === identity)
+                    ) {
+                        merged[i] = {
+                            ...candidate,
+                            ...block,
+                            payload_raw: block.payload_raw || candidate.payload_raw,
+                            payload_json: block.payload_json ?? candidate.payload_json,
+                            status: block.status === 'unknown' ? candidate.status : block.status,
+                        };
+                        return;
+                    }
+                }
+            }
+        }
+
+        merged.push(block);
+    });
+
+    return merged;
+}
 
 /**
  * Processes one incoming chunk of AI stream data for a session.
@@ -29,11 +79,14 @@ export function handleSessionStreamChunk(
     const memoryState = (StorageEngine.readMemory(ramKey) || {}) as {
         text?: string;
         raw_response?: string;
+        blocks?: AIMessageBlock[];
         parser_batches?: ParserBatchRecord[];
     };
     const currentText = typeof memoryState.text === 'string' ? memoryState.text : '';
     const currentRaw = typeof memoryState.raw_response === 'string' ? memoryState.raw_response : '';
+    const currentBlocks = Array.isArray(memoryState.blocks) ? memoryState.blocks : [];
     const currentBatches = Array.isArray(memoryState.parser_batches) ? memoryState.parser_batches : [];
+    const nextBlocks = mergeBlocks(currentBlocks, blocks);
 
     // Pre-parse all event payloads up-front so we can store parse errors and avoid
     // crashing on malformed JSON mid-stream.
@@ -77,8 +130,8 @@ export function handleSessionStreamChunk(
         payload: {
             text: currentText + textToPrint,
             raw_response: currentRaw + chunk,
-            // Ordered message blocks for this full accumulated response
-            blocks,
+            // Ordered message blocks for full accumulated response
+            blocks: nextBlocks,
             parser_batches: nextBatches,
             parser_batch_count: nextBatches.length,
             events_total: nextBatches.reduce((acc, b) => acc + b.events.length, 0),

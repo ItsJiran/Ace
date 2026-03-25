@@ -14,7 +14,7 @@ export const AITextBlockHeaderSchema = z.tuple([
     z.string().describe('window_uid'),            // window_uid (the UI element)
     z.string().nullable().describe('process_uid'), // process_uid (the background executor, if any)
     z.string().nullable().describe('widget_uid'), // widget_uid (can be 'null' or empty)
-    z.enum(['lookup', 'open', 'send', 'close', 'execute_tool']),  // action
+    z.enum(['lookup', 'open', 'send', 'close', 'execute_tool', 'execute_storage']),  // action
     z.string(),                                   // sub_action
 ]);
 
@@ -28,7 +28,7 @@ export const BufferedAIEventSchema = z.object({
         window_uid: z.string(),
         process_uid: z.string().optional(),
         widget_uid: z.string().optional(),
-        action: z.enum(['lookup', 'open', 'send', 'close', 'execute_tool']),
+        action: z.enum(['lookup', 'open', 'send', 'close', 'execute_tool', 'execute_storage']),
         sub_action: z.string().optional(),
     }),
 
