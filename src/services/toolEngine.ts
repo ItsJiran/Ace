@@ -1,5 +1,14 @@
 import { RegistryEngine } from './registryEngine';
+import { ProcessEngine } from './processEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
+
+export interface ToolManifestEntry {
+    slug: string;
+    name: string;
+    description: string;
+    packageRef: string;
+    parameters?: Record<string, unknown>;
+}
 
 class ToolEngineSingleton {
     /**
@@ -35,25 +44,63 @@ class ToolEngineSingleton {
     }
 
     /**
-     * Returns all registered tools for AI inspection.
-     * Note: This now queries the RegistryEngine directly.
+     * Returns all registered tools across all packages with full metadata.
      */
-    getManifest() {
+    getAll(): ToolManifestEntry[] {
         const packages = RegistryEngine.getPackages();
-        const tools = [];
+        const tools: ToolManifestEntry[] = [];
         for (const pkg of packages) {
             const domain = pkg.domains.tools;
-            if (domain) {
-                for (const [name, entry] of Object.entries(domain)) {
-                    tools.push({
-                        name: name, // or entry.name if available
-                        packageName: pkg.manifest.package_name,
-                        // potentially more metadata
-                    });
-                }
+            if (!domain) continue;
+            for (const [slug, entry] of Object.entries(domain)) {
+                const e = entry as any;
+                const meta = e?.metadata ?? {};
+                const impl = e?.implementation as ToolDefinition<any> | undefined;
+                tools.push({
+                    slug,
+                    name: meta.name ?? slug,
+                    description: impl?.description ?? meta.description ?? '',
+                    packageRef: pkg.manifest.package_name,
+                    parameters: meta.parameters,
+                });
             }
         }
         return tools;
+    }
+
+    /**
+     * Returns all registered tools for AI inspection.
+     * @deprecated use getAll() for full metadata
+     */
+    getManifest() {
+        return this.getAll().map(t => ({ name: t.slug, packageName: t.packageRef }));
+    }
+
+    /**
+     * Execute a registered tool as a tracked process.
+     * Creates a ProcessEngine record, validates, runs the handler.
+     * payload is the raw (unvalidated) input from the caller.
+     */
+    async execute(
+        packageRef: string,
+        toolSlug: string,
+        payload: unknown,
+        _options?: { origin_window_uid?: string; origin_widget_uid?: string }
+    ): Promise<unknown> {
+        const validatedArgs = this.validate(packageRef, toolSlug, payload);
+
+        const result = RegistryEngine.getDomainEntry(packageRef, 'tools', toolSlug);
+        if (!result?.entry) throw new Error(`ToolEngine: tool "${packageRef}/${toolSlug}" not found.`);
+
+        const toolDef = result.entry.implementation as ToolDefinition<any>;
+
+        return ProcessEngine.track(
+            `tool:${packageRef}:${toolSlug}`,
+            { packageRef, toolSlug, payload },
+            async (process_uid) => {
+                return toolDef.handler(validatedArgs, process_uid);
+            },
+        );
     }
 }
 

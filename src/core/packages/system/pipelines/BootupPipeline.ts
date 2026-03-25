@@ -199,6 +199,35 @@ const InitLayoutEngineStep: PipelineStep<void, void> = {
     }
 };
 
+/**
+ * Phase 7: Engine Event Routes
+ * Register EventBus routes for engine-backed actions (tool execution, etc.)
+ */
+const InitEngineRoutesStep: PipelineStep<void, void> = {
+    name: 'Init Engine Routes',
+    execute: async () => {
+        const EventBus = window.ACE.event;
+        const ToolEngine = window.ACE.tool;
+
+        // Route: execute_tool
+        // Payload: { package_ref: string; tool_slug: string; payload: unknown }
+        EventBus.registerProcessRoute('execute_tool', async ({ payload }: { payload: Record<string, unknown> }) => {
+            const { package_ref, tool_slug, ...toolPayload } = payload as {
+                package_ref: string;
+                tool_slug: string;
+                [k: string]: unknown;
+            };
+            if (!package_ref || !tool_slug) {
+                console.warn('[execute_tool] Missing package_ref or tool_slug in payload.');
+                return;
+            }
+            await (ToolEngine as any).execute(package_ref, tool_slug, toolPayload);
+        });
+
+        console.log('[Boot] Phase 7: Engine event routes registered (execute_tool).');
+    }
+};
+
 export class BootupPipeline extends PipelineEngine<void, void> {
     constructor() {
         super('Bootup Sequence'); // argument is void
@@ -208,6 +237,7 @@ export class BootupPipeline extends PipelineEngine<void, void> {
         this.addStep(InitGlobalInputHandlersStep);
         this.addStep(InitAutoStartWidgetsStep);
         this.addStep(InitLayoutEngineStep);
+        this.addStep(InitEngineRoutesStep);
     }
 }
 

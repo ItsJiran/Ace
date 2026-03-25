@@ -93,6 +93,38 @@ class ProcessEngineSingleton {
     killProcess(process_uid: string) {
         return this.updateStatus(process_uid, 'killed');
     }
+
+    /**
+     * Wrap any async function as a tracked process.
+     * Creates a process record, runs fn, then marks completed/error.
+     * Returns the fn result. Throws on fn failure (after marking error).
+     */
+    async track<T>(
+        type: string,
+        metadata: Record<string, any>,
+        fn: (process_uid: string) => Promise<T>
+    ): Promise<T> {
+        const record = this.registerProcess(type, metadata);
+        this.updateStatus(record.process_uid, 'running');
+        try {
+            const result = await fn(record.process_uid);
+            this.updateStatus(record.process_uid, 'completed');
+            return result;
+        } catch (err) {
+            this.updateStatus(record.process_uid, 'error', { error: String(err) });
+            throw err;
+        }
+    }
+
+    /**
+     * Returns a snapshot of all known process records from RAM via classification index.
+     */
+    getAll(): ProcessRecord[] {
+        const uids = StorageEngine.readClassification('system:process_registry') ?? [];
+        return uids
+            .map(uid => StorageEngine.readMemory(uid) as ProcessRecord | undefined)
+            .filter((v): v is ProcessRecord => v !== undefined);
+    }
 }
 
 export const ProcessEngine = new ProcessEngineSingleton();

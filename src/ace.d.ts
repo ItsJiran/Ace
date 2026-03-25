@@ -11,6 +11,7 @@ import type { LayoutEngine } from './services/layoutEngine';
 import type { KeybindEngine } from './services/keybindEngine';
 import type { GlobalStateManager } from './services/globalStateManager';
 import type { LoggerEngine } from './services/loggerEngine';
+import type { ShellEngine } from './services/shellEngine';
 import type { Notification, NotificationCreateInput } from './schemas/notification';
 import type {
   AIGatewayConfig,
@@ -78,6 +79,7 @@ declare global {
       global: GlobalStateManager;
       logger: LoggerEngine;
       ai_gateway: ACEAIGatewayAPI;
+      shell: ShellEngine;
       notification?: ACENotificationAPI;
     };
   }

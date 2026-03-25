@@ -1,4 +1,5 @@
 import { StorageEngine } from '#/services/storageEngine';
+import { ProcessEngine } from '#/services/processEngine';
 
 export interface PipelineStep<TInput, TOutput> {
     name: string;
@@ -8,6 +9,8 @@ export interface PipelineStep<TInput, TOutput> {
 export interface PipelineContext {
     process_uid?: string; // Untuk melaporkan progress ke storageEngine (RAM)
     abortSignal?: AbortSignal; // Jika user menekan tombol "Cancel"
+    /** When true, wraps the entire pipeline run in a ProcessEngine.track() record */
+    tracked?: boolean;
 }
 
 export class PipelineEngine<TInitial, TFinal> {
@@ -24,6 +27,20 @@ export class PipelineEngine<TInitial, TFinal> {
 
     // Mengeksekusi seluruh rantai secara berurutan
     async run(input: TInitial, context: PipelineContext): Promise<TFinal> {
+        // Optional: wrap entire pipeline as a tracked ProcessEngine record
+        if (context.tracked && !context.process_uid) {
+            return ProcessEngine.track(
+                `pipeline:${this.pipelineName}`,
+                { pipeline_name: this.pipelineName },
+                async (process_uid) => {
+                    return this._run(input, { ...context, process_uid, tracked: false });
+                },
+            );
+        }
+        return this._run(input, context);
+    }
+
+    private async _run(input: TInitial, context: PipelineContext): Promise<TFinal> {
         const runId = `pipe-${crypto.randomUUID()}`;
         this.upsertPipelineRecord({
             run_id: runId,

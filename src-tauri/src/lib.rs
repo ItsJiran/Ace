@@ -60,6 +60,34 @@
         }
     }
 
+    /// Execute a shell command and return stdout / stderr / exit_code.
+    /// `command` is the program name (e.g. "git", "ls", "sudo").
+    /// `args` are the arguments passed to the program.
+    /// `cwd` optionally sets the working directory.
+    #[tauri::command]
+    fn execute_shell(
+        command: String,
+        args: Vec<String>,
+        cwd: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        let mut cmd = std::process::Command::new(&command);
+        cmd.args(&args);
+
+        if let Some(dir) = &cwd {
+            cmd.current_dir(dir);
+        }
+
+        match cmd.output() {
+            Ok(output) => Ok(serde_json::json!({
+                "stdout": String::from_utf8_lossy(&output.stdout),
+                "stderr": String::from_utf8_lossy(&output.stderr),
+                "exit_code": output.status.code().unwrap_or(-1),
+                "success": output.status.success()
+            })),
+            Err(e) => Err(format!("execute_shell: failed to spawn '{}': {}", command, e)),
+        }
+    }
+
     #[cfg_attr(mobile, tauri::mobile_entry_point)]
     pub fn run() {
         tauri::Builder::default()
@@ -71,7 +99,8 @@
             .invoke_handler(tauri::generate_handler![
                 set_ignore_cursor_events,
                 get_process_memory,
-                open_devtools
+                open_devtools,
+                execute_shell
             ])
             .setup(|app| {
                 let window = app.get_webview_window("main").unwrap();

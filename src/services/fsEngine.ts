@@ -1,4 +1,11 @@
-import { BaseDirectory, writeTextFile, readTextFile, exists, mkdir, readDir } from '@tauri-apps/plugin-fs';
+import { BaseDirectory, writeTextFile, readTextFile, exists, mkdir, readDir, remove } from '@tauri-apps/plugin-fs';
+
+// Late binding to avoid circular dep: processEngine → registryEngine → fsEngine → processEngine
+type ProcessTracker = {
+    track: <T>(type: string, meta: Record<string, any>, fn: (uid: string) => Promise<T>) => Promise<T>;
+};
+const getProcessEngine = (): ProcessTracker | null =>
+    (typeof window !== 'undefined' ? (window as any).ACE?.process : null) ?? null;
 
 class FSEngineSingleton {
     private hasShownPermissionPopup = false;
@@ -130,6 +137,53 @@ class FSEngineSingleton {
             }
             return null;
         }
+    }
+
+    /**
+     * Reads raw text from a file in AppConfig directory (no JSON parsing).
+     */
+    async readRaw(filename: string): Promise<string | null> {
+        try {
+            return await readTextFile(filename, { baseDir: BaseDirectory.AppConfig });
+        } catch (error) {
+            console.error(`FSEngine: Failed to read raw file ${filename}:`, error);
+            return this.readFallbackRaw(filename);
+        }
+    }
+
+    /**
+     * Deletes a file from AppConfig directory.
+     */
+    async deleteFile(filename: string): Promise<boolean> {
+        try {
+            await remove(filename, { baseDir: BaseDirectory.AppConfig });
+            return true;
+        } catch (error) {
+            console.error(`FSEngine: Failed to delete file ${filename}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Wrapped variants: run a file operation as a tracked ProcessEngine record.
+     * Useful when callers want process-level observability.
+     */
+    async trackedRead(filename: string): Promise<ReturnType<FSEngineSingleton['readFile']>> {
+        const pe = getProcessEngine();
+        if (!pe) return this.readFile(filename);
+        return pe.track('fs:read_file', { filename }, () => this.readFile(filename));
+    }
+
+    async trackedWrite(filename: string, content: string): Promise<boolean> {
+        const pe = getProcessEngine();
+        if (!pe) return this.writeFile(filename, content);
+        return pe.track('fs:write_file', { filename }, () => this.writeFile(filename, content));
+    }
+
+    async trackedSave(filename: string, data: unknown): Promise<boolean> {
+        const pe = getProcessEngine();
+        if (!pe) return this.saveFile(filename, data);
+        return pe.track('fs:save_file', { filename }, () => this.saveFile(filename, data));
     }
 
     private showPermissionDeniedPopup(filename: string, error: unknown) {

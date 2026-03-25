@@ -19,8 +19,9 @@ export type ToolHandler<T> = (args: T, processId: ProcessId) => Promise<any>;
 /**
  * Unified Tool Definition Bundle.
  * Combines metadata, schema validation, and execution logic.
+ * T can be any Zod schema (ZodObject, ZodDiscriminatedUnion, etc.)
  */
-export interface ToolDefinition<T extends z.ZodObject<any>> {
+export interface ToolDefinition<T extends z.ZodTypeAny> {
     name: string;
     description: string;
     schema: T;

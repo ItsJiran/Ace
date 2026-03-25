@@ -1,4 +1,4 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
@@ -133,6 +133,18 @@ export default function DevMenu() {
             width: 720,
             height: 540,
             x: 440,
+            y: 120,
+        });
+    };
+
+    const spawnToolRunner = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'tool-runner-dev-window',
+            title: 'Tool Runner',
+            width: 620,
+            height: 540,
+            x: 360,
             y: 120,
         });
     };
@@ -277,6 +289,11 @@ export default function DevMenu() {
             <button onClick={spawnAISessionMonitor} className={buttonClass}>
                 <Monitor size={14} className="text-lime-300" />
                 AI Session Monitor Window
+            </button>
+
+            <button onClick={spawnToolRunner} className={buttonClass}>
+                <Wrench size={14} className="text-amber-400" />
+                Tool Runner
             </button>
 
             <button onClick={pushNotificationSample} className={buttonClass}>
