@@ -58,6 +58,16 @@ Notes:
 - [x] DevMenu `EventBus Monitor` + `Process Monitor` buttons
 - [x] `EventBusMonitorWindow` + `ProcessMonitorDevWindow` (system-dev)
 
+### Gateway + Context Runtime
+- [x] `AIContextEngine` and `AIContextRagEngine` implemented and wired
+- [x] `AIGatewayEngine` now sends composed prompt context (not raw prompt only)
+- [x] Parser supports and normalizes `context` block payloads
+- [x] Summary replacement policy switched to model-authored context block only
+- [x] Default app-bridge + parser-protocol context injected into prompt composition
+- [x] `AISessionMonitor` upgraded for context/history/blocks/storage inspection
+- [x] `AIStressTest` dev window added for looped AI tool-call testing
+- [x] Canonical runtime doc added: `docs/GATEWAY_CONTEXT_MECHANISM.md`
+
 ---
 
 ## Current Focus
@@ -69,14 +79,14 @@ Notes:
 ### In Progress - AI Runtime
 
 #### AI Gateway Engine - Core Runtime
-- [ ] Session lifecycle: create, resume, abort, expire
-- [ ] Stream pipeline: raw SSE -> token buffer -> RAM write (`system:session:<uid>:stream`)
+- [~] Session lifecycle: create/close/list done, resume/abort/expire pending
+- [x] Stream pipeline: raw SSE -> parser blocks -> RAM write (`reply_to_ram_key`)
 - [ ] Gateway status RAM key: `system:session:<uid>:status` (`idle | thinking | streaming | done | error`)
-- [ ] Error handling: timeout, provider error, malformed stream
+- [~] Error handling: provider and malformed payload handling done, timeout policy still partial
 
 #### AI Parser
-- [ ] Token stream reader: consume `system:session:<uid>:stream` reactively
-- [ ] Emit structured ParsedAIEvent to EventEngine on completion of each block
+- [~] Token stream reader: handled in gateway stream handler path (dedicated session stream key pending)
+- [x] Emit structured block/events to EventEngine on completion of each block
 
 #### Prompt Bar and Chat Bar UI
 - [ ] PromptBar window: submit fires `send_gateway`, includes thinking state
@@ -91,7 +101,7 @@ Notes:
 - [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
 - [x] Native OS tools: File System (`FsTool.ts`), Shell Executor (`ShellEngine` + `ShellTool.ts`)
 - [ ] Native OS tools: Obsidian Reader
-- [ ] Context builder pipeline before prompt send
+- [x] Context builder pipeline before prompt send
 
 #### AI Context Engine (NEW)
 - [x] ContextCore: define AIContextEngine core contract (`buildContext`, `ingestTurn`, `attachSession`, `evictContext`)
@@ -102,16 +112,16 @@ Notes:
 - [x] ContextPromptPolicy: composed prompt now injects default app-bridge + parser protocol + compact context
 
 #### Context Layers (Design Tasks)
-- [ ] ContextLayerHistorical: compact rolling summary per session (lightweight memory for prompting)
-- [ ] ContextLayerRAG: store heavy payloads in RAM/DB, keep only summary + storage key in context
+- [x] ContextLayerHistorical: compact per-session summary + recent turn window active
+- [x] ContextLayerRAG: heavy context payloads persisted as RAG references
 - [ ] ContextLayerTooling: maintain tool catalog summary + on-demand deep docs retrieval flow
-- [ ] ContextLayerApplication: maintain ACE application context (EventBus flow, window.ACE bridge, registry domains)
+- [~] ContextLayerApplication: default bridge context + parser protocol injected, deeper app map pending
 
 #### RAG-style Storage Tasks
-- [ ] ContextRAGSchema: define reference record schema (`ref_uid`, `type`, `title`, `summary`, `storage_key`, `source_session`, `created_at`)
-- [ ] ContextRAGWrite: persist large response/prompt/code as reference object instead of raw context expansion
-- [ ] ContextRAGRead: AI requests reference via tooling, engine returns full content by `storage_key`
-- [ ] ContextRAGRank: add ranking metadata (`tags`, `importance`, `recency_score`, `token_estimate`)
+- [x] ContextRAGSchema: define reference record schema (`ref_uid`, `type`, `title`, `summary`, `storage_key`, `source_session`, `created_at`)
+- [x] ContextRAGWrite: persist large context payload as reference object
+- [~] ContextRAGRead: engine read path exists; AI tooling retrieval flow still pending
+- [x] ContextRAGRank: ranking metadata fields available (`tags`, `importance`, `recency_score`, `token_estimate`)
 - [ ] ContextRAGRetention: trim/archive old references without breaking active session keys
 
 #### Tooling Discovery Flow Tasks
@@ -130,10 +140,10 @@ Notes:
 - [ ] ContextACERuntimeKeys: provide key RAM namespaces used by AI runtime/context (`system:session:*`, `system:ai_gateway_*`, etc.)
 
 #### Context Build Pipeline Tasks
-- [ ] ContextCompose: pre-prompt composer combines historical summary + selected RAG refs + tooling hints + ACE app context
+- [x] ContextCompose: pre-prompt composer combines summary + recent turns + runtime bridge context
 - [ ] ContextBudget: token budget manager with priority-based trimming
-- [ ] ContextDiagnostics: output included/excluded segments per request (Dev Menu monitor)
-- [ ] ContextMonitorUI: add session context monitor window (timeline + references + token estimate)
+- [~] ContextDiagnostics: included context references are exposed in request memory
+- [x] ContextMonitorUI: session context monitor window available (context/history/blocks/storage)
 - [ ] ContextTests: add tests for merge, budget trimming, and reference retrieval correctness
 
 ## Development Roadmap
@@ -181,14 +191,14 @@ Core widgets:
 - [ ] Graceful shutdown on app exit
 
 #### Step 2 - AI Gateway Runtime and Streaming
-- [ ] Session API: communicate with sidecar for create/resume/abort/expire
-- [ ] Stream pipeline: sidecar SSE -> RAM stream key
+- [~] Session API: create/close/list wired, resume/abort/expire pending
+- [x] Stream pipeline: sidecar SSE -> parsed blocks -> RAM response memory
 - [ ] Status key: `system:session:<uid>:status`
-- [ ] Error handling and retry policy
+- [~] Error handling and retry policy
 
 #### Step 3 - AI Parser
-- [ ] Reactive stream reader per session key
-- [ ] Emit ParsedAIEvent (`text | tool_call | metadata`) to EventEngine
+- [~] Reactive stream reader currently integrated in gateway stream handler
+- [x] Emit parsed event blocks to EventEngine
 
 #### Step 4 - Prompt Bar and Chat Bar
 - [ ] PromptBar window
@@ -205,12 +215,12 @@ Core widgets:
 - [ ] ToolEngine Pre-Allocation alignment
 
 #### Step 6 - AI Context Engine (New)
-- [ ] ContextStep6State: implement session context state machine (historical, RAG refs, tooling knowledge, app context)
-- [ ] ContextStep6Ingest: consume `context` block from AI output and update summary state per turn
-- [ ] ContextStep6Pointers: store large artifacts as reference pointers (summary + key), not full prompt payloads
+- [~] ContextStep6State: session context state machine active, advanced layers still expanding
+- [x] ContextStep6Ingest: consume `context` block from AI output and update summary per turn
+- [x] ContextStep6Pointers: large context blocks stored as RAG references
 - [ ] ContextStep6Retrieve: context retrieval tooling path (`list_tooling`, `describe_tooling`, `fetch_reference`, `describe_eventbus`)
-- [ ] ContextStep6Assemble: build final prompt context from compact summary + refs + tooling hints + ACE app context
-- [ ] ContextStep6Observe: add observability (composition trace + token-cost estimation)
+- [x] ContextStep6Assemble: final prompt now composed from summary + history + default bridge context
+- [~] ContextStep6Observe: monitor + used_contexts tracing available, deeper diagnostics pending
 
 ### Phase 7 - Host-Guest Package Ecosystem
 - [ ] Implement SafeComponentSlot with ErrorBoundary
