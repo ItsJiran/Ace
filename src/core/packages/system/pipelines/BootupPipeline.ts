@@ -210,18 +210,70 @@ const InitEngineRoutesStep: PipelineStep<void, void> = {
         const ToolEngine = window.ACE.tool;
 
         // Route: execute_tool
-        // Payload: { package_ref: string; tool_slug: string; payload: unknown }
-        EventBus.registerProcessRoute('execute_tool', async ({ payload }: { payload: Record<string, unknown> }) => {
-            const { package_ref, tool_slug, ...toolPayload } = payload as {
-                package_ref: string;
-                tool_slug: string;
+        // Accepted payload forms:
+        // 1) Envelope: { package_ref, tool_slug, payload: {...} }
+        // 2) Flat:     { package_ref, tool_slug, ...tool_args }
+        EventBus.registerProcessRoute('execute_tool', async ({ payload, preallocated_memory }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown> }) => {
+            const raw = (payload ?? {}) as {
+                package_ref?: string;
+                tool_slug?: string;
+                payload?: unknown;
                 [k: string]: unknown;
             };
+
+            const package_ref = typeof raw.package_ref === 'string' ? raw.package_ref : '';
+            const tool_slug = typeof raw.tool_slug === 'string' ? raw.tool_slug : '';
+
+            const toolPayload =
+                raw.payload !== undefined
+                    ? raw.payload
+                    : Object.fromEntries(
+                        Object.entries(raw).filter(([k]) => k !== 'package_ref' && k !== 'tool_slug'),
+                    );
+
             if (!package_ref || !tool_slug) {
                 console.warn('[execute_tool] Missing package_ref or tool_slug in payload.');
                 return;
             }
-            await (ToolEngine as any).execute(package_ref, tool_slug, toolPayload);
+
+            const resultKey =
+                typeof preallocated_memory?.reply_to_ram_key === 'string'
+                    ? preallocated_memory.reply_to_ram_key
+                    : undefined;
+
+            try {
+                const result = await (ToolEngine as any).execute(package_ref, tool_slug, toolPayload);
+                if (resultKey) {
+                    window.ACE.storage.dispatchRAMAction({
+                        action: 'create_memory',
+                        memory_uid: resultKey,
+                        payload: {
+                            status: 'ok',
+                            package_ref,
+                            tool_slug,
+                            result,
+                            finished_at: Date.now(),
+                        },
+                        classifications: ['system:dev', 'system:tool_runner'],
+                    });
+                }
+            } catch (error) {
+                if (resultKey) {
+                    window.ACE.storage.dispatchRAMAction({
+                        action: 'create_memory',
+                        memory_uid: resultKey,
+                        payload: {
+                            status: 'error',
+                            package_ref,
+                            tool_slug,
+                            error_message: error instanceof Error ? error.message : String(error),
+                            finished_at: Date.now(),
+                        },
+                        classifications: ['system:dev', 'system:tool_runner'],
+                    });
+                }
+                throw error;
+            }
         });
 
         console.log('[Boot] Phase 7: Engine event routes registered (execute_tool).');

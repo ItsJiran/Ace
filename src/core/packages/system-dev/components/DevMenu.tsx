@@ -1,4 +1,4 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench, Workflow } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
@@ -161,6 +161,30 @@ export default function DevMenu() {
         });
     };
 
+    const spawnEventBusMonitor = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'eventbus-monitor-window',
+            title: 'EventBus Monitor',
+            width: 680,
+            height: 500,
+            x: 260,
+            y: 120,
+        });
+    };
+
+    const spawnProcessMonitor = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'process-monitor-dev-window',
+            title: 'Process Monitor',
+            width: 620,
+            height: 500,
+            x: 300,
+            y: 140,
+        });
+    };
+
     const spawnPromptChatbarDev = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system-dev',
@@ -289,6 +313,16 @@ export default function DevMenu() {
             <button onClick={spawnAISessionMonitor} className={buttonClass}>
                 <Monitor size={14} className="text-lime-300" />
                 AI Session Monitor Window
+            </button>
+
+            <button onClick={spawnEventBusMonitor} className={buttonClass}>
+                <Workflow size={14} className="text-cyan-300" />
+                EventBus Monitor
+            </button>
+
+            <button onClick={spawnProcessMonitor} className={buttonClass}>
+                <Activity size={14} className="text-fuchsia-300" />
+                Process Monitor
             </button>
 
             <button onClick={spawnToolRunner} className={buttonClass}>

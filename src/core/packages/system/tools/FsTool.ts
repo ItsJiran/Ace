@@ -72,13 +72,15 @@ const toolDef: ToolDefinition<typeof Schema> = {
             case 'read_file': {
                 const text = await FSEngine.readRaw(args.path);
                 if (text === null) throw new Error(`fs_tool: file not found: ${args.path}`);
-                return { action: 'read_file', path: args.path, content: text };
+                const absolute_path = await FSEngine.resolveAppConfigPath(args.path);
+                return { action: 'read_file', path: args.path, absolute_path, content: text };
             }
 
             case 'write_file': {
                 const ok = await FSEngine.writeFile(args.path, args.content);
                 if (!ok) throw new Error(`fs_tool: failed to write: ${args.path}`);
-                return { action: 'write_file', path: args.path, bytes_written: args.content.length };
+                const absolute_path = await FSEngine.resolveAppConfigPath(args.path);
+                return { action: 'write_file', path: args.path, absolute_path, bytes_written: args.content.length };
             }
 
             case 'list_directory': {
@@ -93,13 +95,15 @@ const toolDef: ToolDefinition<typeof Schema> = {
             case 'create_directory': {
                 const ok = await FSEngine.createDirectory(args.path);
                 if (!ok) throw new Error(`fs_tool: failed to create directory: ${args.path}`);
-                return { action: 'create_directory', path: args.path, created: true };
+                const absolute_path = await FSEngine.resolveAppConfigPath(args.path);
+                return { action: 'create_directory', path: args.path, absolute_path, created: true };
             }
 
             case 'delete_file': {
                 const ok = await FSEngine.deleteFile(args.path);
                 if (!ok) throw new Error(`fs_tool: failed to delete: ${args.path}`);
-                return { action: 'delete_file', path: args.path, deleted: true };
+                const absolute_path = await FSEngine.resolveAppConfigPath(args.path);
+                return { action: 'delete_file', path: args.path, absolute_path, deleted: true };
             }
         }
     },

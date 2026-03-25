@@ -1,4 +1,5 @@
 import { BaseDirectory, writeTextFile, readTextFile, exists, mkdir, readDir, remove } from '@tauri-apps/plugin-fs';
+import { appConfigDir, join } from '@tauri-apps/api/path';
 
 // Late binding to avoid circular dep: processEngine → registryEngine → fsEngine → processEngine
 type ProcessTracker = {
@@ -161,6 +162,20 @@ class FSEngineSingleton {
         } catch (error) {
             console.error(`FSEngine: Failed to delete file ${filename}:`, error);
             return false;
+        }
+    }
+
+    /**
+     * Resolves a relative AppConfig path to an absolute OS path.
+     * Useful for diagnostics and tool outputs so users know exact write location.
+     */
+    async resolveAppConfigPath(filename: string): Promise<string> {
+        try {
+            const base = await appConfigDir();
+            return await join(base, filename);
+        } catch {
+            // Fallback when path API is unavailable (e.g. web runtime)
+            return `AppConfig:${filename}`;
         }
     }
 
