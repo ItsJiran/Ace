@@ -77,6 +77,20 @@ export namespace AceRegistryType {
         parameters?: ToolParameters;
     }
 
+    export interface Parser extends BaseIdentity {
+        /** Canonical parser tag name (used in <tag_name>...</tag_name>) */
+        tag_name?: string;
+        aliases?: string[];
+        /** Protocol metadata shown in parser contract prompt */
+        block_schema?: {
+            purpose: string;
+            requiredFields?: string;
+            optionalFields?: string;
+            payloadNote?: string[];
+            exampleLines: string[];
+        };
+    }
+
     // -----------------------------------------------------------------------
     // Feature — High-level capability declaration, triggered via events
     // Default export: function implementing the feature behavior

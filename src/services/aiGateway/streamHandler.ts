@@ -1,12 +1,76 @@
 import { StorageEngine } from '../storageEngine';
 import { EventBus } from '../eventEngine';
 import { AIContextEngine } from '../aiContextEngine';
+import { AIContextRagEngine } from '../aiContextRagEngine';
 import { parseAIStreamChunk } from '#/services/aiParser';
 import type { AIMessageBlock } from '#/services/aiParser';
 import type { AISession, ParsedBatchEvent, ParserBatchRecord } from './types';
 import type { Interaction } from '../../schemas/events';
 
 const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
+
+function pushViolationOnce(violations: string[], message: string): void {
+    if (!violations.includes(message)) {
+        violations.push(message);
+    }
+}
+
+function readHistorySummaryMemoryKey(payload: Record<string, unknown>): string | null {
+    const candidate = payload.memory_key ?? payload.memory_uid ?? payload.ram_key_id ?? payload.storage_key;
+    return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null;
+}
+
+function readHistorySummaryRefUid(payload: Record<string, unknown>): string | null {
+    const candidate = payload.ref_uid ?? payload.reference_uid;
+    return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null;
+}
+
+function validateHistorySummaryBlock(
+    session: AISession,
+    block: Extract<AIMessageBlock, { type: 'history_summary_ai_prompt' | 'history_summary_ai_response' }>,
+): boolean {
+    const protocol = session.currentProtocolState;
+    if (!protocol || !block.payload_json) {
+        return false;
+    }
+
+    const actualKey = readHistorySummaryMemoryKey(block.payload_json);
+    const expectedKey = block.type === 'history_summary_ai_prompt'
+        ? protocol.prompt_memory_key
+        : protocol.response_memory_key;
+    const expectedRefUid = block.type === 'history_summary_ai_prompt'
+        ? protocol.prompt_ref_uid
+        : protocol.response_ref_uid;
+    const actualRefUid = readHistorySummaryRefUid(block.payload_json) ?? undefined;
+
+    if (block.type === 'history_summary_ai_prompt' && protocol.prompt_summary_valid) {
+        pushViolationOnce(protocol.violations, 'Duplicate history_summary_ai_prompt block ignored after first valid block.');
+        return false;
+    }
+
+    if (block.type === 'history_summary_ai_response' && protocol.response_summary_valid) {
+        pushViolationOnce(protocol.violations, 'Duplicate history_summary_ai_response block ignored after first valid block.');
+        return false;
+    }
+
+    const isValid = actualKey === expectedKey && (!expectedRefUid || actualRefUid === expectedRefUid);
+
+    if (block.type === 'history_summary_ai_prompt') {
+        protocol.prompt_summary_received = true;
+        protocol.prompt_summary_valid = isValid;
+        if (!isValid) {
+            pushViolationOnce(protocol.violations, `Invalid history_summary_ai_prompt block memory binding. expected=${expectedKey}`);
+        }
+        return isValid;
+    }
+
+    protocol.response_summary_received = true;
+    protocol.response_summary_valid = isValid;
+    if (!isValid) {
+        pushViolationOnce(protocol.violations, `Invalid history_summary_ai_response block memory binding. expected=${expectedKey}`);
+    }
+    return isValid;
+}
 
 function mergeBlocks(
     previous: AIMessageBlock[],
@@ -51,10 +115,57 @@ function mergeBlocks(
             }
         }
 
+        if (
+            block.type === 'context' ||
+            block.type === 'history_summary_ai_prompt' ||
+            block.type === 'history_summary_ai_response' ||
+            block.type === 'directive'
+        ) {
+            const last = merged[merged.length - 1];
+            if (
+                last &&
+                last.type === block.type &&
+                'is_complete' in last &&
+                !last.is_complete
+            ) {
+                merged[merged.length - 1] = block;
+                return;
+            }
+        }
+
         merged.push(block);
     });
 
     return merged;
+}
+
+function buildNextBatches(
+    previous: ParserBatchRecord[],
+    nextBatch: Omit<ParserBatchRecord, 'batch_index'>,
+    shouldMergeWithPrevious: boolean,
+): ParserBatchRecord[] {
+    if (!shouldMergeWithPrevious || previous.length === 0) {
+        return [
+            ...previous,
+            {
+                ...nextBatch,
+                batch_index: previous.length,
+            },
+        ];
+    }
+
+    const last = previous[previous.length - 1];
+    return [
+        ...previous.slice(0, -1),
+        {
+            batch_index: last.batch_index,
+            received_at: nextBatch.received_at,
+            raw_chunk: `${last.raw_chunk}${nextBatch.raw_chunk}`,
+            text_to_print: `${last.text_to_print}${nextBatch.text_to_print}`,
+            events: [...last.events, ...nextBatch.events],
+            has_carryover_buffer: nextBatch.has_carryover_buffer,
+        },
+    ];
 }
 
 /**
@@ -71,11 +182,16 @@ export function handleSessionStreamChunk(
     ramKey: string,
     processUid?: string,
 ): void {
-    // Prepend any carryover from a partial event block in the previous chunk
+    // Prepend any carryover from an unclosed fenced block in the previous chunk
+    const hadCarryoverBuffer = session.activeEventBuffer.length > 0;
     const fullStream = session.activeEventBuffer + chunk;
     session.activeEventBuffer = '';
 
-    const { blocks, events, textToPrint } = parseAIStreamChunk(fullStream);
+    const { blocks, events, textToPrint, carryoverBuffer } = parseAIStreamChunk(fullStream);
+
+    // Save carryover immediately so non-event fenced blocks (e.g. context)
+    // that are split across chunks can be recovered on the next chunk.
+    session.activeEventBuffer = carryoverBuffer;
 
     // Direct parser -> context bridge:
     // any complete `context` block from aiParser is immediately ingested.
@@ -85,11 +201,29 @@ export function handleSessionStreamChunk(
         AIContextEngine.ingestContextBlock(session.sessionId, block.payload_json);
     });
 
+    blocks.forEach((block) => {
+        if (
+            (block.type !== 'history_summary_ai_prompt' && block.type !== 'history_summary_ai_response') ||
+            !block.is_complete ||
+            !block.payload_json
+        ) {
+            return;
+        }
+
+        if (!validateHistorySummaryBlock(session, block)) {
+            return;
+        }
+
+        AIContextEngine.ingestHistorySummaryBlock(session.sessionId, block.type, block.payload_json);
+    });
+
     const memoryState = (StorageEngine.readMemory(ramKey) || {}) as {
         text?: string;
         raw_response?: string;
         blocks?: AIMessageBlock[];
         parser_batches?: ParserBatchRecord[];
+        response_reference?: { ref_uid: string; storage_key: string };
+        protocol_validation?: unknown;
     };
     const currentText = typeof memoryState.text === 'string' ? memoryState.text : '';
     const currentRaw = typeof memoryState.raw_response === 'string' ? memoryState.raw_response : '';
@@ -120,17 +254,17 @@ export function handleSessionStreamChunk(
         };
     });
 
-    const nextBatches: ParserBatchRecord[] = [
-        ...currentBatches,
+    const nextBatches = buildNextBatches(
+        currentBatches,
         {
-            batch_index: currentBatches.length,
             received_at: Date.now(),
             raw_chunk: chunk,
             text_to_print: textToPrint,
             events: parsedEventsForBatch,
-            has_carryover_buffer: events.some((e) => !e.is_complete),
+            has_carryover_buffer: carryoverBuffer.length > 0,
         },
-    ];
+        hadCarryoverBuffer,
+    );
 
     // ── PATHWAY A: write updated stream state to RAM ──────────────────────────
     StorageEngine.dispatchRAMAction({
@@ -145,9 +279,22 @@ export function handleSessionStreamChunk(
             parser_batch_count: nextBatches.length,
             events_total: nextBatches.reduce((acc, b) => acc + b.events.length, 0),
             last_updated_at: Date.now(),
+            protocol_validation: session.currentProtocolState ?? memoryState.protocol_validation ?? null,
         },
         classifications: CLASSIFICATIONS,
     });
+
+    if (memoryState.response_reference?.storage_key) {
+        AIContextRagEngine.writeReferencePayload(memoryState.response_reference.storage_key, {
+            session_id: session.sessionId,
+            sdk: session.sdk,
+            model: session.model,
+            raw_response: currentRaw + chunk,
+            text: currentText + textToPrint,
+            status: 'streaming',
+            updated_at: Date.now(),
+        });
+    }
 
     // ── PATHWAY B: dispatch complete events onto the EventBus ─────────────────
     events.forEach((event) => {
@@ -186,11 +333,9 @@ export function handleSessionStreamChunk(
             console.log(`[AIGatewayEngine] [${session.sessionId}] Event → ${interaction.action}`);
             EventBus.emit(interaction);
         } else {
-            // Incomplete event: stash partial block so the next chunk can continue it
+            // Incomplete event: parser already stashed unclosed fence into
+            // `carryoverBuffer`, we only need to track session state flags.
             session.isInsideEventBlock = true;
-            const h = event.headers;
-            const headerLine = `${h.event_type}, ${h.window_uid}, ${h.process_uid || 'null'}, ${h.widget_uid || 'null'}, ${h.action}, ${h.sub_action}`;
-            session.activeEventBuffer = `\n\`\`\`event\n${headerLine}\n${event.raw_payload_buffer}`;
         }
     });
 }

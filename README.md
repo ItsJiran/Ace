@@ -31,43 +31,6 @@ Notes:
 - This README now tracks active and pending work only.
 - Completed details and long examples are maintained in `.ai/` documentation.
 
-## Recently Completed
-
-### Tooling Engine Foundation
-- [x] `ProcessEngine.track()` + `getAll()` — wrap any async fn as an observable process in RAM
-- [x] `ToolEngine.execute()` + `getAll()` + `ToolManifestEntry` — registry read-through, Zod validation, ProcessEngine-tracked execution
-- [x] `ToolDefinition<T>` constraint relaxed from `ZodObject<any>` → `ZodTypeAny` (supports discriminated unions)
-- [x] `FsTool.ts` — consolidated single fs-tool with `z.discriminatedUnion` on `action` field (`read_file | write_file | list_directory | create_directory | delete_file`)
-- [x] EventBus `execute_tool` route registered in BootupPipeline Phase 7
-- [x] EventBus `execute_tool` payload compatibility fix: supports both envelope form (`payload`) and flat form (`...args`)
-- [x] `FSEngine.readRaw`, `deleteFile`, `trackedRead`, `trackedWrite`, `trackedSave` added
-- [x] `FSEngine.resolveAppConfigPath()` + `FsTool` absolute path output for read/write/create/delete responses
-- [x] `PipelineEngine.tracked` context option — wraps entire pipeline in `ProcessEngine.track`
-
-### Shell Engine
-- [x] `execute_shell` Rust command in `src-tauri/src/lib.rs` (command + args + cwd → stdout/stderr/exit_code)
-- [x] `ShellEngine` singleton — `run`, `runSudo` (pkexec), `checkAvailable`, `output`; BLOCKED_PATTERNS enforced
-- [x] `ShellTool.ts` — registry-discoverable tool wrapping ShellEngine (`run | run_sudo | output | check_available`)
-- [x] `window.ACE.shell` registered in `boot.ts` + `ace.d.ts`
-
-### Dev UI
-- [x] `ToolRunnerDev` component — list tools, edit JSON payload, run via EventBus or direct execute, show result
-- [x] `ToolRunnerDev` schema inspector — field path/type/required/default/description + union/discriminated-union variants + auto example payload
-- [x] `ToolRunnerDevWindow` — 620×540, chrome_style standard, slug `tool-runner-dev-window`
-- [x] DevMenu `Tool Runner` button (Wrench icon, amber-400)
-- [x] DevMenu `EventBus Monitor` + `Process Monitor` buttons
-- [x] `EventBusMonitorWindow` + `ProcessMonitorDevWindow` (system-dev)
-
-### Gateway + Context Runtime
-- [x] `AIContextEngine` and `AIContextRagEngine` implemented and wired
-- [x] `AIGatewayEngine` now sends composed prompt context (not raw prompt only)
-- [x] Parser supports and normalizes `context` block payloads
-- [x] Summary replacement policy switched to model-authored context block only
-- [x] Default app-bridge + parser-protocol context injected into prompt composition
-- [x] `AISessionMonitor` upgraded for context/history/blocks/storage inspection
-- [x] `AIStressTest` dev window added for looped AI tool-call testing
-- [x] Canonical runtime doc added: `docs/GATEWAY_CONTEXT_MECHANISM.md`
-
 ---
 
 ## Current Focus
@@ -80,13 +43,11 @@ Notes:
 
 #### AI Gateway Engine - Core Runtime
 - [~] Session lifecycle: create/close/list done, resume/abort/expire pending
-- [x] Stream pipeline: raw SSE -> parser blocks -> RAM write (`reply_to_ram_key`)
 - [ ] Gateway status RAM key: `system:session:<uid>:status` (`idle | thinking | streaming | done | error`)
 - [~] Error handling: provider and malformed payload handling done, timeout policy still partial
 
 #### AI Parser
 - [~] Token stream reader: handled in gateway stream handler path (dedicated session stream key pending)
-- [x] Emit structured block/events to EventEngine on completion of each block
 
 #### Prompt Bar and Chat Bar UI
 - [ ] PromptBar window: submit fires `send_gateway`, includes thinking state
@@ -96,32 +57,18 @@ Notes:
 - [ ] Scrollable message history with timestamps
 
 #### Tooling Mechanism
-- [x] EventBus `execute_tool` route: parser → EventEngine dispatch → ToolEngine.execute (envelope + flat payload support)
 - [ ] Tool result write-back to RAM -> resume session context
 - [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
-- [x] Native OS tools: File System (`FsTool.ts`), Shell Executor (`ShellEngine` + `ShellTool.ts`)
-- [ ] Native OS tools: Obsidian Reader
-- [x] Context builder pipeline before prompt send
 
 #### AI Context Engine (NEW)
-- [x] ContextCore: define AIContextEngine core contract (`buildContext`, `ingestTurn`, `attachSession`, `evictContext`)
-- [x] ContextSession: session-scoped context model (each session has independent timeline + references)
-- [x] ContextParser: parser block type `context` for per-turn summary payload
 - [ ] ContextSchema: define context block schema (`summary`, `intent`, `constraints`, `decisions`, `next_actions`, `confidence`)
-- [x] ContextMerge: latest `context` summary block replaces previous canonical summary
-- [x] ContextPromptPolicy: composed prompt now injects default app-bridge + parser protocol + compact context
 
 #### Context Layers (Design Tasks)
-- [x] ContextLayerHistorical: compact per-session summary + recent turn window active
-- [x] ContextLayerRAG: heavy context payloads persisted as RAG references
 - [ ] ContextLayerTooling: maintain tool catalog summary + on-demand deep docs retrieval flow
 - [~] ContextLayerApplication: default bridge context + parser protocol injected, deeper app map pending
 
 #### RAG-style Storage Tasks
-- [x] ContextRAGSchema: define reference record schema (`ref_uid`, `type`, `title`, `summary`, `storage_key`, `source_session`, `created_at`)
-- [x] ContextRAGWrite: persist large context payload as reference object
 - [~] ContextRAGRead: engine read path exists; AI tooling retrieval flow still pending
-- [x] ContextRAGRank: ranking metadata fields available (`tags`, `importance`, `recency_score`, `token_estimate`)
 - [ ] ContextRAGRetention: trim/archive old references without breaking active session keys
 
 #### Tooling Discovery Flow Tasks
@@ -140,10 +87,8 @@ Notes:
 - [ ] ContextACERuntimeKeys: provide key RAM namespaces used by AI runtime/context (`system:session:*`, `system:ai_gateway_*`, etc.)
 
 #### Context Build Pipeline Tasks
-- [x] ContextCompose: pre-prompt composer combines summary + recent turns + runtime bridge context
 - [ ] ContextBudget: token budget manager with priority-based trimming
 - [~] ContextDiagnostics: included context references are exposed in request memory
-- [x] ContextMonitorUI: session context monitor window available (context/history/blocks/storage)
 - [ ] ContextTests: add tests for merge, budget trimming, and reference retrieval correctness
 
 ## Development Roadmap
@@ -192,13 +137,11 @@ Core widgets:
 
 #### Step 2 - AI Gateway Runtime and Streaming
 - [~] Session API: create/close/list wired, resume/abort/expire pending
-- [x] Stream pipeline: sidecar SSE -> parsed blocks -> RAM response memory
 - [ ] Status key: `system:session:<uid>:status`
 - [~] Error handling and retry policy
 
 #### Step 3 - AI Parser
 - [~] Reactive stream reader currently integrated in gateway stream handler
-- [x] Emit parsed event blocks to EventEngine
 
 #### Step 4 - Prompt Bar and Chat Bar
 - [ ] PromptBar window
@@ -208,18 +151,13 @@ Core widgets:
 - [ ] Timestamped history view
 
 #### Step 5 - Tooling Mechanism
-- [x] EventBus `execute_tool` route (BootupPipeline Phase 7)
-- [x] ToolEngine.execute + ToolManifestEntry + ProcessEngine-tracked execution
 - [ ] Parser tool-call intercept and full dispatch chain
 - [ ] Tool result write-back and session resume
 - [ ] ToolEngine Pre-Allocation alignment
 
 #### Step 6 - AI Context Engine (New)
 - [~] ContextStep6State: session context state machine active, advanced layers still expanding
-- [x] ContextStep6Ingest: consume `context` block from AI output and update summary per turn
-- [x] ContextStep6Pointers: large context blocks stored as RAG references
 - [ ] ContextStep6Retrieve: context retrieval tooling path (`list_tooling`, `describe_tooling`, `fetch_reference`, `describe_eventbus`)
-- [x] ContextStep6Assemble: final prompt now composed from summary + history + default bridge context
 - [~] ContextStep6Observe: monitor + used_contexts tracing available, deeper diagnostics pending
 
 ### Phase 7 - Host-Guest Package Ecosystem

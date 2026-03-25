@@ -44,6 +44,7 @@ class AISessionManagerSingleton {
             activeOutputRamKey: session.activeOutputRamKey,
             isInsideEventBlock: session.isInsideEventBlock,
             activeEventBufferLength: session.activeEventBuffer.length,
+            protocol_state: session.lastProtocolState ?? session.currentProtocolState,
         }));
     }
 }

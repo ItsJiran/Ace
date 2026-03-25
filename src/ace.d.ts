@@ -36,6 +36,14 @@ interface AIGatewaySessionSnapshot {
   // Enhanced monitoring fields
   summary?: string;
   turns?: Array<{ at: number; role: 'user' | 'assistant' | 'system'; text: string }>;
+  history_summaries?: Array<{
+    at: number;
+    block_type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+    summary: string;
+    memory_key?: string;
+    ref_uid?: string;
+    payload: Record<string, unknown>;
+  }>;
   context_blocks?: Array<{ at: number; payload: Record<string, unknown> }>;
   used_contexts?: Array<{
     key: string;
@@ -45,6 +53,21 @@ interface AIGatewaySessionSnapshot {
     token_estimate?: number;
   }>;
   context_updated_at?: number;
+  protocol_state?: {
+    request_started_at: number;
+    finished_at?: number;
+    prompt_memory_key: string;
+    prompt_ref_uid?: string;
+    response_memory_key: string;
+    response_ref_uid?: string;
+    prompt_summary_received: boolean;
+    prompt_summary_valid: boolean;
+    response_summary_received: boolean;
+    response_summary_valid: boolean;
+    fallback_prompt_summary_used: boolean;
+    fallback_response_summary_used: boolean;
+    violations: string[];
+  };
 }
 
 interface ACENotificationAPI {

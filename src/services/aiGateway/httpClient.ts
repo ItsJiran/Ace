@@ -24,6 +24,8 @@ export async function sendToSession(
     metadata?: {
         original_prompt?: string;
         used_contexts?: unknown[];
+        prompt_reference?: { ref_uid: string; storage_key: string };
+        response_reference?: { ref_uid: string; storage_key: string };
     },
 ): Promise<void> {
     console.log(`[AIGatewayEngine] [${session.sessionId}] Sending: "${prompt}"`);
@@ -38,9 +40,12 @@ export async function sendToSession(
             original_prompt: metadata?.original_prompt ?? prompt,
             prompt,
             used_contexts: metadata?.used_contexts ?? [],
+            prompt_reference: metadata?.prompt_reference,
+            response_reference: metadata?.response_reference,
             text: '',
             raw_response: '',
             blocks: [],
+            protocol_validation: session.currentProtocolState ?? null,
             parser_batches: [],
             parser_batch_count: 0,
             events_total: 0,

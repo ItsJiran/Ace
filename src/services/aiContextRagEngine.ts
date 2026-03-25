@@ -54,6 +54,18 @@ export interface AIContextRagReference {
     token_estimate?: number;
 }
 
+export interface AIContextRagReferenceReserveInput {
+    type: AIContextRagReference['type'];
+    title: string;
+    summary: string;
+    source_session: string;
+    tags?: string[];
+    importance?: number;
+    recency_score?: number;
+    token_estimate?: number;
+    payload?: unknown;
+}
+
 class AIContextRagEngineSingleton {
     // In-memory index of all active references.
     // In a production specific implementation, this might be backed by a vector DB.
@@ -71,17 +83,11 @@ class AIContextRagEngineSingleton {
     }
 
     /**
-     * Offloads a heavy payload into storage and returns a lightweight reference.
-     * 
-     * @param input.payload - The actual data (JSON, text, etc.) to store.
-     * @param input.title - Short name for the reference.
-     * @param input.summary - Evaluation of content for the AI.
-     * 
-     * @returns The created reference object.
+     * Pre-allocates a reference so runtime systems can share the storage key
+     * before the final payload is fully available.
      */
-    createReference(input: Omit<AIContextRagReference, 'ref_uid' | 'created_at' | 'storage_key'> & { payload: unknown }): AIContextRagReference {
+    reserveReference(input: AIContextRagReferenceReserveInput): AIContextRagReference {
         const ref_uid = `ctxref-${crypto.randomUUID()}`;
-        // We namespace payloads so they don't collide with other system keys
         const storage_key = `system:ai_context_rag:payload:${ref_uid}`;
         const created_at = Date.now();
 
@@ -101,17 +107,79 @@ class AIContextRagEngineSingleton {
 
         this.refs.set(ref_uid, reference);
 
-        // Persist the HEAVY payload to a dedicated RAM key
         StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: storage_key,
-            payload: input.payload,
+            payload: input.payload ?? null,
             classifications: ['system:core', 'system:ai_context_rag'],
         });
 
-        // Update the public index
         this.syncIndex();
         return reference;
+    }
+
+    /**
+     * Offloads a heavy payload into storage and returns a lightweight reference.
+     * 
+     * @param input.payload - The actual data (JSON, text, etc.) to store.
+     * @param input.title - Short name for the reference.
+     * @param input.summary - Evaluation of content for the AI.
+     * 
+     * @returns The created reference object.
+     */
+    createReference(input: Omit<AIContextRagReference, 'ref_uid' | 'created_at' | 'storage_key'> & { payload: unknown }): AIContextRagReference {
+        const reference = this.reserveReference({
+            type: input.type,
+            title: input.title,
+            summary: input.summary,
+            source_session: input.source_session,
+            tags: input.tags,
+            importance: input.importance,
+            recency_score: input.recency_score,
+            token_estimate: input.token_estimate,
+            payload: input.payload,
+        });
+
+        return reference;
+    }
+
+    /**
+     * Writes or replaces the payload living behind a reference storage key.
+     */
+    writeReferencePayload(storage_key: string, payload: unknown): boolean {
+        const existing = StorageEngine.readMemory(storage_key);
+        if (typeof existing === 'undefined') {
+            StorageEngine.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: storage_key,
+                payload,
+                classifications: ['system:core', 'system:ai_context_rag'],
+            });
+            return true;
+        }
+
+        const isObjectPayload = payload !== null && typeof payload === 'object' && !Array.isArray(payload);
+        if (isObjectPayload && existing !== null && typeof existing === 'object' && !Array.isArray(existing)) {
+            return StorageEngine.dispatchRAMAction({
+                action: 'update_memory',
+                memory_uid: storage_key,
+                payload: payload as Record<string, unknown>,
+                classifications: ['system:core', 'system:ai_context_rag'],
+            }) as boolean;
+        }
+
+        StorageEngine.dispatchRAMAction({
+            action: 'delete_memory',
+            memory_uid: storage_key,
+        });
+
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: storage_key,
+            payload,
+            classifications: ['system:core', 'system:ai_context_rag'],
+        });
+        return true;
     }
 
     /** Retrieve a specific reference metadata by ID. */
@@ -157,6 +225,45 @@ class AIContextRagEngineSingleton {
         
         this.syncIndex();
         return true;
+    }
+
+    deleteReferencesBySession(source_session: string, filter?: { tags?: string[]; types?: AIContextRagReference['type'][] }): number {
+        const refs = this.listReferences(source_session).filter((ref) => {
+            const tagMatch = !filter?.tags || filter.tags.every((tag) => ref.tags?.includes(tag));
+            const typeMatch = !filter?.types || filter.types.includes(ref.type);
+            return tagMatch && typeMatch;
+        });
+
+        refs.forEach((ref) => {
+            this.deleteReference(ref.ref_uid);
+        });
+
+        return refs.length;
+    }
+
+    pruneSessionRawHistoryReferences(source_session: string, retainPerType = 12): number {
+        const historyRefs = this.listReferences(source_session).filter(
+            (ref) => ref.tags?.includes('history') && ref.tags?.includes('raw'),
+        );
+
+        const refsByType = new Map<AIContextRagReference['type'], AIContextRagReference[]>();
+        historyRefs.forEach((ref) => {
+            const bucket = refsByType.get(ref.type) ?? [];
+            bucket.push(ref);
+            refsByType.set(ref.type, bucket);
+        });
+
+        let deleted = 0;
+        refsByType.forEach((refs) => {
+            const stale = refs.sort((a, b) => b.created_at - a.created_at).slice(retainPerType);
+            stale.forEach((ref) => {
+                if (this.deleteReference(ref.ref_uid)) {
+                    deleted += 1;
+                }
+            });
+        });
+
+        return deleted;
     }
 
     /**

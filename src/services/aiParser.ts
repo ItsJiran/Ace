@@ -1,251 +1,137 @@
-import type { BufferedAIEvent } from '../schemas/ai_protocol';
-import { AITextBlockHeaderSchema } from '../schemas/ai_protocol';
+import { RegistryEngine } from './registryEngine';
+import type {
+    AIParseResult,
+    ParserBlockRuntime,
+} from '../schemas/parserBlocks';
 
-export type ExecutionBlockType = 'execute_tool' | 'execute_storage';
-export type ExecutionBlockStatus =
-    | 'pending'
-    | 'queued'
-    | 'running'
-    | 'completed'
-    | 'error'
-    | 'cancelled'
-    | 'unknown';
+export type {
+    AIMessageBlock,
+    AIParseResult,
+    BaseBlock,
+    BaseExecutionBlock,
+    BlockProtocolSchema,
+    ContextBlock,
+    ExecutionBlockStatus,
+    ExecutionBlockType,
+    HistorySummaryBlock,
+    ParserBlockRuntime,
+} from '../schemas/parserBlocks';
 
-export interface BaseExecutionBlock {
-    type: ExecutionBlockType;
-    status: ExecutionBlockStatus;
-    memory_uid?: string;
-    result_memory_uid?: string;
-    operation?: string;
-    payload_raw: string;
-    payload_json: Record<string, unknown> | null;
-    payload_parse_error?: string;
-    is_complete: boolean;
+export function buildBlockProtocolLines(): string {
+    return RegistryEngine.buildParserBlockProtocolLines();
 }
 
-export interface ContextBlock {
-    type: 'context';
-    payload_raw: string;
-    payload_json: Record<string, unknown> | null;
-    payload_parse_error?: string;
-    is_complete: boolean;
-}
+/** @deprecated Import buildBlockProtocolLines() to get an up-to-date catalog. */
+export const AI_PARSER_BLOCK_PROTOCOL_LINES = buildBlockProtocolLines();
 
-/**
- * Ordered segment model for one stream chunk.
- * This is the core format UI/state managers should consume.
- */
-export type AIMessageBlock =
-    | { type: 'paragraph'; content: string }
-    | { type: 'event'; event: BufferedAIEvent }
-    | BaseExecutionBlock
-    | ContextBlock
-    | {
-        // Future-proof fallback for upcoming fenced directives
-        type: 'directive';
-        directive_name: string;
-        content: string;
-        is_complete: boolean;
-    };
+function findNextStructuredTagStart(chunk: string, cursor: number): number {
+    let index = chunk.indexOf('<', cursor);
 
-/**
- * Result of parsing one stream chunk.
- *
- * blocks      - ordered typed segments (primary output)
- * events      - flattened event list (backward compatibility)
- * textToPrint - concatenated paragraph text (backward compatibility)
- */
-export interface AIParseResult {
-    blocks: AIMessageBlock[];
-    events: BufferedAIEvent[];
-    textToPrint: string;
-}
-
-function parseJsonLoose(raw: string): {
-    json: Record<string, unknown> | null;
-    error?: string;
-} {
-    const trimmed = raw.trim();
-    if (!trimmed) return { json: null };
-
-    try {
-        const parsed = JSON.parse(trimmed) as unknown;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            return { json: parsed as Record<string, unknown> };
+    while (index !== -1) {
+        const candidate = readStructuredTagAt(chunk, index);
+        if (candidate) {
+            return index;
         }
-        return { json: { value: parsed } };
-    } catch (error) {
-        return { json: null, error: error instanceof Error ? error.message : String(error) };
-    }
-}
-
-function normalizeContextPayload(
-    payload: Record<string, unknown> | null,
-    rawBody: string,
-): Record<string, unknown> | null {
-    if (!payload) {
-        const fallback = rawBody.trim();
-        return fallback
-            ? {
-                type: 'context_note',
-                text: fallback,
-            }
-            : null;
+        index = chunk.indexOf('<', index + 1);
     }
 
-    const normalized: Record<string, unknown> = { ...payload };
-    const nestedContext = payload.context;
-
-    // Accept wrapper shapes like { context: { summary, intent, ... } }
-    if (
-        nestedContext &&
-        typeof nestedContext === 'object' &&
-        !Array.isArray(nestedContext)
-    ) {
-        const nested = nestedContext as Record<string, unknown>;
-        if (typeof normalized.summary !== 'string' && typeof nested.summary === 'string') {
-            normalized.summary = nested.summary;
-        }
-        if (typeof normalized.context_summary !== 'string' && typeof nested.context_summary === 'string') {
-            normalized.context_summary = nested.context_summary;
-        }
-        if (typeof normalized.intent !== 'string' && typeof nested.intent === 'string') {
-            normalized.intent = nested.intent;
-        }
-        if (typeof normalized.type !== 'string' && typeof nested.type === 'string') {
-            normalized.type = nested.type;
-        }
-        if (typeof normalized.kind !== 'string' && typeof nested.kind === 'string') {
-            normalized.kind = nested.kind;
-        }
-        if (typeof normalized.text !== 'string' && typeof nested.text === 'string') {
-            normalized.text = nested.text;
-        }
-        if (
-            typeof normalized.replace_summary !== 'string' &&
-            typeof nested.replace_summary === 'string'
-        ) {
-            normalized.replace_summary = nested.replace_summary;
-        }
-    }
-
-    return normalized;
+    return -1;
 }
 
-function normalizeStatus(value: unknown): ExecutionBlockStatus {
-    const str = typeof value === 'string' ? value.trim().toLowerCase() : '';
-    if (
-        str === 'pending' ||
-        str === 'queued' ||
-        str === 'running' ||
-        str === 'completed' ||
-        str === 'error' ||
-        str === 'cancelled'
-    ) {
-        return str;
-    }
-    return 'unknown';
+function findPartialStructuredTagTail(chunk: string, cursor: number): number {
+    const lastLt = chunk.lastIndexOf('<');
+    if (lastLt < cursor) return -1;
+
+    const suffix = chunk.slice(lastLt).toLowerCase();
+    const isPartial = /^<[a-z_][a-z0-9_]*$/i.test(suffix);
+
+    return isPartial ? lastLt : -1;
 }
 
-function extractExecutionBlock(tag: ExecutionBlockType, body: string, isComplete: boolean): BaseExecutionBlock {
-    const { json, error } = parseJsonLoose(body);
-
-    const status = normalizeStatus(
-        json?.status ?? json?.state ?? (isComplete ? 'completed' : 'pending'),
-    );
-
-    const memoryUid =
-        typeof json?.memory_uid === 'string'
-            ? json.memory_uid
-            : typeof json?.memory_key === 'string'
-                ? json.memory_key
-                : undefined;
-
-    const resultMemoryUid =
-        typeof json?.result_memory_uid === 'string'
-            ? json.result_memory_uid
-            : typeof json?.result_key === 'string'
-                ? json.result_key
-                : undefined;
-
-    const operation =
-        typeof json?.operation === 'string'
-            ? json.operation
-            : typeof json?.tool === 'string'
-                ? json.tool
-                : typeof json?.action === 'string'
-                    ? json.action
-                    : undefined;
+function readStructuredTagAt(chunk: string, index: number): { tag: string; openEnd: number } | null {
+    const matched = /^<([a-z_][a-z0-9_]*)>/i.exec(chunk.slice(index));
+    if (!matched) {
+        return null;
+    }
 
     return {
-        type: tag,
-        status,
-        memory_uid: memoryUid,
-        result_memory_uid: resultMemoryUid,
-        operation,
-        payload_raw: body,
-        payload_json: json,
-        payload_parse_error: error,
+        tag: matched[1].toLowerCase(),
+        openEnd: index + matched[0].length,
+    };
+}
+
+function findClosingStructuredTag(chunk: string, tag: string, bodyStart: number): number {
+    return chunk.toLowerCase().indexOf(`</${tag}>`, bodyStart);
+}
+
+function extractStructuredBlock(
+    tag: string,
+    body: string,
+    isComplete: boolean,
+    result: AIParseResult,
+) {
+    const definition: ParserBlockRuntime | null = RegistryEngine.getParserBlock(tag);
+    if (definition) {
+        definition.handler({ tag, body, isComplete, result });
+        return;
+    }
+
+    result.blocks.push({
+        type: 'directive',
+        directive_name: tag || 'unknown',
+        content: body,
         is_complete: isComplete,
-    };
+    });
 }
 
-function parseEventBlock(body: string): {
-    event?: BufferedAIEvent;
-    fallbackText?: string;
-} {
-    const firstLineBreak = body.indexOf('\n');
-    if (firstLineBreak === -1) {
-        return { fallbackText: `\`\`\`event\n${body}` };
+function findClosingFence(chunk: string, bodyStart: number): number {
+    for (let i = bodyStart; i < chunk.length; i += 1) {
+        const isLineStart = i === bodyStart || chunk[i - 1] === '\n';
+        if (!isLineStart) continue;
+
+        let j = i;
+        let spaces = 0;
+        while (spaces < 3 && j < chunk.length && (chunk[j] === ' ' || chunk[j] === '\t')) {
+            j += 1;
+            spaces += 1;
+        }
+
+        if (chunk.slice(j, j + 3) === '```') {
+            return i;
+        }
     }
 
-    const headerLine = body.slice(0, firstLineBreak).trim();
-    const payloadSection = body.slice(firstLineBreak + 1);
-    const payload = payloadSection.replace(/\n?end_event\s*$/, '');
-
-    const headerParts = headerLine.split(',').map((s) => s.trim());
-    const headerValidation = AITextBlockHeaderSchema.safeParse(headerParts);
-
-    if (!headerValidation.success) {
-        return { fallbackText: `\`\`\`event\n${body}` };
-    }
-
-    const [event_type, window_uid, process_uid_raw, widget_uid_raw, action, sub_action] = headerValidation.data;
-
-    const event: BufferedAIEvent = {
-        headers: {
-            event_type,
-            window_uid,
-            process_uid: process_uid_raw === 'null' || process_uid_raw === null ? undefined : process_uid_raw,
-            widget_uid: widget_uid_raw === 'null' || widget_uid_raw === null ? undefined : widget_uid_raw,
-            action,
-            sub_action,
-        },
-        raw_payload_buffer: payload,
-        // Historical contract: end_event is the source of truth for completion,
-        // even if the markdown closing fence arrives in a later chunk.
-        is_complete: /\n?end_event\s*$/.test(payloadSection),
-    };
-
-    return { event };
+    return -1;
 }
 
-/**
- * Parse one raw stream chunk into typed blocks.
- */
 export function parseAIStreamChunk(chunk: string): AIParseResult {
     const result: AIParseResult = {
         blocks: [],
         events: [],
         textToPrint: '',
+        carryoverBuffer: '',
     };
 
     let cursor = 0;
 
     while (cursor < chunk.length) {
         const fenceStart = chunk.indexOf('```', cursor);
+        const tagStart = findNextStructuredTagStart(chunk, cursor);
+        const candidateStarts = [fenceStart, tagStart].filter((index) => index !== -1);
+        const structureStart = candidateStarts.length > 0 ? Math.min(...candidateStarts) : -1;
 
-        if (fenceStart === -1) {
+        if (structureStart === -1) {
+            const partialTagStart = findPartialStructuredTagTail(chunk, cursor);
+            if (partialTagStart !== -1) {
+                const text = chunk.slice(cursor, partialTagStart);
+                if (text) {
+                    result.blocks.push({ type: 'paragraph', content: text });
+                    result.textToPrint += text;
+                }
+                result.carryoverBuffer = chunk.slice(partialTagStart);
+                break;
+            }
+
             const text = chunk.slice(cursor);
             if (text) {
                 result.blocks.push({ type: 'paragraph', content: text });
@@ -254,65 +140,60 @@ export function parseAIStreamChunk(chunk: string): AIParseResult {
             break;
         }
 
-        if (fenceStart > cursor) {
-            const text = chunk.slice(cursor, fenceStart);
+        if (structureStart > cursor) {
+            const text = chunk.slice(cursor, structureStart);
             result.blocks.push({ type: 'paragraph', content: text });
             result.textToPrint += text;
         }
 
-        const tagLineEnd = chunk.indexOf('\n', fenceStart + 3);
+        if (tagStart !== -1 && tagStart === structureStart) {
+            const openTag = readStructuredTagAt(chunk, tagStart);
+            if (!openTag) {
+                const text = chunk.slice(structureStart, structureStart + 1);
+                result.blocks.push({ type: 'paragraph', content: text });
+                result.textToPrint += text;
+                cursor = structureStart + 1;
+                continue;
+            }
+
+            const closeTagStart = findClosingStructuredTag(chunk, openTag.tag, openTag.openEnd);
+            const hasCloseTag = closeTagStart !== -1;
+            const bodyEnd = hasCloseTag ? closeTagStart : chunk.length;
+            const body = chunk.slice(openTag.openEnd, bodyEnd);
+            extractStructuredBlock(openTag.tag, body, hasCloseTag, result);
+
+            if (!hasCloseTag) {
+                result.carryoverBuffer = chunk.slice(tagStart);
+                break;
+            }
+
+            cursor = closeTagStart + `</${openTag.tag}>`.length;
+            if (cursor < chunk.length && chunk[cursor] === '\n') cursor += 1;
+            continue;
+        }
+
+        const tagLineEnd = chunk.indexOf('\n', structureStart + 3);
         if (tagLineEnd === -1) {
-            // Incomplete fence header; keep as paragraph text so nothing is lost.
-            const text = chunk.slice(fenceStart);
-            result.blocks.push({ type: 'paragraph', content: text });
-            result.textToPrint += text;
+            result.carryoverBuffer = chunk.slice(structureStart);
             break;
         }
 
-        const rawTag = chunk.slice(fenceStart + 3, tagLineEnd).trim().toLowerCase();
+        const rawTag = chunk.slice(structureStart + 3, tagLineEnd).trim().toLowerCase();
         const bodyStart = tagLineEnd + 1;
 
-        const closeFence = chunk.indexOf('\n```', bodyStart);
+        const closeFence = findClosingFence(chunk, bodyStart);
         const hasCloseFence = closeFence !== -1;
         const bodyEnd = hasCloseFence ? closeFence : chunk.length;
         const body = chunk.slice(bodyStart, bodyEnd);
 
-        if (rawTag === 'event' || rawTag === 'json') {
-            const parsed = parseEventBlock(body);
-            if (parsed.event) {
-                result.events.push(parsed.event);
-                result.blocks.push({ type: 'event', event: parsed.event });
-            } else if (parsed.fallbackText) {
-                result.blocks.push({ type: 'paragraph', content: parsed.fallbackText });
-                result.textToPrint += parsed.fallbackText;
-            }
-        } else if (rawTag === 'execute_tool' || rawTag === 'execute_storage') {
-            result.blocks.push(extractExecutionBlock(rawTag, body, hasCloseFence));
-        } else if (rawTag === 'context') {
-            const parsed = parseJsonLoose(body);
-            result.blocks.push({
-                type: 'context',
-                payload_raw: body,
-                payload_json: normalizeContextPayload(parsed.json, body),
-                payload_parse_error: parsed.error,
-                is_complete: hasCloseFence,
-            });
-        } else {
-            // Unknown fenced directives are still structured for forward compatibility.
-            result.blocks.push({
-                type: 'directive',
-                directive_name: rawTag || 'unknown',
-                content: body,
-                is_complete: hasCloseFence,
-            });
-        }
+        extractStructuredBlock(rawTag, body, hasCloseFence, result);
 
         if (!hasCloseFence) {
-            // No close fence in this chunk, stop and let upstream buffer handling continue.
+            result.carryoverBuffer = chunk.slice(structureStart);
             break;
         }
 
-        cursor = closeFence + 4; // skip '\n```'
+        cursor = closeFence + 4;
         if (cursor < chunk.length && chunk[cursor] === '\n') cursor += 1;
     }
 

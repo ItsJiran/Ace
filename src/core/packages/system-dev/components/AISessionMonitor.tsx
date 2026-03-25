@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit } from 'lucide-react';
+import { useAceMemory } from '#/hooks/useAceMemory';
+import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit, Copy, Check } from 'lucide-react';
 
 type SessionStatus = 'idle' | 'connected' | 'streaming' | 'error';
 type SDKProvider = 'openai' | 'google' | 'anthropic';
@@ -23,7 +24,173 @@ interface SessionSnapshot {
     context_updated_at?: number;
     summary?: string;
     turns?: Array<{ at: number; role: 'user' | 'assistant' | 'system'; text: string }>;
+    history_summaries?: Array<{
+        at: number;
+        block_type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+        summary: string;
+        memory_key?: string;
+        ref_uid?: string;
+        payload: Record<string, unknown>;
+    }>;
     context_blocks?: Array<{ at: number; payload: Record<string, unknown> }>;
+    protocol_state?: {
+        request_started_at: number;
+        finished_at?: number;
+        prompt_memory_key: string;
+        prompt_ref_uid?: string;
+        response_memory_key: string;
+        response_ref_uid?: string;
+        prompt_summary_received: boolean;
+        prompt_summary_valid: boolean;
+        response_summary_received: boolean;
+        response_summary_valid: boolean;
+        fallback_prompt_summary_used: boolean;
+        fallback_response_summary_used: boolean;
+        violations: string[];
+    };
+}
+
+interface ResponseMemorySnapshot {
+    original_prompt?: string;
+    prompt?: string;
+    prompt_reference?: { ref_uid: string; storage_key: string };
+    response_reference?: { ref_uid: string; storage_key: string };
+    text?: string;
+    raw_response?: string;
+    blocks?: Array<
+        | { type: 'paragraph'; content: string }
+        | { type: 'context'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
+        | { type: 'history_summary_ai_prompt' | 'history_summary_ai_response'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
+        | { type: 'execute_tool' | 'execute_storage'; payload_raw: string; payload_json: Record<string, unknown> | null; status: string; is_complete: boolean; operation?: string }
+        | { type: 'event'; event: { headers: Record<string, unknown>; raw_payload_buffer: string; is_complete: boolean } }
+        | { type: 'directive'; directive_name: string; content: string; is_complete: boolean }
+    >;
+    parser_batch_count?: number;
+    events_total?: number;
+    protocol_validation?: SessionSnapshot['protocol_state'];
+    status?: string;
+    error_message?: string;
+}
+
+interface HistoryMemorySnapshot {
+    original_prompt?: string;
+    composed_prompt?: string;
+    raw_response?: string;
+    text?: string;
+    status?: string;
+    updated_at?: number;
+}
+
+async function copyTextToClipboard(value: string): Promise<void> {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(value);
+            return;
+        } catch {
+            // Fall through to DOM-based copy for Tauri/webview cases where the Clipboard API is unavailable.
+        }
+    }
+
+    if (typeof document === 'undefined') {
+        throw new Error('Clipboard is unavailable in this runtime.');
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, value.length);
+
+    const success = document.execCommand('copy');
+    document.body.removeChild(textarea);
+
+    if (!success) {
+        throw new Error('Clipboard copy command was rejected.');
+    }
+}
+
+function CopyTextButton({ label, value }: { label: string; value?: string }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        if (!value) return;
+
+        try {
+            await copyTextToClipboard(value);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1200);
+        } catch (error) {
+            console.warn(`[AISessionMonitor] Failed to copy ${label}:`, error);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleCopy}
+            disabled={!value}
+            className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] uppercase font-bold tracking-wide transition-colors ${
+                value
+                    ? copied
+                        ? 'border-emerald-700 bg-emerald-950/30 text-emerald-300'
+                        : 'border-zinc-700 bg-zinc-900/70 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-700 cursor-not-allowed'
+            }`}
+            title={value ? `Copy ${label}` : `${label} is empty`}
+        >
+            {copied ? <Check size={11} /> : <Copy size={11} />}
+            {copied ? 'Copied' : `Copy ${label}`}
+        </button>
+    );
+}
+
+function HistorySummaryCard({ item }: { item: NonNullable<SessionSnapshot['history_summaries']>[number] }) {
+    const [expanded, setExpanded] = useState(false);
+    const storageMemory = useAceMemory<HistoryMemorySnapshot>(item.memory_key || 'system:dev:ai_session_monitor:history_idle');
+    const title = item.block_type === 'history_summary_ai_prompt' ? 'Prompt Summary' : 'Response Summary';
+    const rawBody = item.block_type === 'history_summary_ai_prompt'
+        ? storageMemory?.original_prompt || '-'
+        : storageMemory?.raw_response || storageMemory?.text || '-';
+
+    return (
+        <div className="border border-zinc-800 rounded bg-zinc-900/30 overflow-hidden">
+            <button
+                onClick={() => setExpanded((value) => !value)}
+                className="w-full px-3 py-2 text-left flex items-start gap-2 hover:bg-zinc-900/50 transition-colors"
+            >
+                {expanded ? <ChevronDown size={12} className="mt-0.5 text-zinc-500 shrink-0" /> : <ChevronRight size={12} className="mt-0.5 text-zinc-500 shrink-0" />}
+                <div className="flex-1 min-w-0">
+                    <div className="flex justify-between gap-3">
+                        <span className="text-zinc-200 text-[11px] font-semibold">{title}</span>
+                        <span className="text-[9px] text-zinc-500 shrink-0">{new Date(item.at).toLocaleTimeString()}</span>
+                    </div>
+                    <div className="text-zinc-400 text-[11px] whitespace-pre-wrap mt-1">{item.summary}</div>
+                </div>
+            </button>
+
+            {expanded && (
+                <div className="border-t border-zinc-800 bg-black/20 p-3 space-y-2 text-[10px]">
+                    <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                        <span className="text-zinc-500">Memory Key</span>
+                        <span className="font-mono text-zinc-300 break-all">{item.memory_key || '-'}</span>
+                        <span className="text-zinc-500">Ref UID</span>
+                        <span className="font-mono text-zinc-300 break-all">{item.ref_uid || '-'}</span>
+                        <span className="text-zinc-500">Status</span>
+                        <span className="text-zinc-300">{storageMemory?.status || '-'}</span>
+                    </div>
+                    <div>
+                        <div className="text-zinc-500 uppercase mb-1">Raw Payload</div>
+                        <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{rawBody}</pre>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }
 
 export const registry: AceRegistryType.Component = {
@@ -40,7 +207,8 @@ const statusColor: Record<SessionStatus, string> = {
 };
 
 function SessionDetailView({ session }: { session: SessionSnapshot }) {
-    const [activeTab, setActiveTab] = useState<'context' | 'history' | 'blocks' | 'storage'>('context');
+    const [activeTab, setActiveTab] = useState<'context' | 'history' | 'blocks' | 'response' | 'storage'>('context');
+    const responseMemory = useAceMemory<ResponseMemorySnapshot>(session.activeOutputRamKey || 'system:dev:ai_session_monitor:idle');
 
     return (
         <div className="mt-3 border-t border-zinc-800 pt-3">
@@ -49,6 +217,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                      { id: 'context', icon: BrainCircuit, label: 'Context' },
                      { id: 'history', icon: History, label: 'History' },
                      { id: 'blocks', icon: Blocks, label: 'Blocks' },
+                     { id: 'response', icon: FileText, label: 'Response' },
                      { id: 'storage', icon: Database, label: 'Storage' },
                 ].map((tab) => (
                     <button
@@ -75,6 +244,26 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                             </div>
                             <div className="text-xs text-zinc-300 leading-relaxed bg-zinc-900 p-3 rounded border border-zinc-800 min-h-[60px] whitespace-pre-wrap">
                                 {session.summary || <span className="text-zinc-600 italic">No summary generated yet.</span>}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-[10px] uppercase text-zinc-500 font-bold mb-2 flex items-center gap-2">
+                                <History size={12} /> AI History Summaries ({session.history_summaries?.length ?? 0})
+                            </div>
+                            <div className="space-y-1.5">
+                                {session.history_summaries?.map((item, i) => (
+                                    <div key={i} className="text-[11px] border border-zinc-800 rounded px-3 py-2 bg-zinc-900/40 flex flex-col gap-1">
+                                        <div className="flex justify-between gap-3">
+                                            <span className="text-zinc-300 font-semibold">{item.block_type}</span>
+                                            <span className="text-[9px] text-zinc-500">{new Date(item.at).toLocaleTimeString()}</span>
+                                        </div>
+                                        <div className="text-zinc-400 whitespace-pre-wrap">{item.summary}</div>
+                                        {item.memory_key && <div className="text-zinc-500 font-mono text-[10px] break-all">{item.memory_key}</div>}
+                                    </div>
+                                ))}
+                                {(!session.history_summaries || session.history_summaries.length === 0) && (
+                                    <div className="text-zinc-600 italic text-xs px-2">No AI-authored history summaries yet.</div>
+                                )}
                             </div>
                         </div>
                         <div>
@@ -108,21 +297,13 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
 
                 {activeTab === 'history' && (
                     <div className="space-y-3">
-                        {session.turns?.map((turn, i) => (
-                            <div key={i} className="flex gap-3 text-xs group">
-                                <div className={`pt-1 w-16 text-[9px] uppercase font-bold text-right shrink-0 ${
-                                    turn.role === 'user' ? 'text-blue-400' : 
-                                    turn.role === 'assistant' ? 'text-emerald-400' : 'text-purple-400'
-                                }`}>
-                                    {turn.role}
-                                </div>
-                                <div className="flex-1 bg-zinc-900/40 px-3 py-2 rounded border border-zinc-800/30 text-zinc-300 whitespace-pre-wrap font-mono text-[11px] group-hover:bg-zinc-900/60 group-hover:border-zinc-700/50 transition-colors">
-                                    {turn.text}
-                                </div>
-                            </div>
-                        ))}
-                         {(!session.turns || session.turns.length === 0) && (
-                            <div className="text-zinc-600 italic text-xs text-center py-8">No conversation history.</div>
+                        {[...(session.history_summaries || [])]
+                            .sort((a, b) => b.at - a.at)
+                            .map((item, i) => (
+                                <HistorySummaryCard key={`${item.at}-${item.block_type}-${i}`} item={item} />
+                            ))}
+                        {(!session.history_summaries || session.history_summaries.length === 0) && (
+                            <div className="text-zinc-600 italic text-xs text-center py-8">No summarized history yet.</div>
                         )}
                     </div>
                 )}
@@ -143,6 +324,87 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                          {(!session.context_blocks || session.context_blocks.length === 0) && (
                             <div className="text-zinc-600 italic text-xs text-center py-8">No raw context blocks received.</div>
                         )}
+                    </div>
+                )}
+
+                {activeTab === 'response' && (
+                    <div className="space-y-4 text-xs">
+                        <div className="border border-zinc-800 rounded bg-zinc-900/20 p-3 space-y-2">
+                            <div className="text-[10px] uppercase font-bold text-zinc-500">Output Memory Snapshot</div>
+                            <div className="grid grid-cols-[110px_1fr] gap-2 items-start">
+                                <span className="text-zinc-500">Status</span>
+                                <span className="text-zinc-300">{responseMemory?.status || '-'}</span>
+                                <span className="text-zinc-500">Batches</span>
+                                <span className="text-zinc-300">{responseMemory?.parser_batch_count ?? 0}</span>
+                                <span className="text-zinc-500">Events</span>
+                                <span className="text-zinc-300">{responseMemory?.events_total ?? 0}</span>
+                                <span className="text-zinc-500">Prompt Ref</span>
+                                <span className="text-zinc-300 font-mono text-[10px] break-all">{responseMemory?.prompt_reference?.storage_key || '-'}</span>
+                                <span className="text-zinc-500">Response Ref</span>
+                                <span className="text-zinc-300 font-mono text-[10px] break-all">{responseMemory?.response_reference?.storage_key || '-'}</span>
+                                <span className="text-zinc-500">Protocol</span>
+                                <span className="text-zinc-300">{responseMemory?.protocol_validation?.violations?.length ? 'issues' : 'ok'}</span>
+                            </div>
+                            {responseMemory?.error_message && (
+                                <div className="text-red-300 bg-red-950/20 border border-red-900/40 rounded p-2 whitespace-pre-wrap">
+                                    {responseMemory.error_message}
+                                </div>
+                            )}
+                            {responseMemory?.protocol_validation && (
+                                <div className="rounded border border-zinc-800 bg-black/20 p-3 space-y-2">
+                                    <div className="text-[10px] uppercase font-bold text-zinc-500">Protocol Validation</div>
+                                    <div className="grid grid-cols-[150px_1fr] gap-2 items-start text-[11px]">
+                                        <span className="text-zinc-500">Prompt Summary</span>
+                                        <span className="text-zinc-300">{responseMemory.protocol_validation.prompt_summary_valid ? 'valid' : responseMemory.protocol_validation.fallback_prompt_summary_used ? 'fallback' : 'missing'}</span>
+                                        <span className="text-zinc-500">Response Summary</span>
+                                        <span className="text-zinc-300">{responseMemory.protocol_validation.response_summary_valid ? 'valid' : responseMemory.protocol_validation.fallback_response_summary_used ? 'fallback' : 'missing'}</span>
+                                        <span className="text-zinc-500">Violations</span>
+                                        <span className="text-zinc-300 whitespace-pre-wrap">{responseMemory.protocol_validation.violations.length > 0 ? responseMemory.protocol_validation.violations.join('\n') : '-'}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <div>
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                    <div className="text-[10px] uppercase font-bold text-zinc-500">Original Prompt</div>
+                                    <CopyTextButton label="raw prompt" value={responseMemory?.original_prompt} />
+                                </div>
+                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[120px] whitespace-pre-wrap">{responseMemory?.original_prompt || '-'}</pre>
+                            </div>
+                            <div>
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                    <div className="text-[10px] uppercase font-bold text-zinc-500">Composed Prompt</div>
+                                    <CopyTextButton label="composed prompt" value={responseMemory?.prompt} />
+                                </div>
+                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{responseMemory?.prompt || '-'}</pre>
+                            </div>
+                            <div>
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                    <div className="text-[10px] uppercase font-bold text-zinc-500">Raw Response</div>
+                                    <CopyTextButton label="raw response" value={responseMemory?.raw_response} />
+                                </div>
+                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{responseMemory?.raw_response || '-'}</pre>
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Parsed Blocks ({responseMemory?.blocks?.length ?? 0})</div>
+                                <div className="space-y-2">
+                                    {responseMemory?.blocks?.map((block, index) => (
+                                        <div key={index} className="border border-zinc-800 rounded bg-zinc-900/30 overflow-hidden">
+                                            <div className="px-3 py-1.5 text-[10px] bg-zinc-900/80 border-b border-zinc-800 text-zinc-400 flex justify-between">
+                                                <span className="font-semibold text-zinc-300">{block.type}</span>
+                                                {'status' in block && block.status ? <span>{block.status}</span> : null}
+                                            </div>
+                                            <pre className="p-3 text-[10px] text-zinc-400 overflow-auto max-h-[180px] whitespace-pre-wrap">{JSON.stringify(block, null, 2)}</pre>
+                                        </div>
+                                    ))}
+                                    {(!responseMemory?.blocks || responseMemory.blocks.length === 0) && (
+                                        <div className="text-zinc-600 italic px-2">No parsed response blocks yet.</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 

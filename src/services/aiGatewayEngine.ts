@@ -38,6 +38,7 @@ import { AIConfigManager } from './aiGateway/configManager';
 import { HealthProbe } from './aiGateway/healthProbe';
 import { fetchModels as _fetchModels, testResponse as _testResponse } from './aiGateway/providerClient';
 import { AIContextEngine } from './aiContextEngine';
+import { AIContextRagEngine } from './aiContextRagEngine';
 import type {
     AIGatewayFetchModelsResult,
     AIGatewayResponseResult,
@@ -46,7 +47,7 @@ import type {
 } from '../schemas/ai_gateway';
 
 export type { SDKProvider, AISession, AISessionSnapshot } from './aiGateway/types';
-import type { SDKProvider, AISessionSnapshot } from './aiGateway/types';
+import type { AIRequestProtocolState, SDKProvider, AISessionSnapshot } from './aiGateway/types';
 
 class AIGatewayEngineSingleton {
     /**
@@ -181,6 +182,7 @@ class AIGatewayEngineSingleton {
     closeSession(sessionId: string): void {
         AISessionManager.close(sessionId);
         AIContextEngine.evictContext(sessionId);
+        AIContextRagEngine.deleteReferencesBySession(sessionId);
     }
 
     /**
@@ -196,7 +198,9 @@ class AIGatewayEngineSingleton {
                 context_updated_at: contextState?.updated_at,
                 summary: contextState?.summary,
                 turns: contextState?.turns ?? [],
+                history_summaries: contextState?.history_summaries ?? [],
                 context_blocks: contextState?.context_blocks ?? [],
+                protocol_state: snapshot.protocol_state,
             };
         });
     }
@@ -213,12 +217,75 @@ class AIGatewayEngineSingleton {
 
         AIContextEngine.attachSession(sessionId);
 
+        const promptReference = AIContextRagEngine.reserveReference({
+            type: 'prompt',
+            title: 'Raw user prompt history',
+            summary: 'Raw prompt for compact history reconstruction.',
+            source_session: sessionId,
+            tags: ['history', 'prompt', 'raw'],
+            payload: {
+                session_id: sessionId,
+                sdk: session.sdk,
+                model: session.model,
+                original_prompt: prompt,
+                status: 'reserved',
+                created_at: Date.now(),
+            },
+        });
+
+        const responseReference = AIContextRagEngine.reserveReference({
+            type: 'response',
+            title: 'Raw assistant response history',
+            summary: 'Raw response stream for compact history reconstruction.',
+            source_session: sessionId,
+            tags: ['history', 'response', 'raw'],
+            payload: {
+                session_id: sessionId,
+                sdk: session.sdk,
+                model: session.model,
+                raw_response: '',
+                text: '',
+                status: 'reserved',
+                created_at: Date.now(),
+            },
+        });
+
+        session.currentProtocolState = {
+            request_started_at: Date.now(),
+            prompt_memory_key: promptReference.storage_key,
+            prompt_ref_uid: promptReference.ref_uid,
+            response_memory_key: responseReference.storage_key,
+            response_ref_uid: responseReference.ref_uid,
+            prompt_summary_received: false,
+            prompt_summary_valid: false,
+            response_summary_received: false,
+            response_summary_valid: false,
+            fallback_prompt_summary_used: false,
+            fallback_response_summary_used: false,
+            violations: [],
+        };
+
         // Build the outbound prompt from the session context BEFORE appending the
         // current user turn into history. This avoids duplicating the same user
         // prompt in both [RECENT_TURNS] and [USER_PROMPT].
         const contextBuild = AIContextEngine.buildContext(sessionId, prompt, {
             sdk: session.sdk,
             model: session.model,
+            promptHistoryMemoryKey: promptReference.storage_key,
+            promptHistoryRefUid: promptReference.ref_uid,
+            responseHistoryMemoryKey: responseReference.storage_key,
+            responseHistoryRefUid: responseReference.ref_uid,
+        });
+
+        AIContextRagEngine.writeReferencePayload(promptReference.storage_key, {
+            session_id: sessionId,
+            sdk: session.sdk,
+            model: session.model,
+            original_prompt: prompt,
+            composed_prompt: contextBuild.composed_prompt,
+            used_contexts: contextBuild.used_contexts,
+            status: 'ready',
+            updated_at: Date.now(),
         });
 
         // Persist the user turn after prompt composition so future requests can
@@ -234,11 +301,43 @@ class AIGatewayEngineSingleton {
             {
                 original_prompt: prompt,
                 used_contexts: contextBuild.used_contexts,
+                prompt_reference: promptReference,
+                response_reference: responseReference,
             },
         );
 
         const responseMemory = StorageEngine.readMemory(reply_to_ram_key) as { text?: unknown } | undefined;
         const responseText = typeof responseMemory?.text === 'string' ? responseMemory.text : '';
+        const rawResponse = StorageEngine.readMemory(reply_to_ram_key) as {
+            raw_response?: unknown;
+            blocks?: unknown;
+            status?: unknown;
+            error_message?: unknown;
+        } | undefined;
+        AIContextRagEngine.writeReferencePayload(responseReference.storage_key, {
+            session_id: sessionId,
+            sdk: session.sdk,
+            model: session.model,
+            raw_response: typeof rawResponse?.raw_response === 'string' ? rawResponse.raw_response : '',
+            text: responseText,
+            blocks: Array.isArray(rawResponse?.blocks) ? rawResponse.blocks : [],
+            status: typeof rawResponse?.status === 'string' ? rawResponse.status : 'completed',
+            error_message: typeof rawResponse?.error_message === 'string' ? rawResponse.error_message : undefined,
+            updated_at: Date.now(),
+        });
+
+        const protocolState = this.finalizeProtocolState(session, prompt, responseText);
+        StorageEngine.dispatchRAMAction({
+            action: 'update_memory',
+            memory_uid: reply_to_ram_key,
+            payload: {
+                protocol_validation: protocolState,
+            },
+            classifications: ['system:dev', 'system:ai_parser'],
+        });
+
+        AIContextRagEngine.pruneSessionRawHistoryReferences(sessionId, 12);
+
         if (responseText.trim().length > 0) {
             AIContextEngine.ingestTurn(sessionId, {
                 at: Date.now(),
@@ -247,6 +346,50 @@ class AIGatewayEngineSingleton {
             });
             AIContextEngine.buildContext(sessionId, prompt, { sdk: session.sdk, model: session.model });
         }
+    }
+
+    private finalizeProtocolState(
+        session: { currentProtocolState?: AIRequestProtocolState; lastProtocolState?: AIRequestProtocolState; sessionId: string },
+        prompt: string,
+        responseText: string,
+    ): AIRequestProtocolState | null {
+        const protocol = session.currentProtocolState;
+        if (!protocol) {
+            return null;
+        }
+
+        if (!protocol.prompt_summary_valid) {
+            AIContextEngine.ingestRuntimeHistorySummaryFallback(session.sessionId, {
+                block_type: 'history_summary_ai_prompt',
+                memory_key: protocol.prompt_memory_key,
+                ref_uid: protocol.prompt_ref_uid,
+                summary_source_text: prompt,
+                protocol_reason: protocol.prompt_summary_received ? 'invalid_block' : 'missing_block',
+            });
+            protocol.fallback_prompt_summary_used = true;
+            if (!protocol.prompt_summary_received) {
+                protocol.violations.push('Missing required history_summary_ai_prompt block.');
+            }
+        }
+
+        if (!protocol.response_summary_valid && responseText.trim().length > 0) {
+            AIContextEngine.ingestRuntimeHistorySummaryFallback(session.sessionId, {
+                block_type: 'history_summary_ai_response',
+                memory_key: protocol.response_memory_key,
+                ref_uid: protocol.response_ref_uid,
+                summary_source_text: responseText,
+                protocol_reason: protocol.response_summary_received ? 'invalid_block' : 'missing_block',
+            });
+            protocol.fallback_response_summary_used = true;
+            if (!protocol.response_summary_received) {
+                protocol.violations.push('Missing required history_summary_ai_response block.');
+            }
+        }
+
+        protocol.finished_at = Date.now();
+        session.lastProtocolState = { ...protocol, violations: [...protocol.violations] };
+        session.currentProtocolState = undefined;
+        return session.lastProtocolState;
     }
 
     // ── Health / Discovery ────────────────────────────────────────────────────

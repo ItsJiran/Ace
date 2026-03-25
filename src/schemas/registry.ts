@@ -18,6 +18,7 @@ export const RegistryDomainSchema = z.enum([
     'widget',
     'component',
     'feature',
+    'parser',
     'tool',
     'process',
     'pipeline',

@@ -1,4 +1,4 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench, Workflow } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench, Workflow, ListTree } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
@@ -157,6 +157,18 @@ export default function DevMenu() {
             width: 620,
             height: 540,
             x: 360,
+            y: 120,
+        });
+    };
+
+    const spawnParserBlockRegistry = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'parser-block-registry-list-window',
+            title: 'Parser Block Registry',
+            width: 640,
+            height: 460,
+            x: 280,
             y: 120,
         });
     };
@@ -345,6 +357,11 @@ export default function DevMenu() {
             <button onClick={spawnToolRunner} className={buttonClass}>
                 <Wrench size={14} className="text-amber-400" />
                 Tool Runner
+            </button>
+
+            <button onClick={spawnParserBlockRegistry} className={buttonClass}>
+                <ListTree size={14} className="text-violet-300" />
+                Parser Block Registry
             </button>
 
             <button onClick={pushNotificationSample} className={buttonClass}>
