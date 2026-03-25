@@ -405,6 +405,7 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
     const [scanningPorts, setScanningPorts] = useState(false);
     const [sidecarHealth, setSidecarHealth] = useState<AIGatewaySidecarHealthResult | null>(null);
     const [scanResult, setScanResult] = useState<AIGatewayRadarScanResult | null>(null);
+    const [testResult, setTestResult] = useState<{ sdk: SDKProvider; model: string; result: AIGatewayResponseResult } | null>(null);
     const [apiKeys, setApiKeys] = useState<Record<SDKProvider, string>>({
         openai: config.sdks.openai?.api_key ?? '',
         google: config.sdks.google?.api_key ?? '',
@@ -470,13 +471,6 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
         };
     }, []);
 
-    const summarizeResponse = (result: AIGatewayResponseResult) => {
-        if (!result.ok) {
-            return `Response test failed (${result.status_code ?? 'n/a'}): ${result.error_message ?? 'unknown error'}`;
-        }
-        const preview = result.response_text ? ` | "${result.response_text.slice(0, 120)}"` : '';
-        return `Response OK (${result.status_code ?? 'n/a'}) ${result.latency_ms}ms${preview}`;
-    };
 
     const onSaveApiKey = async (sdk: SDKProvider) => {
         setSavingSDK(sdk);
@@ -538,7 +532,7 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
 
             await window.ACE.ai_gateway.setSDKApiKey(sdk, apiKeys[sdk]);
             const result = await window.ACE.ai_gateway.testResponse(sdk, selectedModel, testPrompt.trim() || 'ping');
-            setFeedback(summarizeResponse(result));
+            setTestResult({ sdk, model: selectedModel, result });
         } catch (error) {
             setFeedback(error instanceof Error ? error.message : 'Failed to test model response.');
         } finally {
@@ -546,8 +540,52 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
         }
     };
 
+    useEffect(() => {
+        if (!testResult) return;
+        const timer = setTimeout(() => setTestResult(null), 12000);
+        return () => clearTimeout(timer);
+    }, [testResult]);
+
     return (
         <div className="space-y-5">
+            {testResult && (
+                <div className={`rounded-xl border-2 p-4 space-y-3 animate-in slide-in-from-top-2 fade-in-0 duration-300 ${
+                    testResult.result.ok
+                        ? 'border-emerald-300 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30'
+                        : 'border-rose-300 dark:border-rose-600 bg-rose-50 dark:bg-rose-950/30'
+                }`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${
+                                testResult.result.ok ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+                            }`}>
+                                {testResult.result.ok ? '✓ OK' : '✗ FAILED'}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200 uppercase tracking-wide">{testResult.sdk}</span>
+                            <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-mono truncate max-w-[200px]">{testResult.model}</span>
+                        </div>
+                        <button
+                            onClick={() => setTestResult(null)}
+                            className="text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 shrink-0 text-base leading-none"
+                        >✕</button>
+                    </div>
+                    <div className="flex gap-3 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+                        <span>Status: {testResult.result.status_code ?? 'n/a'}</span>
+                        <span>·</span>
+                        <span>Latency: {testResult.result.latency_ms}ms</span>
+                    </div>
+                    {testResult.result.ok && testResult.result.response_text && (
+                        <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/30 p-3 text-xs font-mono leading-relaxed break-words text-emerald-800 dark:text-emerald-200 whitespace-pre-wrap">
+                            &ldquo;{testResult.result.response_text.slice(0, 400)}{testResult.result.response_text.length > 400 ? '…' : ''}&rdquo;
+                        </div>
+                    )}
+                    {!testResult.result.ok && testResult.result.error_message && (
+                        <div className="rounded-lg bg-rose-100 dark:bg-rose-900/30 p-3 text-xs font-mono text-rose-700 dark:text-rose-300 break-words">
+                            {testResult.result.error_message}
+                        </div>
+                    )}
+                </div>
+            )}
             <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
                 <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">Gateway Server Integration</div>
                 <div className="text-xs text-slate-500 dark:text-zinc-400">

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Per-SDK gateway target (simplified - endpoints managed by gateway server)
 export const AIGatewaySDKTargetSchema = z.object({
-    api_key: z.string().min(1),
+    api_key: z.string().min(0),
     models: z.array(
         z.object({
             id: z.string(),

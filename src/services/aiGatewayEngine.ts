@@ -69,11 +69,7 @@ class AIGatewayEngineSingleton {
             version: 2,
             active_sdk: null,
             active_model: null,
-            sdks: {
-                openai: { api_key: '', models: [] },
-                google: { api_key: '', models: [] },
-                anthropic: { api_key: '', models: [] },
-            },
+            sdks: {},
         });
 
         if (!ensured) {
@@ -86,21 +82,25 @@ class AIGatewayEngineSingleton {
         if (parsed.success) {
             this.gatewayConfig = parsed.data;
         } else {
-            this.gatewayConfig = {
-                version: 2,
-                active_sdk: null,
-                active_model: null,
-                sdks: {
-                    openai: { api_key: '', models: [] },
-                    google: { api_key: '', models: [] },
-                    anthropic: { api_key: '', models: [] },
-                },
-            };
-            await this.persistConfig();
+            console.warn('[AIGatewayEngine] gateway.json parse failed, keeping defaults in RAM only (not overwriting file).', parsed.error.issues);
         }
 
         this.syncConfigToRAM();
-        await this.healthCheckSidecar();
+        
+        // Try to find and connect to the gateway server
+        // First try the default port, then radar scan if that fails
+        const healthCheck = await this.healthCheckSidecar();
+        if (!healthCheck.ok) {
+            console.warn('[AIGatewayEngine] Failed to connect to default gateway URL. Running radar scan...');
+            const radar = await this.radarScanPorts(8888, 8930);
+            if (radar.active_base_url) {
+                console.info(`[AIGatewayEngine] Found gateway at ${radar.active_base_url}`);
+                this.gateway_server_url = radar.active_base_url;
+            } else {
+                console.warn('[AIGatewayEngine] Gateway server not found. App can still run, but AI features will be unavailable until gateway is started.');
+            }
+        }
+        
         this.isBooted = true;
     }
 
