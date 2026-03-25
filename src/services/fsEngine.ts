@@ -2,6 +2,34 @@ import { BaseDirectory, writeTextFile, readTextFile, exists, mkdir, readDir } fr
 
 class FSEngineSingleton {
     private hasShownPermissionPopup = false;
+    private readonly fallbackPrefix = 'ace:appconfig:';
+
+    private getFallbackKey(filename: string): string {
+        return `${this.fallbackPrefix}${filename}`;
+    }
+
+    private readFallbackRaw(filename: string): string | null {
+        if (typeof window === 'undefined' || !window.localStorage) return null;
+        try {
+            return window.localStorage.getItem(this.getFallbackKey(filename));
+        } catch {
+            return null;
+        }
+    }
+
+    private writeFallbackRaw(filename: string, content: string): boolean {
+        if (typeof window === 'undefined' || !window.localStorage) return false;
+        try {
+            window.localStorage.setItem(this.getFallbackKey(filename), content);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private hasFallbackFile(filename: string): boolean {
+        return this.readFallbackRaw(filename) !== null;
+    }
 
     /**
      * Ensures a directory exists in the App Data directory.
@@ -41,7 +69,12 @@ class FSEngineSingleton {
         } catch (error) {
             console.error(`FSEngine: Failed to write file ${filename}:`, error);
             this.showPermissionDeniedPopup(filename, error);
-            return false;
+            // Dev/runtime fallback (non-Tauri or denied capability)
+            const fallbackOk = this.writeFallbackRaw(filename, content);
+            if (fallbackOk) {
+                console.warn(`FSEngine: write fallback to localStorage for ${filename}`);
+            }
+            return fallbackOk;
         }
     }
 
@@ -58,19 +91,26 @@ class FSEngineSingleton {
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to ensure file ${filename}:`, error);
-            return false;
+            if (this.hasFallbackFile(filename)) {
+                return true;
+            }
+            return await this.saveFile(filename, defaultData);
         }
     }
 
     async saveFile(filename: string, data: any): Promise<boolean> {
+        const content = JSON.stringify(data, null, 2);
         try {
-            const content = JSON.stringify(data, null, 2);
             await writeTextFile(filename, content, { baseDir: BaseDirectory.AppConfig });
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to save file ${filename}:`, error);
             this.showPermissionDeniedPopup(filename, error);
-            return false;
+            const fallbackOk = this.writeFallbackRaw(filename, content);
+            if (fallbackOk) {
+                console.warn(`FSEngine: save fallback to localStorage for ${filename}`);
+            }
+            return fallbackOk;
         }
     }
 
@@ -80,6 +120,14 @@ class FSEngineSingleton {
             return JSON.parse(content);
         } catch (error) {
             console.error(`FSEngine: Failed to read file ${filename}:`, error);
+            const fallbackRaw = this.readFallbackRaw(filename);
+            if (fallbackRaw !== null) {
+                try {
+                    return JSON.parse(fallbackRaw);
+                } catch (fallbackError) {
+                    console.error(`FSEngine: Failed to parse fallback file ${filename}:`, fallbackError);
+                }
+            }
             return null;
         }
     }

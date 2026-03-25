@@ -1,4 +1,4 @@
-import type { AISession, SDKProvider } from './types';
+import type { AISession, AISessionSnapshot, SDKProvider } from './types';
 
 class AISessionManagerSingleton {
     private sessions = new Map<string, AISession>();
@@ -33,6 +33,18 @@ class AISessionManagerSingleton {
 
     has(sessionId: string): boolean {
         return this.sessions.has(sessionId);
+    }
+
+    list(): AISessionSnapshot[] {
+        return Array.from(this.sessions.values()).map((session) => ({
+            sessionId: session.sessionId,
+            sdk: session.sdk,
+            model: session.model,
+            status: session.status,
+            activeOutputRamKey: session.activeOutputRamKey,
+            isInsideEventBlock: session.isInsideEventBlock,
+            activeEventBufferLength: session.activeEventBuffer.length,
+        }));
     }
 }
 

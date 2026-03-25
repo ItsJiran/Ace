@@ -1,4 +1,4 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
@@ -137,6 +137,30 @@ export default function DevMenu() {
         });
     };
 
+    const spawnAISessionMonitor = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'ai-session-monitor-window',
+            title: 'AI Session Monitor',
+            width: 460,
+            height: 540,
+            x: 760,
+            y: 120,
+        });
+    };
+
+    const spawnPromptChatbarDev = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'ai-prompt-chatbar-dev-window',
+            title: 'Prompt Chatbar Dev',
+            width: 680,
+            height: 520,
+            x: 380,
+            y: 120,
+        });
+    };
+
     const pushNotificationSample = () => {
         const notifier = window.ACE.notification;
         if (!notifier) {
@@ -243,6 +267,16 @@ export default function DevMenu() {
             <button onClick={spawnAIChatbarTest} className={buttonClass}>
                 <MessageSquare size={14} className="text-emerald-300" />
                 AI Chatbar Test Window
+            </button>
+
+            <button onClick={spawnPromptChatbarDev} className={buttonClass}>
+                <MessageCircle size={14} className="text-sky-300" />
+                Prompt Chatbar Dev Window
+            </button>
+
+            <button onClick={spawnAISessionMonitor} className={buttonClass}>
+                <Monitor size={14} className="text-lime-300" />
+                AI Session Monitor Window
             </button>
 
             <button onClick={pushNotificationSample} className={buttonClass}>

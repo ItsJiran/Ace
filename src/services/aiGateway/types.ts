@@ -19,6 +19,17 @@ export interface AISession {
     status: 'idle' | 'connected' | 'streaming' | 'error';
 }
 
+/** Read-only session shape for UI monitoring/debug panels. */
+export interface AISessionSnapshot {
+    sessionId: string;
+    sdk: SDKProvider;
+    model: string;
+    status: AISession['status'];
+    activeOutputRamKey?: string;
+    isInsideEventBlock: boolean;
+    activeEventBufferLength: number;
+}
+
 /** A single parsed event block from an AI stream chunk */
 export interface ParsedBatchEvent {
     headers: {

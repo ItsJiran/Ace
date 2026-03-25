@@ -22,6 +22,16 @@ import type {
 
 type SDKProvider = 'openai' | 'google' | 'anthropic';
 
+interface AIGatewaySessionSnapshot {
+  sessionId: string;
+  sdk: SDKProvider;
+  model: string;
+  status: 'idle' | 'connected' | 'streaming' | 'error';
+  activeOutputRamKey?: string;
+  isInsideEventBlock: boolean;
+  activeEventBufferLength: number;
+}
+
 interface ACENotificationAPI {
   push: (input: NotificationCreateInput) => Notification;
   remove: (uid: string) => boolean;
@@ -47,6 +57,7 @@ interface ACEAIGatewayAPI {
   testResponse: (sdk: SDKProvider, model: string, prompt: string) => Promise<AIGatewayResponseResult>;
   createSession: (sdk: SDKProvider, model: string) => Promise<string>;
   closeSession: (sessionId: string) => void;
+  listSessions: () => AIGatewaySessionSnapshot[];
   sendToSession: (sessionId: string, prompt: string, reply_to_ram_key: string) => Promise<void>;
 }
 

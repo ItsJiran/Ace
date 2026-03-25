@@ -13,8 +13,8 @@ import {
     type AIGatewayRadarScanResult,
 } from '../schemas/ai_gateway';
 
-export type { SDKProvider, AISession } from './aiGateway/types';
-import type { SDKProvider } from './aiGateway/types';
+export type { SDKProvider, AISession, AISessionSnapshot } from './aiGateway/types';
+import type { SDKProvider, AISessionSnapshot } from './aiGateway/types';
 
 /**
  * AIGatewayEngineSingleton
@@ -160,6 +160,11 @@ class AIGatewayEngineSingleton {
     /** Close and remove a session. */
     closeSession(sessionId: string): void {
         AISessionManager.close(sessionId);
+    }
+
+    /** Read-only snapshots for dev monitoring UI. */
+    listSessions(): AISessionSnapshot[] {
+        return AISessionManager.list();
     }
 
     /** Send a prompt to an existing session, streaming the response into RAM. */
