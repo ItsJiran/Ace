@@ -135,3 +135,50 @@ class GoogleAdapter(BaseProviderAdapter):
                 ok=False,
                 error_message=f"Google test_response error: {str(e)}"
             )
+
+    async def stream_response(self, model: str, prompt: str):
+        """Stream a completion from Google Gemini token-by-token."""
+        import json
+        if not self.validate_api_key():
+            yield "[error: Google API key not configured]"
+            return
+
+        stream_timeout = aiohttp.ClientTimeout(total=120)
+        model_id = model or "gemini-pro"
+        url = f"{self.base_url}/models/{model_id}:streamGenerateContent"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+        }
+        try:
+            async with aiohttp.ClientSession(timeout=stream_timeout) as session:
+                async with session.post(
+                    url,
+                    json=payload,
+                    params={"key": self.api_key, "alt": "sse"},
+                    headers={"Content-Type": "application/json"},
+                ) as response:
+                    if response.status != 200:
+                        text = await response.text()
+                        yield f"[error: Google {response.status} - {text[:200]}]"
+                        return
+
+                    async for raw_line in response.content:
+                        line = raw_line.decode("utf-8").rstrip("\n")
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        try:
+                            obj = json.loads(data)
+                            candidates = obj.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts:
+                                    token = parts[0].get("text", "")
+                                    if token:
+                                        yield token
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            continue
+        except asyncio.TimeoutError:
+            yield "[error: Google stream timed out]"
+        except Exception as e:
+            yield f"[error: {str(e)}]"

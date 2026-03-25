@@ -71,8 +71,18 @@ Windows are **React Components** that typically manage their lifecycle via `useA
 - [x] **AI Gateway Refactor:** Per-SDK schema (`gateway.json` v2) with simplified config (API key + models, no endpoints)
 - [x] **AIGatewayEngine Methods:** Implemented `fetchModels(sdk)`, `testResponse(sdk, model, prompt)`, `setActiveSDK()`, `setActiveModel()`, `setSDKApiKey()`
 - [x] **Gateway Server Architecture Decision:** App communicates only with `sdk-gateway-server` sidecar; gateway handles all provider endpoints internally
-- [x] **Python AI Gateway Server Implementation:** Multi-provider sidecar with OpenAI, Google Gemini, Anthropic adapters; FastAPI server; Bearer token auth; `/health`, `/models/{sdk}`, `/test/{sdk}` endpoints ready
+- [x] **Python AI Gateway Server (`src-gateway-server/`):** Multi-provider sidecar with OpenAI, Google Gemini, Anthropic adapters; FastAPI + Uvicorn; Bearer token auth; `/health`, `/models/{sdk}`, `/test/{sdk}` endpoints — fully working
 - [x] **Gateway Server Adapters:** BaseProviderAdapter interface with OpenAI, Google, and Anthropic implementations; async aiohttp with 9s timeouts; error normalization
+- [x] **Python venv setup:** `src-gateway-server/.venv` virtual environment; `npm run setup:gateway` bootstraps deps; `npm run dev:gateway` / `npm run dev:with-gateway` scripts wired
+- [x] **CORS fixed:** `allow_origin_regex` middleware accepting `localhost:*` and `127.0.0.1:*` — browser fetch works from Tauri/Vite dev server
+- [x] **Auto port-redirect:** sidecar scans 8888–8930 on startup and picks first available port; health endpoint reports actual `base_url` + `port`
+- [x] **Radar port scanner:** `AIGatewayEngine.radarScanPorts()` probes range in parallel, verifies response by `gateway_name` field, returns `found_ports[]` + `active_base_url`
+- [x] **Sidecar health verifier:** `AIGatewayEngine.healthCheckSidecar()` fetches `/health`, matches `gateway_name === 'ace-sdk-gateway-server'`, persists result to `system:ai_gateway_runtime` RAM key
+- [x] **Auto-resolve base URL at boot:** engine tries default → fallback → radar scan sequence; never hard-fails if gateway starts on a redirected port
+- [x] **System Settings — AI Gateway tab fully working:** per-SDK API key input, Save Key, Fetch Models, Set Active SDK/Model, Test Response — all wired end-to-end
+- [x] **Test Response result card:** rich highlighted banner (green/red) with status, latency, model name, response preview; auto-dismisses after 12s
+- [x] **Sidecar Healthcheck panel in System Settings:** ONLINE/OFFLINE badge, base URL, verifier name, contract version, latency, found ports from radar scan, manual Health Check + Radar Scan buttons, periodic auto-scan every 5s
+- [x] **Config persistence fix:** Zod schema `api_key: min(0)` (was `min(1)`) — empty-key SDKs no longer cause parse failure that wiped `gateway.json` on restart
 - [x] **Fix B:** `setFocusedWindowInteractive()` — eliminated double write to `system:global_state` and `system:overlay_state` on every spawn focus (4 writes → 3 writes, removes 2 synchronous socket fan-out cascades)
 
 ### 🚧 In Progress — Performance
@@ -90,90 +100,22 @@ Windows are **React Components** that typically manage their lifecycle via `useA
 - [x] **CursorBridge selective hit-test** — `isSelectiveHitTestWindow` + `isCursorOnInteractiveNode` DOM-based test for transparent-host windows (DockBar, NotificationWindow); transparent areas no longer block desktop click-through
 - [x] **DevMenu notification trigger** — "Push Notification" button calling `window.ACE.notification.push()` with sample payload
 
-### 🚧 In Progress — AI & Tooling (Current Sprint)
+### ✅ Completed — AI & Gateway Integration
 
-**Priority order: System Settings Gateway UI → Gateway Connectivity Testing → Gateway Core Runtime (Session/Stream) → Parser → PromptBar/ChatBar → Tooling**
+**Gateway integration is fully working end-to-end.** Next focus: AI streaming runtime + PromptBar/ChatBar UI.
 
-#### 0. System Settings — AI Gateway Manager *(First Focus)*
-- [ ] Add **AI Gateway Settings** section in System Settings as top-priority delivery
-- [ ] Per-SDK sections in Settings UI: **OpenAI**, **Google (Gemini)**, **Anthropic**
-- [ ] Each SDK section: API key field, model list display
-- [ ] **Fetch Models** button per SDK: calls `sdk-gateway-server` to fetch provider models (also serves as SDK connectivity + auth test)
-- [ ] Active SDK + active model selection (global active choice across SDKs)
-- [ ] Persist all gateway settings via `fsEngine` to `gateway.json` (v2 per-SDK schema, no endpoints)
-- [ ] Future extensibility: custom/local SDK slots — gateway server will handle custom provider endpoint configs
+#### ✅ System Settings — AI Gateway Manager *(Complete)*
+- [x] **AI Gateway Settings** section in System Settings fully delivered
+- [x] Per-SDK sections in Settings UI: **OpenAI**, **Google (Gemini)**, **Anthropic**
+- [x] Each SDK section: API key field, model list display, active model selector
+- [x] **Fetch Models** button per SDK: calls `sdk-gateway-server` to fetch provider models (also serves as SDK connectivity + auth test)
+- [x] Active SDK + active model selection (global active choice across SDKs)
+- [x] Gateway settings persisted via `fsEngine` to `gateway.json` (v2 per-SDK schema)
+- [x] **Sidecar Healthcheck panel** — ONLINE/OFFLINE badge, base URL, latency, contract version, found ports
+- [x] **Auto-scan** — radar scan every 5s; manual Health Check + Radar Scan Ports buttons
+- [x] **Test Response card** — rich result toast with status/latency/preview; auto-dismisses 12s
 
-##### ✅ `gateway.json` v2 Schema (Implemented)
-```json
-{
-  "version": 2,
-  "active_sdk": "openai",
-  "active_model": "gpt-4o",
-  "sdks": {
-    "openai": {
-      "api_key": "sk-...",
-      "models": []
-    },
-    "google": {
-      "api_key": "AIza...",
-      "models": []
-    },
-    "anthropic": {
-      "api_key": "sk-ant-...",
-      "models": []
-    }
-  }
-}
-```
-- `active_sdk` + `active_model`: global selection for which SDK and model to use in sessions
-- `sdks.<provider>.api_key`: single API key per SDK provider (passed to `sdk-gateway-server` for API calls)
-- `sdks.<provider>.models`: populated by fetching model list from `sdk-gateway-server` — doubles as SDK health check
-- **Host endpoints managed by `sdk-gateway-server`:** App talks only to sidecar, never directly to provider APIs. Gateway server handles all provider endpoint logic internally.
-- Future: `sdks.custom` slot for local/self-hosted providers (will need custom host + model discovery in gateway config)
-
-#### 1. ✅ AI Gateway Engine — Testing & Model Discovery (Implemented)
-- [x] Implement `fetchModels(sdk)` method: calls `sdk-gateway-server` model list endpoint, returns model array
-- [x] Model list fetch doubles as connectivity/auth test — if models come back, SDK is working
-- [x] Implement `testResponse(sdk, model, prompt)` method: calls gateway server to test completion with selected model
-- [x] Return structured test result payload (`ok`, `latency_ms`, `status_code`, `error_message?`)
-- [x] Persist fetched models back into `gateway.json` per SDK entry
-- [x] Active SDK + model selection API: `setActiveSDK(sdk)`, `setActiveModel(sdk, model)`, `setSDKApiKey(sdk, key)`
-- [ ] Wire Settings **Fetch Models** button to `fetchModels()` per SDK via gateway server (pending UI implementation)
-
-#### 1.5. Python AI SDK Gateway Server Layer *(New Requirement)*
-  - [x] Build a Python layer that runs AI SDK calls as a dedicated gateway server process
-  - [x] Primary strategy: package/compile gateway server as a standalone sidecar artifact (separate from main app binary)
-  - [x] Runtime contract: app starts sidecar process and communicates via stable gateway API contract
-  - [x] Update strategy: ship updater to replace sidecar artifact/package without rebuilding main app
-  - [x] Restart behavior: on app restart, app loads the latest installed sidecar build automatically
-  - [x] Add health/version endpoint from Python server so System Settings can verify loaded SDK build
-
-  ##### ✅ Implemented Structure: `src-gateway-server/` (Python)
-  - [x] Create `src-gateway-server/` as a dedicated multi-provider gateway runtime layer
-  - [x] Add provider adapter interface (`BaseProviderAdapter`) so all SDKs follow one contract
-  - [x] Implement adapters for `openai`, `google`, `anthropic`, and extensible custom providers
-  - [x] Gateway facade exposes one unified API while routing internally to provider-specific SDK adapters
-  - [x] Keep provider-specific auth/config isolated in adapter modules (avoid leaking provider logic to app core)
-
-  ##### ✅ Implemented `src-gateway-server/` Layout
-  - [x] `src-gateway-server/main.py` — bootstrap HTTP/FastAPI server + lifecycle
-  - [x] `src-gateway-server/routes/api.py` — `/health`, `/models/{sdk}`, `/test/{sdk}` endpoints
-  - [x] `src-gateway-server/adapters/` — `base_adapter.py`, `openai_adapter.py`, `google_adapter.py`, `anthropic_adapter.py`
-  - [x] `src-gateway-server/core/gateway.py` — gateway facade, adapter registry, contract mapping, error normalization
-  - [x] `src-gateway-server/models/__init__.py` — request/response DTO schemas for stable cross-runtime contract
-  - [x] `src-gateway-server/runtime/` — placeholder for sidecar process runtime/launcher (future)
-  - [x] `src-gateway-server/config/` — placeholder for provider registry and runtime config loading (future)
-  - [x] `src-gateway-server/requirements.txt` — FastAPI, aiohttp, provider SDK dependencies
-  - [x] `src-gateway-server/README.md` — complete documentation with install, API reference, integration guide
-
-##### Multi-SDK Contract Rules (Boundary Enforcement)
-- [ ] Main app talks only to gateway endpoints (never directly to provider SDK)
-- [ ] Standardize normalized response shape across providers (`text`, `tool_call`, `usage`, `errors`)
-- [ ] Standardize streaming event envelope across providers (provider-specific chunks mapped to one schema)
-- [ ] Enforce versioned contract (`gateway_contract_version`) for app ↔ sidecar compatibility checks
-- [ ] Add capability map per provider (`supports_stream`, `supports_tools`, `supports_vision`, etc.)
-
-#### 2. AI Gateway Engine — Core Runtime *(After Testing Stable)*
+#### 2. AI Gateway Engine — Core Runtime *(Next: After Streaming Contract Defined)*
 - [ ] Finalize provider transport layer (OpenAI-compatible HTTP streaming)
 - [ ] Session lifecycle: create, resume, abort, expire
 - [ ] Stream pipeline: raw SSE → token buffer → RAM write (`system:session:<uid>:stream`)
@@ -257,7 +199,7 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 - [ ] **Tauri Transparent Layer**: Configure the borderless, click-through fullscreen window (Layer 1).
 - [ ] **Base Dumb Components**: Build the UI primitives (e.g., `<CommandInput />`, `<ChatBubble />`, `<WindowFrame />`) using Shadcn & Tailwind.
 - [ ] **Settings Window**: Create a settings window for keybinds and configuration and tools list, and widget list.
-- [ ] **AI Gateway Configuration Panel (System Settings)**: Per-SDK gateway management (OpenAI, Google, Anthropic) with API key per SDK, model list discovery via gateway server, and active SDK + model selection — persisted to `gateway.json` v2 via `fsEngine`.
+- [x] **AI Gateway Configuration Panel (System Settings)**: Per-SDK gateway management (OpenAI, Google, Anthropic) with API key per SDK, model list discovery via gateway server, active SDK + model selection — persisted to `gateway.json` v2 via `fsEngine`. **Fully working.**
 - [ ] **Theme System (Light/Dark) for Core Widgets**: Implement global design tokens from `.ai/13_core_widget_design_language.md` and apply to System/Prompt/Console widgets.
 - [ ] **Core Chat Surface Styling**: Implement AI/user bubble styling rules, floating pill input bar, and soft multi-layer shadows based on design language pillar.
 - [ ] **Motion Polish Pass**: Add subtle fade-in and typing indicator motion primitives (non-flashy) and standardize easing/duration tokens.
@@ -270,44 +212,34 @@ You are finished with Phase 4 when you can run 10 concurrent "Mock Streams" writ
 ### 🧠 Phase 6: The AI Gateway, Parser & Chat Surface *(Current Phase)*
 *Goal: Build incrementally from configuration and connectivity verification first, then expand into full gateway runtime, parsing, and chat rendering.*
 
-#### ✅ Step 0 — System Settings: AI Gateway Manager Foundation (Schema Ready)
-- [x] **Schema & Engine Ready:** `gateway.json` v2 schema refactored to per-SDK (API key + models only, no endpoints)
-- [x] Engine methods prepared: `fetchModels(sdk)`, `testResponse()`, `setActiveSDK()`, `setActiveModel()`, `setSDKApiKey()`
-- [ ] Settings UI (Next Phase): OpenAI, Google (Gemini), Anthropic tabs/sections
-- [ ] Settings UI: API key input + Fetch Models button per SDK
-- [ ] Settings UI: Active SDK/model selectors (cross-SDK global choice)
-- [ ] Future: custom/local SDK slots — gateway server will manage custom provider configs
+#### ✅ Step 0 — System Settings: AI Gateway Manager (Complete)
+- [x] `gateway.json` v2 schema: per-SDK API key + models, no hardcoded endpoints
+- [x] System Settings AI Gateway tab: API key inputs, Fetch Models, active SDK/model selector, Test Response
+- [x] Sidecar Healthcheck panel: ONLINE/OFFLINE badge, base URL, contract version, latency, radar found-ports
+- [x] Config persisted safely — Zod `min(0)` fix prevents parse failure wiping saved keys on restart
 
-#### ✅ Step 1 — AI Gateway Engine: Model Discovery & Testing (Implemented)
-- [x] Implement `fetchModels(sdk)` — calls `sdk-gateway-server` /models endpoint for given SDK
-- [x] Model list response doubles as connectivity/auth validation (models returned = SDK+auth working)
-- [x] Implement `testResponse(sdk, model, prompt)` for completion smoke test via gateway server
-- [x] Standardize result contract (`ok`, `latency_ms`, `status_code`, `error_message?`)
-- [x] Persist fetched model list back to `gateway.json` per SDK entry
-- [x] Active selection API: `setActiveSDK(sdk)`, `setActiveModel(sdk, model)`, `setSDKApiKey(sdk, key)`
-- [ ] Wire Settings UI per-SDK actions to engine methods (pending UI implementation)
+#### ✅ Step 1 — AI Gateway Engine: Discovery, Testing & Observability (Complete)
+- [x] `fetchModels(sdk)`, `testResponse(sdk, model, prompt)`, `healthCheckSidecar()`, `radarScanPorts()`
+- [x] Auto-resolve gateway URL at boot: current → default → radar scan
+- [x] `system:ai_gateway_runtime` RAM key: live health/scan state for UI subscription
+- [x] `system:ai_gateway_config` RAM key: config mirror for reactive UI updates
 
-#### Step 1.5 — Python AI SDK Server (Sidecar Packaging First)
-- [ ] Implement Python-based AI Gateway SDK server process (separate from main app binary)
-- [ ] Keep main app binary untouched while gateway updates are delivered by replacing sidecar package/artifact
-- [ ] Provide updater script flow: download/replace sidecar runtime safely
-- [ ] On restart, app resolves and launches the newest sidecar build automatically
-- [ ] Optional extension path: dynamic linking mode for SDK libs when required by specific provider/runtime needs
-- [ ] Add diagnostics endpoint for loaded SDK version/path for quick verification from Settings/DevKit
+#### ✅ Step 1.5 — Python AI Gateway Sidecar (Complete)
+- [x] `src-gateway-server/` — FastAPI multi-provider sidecar (OpenAI, Google, Anthropic)
+- [x] Endpoints: `/health`, `/models/{sdk}`, `/test/{sdk}`; Bearer token auth
+- [x] Auto port-redirect 8888–8930; verifier metadata in `/health` response
+- [x] CORS for `localhost`/`127.0.0.1`; Python venv + npm scripts
 
-#### Step 1.6 — Multi-SDK Gateway Aggregation Plan (`src-gateway-server`)
-- [ ] Build provider adapter registry so one gateway can serve multiple SDKs (`openai`, `google`, `anthropic`, others)
-- [ ] Gateway server internally manages all provider endpoints — app never talks to provider APIs directly
-- [ ] Implement `/models`, `/test_response` endpoints in gateway facade (shared logic, adapter-specific execution)
-- [ ] Implement unified streaming relay: provider stream → normalized event stream for app parser
-- [ ] Add fallback strategy per adapter (primary provider fails -> optional fallback provider)
-- [ ] Add per-provider SDK diagnostics and version telemetry for Settings/DevKit observability
+#### ⏳ Step 1.6 — Multi-SDK Contract Hardening *(Next)*
+- [ ] Normalized streaming event envelope across providers
+- [ ] `gateway_contract_version` enforcement on boot
+- [ ] Fallback provider chain
+- [ ] Capability map per provider (`supports_stream`, `supports_tools`, `supports_vision`)
 
-#### Step 1.7 — Sidecar Process Integration (App Runtime)
-- [ ] Add `GatewaySidecarManager` in app runtime to spawn/check/restart Python gateway process
-- [ ] Boot flow: ensure sidecar running before gateway tests/session APIs are used
-- [ ] Add health handshake (`contract version`, `sdk versions`, `loaded adapters`) before enabling UI actions
-- [ ] Add graceful shutdown/restart handling and stale process cleanup
+#### ⏳ Step 1.7 — Sidecar Process Manager *(Future)*
+- [ ] Auto-spawn/restart Python sidecar from within app binary
+- [ ] Health handshake on boot before enabling gateway UI
+- [ ] Graceful shutdown on app exit
 
 #### Step 2 — AI Gateway Engine: Runtime & Streaming
 - [ ] Session API: communicate with `sdk-gateway-server` for create/resume/abort/expire operations

@@ -114,3 +114,52 @@ class AnthropicAdapter(BaseProviderAdapter):
                 ok=False,
                 error_message=f"Anthropic test_response error: {str(e)}"
             )
+
+    async def stream_response(self, model: str, prompt: str):
+        """Stream a completion from Anthropic Claude token-by-token."""
+        import json
+        if not self.validate_api_key():
+            yield "[error: Anthropic API key not configured]"
+            return
+
+        stream_timeout = aiohttp.ClientTimeout(total=120)
+        try:
+            async with aiohttp.ClientSession(timeout=stream_timeout) as session:
+                headers = {
+                    "x-api-key": self.api_key,
+                    "anthropic-version": self.api_version,
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": model or "claude-3-haiku-20240307",
+                    "max_tokens": 2048,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": True,
+                }
+                async with session.post(
+                    f"{self.base_url}/messages",
+                    json=payload,
+                    headers=headers,
+                ) as response:
+                    if response.status != 200:
+                        text = await response.text()
+                        yield f"[error: Anthropic {response.status} - {text[:200]}]"
+                        return
+
+                    async for raw_line in response.content:
+                        line = raw_line.decode("utf-8").rstrip("\n")
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        try:
+                            obj = json.loads(data)
+                            if obj.get("type") == "content_block_delta":
+                                token = obj.get("delta", {}).get("text", "")
+                                if token:
+                                    yield token
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+        except asyncio.TimeoutError:
+            yield "[error: Anthropic stream timed out]"
+        except Exception as e:
+            yield f"[error: {str(e)}]"

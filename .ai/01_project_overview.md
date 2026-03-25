@@ -119,7 +119,7 @@ Each domain engine is autonomous. It registers its own Event Bus listeners for t
 
   toolsEngine (The Library/Registry): The static dictionary of system capabilities. It maintains the registry of all available OS-level tools, providing the exact Zod schemas for the EventEngine to use during validation, and the mapped TypeScript handlers for the executing engine.
 
-  aiGatewayEngine: The LLM communicator. It manages the WebSocket/HTTP connection to the remote AI, coordinates streamed responses, and escalates executable work back to the Event Bus.
+  aiGatewayEngine: The LLM communicator. It communicates with the `src-gateway-server` Python sidecar over HTTP rather than connecting to AI providers directly. At boot it loads `gateway.json` from AppConfig, runs a health check against `http://127.0.0.1:8888`, and falls back to a port radar scan (8888–8930) if the default port is unavailable. Config is published to `system:ai_gateway_config` and live connection state to `system:ai_gateway_runtime` in RAM. It manages per-session streaming contexts, coordinates parsed AI responses, and escalates executable work back to the Event Bus.
 
   pipelineEngine (The Pipeline): The linear execution engine. Any engine can use it directly to orchestrate a complex step-by-step sequence with built-in observability and cancellation.
 

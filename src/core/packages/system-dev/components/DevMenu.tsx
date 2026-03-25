@@ -1,5 +1,6 @@
-import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing } from 'lucide-react';
+import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useState } from 'react';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { AceRegistryType } from '#/schemas/registryTypes';
@@ -13,6 +14,10 @@ export const registry: AceRegistryType.Component = {
 
 export default function DevMenu() {
     const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
+    const [parserPrompt, setParserPrompt] = useState('');
+    const [parserMemoryUid, setParserMemoryUid] = useState('system:dev:ai_parser:last');
+    const [parserSessionId, setParserSessionId] = useState<string | null>(null);
+    const parserMemory = useAceMemory<any>(parserMemoryUid);
     
     const isAmbient = overlayState?.mode === 'ambient';
 
@@ -126,6 +131,18 @@ export default function DevMenu() {
         });
     };
 
+    const spawnAIChatbarTest = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'ai-chatbar-test-window',
+            title: 'AI Chatbar Test',
+            width: 720,
+            height: 540,
+            x: 440,
+            y: 120,
+        });
+    };
+
     const pushNotificationSample = () => {
         const notifier = window.ACE.notification;
         if (!notifier) {
@@ -182,11 +199,97 @@ export default function DevMenu() {
 
     const buttonClass = 'flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 text-zinc-300';
 
+    const submitParserPrompt = async () => {
+        const prompt = parserPrompt.trim();
+        if (!prompt) return;
+
+        const sdk = window.ACE.ai_gateway.getActiveSDK() || 'openai';
+        const model = window.ACE.ai_gateway.getActiveModel() || 'gpt-4o-mini';
+
+        let sessionId = parserSessionId;
+        if (!sessionId) {
+            sessionId = await window.ACE.ai_gateway.createSession(sdk, model);
+            setParserSessionId(sessionId);
+        }
+
+        window.ACE.event.emit({
+            event_type: 'interaction',
+            action: 'send_gateway',
+            payload: {
+                prompt,
+            },
+            preallocated_memory: {
+                reply_to_ram_key: parserMemoryUid,
+                session_id: sessionId,
+                sdk,
+                model,
+            },
+        } as any);
+
+        setParserPrompt('');
+    };
+
     return (
         <div className="flex flex-col gap-2 w-full h-full p-2 relative">
             <RenderCounterBadge componentName="DevMenu" />
             <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">
                 Development Kit
+            </div>
+
+            <div className="rounded border border-zinc-700/50 bg-zinc-900/50 p-2 flex flex-col gap-2">
+                <div className="text-[11px] font-semibold text-cyan-300 uppercase tracking-wide">
+                    AI Parser EventBus Test
+                </div>
+
+                <input
+                    value={parserMemoryUid}
+                    onChange={(e) => setParserMemoryUid(e.target.value)}
+                    className="w-full rounded bg-zinc-950 border border-zinc-700 px-2 py-1 text-[11px] text-zinc-300"
+                    placeholder="target memory uid"
+                />
+
+                <textarea
+                    value={parserPrompt}
+                    onChange={(e) => setParserPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            void submitParserPrompt();
+                        }
+                    }}
+                    className="w-full rounded bg-zinc-950 border border-zinc-700 px-2 py-1 text-[12px] text-zinc-200 min-h-[62px]"
+                    placeholder="Type prompt then press Enter to emit send_gateway with targeted memory"
+                />
+
+                <div className="flex items-center justify-between gap-2">
+                    <button onClick={() => void submitParserPrompt()} className="px-2 py-1 rounded text-xs bg-cyan-700/70 hover:bg-cyan-600 text-cyan-50 border border-cyan-500/40">
+                        Send Prompt
+                    </button>
+                    <div className="text-[10px] text-zinc-400 truncate max-w-[170px]" title={parserSessionId || ''}>
+                        session: {parserSessionId || '-'}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px] text-zinc-400">
+                    <div>status: <span className="text-zinc-200">{parserMemory?.status || '-'}</span></div>
+                    <div>batches: <span className="text-zinc-200">{parserMemory?.parser_batch_count ?? 0}</span></div>
+                    <div>events: <span className="text-zinc-200">{parserMemory?.events_total ?? 0}</span></div>
+                    <div>raw chars: <span className="text-zinc-200">{parserMemory?.raw_response?.length ?? 0}</span></div>
+                </div>
+
+                <details className="rounded border border-zinc-800 bg-zinc-950/50 p-2">
+                    <summary className="cursor-pointer text-[11px] text-zinc-300">Raw Response</summary>
+                    <pre className="mt-2 text-[10px] leading-4 text-zinc-400 whitespace-pre-wrap break-words max-h-32 overflow-auto">
+                        {parserMemory?.raw_response || ''}
+                    </pre>
+                </details>
+
+                <details className="rounded border border-zinc-800 bg-zinc-950/50 p-2" open>
+                    <summary className="cursor-pointer text-[11px] text-zinc-300">Parser Batches (JSON Array)</summary>
+                    <pre className="mt-2 text-[10px] leading-4 text-zinc-400 whitespace-pre-wrap break-words max-h-44 overflow-auto">
+                        {JSON.stringify(parserMemory?.parser_batches || [], null, 2)}
+                    </pre>
+                </details>
             </div>
 
             <button onClick={spawnSystemSettings} className={buttonClass}>
@@ -227,6 +330,11 @@ export default function DevMenu() {
             <button onClick={spawnRamMonitor} className={buttonClass}>
                 <MemoryStick size={14} className="text-cyan-400" />
                 RAM Monitor
+            </button>
+
+            <button onClick={spawnAIChatbarTest} className={buttonClass}>
+                <MessageSquare size={14} className="text-emerald-300" />
+                AI Chatbar Test Window
             </button>
 
             <button onClick={pushNotificationSample} className={buttonClass}>

@@ -43,6 +43,22 @@ The bootup sequence operates in **4 Strict Phases**, executed through the boot p
   3. Refresh the runtime list of available layouts.
 * **Result:** The system can save and restore workspace snapshots without blocking base overlay startup.
 
+### Phase 5: AI Gateway Initialization
+* **Action:** Connect to the Python gateway sidecar and synchronize persisted provider configuration into RAM.
+* **Execution:**
+  1. Call `FSEngine.ensureFile('gateway.json', { version, active_sdk: null, sdks: {} })` — creates the file if missing.
+  2. Read and Zod-parse `gateway.json`.
+    * On success: load parsed config into `this.gatewayConfig`.
+    * On failure: log a warning and keep in-RAM defaults. **Do not overwrite the file** — a parse failure may mean the file contains a newer schema version.
+  3. Call `syncConfigToRAM()` — publishes `system:ai_gateway_config`.
+  4. Health check: `GET http://127.0.0.1:8888/health` with a 1500 ms timeout.
+    * Verify `ok === true` AND `gateway_name === "ace-sdk-gateway-server"`.
+  5. If step 4 fails: run `radarScanPorts(8888, 8930)` — probe each port concurrently and return the first verifying URL.
+  6. If a URL is found (step 4 or 5): update `this.gateway_server_url` to the verified URL.
+  7. Mark engine as `isBooted = true`.
+* **Key principle:** Boot does **not** block or throw if the sidecar is absent. The engine logs a warning and allows the rest of the application to continue. AI features become unavailable but all other system behavior is unaffected.
+* **RAM keys written:** `system:ai_gateway_config`, `system:ai_gateway_runtime`.
+
 ## What Does Not Boot Upfront
 
 - `processEngine` is intentionally not booted as a permanent startup phase.

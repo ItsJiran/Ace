@@ -2,7 +2,7 @@
 
 from typing import Optional
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from core.gateway import GatewayFacade
 from models import HealthResponse
 
@@ -183,3 +183,56 @@ async def test_response(sdk: str, request: Request) -> JSONResponse:
 
     result = await gateway.test_response(sdk, model, prompt)
     return JSONResponse(content=result.to_dict())
+
+
+@router.post("/chat/{sdk}")
+async def chat_stream(sdk: str, request: Request) -> StreamingResponse:
+    """Stream a chat completion token-by-token.
+
+    Expects Bearer token in Authorization header.
+    Body: JSON with "model" and "prompt" fields.
+    Returns a plain text chunked streaming response.
+
+    Args:
+        sdk: Provider ID ("openai", "google", "anthropic")
+        request: FastAPI request
+
+    Returns:
+        StreamingResponse with raw text tokens
+    """
+    if gateway is None:
+        async def error_gen():
+            yield "[error: Gateway not initialized]"
+        return StreamingResponse(error_gen(), media_type="text/plain", status_code=500)
+
+    api_key = await extract_bearer_token(request)
+    if not api_key:
+        async def error_gen():
+            yield "[error: Missing or invalid Authorization header. Use: Authorization: Bearer <api_key>]"
+        return StreamingResponse(error_gen(), media_type="text/plain", status_code=401)
+
+    if not gateway.load_adapter(sdk, api_key):
+        async def error_gen():
+            yield f"[error: Unsupported SDK: {sdk}. Supported: openai, google, anthropic]"
+        return StreamingResponse(error_gen(), media_type="text/plain", status_code=400)
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        async def error_gen():
+            yield f"[error: Invalid JSON body: {str(e)}]"
+        return StreamingResponse(error_gen(), media_type="text/plain", status_code=400)
+
+    model = body.get("model", "")
+    prompt = body.get("prompt", "")
+
+    if not model:
+        async def error_gen():
+            yield "[error: Missing required field: model]"
+        return StreamingResponse(error_gen(), media_type="text/plain", status_code=400)
+
+    async def generate():
+        async for chunk in gateway.stream_response(sdk, model, prompt):
+            yield chunk
+
+    return StreamingResponse(generate(), media_type="text/plain")

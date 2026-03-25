@@ -1,7 +1,7 @@
 """Base adapter interface for AI SDK providers."""
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import AsyncGenerator, List
 from models import AIModel, ModelsResponse, TestResponseResult
 
 
@@ -24,6 +24,13 @@ class BaseProviderAdapter(ABC):
     async def test_response(self, model: str, prompt: str) -> TestResponseResult:
         """Test a completion with the given model and prompt."""
         pass
+
+    @abstractmethod
+    async def stream_response(self, model: str, prompt: str) -> AsyncGenerator[str, None]:
+        """Stream a completion token-by-token. Yields raw text chunks."""
+        # Subclasses must implement this as an async generator
+        raise NotImplementedError
+        yield  # make this method a generator to satisfy the type
 
     def validate_api_key(self) -> bool:
         """Validate that API key is set."""

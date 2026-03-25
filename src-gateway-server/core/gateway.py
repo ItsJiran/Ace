@@ -112,3 +112,22 @@ class GatewayFacade:
 
         adapter = self._adapters[sdk]
         return await adapter.test_response(model, prompt)
+
+    async def stream_response(self, sdk: str, model: str, prompt: str):
+        """Stream a completion token-by-token for the given SDK.
+
+        Args:
+            sdk: Provider ID ("openai", "google", "anthropic")
+            model: Model ID
+            prompt: Prompt to send
+
+        Yields:
+            Raw text chunks from the provider
+        """
+        if sdk not in self._adapters:
+            yield f"[error: SDK '{sdk}' not loaded. Load it first with an API key.]"
+            return
+
+        adapter = self._adapters[sdk]
+        async for chunk in adapter.stream_response(model, prompt):
+            yield chunk

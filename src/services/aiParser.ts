@@ -2,17 +2,34 @@ import type { BufferedAIEvent } from '../schemas/ai_protocol';
 import { AITextBlockHeaderSchema } from '../schemas/ai_protocol';
 
 /**
+ * A single ordered segment of an AI response.
+ *
+ * The full response is a sequence of alternating text and event blocks, e.g.:
+ *   [ { type:'text', … }, { type:'event', … }, { type:'text', … } ]
+ *
+ * This makes it possible for the UI to render each segment as its own bubble /
+ * action card rather than collapsing all text into one undivided string.
+ */
+export type AIMessageBlock =
+    | { type: 'text'; content: string }
+    | { type: 'event'; event: BufferedAIEvent };
+
+/**
  * Result of parsing a chunk of AI stream.
- * events: An array of successfully parsed event blocks (some might be incomplete if buffering).
- * textToPrint: Any raw text outside of event blocks that should be printed to the UI normally.
+ *
+ * blocks       — ordered sequence of text/event segments (primary output).
+ * events       — flat array of all events (backward-compat convenience).
+ * textToPrint  — all text segments concatenated (backward-compat convenience).
  */
 export interface AIParseResult {
+    blocks: AIMessageBlock[];
     events: BufferedAIEvent[];
     textToPrint: string;
 }
 
 export function parseAIStreamChunk(chunk: string): AIParseResult {
     const result: AIParseResult = {
+        blocks: [],
         events: [],
         textToPrint: ''
     };
@@ -30,7 +47,9 @@ export function parseAIStreamChunk(chunk: string): AIParseResult {
 
         // 1. Add any preceding raw text to the textToPrint buffer
         if (startIdx > textCursor) {
-            result.textToPrint += chunk.substring(textCursor, startIdx);
+            const textContent = chunk.substring(textCursor, startIdx);
+            result.textToPrint += textContent;
+            result.blocks.push({ type: 'text', content: textContent });
         }
         textCursor = startIdx + fullBlock.length;
 
@@ -67,11 +86,14 @@ export function parseAIStreamChunk(chunk: string): AIParseResult {
         };
 
         result.events.push(event);
+        result.blocks.push({ type: 'event', event });
     }
 
     // Add any trailing raw text after all regex matches
     if (textCursor < chunk.length) {
-        result.textToPrint += chunk.substring(textCursor);
+        const trailingText = chunk.substring(textCursor);
+        result.textToPrint += trailingText;
+        result.blocks.push({ type: 'text', content: trailingText });
     }
 
     return result;
