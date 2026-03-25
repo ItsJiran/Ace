@@ -23,6 +23,30 @@ Notes:
 - This README now tracks active and pending work only.
 - Completed details and long examples are maintained in `.ai/` documentation.
 
+## Recently Completed
+
+### Tooling Engine Foundation
+- [x] `ProcessEngine.track()` + `getAll()` — wrap any async fn as an observable process in RAM
+- [x] `ToolEngine.execute()` + `getAll()` + `ToolManifestEntry` — registry read-through, Zod validation, ProcessEngine-tracked execution
+- [x] `ToolDefinition<T>` constraint relaxed from `ZodObject<any>` → `ZodTypeAny` (supports discriminated unions)
+- [x] `FsTool.ts` — consolidated single fs-tool with `z.discriminatedUnion` on `action` field (`read_file | write_file | list_directory | create_directory | delete_file`)
+- [x] EventBus `execute_tool` route registered in BootupPipeline Phase 7
+- [x] `FSEngine.readRaw`, `deleteFile`, `trackedRead`, `trackedWrite`, `trackedSave` added
+- [x] `PipelineEngine.tracked` context option — wraps entire pipeline in `ProcessEngine.track`
+
+### Shell Engine
+- [x] `execute_shell` Rust command in `src-tauri/src/lib.rs` (command + args + cwd → stdout/stderr/exit_code)
+- [x] `ShellEngine` singleton — `run`, `runSudo` (pkexec), `checkAvailable`, `output`; BLOCKED_PATTERNS enforced
+- [x] `ShellTool.ts` — registry-discoverable tool wrapping ShellEngine (`run | run_sudo | output | check_available`)
+- [x] `window.ACE.shell` registered in `boot.ts` + `ace.d.ts`
+
+### Dev UI
+- [x] `ToolRunnerDev` component — list tools, edit JSON payload, run via EventBus or direct execute, show result
+- [x] `ToolRunnerDevWindow` — 620×540, chrome_style standard, slug `tool-runner-dev-window`
+- [x] DevMenu `Tool Runner` button (Wrench icon, amber-400)
+
+---
+
 ## Current Focus
 
 ### In Progress - UI Shell
@@ -49,10 +73,11 @@ Notes:
 - [ ] Scrollable message history with timestamps
 
 #### Tooling Mechanism
-- [ ] Tool call intercept from parser -> EventEngine dispatch -> tool execution
+- [x] EventBus `execute_tool` route: parser → EventEngine dispatch → ToolEngine.execute
 - [ ] Tool result write-back to RAM -> resume session context
 - [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
-- [ ] Native OS tools: File System, Shell Executor, Obsidian Reader
+- [x] Native OS tools: File System (`FsTool.ts`), Shell Executor (`ShellEngine` + `ShellTool.ts`)
+- [ ] Native OS tools: Obsidian Reader
 - [ ] Context builder pipeline before prompt send
 
 #### AI Context Engine (NEW)
@@ -160,7 +185,9 @@ Core widgets:
 - [ ] Timestamped history view
 
 #### Step 5 - Tooling Mechanism
-- [ ] Parser tool-call intercept and dispatch
+- [x] EventBus `execute_tool` route (BootupPipeline Phase 7)
+- [x] ToolEngine.execute + ToolManifestEntry + ProcessEngine-tracked execution
+- [ ] Parser tool-call intercept and full dispatch chain
 - [ ] Tool result write-back and session resume
 - [ ] ToolEngine Pre-Allocation alignment
 

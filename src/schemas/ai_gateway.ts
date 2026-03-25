@@ -7,8 +7,11 @@ export const AIGatewaySDKTargetSchema = z.object({
         z.object({
             id: z.string(),
             name: z.string(),
-            context_window: z.number().optional(),
-            capabilities: z.array(z.string()).optional(),
+            // Some providers return `null` for unknown context windows.
+            // Normalize null -> undefined so legacy files remain readable.
+            context_window: z.union([z.number(), z.null()]).optional().transform((v) => v ?? undefined),
+            // Keep tolerant parsing for partially populated provider payloads.
+            capabilities: z.union([z.array(z.string()), z.null()]).optional().transform((v) => v ?? undefined),
         })
     ).default([]),
 });
