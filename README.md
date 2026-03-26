@@ -52,6 +52,17 @@ Notes:
 - [x] **Parser Domain Decoupling in RegistryEngine**: Removed hard parser imports from `RegistryEngine`; parser lookup now resolved from registered `parsers` domain entries.
 - [x] **Schema Boundary Split**: Moved generic parser contracts to `src/schemas/parser.ts`; block-attached types (`context`, `history_summary_*`) now live inside their parser files.
 
+### Tool Execution Runtime (Mar 2026)
+- [x] **Tool Action Routes in ToolEngine**: Added `tool:list`, `tool:view_schema`, `tool:execute` EventBus routes; each route writes structured result to RAM and emits `parser_result:session` back to the originating session.
+- [x] **Parsed Tool Block Dispatch in StreamHandler**: Complete `<tool>` blocks from parser are turned into typed EventBus interactions (`action: tool`, `sub_action: list|view_schema|execute`) and dispatched at end of each stream chunk.
+- [x] **Parser Interrupt Hard-Cut**: After `interrupt_requested` is set inside `parseAIStreamChunk`, the parse loop exits immediately — content after the interrupted tag is discarded within the same chunk.
+- [x] **Late-Chunk Discard Post-Interrupt**: `httpClient` sets an `ignoreLateChunks` flag once interrupt is detected; subsequent streaming chunks are counted but not forwarded to the parser, preventing stale model output from entering the session.
+- [x] **Tool/Storage Payload Parser Hardening**: `parseJsonLoose` in `ToolBlock.ts` and `StorageBlock.ts` now tries multiple sanitization candidates (strip outer tag, strip fenced JSON, extract `{...}` object) before giving up, eliminating `payload_parse_error` when the model accidentally wraps the JSON body.
+- [x] **Tool Lifecycle Events in ToolEngine**: Added `publishToolActionStarted` helper; routes `tool:list`, `tool:view_schema`, `tool:execute` now emit `tool_action_started` immediately on entry, giving the monitor a distinct `dispatch → started → result/error` timeline.
+- [x] **Block Handler State in Session Snapshot**: `AIGatewayEngine.listSessions()` derives `block_handler_state` from active response RAM by reading the latest tool lifecycle event; status is `running` during dispatch/started and `idle` after result/error.
+- [x] **AISessionMonitor Handler Badge**: Session row now shows `Handler: running/idle` badge with current action name, updating live with 1-second auto-refresh.
+- [x] **AIChatbarTest Block Activity Panel**: Added real-time `Block Handler State` panel above chat transcript — shows handler label, list of pending/running action blocks, and a rolling timeline of tool runtime events (dispatch/started/result/error).
+
 ---
 
 ## Current Focus
@@ -69,6 +80,10 @@ Notes:
 
 #### AI Parser
 - [~] Token stream reader: handled in gateway stream handler path (dedicated session stream key pending)
+- [x] Tool block execution: parsed `<tool>` blocks dispatched as EventBus interactions to `ToolEngine` action routes
+- [x] Parser interrupt hard-cut: parsing loop exits immediately when `interrupt_requested` is flagged within a chunk
+- [x] Late-chunk discard: stream chunks arriving after interrupt signal are discarded without parsing
+- [x] Payload parse hardening: `<tool>` and `<storage>` body parser tolerates accidental tag/fence wrappers
 - [ ] Thought/Thinking context block parser: parse context blocks (thoughts / thinking) into dedicated structured payloads
 - [ ] Thought printer channel: add dedicated printer flow to render thoughts / thinking output separately from normal assistant reply
 - [ ] Planning context block parser: parse context blocks for planning into structured plan payloads
@@ -298,7 +313,9 @@ Audit Checklist:
 - [ ] Scrollable message history with timestamps
 
 #### Tooling Mechanism
-- [ ] Tool result write-back to RAM -> resume session context
+- [x] Tool result write-back to RAM: `tool:list`, `tool:view_schema`, `tool:execute` routes write structured results to RAM and emit parser result events back to session
+- [x] Tool lifecycle observability: `tool_action_dispatch` → `tool_action_started` → `tool_action_result/error` events tracked per session in response RAM
+- [ ] Resume session context after tool result: AI continuation loop after tool execution result is ingested (feedback injection)
 - [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
 
 #### AI Context Engine (NEW)
@@ -312,23 +329,6 @@ Audit Checklist:
 #### RAG-style Storage Tasks
 - [~] ContextRAGRead: engine read path exists; AI tooling retrieval flow still pending
 - [ ] ContextRAGRetention: trim/archive old references without breaking active session keys
-
-#### Tooling Discovery Flow Tasks
-- [ ] ContextToolingContext: use `<context>` block payload for tooling knowledge snapshots (catalog, usage, schemas)
-- [ ] ContextToolingList: add `list_tooling` event/action (tool names + short descriptions)
-- [ ] ContextToolingDescribe: add `describe_tooling` event/action (usage guide for selected tool)
-- [ ] ContextToolingExecute: add `execute_tooling` event/action (validated payload execution)
-- [ ] ContextToolingSchema: add tool schema endpoint/bridge for argument hints + validation errors
-- [ ] ContextToolingSafety: add allowlist/permission gating for sensitive tools
-
-#### ACE Application Context Tasks
-- [ ] ContextACEContext: use `<context>` block payload for ACE app contract snapshots (eventbus/bridge/domains/boot/runtime keys)
-- [ ] ContextACEEventBus: provide compact EventBus contract map (event_type, action, sub_action, payload patterns)
-- [ ] ContextACEBridge: provide `window.ACE` capability map (registry, window, event, storage, tool, process, pipeline)
-- [ ] ContextACEDomains: provide package/domain map (`components`, `windows`, `tools`, `processes`, `pipelines`, `widgets`)
-- [ ] ContextACEBootFlow: provide boot sequence summary (phase order + critical dependencies)
-- [ ] ContextACEInteractionFlow: provide canonical flow (`UI -> EventBus -> Engine/Process -> Storage -> UI`)
-- [ ] ContextACERuntimeKeys: provide key RAM namespaces used by AI runtime/context (`system:session:*`, `system:ai_gateway_*`, etc.)
 
 #### Context Build Pipeline Tasks
 - [ ] ContextBudget: token budget manager with priority-based trimming
