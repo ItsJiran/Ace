@@ -54,6 +54,14 @@ interface SessionSnapshot {
         fallback_response_summary_used: boolean;
         violations: string[];
     };
+    block_handler_state?: {
+        status: 'idle' | 'running';
+        block_type?: string;
+        action?: string;
+        event_name?: string;
+        result_memory_uid?: string;
+        updated_at?: number;
+    };
 }
 
 interface ResponseMemorySnapshot {
@@ -67,12 +75,33 @@ interface ResponseMemorySnapshot {
         | { type: 'paragraph'; content: string }
         | { type: 'context'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
         | { type: 'history_summary_ai_prompt' | 'history_summary_ai_response'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
-        | { type: 'execute_tool' | 'execute_storage'; payload_raw: string; payload_json: Record<string, unknown> | null; status: string; is_complete: boolean; operation?: string }
+        | { type: 'tool' | 'storage'; payload_raw: string; payload_json: Record<string, unknown> | null; status: string; is_complete: boolean; action?: string; memory_uid?: string; result_memory_uid?: string }
         | { type: 'event'; event: { headers: Record<string, unknown>; raw_payload_buffer: string; is_complete: boolean } }
         | { type: 'directive'; directive_name: string; content: string; is_complete: boolean }
     >;
     parser_batch_count?: number;
     events_total?: number;
+    parser_handler_results?: Array<{
+        session_id: string;
+        tag: string;
+        at: number;
+        event_name?: string;
+        interrupt_hint?: boolean;
+        payload: Record<string, unknown>;
+    }>;
+    parser_handler_result_count?: number;
+    parser_handler_last_result_at?: number;
+    parser_stop_signals?: Array<{
+        session_id: string;
+        tag: string;
+        at: number;
+        reason: string;
+        interrupt_mode: 'none' | 'pause_stream' | 'hard_stop';
+    }>;
+    parser_stop_signal_count?: number;
+    parser_last_stop_at?: number;
+    ignored_after_interrupt_chunks?: number;
+    ignored_after_interrupt_bytes?: number;
     protocol_validation?: SessionSnapshot['protocol_state'];
     status?: string;
     error_message?: string;
@@ -228,6 +257,13 @@ const statusColor: Record<SessionStatus, string> = {
 function SessionDetailView({ session }: { session: SessionSnapshot }) {
     const [activeTab, setActiveTab] = useState<'context' | 'history' | 'blocks' | 'response' | 'storage'>('context');
     const responseMemory = useAceMemory<ResponseMemorySnapshot>(session.activeOutputRamKey || 'system:dev:ai_session_monitor:idle');
+    const parsedBlocks = responseMemory?.blocks || [];
+    const parserResults = responseMemory?.parser_handler_results || [];
+    const parserStops = responseMemory?.parser_stop_signals || [];
+    const toolRuntimeEvents = parserResults.filter((result) => {
+        if (!result.event_name) return false;
+        return result.event_name === 'tool_action_dispatch' || result.event_name === 'tool_action_started' || result.event_name === 'tool_action_result' || result.event_name === 'tool_action_error';
+    });
 
     return (
         <div className="mt-3 border-t border-zinc-800 pt-3">
@@ -329,20 +365,112 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
 
                 {activeTab === 'blocks' && (
                     <div className="space-y-3">
-                        {session.context_blocks?.map((block, i) => (
-                             <div key={i} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
-                                <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center">
-                                    <span className="font-semibold text-zinc-300">Context Block #{i + 1}</span>
-                                    <span className="font-mono opacity-50">{new Date(block.at).toLocaleTimeString()}</span>
-                                </div>
-                                <pre className="p-3 text-[10px] text-zinc-400 font-mono overflow-auto max-h-[200px] leading-relaxed">
-                                    {JSON.stringify(block.payload, null, 2)}
-                                </pre>
-                             </div>
-                        ))}
-                         {(!session.context_blocks || session.context_blocks.length === 0) && (
-                            <div className="text-zinc-600 italic text-xs text-center py-8">No raw context blocks received.</div>
-                        )}
+                        <div className="border border-zinc-800 rounded bg-zinc-900/20 p-3 space-y-2">
+                            <div className="text-[10px] uppercase font-bold text-zinc-500">Parser State</div>
+                            <div className="grid grid-cols-[130px_1fr] gap-2 items-start text-[11px]">
+                                <span className="text-zinc-500">Parsed Blocks</span>
+                                <span className="text-zinc-300">{parsedBlocks.length}</span>
+                                <span className="text-zinc-500">Parser Results</span>
+                                <span className="text-zinc-300">{responseMemory?.parser_handler_result_count ?? parserResults.length}</span>
+                                <span className="text-zinc-500">Last Result</span>
+                                <span className="text-zinc-300">{responseMemory?.parser_handler_last_result_at ? new Date(responseMemory.parser_handler_last_result_at).toLocaleTimeString() : '-'}</span>
+                                <span className="text-zinc-500">Stop Signals</span>
+                                <span className="text-zinc-300">{responseMemory?.parser_stop_signal_count ?? parserStops.length}</span>
+                                <span className="text-zinc-500">Last Stop</span>
+                                <span className="text-zinc-300">{responseMemory?.parser_last_stop_at ? new Date(responseMemory.parser_last_stop_at).toLocaleTimeString() : '-'}</span>
+                                <span className="text-zinc-500">Ignored Chunks</span>
+                                <span className="text-zinc-300">{responseMemory?.ignored_after_interrupt_chunks ?? 0}</span>
+                                <span className="text-zinc-500">Ignored Bytes</span>
+                                <span className="text-zinc-300">{responseMemory?.ignored_after_interrupt_bytes ?? 0}</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Tool Runtime Monitor ({toolRuntimeEvents.length})</div>
+                            <div className="space-y-2">
+                                {toolRuntimeEvents.map((event, index) => (
+                                    <div key={`${event.at}-${index}`} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
+                                        <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
+                                            <span className="font-semibold text-zinc-300">{event.event_name}</span>
+                                            <span className="font-mono opacity-50">{new Date(event.at).toLocaleTimeString()}</span>
+                                        </div>
+                                        <pre className="p-3 text-[10px] text-zinc-400 font-mono overflow-auto max-h-[160px] leading-relaxed whitespace-pre-wrap">
+                                            {JSON.stringify(event.payload, null, 2)}
+                                        </pre>
+                                    </div>
+                                ))}
+                                {toolRuntimeEvents.length === 0 && (
+                                    <div className="text-zinc-600 italic text-xs text-center py-6">No tool runtime events recorded.</div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Parsed Blocks ({parsedBlocks.length})</div>
+                            <div className="space-y-2">
+                                {parsedBlocks.map((block, index) => (
+                                    <div key={index} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
+                                        <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
+                                            <span className="font-semibold text-zinc-300">{block.type}</span>
+                                            <div className="flex items-center gap-2">
+                                                {'action' in block && block.action ? <span className="text-zinc-500">{block.action}</span> : null}
+                                                {'status' in block && block.status ? <span className="font-mono opacity-70">{block.status}</span> : null}
+                                            </div>
+                                        </div>
+                                        <pre className="p-3 text-[10px] text-zinc-400 font-mono overflow-auto max-h-[200px] leading-relaxed whitespace-pre-wrap">
+                                            {JSON.stringify(block, null, 2)}
+                                        </pre>
+                                    </div>
+                                ))}
+                                {parsedBlocks.length === 0 && (
+                                    <div className="text-zinc-600 italic text-xs text-center py-8">No parsed response blocks yet.</div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Parser Handler Results ({parserResults.length})</div>
+                            <div className="space-y-2">
+                                {parserResults.map((result, index) => (
+                                    <div key={`${result.at}-${index}`} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
+                                        <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
+                                            <span className="font-semibold text-zinc-300">{result.tag}</span>
+                                            <div className="flex items-center gap-2">
+                                                {result.event_name ? <span>{result.event_name}</span> : null}
+                                                <span className="font-mono opacity-50">{new Date(result.at).toLocaleTimeString()}</span>
+                                            </div>
+                                        </div>
+                                        <pre className="p-3 text-[10px] text-zinc-400 font-mono overflow-auto max-h-[180px] leading-relaxed whitespace-pre-wrap">
+                                            {JSON.stringify(result.payload, null, 2)}
+                                        </pre>
+                                    </div>
+                                ))}
+                                {parserResults.length === 0 && (
+                                    <div className="text-zinc-600 italic text-xs text-center py-6">No parser handler results recorded.</div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Parser Stop Signals ({parserStops.length})</div>
+                            <div className="space-y-2">
+                                {parserStops.map((signal, index) => (
+                                    <div key={`${signal.at}-${index}`} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
+                                        <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
+                                            <span className="font-semibold text-zinc-300">{signal.tag}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span>{signal.interrupt_mode}</span>
+                                                <span className="font-mono opacity-50">{new Date(signal.at).toLocaleTimeString()}</span>
+                                            </div>
+                                        </div>
+                                        <div className="p-3 text-[11px] text-zinc-300 whitespace-pre-wrap">{signal.reason}</div>
+                                    </div>
+                                ))}
+                                {parserStops.length === 0 && (
+                                    <div className="text-zinc-600 italic text-xs text-center py-6">No parser stop signals recorded.</div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -588,6 +716,15 @@ export default function AISessionMonitor() {
                                 <div className="flex gap-1.5 items-center ml-auto">
                                     <span className="opacity-50">Buffer</span>
                                     <span className="text-zinc-400 font-mono">{session.activeEventBufferLength}b</span>
+                                </div>
+                                <div className="flex gap-1.5 items-center">
+                                    <span className="opacity-50">Handler</span>
+                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold ${session.block_handler_state?.status === 'running' ? 'text-amber-300 bg-amber-950/30 border-amber-700/60' : 'text-zinc-400 bg-zinc-900/50 border-zinc-700/50'}`}>
+                                        {session.block_handler_state?.status || 'idle'}
+                                    </span>
+                                    {session.block_handler_state?.action ? (
+                                        <span className="text-zinc-400 font-mono">{session.block_handler_state.action}</span>
+                                    ) : null}
                                 </div>
                             </div>
                         </div>

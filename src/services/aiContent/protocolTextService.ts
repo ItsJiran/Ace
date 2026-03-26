@@ -24,9 +24,9 @@ export const DEFAULT_APP_BRIDGE_CONTEXT = [
     '  - If [TURN_HISTORY_PROTOCOL] says OPTIONAL, you may skip it for short messages.',
     '',
     'TOOL AND EVENT BLOCKS:',
-    '  - <execute_tool>    — request the runtime to invoke a named tool.',
-    '  - <execute_storage> — request a memory/storage read or write.',
-    '  - <event>           — fire a UI or system event.',
+    '  - <tool>     — list tools, view a tool schema, or execute a tool.',
+    '  - <storage>  — read, list, inspect, write, or delete runtime memory.',
+    '  - <event>    — fire a UI or system event.',
 ].join('\n');
 
 export function buildDefaultParserContextProtocol(): string {

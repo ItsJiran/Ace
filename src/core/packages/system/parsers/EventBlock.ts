@@ -1,7 +1,7 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AITextBlockHeaderSchema } from '#/schemas/ai_protocol';
 import type { BufferedAIEvent } from '#/schemas/ai_protocol';
-import type { ParserBlockHandler } from '#/schemas/parserBlocks';
+import type { ParserBlockHandler } from '#/schemas/parser';
 
 function parseEventBlock(body: string): {
     event?: BufferedAIEvent;

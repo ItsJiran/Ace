@@ -1,28 +1,28 @@
-import { RegistryEngine } from './registryEngine';
+import { ParserEngine } from './parserEngine';
 import type {
     AIParseResult,
-    ParserBlockRuntime,
-} from '../schemas/parserBlocks';
+} from '#/schemas/parser';
 
 export type {
+    ActionBlock,
     AIMessageBlock,
     AIParseResult,
     BaseBlock,
-    BaseExecutionBlock,
     BlockProtocolSchema,
-    ContextBlock,
-    ExecutionBlockStatus,
-    ExecutionBlockType,
-    HistorySummaryBlock,
     ParserBlockRuntime,
-} from '../schemas/parserBlocks';
+} from '#/schemas/parser';
 
 export function buildBlockProtocolLines(): string {
-    return RegistryEngine.buildParserBlockProtocolLines();
+    return ParserEngine.buildParserBlockProtocolLines();
 }
 
 /** @deprecated Import buildBlockProtocolLines() to get an up-to-date catalog. */
 export const AI_PARSER_BLOCK_PROTOCOL_LINES = buildBlockProtocolLines();
+
+export interface ParseAIStreamOptions {
+    sessionId?: string;
+    processUid?: string;
+}
 
 function findNextStructuredTagStart(chunk: string, cursor: number): number {
     let index = chunk.indexOf('<', cursor);
@@ -69,10 +69,17 @@ function extractStructuredBlock(
     body: string,
     isComplete: boolean,
     result: AIParseResult,
+    options?: ParseAIStreamOptions,
 ) {
-    const definition: ParserBlockRuntime | null = RegistryEngine.getParserBlock(tag);
-    if (definition) {
-        definition.handler({ tag, body, isComplete, result });
+    const handled = ParserEngine.dispatchParsedBlock({
+        tag,
+        body,
+        isComplete,
+        result,
+        sessionId: options?.sessionId,
+        processUid: options?.processUid,
+    });
+    if (handled) {
         return;
     }
 
@@ -104,7 +111,7 @@ function findClosingFence(chunk: string, bodyStart: number): number {
     return -1;
 }
 
-export function parseAIStreamChunk(chunk: string): AIParseResult {
+export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions): AIParseResult {
     const result: AIParseResult = {
         blocks: [],
         events: [],
@@ -115,6 +122,10 @@ export function parseAIStreamChunk(chunk: string): AIParseResult {
     let cursor = 0;
 
     while (cursor < chunk.length) {
+        if (result.interrupt_requested) {
+            break;
+        }
+
         const fenceStart = chunk.indexOf('```', cursor);
         const tagStart = findNextStructuredTagStart(chunk, cursor);
         const candidateStarts = [fenceStart, tagStart].filter((index) => index !== -1);
@@ -160,7 +171,11 @@ export function parseAIStreamChunk(chunk: string): AIParseResult {
             const hasCloseTag = closeTagStart !== -1;
             const bodyEnd = hasCloseTag ? closeTagStart : chunk.length;
             const body = chunk.slice(openTag.openEnd, bodyEnd);
-            extractStructuredBlock(openTag.tag, body, hasCloseTag, result);
+            extractStructuredBlock(openTag.tag, body, hasCloseTag, result, options);
+
+            if (result.interrupt_requested) {
+                break;
+            }
 
             if (!hasCloseTag) {
                 result.carryoverBuffer = chunk.slice(tagStart);
@@ -186,7 +201,11 @@ export function parseAIStreamChunk(chunk: string): AIParseResult {
         const bodyEnd = hasCloseFence ? closeFence : chunk.length;
         const body = chunk.slice(bodyStart, bodyEnd);
 
-        extractStructuredBlock(rawTag, body, hasCloseFence, result);
+        extractStructuredBlock(rawTag, body, hasCloseFence, result, options);
+
+        if (result.interrupt_requested) {
+            break;
+        }
 
         if (!hasCloseFence) {
             result.carryoverBuffer = chunk.slice(structureStart);

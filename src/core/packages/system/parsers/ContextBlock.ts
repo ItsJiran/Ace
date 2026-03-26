@@ -1,5 +1,9 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import type { ParserBlockHandler } from '#/schemas/parserBlocks';
+import type { BaseBlock, ParserBlockHandler } from '#/schemas/parser';
+
+export interface ContextParserBlock extends BaseBlock {
+    type: 'context';
+}
 
 function parseJsonLoose(raw: string): {
     json: Record<string, unknown> | null;

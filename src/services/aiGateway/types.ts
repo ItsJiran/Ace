@@ -71,6 +71,14 @@ export interface AISessionSnapshot {
     }>;
     context_updated_at?: number;
     protocol_state?: AIRequestProtocolState;
+    block_handler_state?: {
+        status: 'idle' | 'running';
+        block_type?: string;
+        action?: string;
+        event_name?: string;
+        result_memory_uid?: string;
+        updated_at?: number;
+    };
 }
 
 /** A single parsed event block from an AI stream chunk */

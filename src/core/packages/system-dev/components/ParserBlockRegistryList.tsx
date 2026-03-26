@@ -1,5 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import type { ParserBlockRuntime } from '#/schemas/parserBlocks';
+import type { ParserBlockRuntime } from '#/schemas/parser';
 
 export const registry: AceRegistryType.Component = {
     name: 'parser_block_registry_list',

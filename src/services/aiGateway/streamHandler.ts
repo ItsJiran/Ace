@@ -2,10 +2,12 @@ import { StorageEngine } from '../storageEngine';
 import { EventBus } from '../eventEngine';
 import { AIContextEngine } from '../aiContextEngine';
 import { AIContextRagEngine } from '../aiContextRagEngine';
+import { ParserEngine } from '../parserEngine';
 import { parseAIStreamChunk } from '#/services/aiParser';
 import type { AIMessageBlock } from '#/services/aiParser';
 import type { AISession, ParsedBatchEvent, ParserBatchRecord } from './types';
 import type { Interaction } from '../../schemas/events';
+import type { ActionBlock, ParserInterruptMode, ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
 
 const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
 
@@ -99,13 +101,13 @@ function mergeBlocks(
 
         // For execute blocks in looped responses, update the latest block sharing
         // the same memory identity instead of always appending duplicates.
-        if (block.type === 'execute_tool' || block.type === 'execute_storage') {
+        if (block.type === 'tool' || block.type === 'storage') {
             const identity = block.memory_uid || block.result_memory_uid;
             if (identity) {
                 for (let i = merged.length - 1; i >= 0; i -= 1) {
                     const candidate = merged[i];
                     if (
-                        (candidate.type === 'execute_tool' || candidate.type === 'execute_storage') &&
+                        (candidate.type === 'tool' || candidate.type === 'storage') &&
                         candidate.type === block.type &&
                         (candidate.memory_uid === identity || candidate.result_memory_uid === identity)
                     ) {
@@ -175,6 +177,59 @@ function buildNextBatches(
     ];
 }
 
+function buildToolInteractionFromBlock(input: {
+    block: ActionBlock & { type: 'tool' };
+    session: AISession;
+    processUid?: string;
+    fallbackResultKey: string;
+}): Interaction | null {
+    const { block, session, processUid, fallbackResultKey } = input;
+    const blockRecord = block as unknown as Record<string, unknown>;
+    const action = typeof block.action === 'string' ? block.action : '';
+    if (!action) return null;
+
+    const payloadJson = block.payload_json && typeof block.payload_json === 'object'
+        ? block.payload_json
+        : {};
+
+    const packageRef =
+        typeof (payloadJson as Record<string, unknown>).package_ref === 'string'
+            ? (payloadJson as Record<string, unknown>).package_ref as string
+            : typeof blockRecord.package_ref === 'string'
+                ? blockRecord.package_ref as string
+                : undefined;
+
+    const toolSlug =
+        typeof (payloadJson as Record<string, unknown>).tool_slug === 'string'
+            ? (payloadJson as Record<string, unknown>).tool_slug as string
+            : typeof (payloadJson as Record<string, unknown>).tool === 'string'
+                ? (payloadJson as Record<string, unknown>).tool as string
+                : typeof blockRecord.tool_slug === 'string'
+                    ? blockRecord.tool_slug as string
+                    : undefined;
+
+    return {
+        event_type: 'interaction',
+        process_uid: processUid,
+        action: 'tool',
+        sub_action: action,
+        payload: {
+            ...payloadJson,
+            package_ref: packageRef,
+            tool_slug: toolSlug,
+            result_memory_uid: block.result_memory_uid ?? fallbackResultKey,
+            memory_uid: block.memory_uid,
+            status: block.status,
+        },
+        preallocated_memory: {
+            session_id: session.sessionId,
+            sdk: session.sdk,
+            model: session.model,
+            reply_to_ram_key: block.result_memory_uid ?? fallbackResultKey,
+        },
+    };
+}
+
 /**
  * Processes one incoming chunk of AI stream data for a session.
  *
@@ -188,13 +243,16 @@ export function handleSessionStreamChunk(
     chunk: string,
     ramKey: string,
     processUid?: string,
-): void {
+): { interrupted: boolean; reason?: string; mode?: ParserInterruptMode } {
     // Prepend any carryover from an unclosed fenced block in the previous chunk
     const hadCarryoverBuffer = session.activeEventBuffer.length > 0;
     const fullStream = session.activeEventBuffer + chunk;
     session.activeEventBuffer = '';
 
-    const { blocks, events, textToPrint, carryoverBuffer } = parseAIStreamChunk(fullStream);
+    const { blocks, events, textToPrint, carryoverBuffer, interrupt_requested, interrupt_reason } = parseAIStreamChunk(fullStream, {
+        sessionId: session.sessionId,
+        processUid,
+    });
 
     // Save carryover immediately so non-event fenced blocks (e.g. context)
     // that are split across chunks can be recovered on the next chunk.
@@ -272,6 +330,16 @@ export function handleSessionStreamChunk(
         },
         hadCarryoverBuffer,
     );
+    const parserHandlerResults: ParserSessionEmitRecord[] = ParserEngine.drainSessionResults(session.sessionId);
+    const parserStopSignals: ParserSessionStopSignal[] = ParserEngine.drainSessionStopSignals(session.sessionId);
+    const currentHandlerResults = Array.isArray((memoryState as Record<string, unknown>).parser_handler_results)
+        ? ((memoryState as Record<string, unknown>).parser_handler_results as ParserSessionEmitRecord[])
+        : [];
+    const nextHandlerResults = [...currentHandlerResults, ...parserHandlerResults].slice(-120);
+    const currentStopSignals = Array.isArray((memoryState as Record<string, unknown>).parser_stop_signals)
+        ? ((memoryState as Record<string, unknown>).parser_stop_signals as ParserSessionStopSignal[])
+        : [];
+    const nextStopSignals = [...currentStopSignals, ...parserStopSignals].slice(-40);
 
     // ── PATHWAY A: write updated stream state to RAM ──────────────────────────
     StorageEngine.dispatchRAMAction({
@@ -285,6 +353,18 @@ export function handleSessionStreamChunk(
             parser_batches: nextBatches,
             parser_batch_count: nextBatches.length,
             events_total: nextBatches.reduce((acc, b) => acc + b.events.length, 0),
+            parser_handler_results: nextHandlerResults,
+            parser_handler_result_count: nextHandlerResults.length,
+            parser_handler_last_result_at:
+                nextHandlerResults.length > 0
+                    ? nextHandlerResults[nextHandlerResults.length - 1].at
+                    : undefined,
+            parser_stop_signals: nextStopSignals,
+            parser_stop_signal_count: nextStopSignals.length,
+            parser_last_stop_at:
+                nextStopSignals.length > 0
+                    ? nextStopSignals[nextStopSignals.length - 1].at
+                    : undefined,
             last_updated_at: Date.now(),
             protocol_validation: session.currentProtocolState ?? memoryState.protocol_validation ?? null,
         },
@@ -345,4 +425,47 @@ export function handleSessionStreamChunk(
             session.isInsideEventBlock = true;
         }
     });
+
+    blocks.forEach((block, index) => {
+        if (block.type !== 'tool' || !block.is_complete) return;
+
+        const fallbackResultKey =
+            block.result_memory_uid ??
+            `system:session:${session.sessionId}:tool_result:${Date.now()}:${index}`;
+
+        const interaction = buildToolInteractionFromBlock({
+            block: block as ActionBlock & { type: 'tool' },
+            session,
+            processUid,
+            fallbackResultKey,
+        });
+
+        if (!interaction) return;
+
+        EventBus.emit({
+            event_type: 'interaction',
+            action: 'parser_result',
+            sub_action: 'session',
+            process_uid: processUid,
+            payload: {
+                session_id: session.sessionId,
+                tag: 'tool',
+                at: Date.now(),
+                event_name: 'tool_action_dispatch',
+                action: interaction.sub_action,
+                result_memory_uid: (interaction.payload as Record<string, unknown>).result_memory_uid,
+                payload: interaction.payload,
+            },
+        });
+
+        EventBus.emit(interaction);
+    });
+
+    const latestStop = nextStopSignals.length > 0 ? nextStopSignals[nextStopSignals.length - 1] : undefined;
+
+    return {
+        interrupted: Boolean(interrupt_requested) || Boolean(latestStop),
+        reason: latestStop?.reason ?? interrupt_reason,
+        mode: latestStop?.interrupt_mode,
+    };
 }

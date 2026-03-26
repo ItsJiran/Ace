@@ -118,11 +118,49 @@ export async function sendToSession(
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
 
+        let interrupted = false;
+        let interruptReason: string | undefined;
+        let ignoreLateChunks = false;
+        let ignoredChunkCount = 0;
+        let ignoredByteCount = 0;
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            if (!value) continue;
+
+            if (ignoreLateChunks) {
+                ignoredChunkCount += 1;
+                ignoredByteCount += value.byteLength;
+                continue;
+            }
+
             const chunk = decoder.decode(value, { stream: true });
-            handleSessionStreamChunk(session, chunk, replyToRamKey);
+            const parseOutcome = handleSessionStreamChunk(session, chunk, replyToRamKey);
+            if (parseOutcome.interrupted) {
+                interrupted = true;
+                interruptReason = parseOutcome.reason;
+                ignoreLateChunks = true;
+                await reader.cancel();
+                continue;
+            }
+        }
+
+        if (interrupted) {
+            session.status = 'connected';
+            StorageEngine.dispatchRAMAction({
+                action: 'update_memory',
+                memory_uid: replyToRamKey,
+                payload: {
+                    status: 'interrupted',
+                    parser_interrupt_reason: interruptReason ?? 'parser_interrupt_requested',
+                    ignored_after_interrupt_chunks: ignoredChunkCount,
+                    ignored_after_interrupt_bytes: ignoredByteCount,
+                    finished_at: Date.now(),
+                },
+                classifications: CLASSIFICATIONS,
+            });
+            return;
         }
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

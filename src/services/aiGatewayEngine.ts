@@ -43,6 +43,7 @@ import {
 } from './aiGateway/protocolLifecycle';
 import { AIContextEngine } from './aiContextEngine';
 import { AIContextRagEngine } from './aiContextRagEngine';
+import { StorageEngine } from './storageEngine';
 import type {
     AIGatewayFetchModelsResult,
     AIGatewayResponseResult,
@@ -154,6 +155,35 @@ class AIGatewayEngineSingleton {
     listSessions(): AISessionSnapshot[] {
         return AISessionManager.list().map((snapshot) => {
             const contextState = AIContextEngine.getSessionContext(snapshot.sessionId);
+            const responseMemory = snapshot.activeOutputRamKey
+                ? (StorageEngine.readMemory(snapshot.activeOutputRamKey) as Record<string, unknown> | undefined)
+                : undefined;
+
+            const parserResults = Array.isArray(responseMemory?.parser_handler_results)
+                ? (responseMemory?.parser_handler_results as Array<Record<string, unknown>>)
+                : [];
+
+            const lifecycleEvents = parserResults
+                .filter((record) => {
+                    const eventName = typeof record.event_name === 'string' ? record.event_name : '';
+                    return eventName === 'tool_action_dispatch' || eventName === 'tool_action_started' || eventName === 'tool_action_result' || eventName === 'tool_action_error';
+                })
+                .sort((a, b) => {
+                    const atA = typeof a.at === 'number' ? a.at : 0;
+                    const atB = typeof b.at === 'number' ? b.at : 0;
+                    return atA - atB;
+                });
+
+            const latestLifecycle = lifecycleEvents.length > 0 ? lifecycleEvents[lifecycleEvents.length - 1] : undefined;
+            const latestEventName = typeof latestLifecycle?.event_name === 'string' ? latestLifecycle.event_name : undefined;
+            const latestPayload = latestLifecycle && typeof latestLifecycle.payload === 'object'
+                ? (latestLifecycle.payload as Record<string, unknown>)
+                : undefined;
+            const latestAction = typeof latestPayload?.action === 'string' ? latestPayload.action : undefined;
+            const latestResultMemoryUid = typeof latestPayload?.result_memory_uid === 'string' ? latestPayload.result_memory_uid : undefined;
+            const latestAt = typeof latestLifecycle?.at === 'number' ? latestLifecycle.at : undefined;
+            const handlerRunning = latestEventName === 'tool_action_dispatch' || latestEventName === 'tool_action_started';
+
             return {
                 ...snapshot,
                 used_contexts: contextState?.used_contexts ?? [],
@@ -163,6 +193,14 @@ class AIGatewayEngineSingleton {
                 history_summaries: contextState?.history_summaries ?? [],
                 context_blocks: contextState?.context_blocks ?? [],
                 protocol_state: snapshot.protocol_state,
+                block_handler_state: {
+                    status: handlerRunning ? 'running' : 'idle',
+                    block_type: latestEventName ? 'tool' : undefined,
+                    action: latestAction,
+                    event_name: latestEventName,
+                    result_memory_uid: latestResultMemoryUid,
+                    updated_at: latestAt,
+                },
             };
         });
     }

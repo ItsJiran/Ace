@@ -1,5 +1,11 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import type { HistorySummaryBlock, ParserBlockHandler } from '#/schemas/parserBlocks';
+import type { BaseBlock, ParserBlockHandler } from '#/schemas/parser';
+
+type HistorySummaryPromptType = 'history_summary_ai_prompt';
+
+export interface HistorySummaryPromptParserBlock extends BaseBlock {
+    type: HistorySummaryPromptType;
+}
 
 function parseJsonLoose(raw: string): {
     json: Record<string, unknown> | null;
@@ -22,7 +28,7 @@ function parseJsonLoose(raw: string): {
 function normalizeHistorySummaryPayload(
     payload: Record<string, unknown> | null,
     rawBody: string,
-    blockType: HistorySummaryBlock['type'],
+    blockType: HistorySummaryPromptType,
 ): Record<string, unknown> | null {
     if (!payload) {
         const fallback = rawBody.trim();
@@ -68,7 +74,7 @@ export const registry: AceRegistryType.Parser = {
 };
 
 const historySummaryPromptHandler: ParserBlockHandler = ({ body, isComplete, result }) => {
-    const blockType: HistorySummaryBlock['type'] = 'history_summary_ai_prompt';
+    const blockType: HistorySummaryPromptType = 'history_summary_ai_prompt';
     const parsed = parseJsonLoose(body);
     result.blocks.push({
         type: blockType,

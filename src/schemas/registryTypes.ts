@@ -81,6 +81,10 @@ export namespace AceRegistryType {
         /** Canonical parser tag name (used in <tag_name>...</tag_name>) */
         tag_name?: string;
         aliases?: string[];
+        runtime_behavior?: {
+            interrupt_mode?: 'none' | 'pause_stream' | 'hard_stop';
+            interrupt_on_complete?: boolean;
+        };
         /** Protocol metadata shown in parser contract prompt */
         block_schema?: {
             purpose: string;

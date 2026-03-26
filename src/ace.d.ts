@@ -14,6 +14,7 @@ import type { LoggerEngine } from './services/loggerEngine';
 import type { ShellEngine } from './services/shellEngine';
 import type { AIContextEngine } from './services/aiContextEngine';
 import type { AIContextRagEngine } from './services/aiContextRagEngine';
+import type { ParserEngine } from './services/parserEngine';
 import type { Notification, NotificationCreateInput } from './schemas/notification';
 import type {
   AIGatewayConfig,
@@ -125,6 +126,7 @@ declare global {
       shell: ShellEngine;
       context: AIContextEngine;
       context_rag: AIContextRagEngine;
+      parser: ParserEngine;
       notification?: ACENotificationAPI;
     };
   }

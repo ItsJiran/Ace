@@ -46,6 +46,12 @@ Notes:
 ### Boot & Routing
 - [x] **Centralized Route Gate**: All engine EventBus routes (`send_gateway`, `open_window`, `keybind`, `execute_tool`) registered in boot Phase 7 via `registerEventRoutes()` pattern.
 
+### Parser & Contract Refactors
+- [x] **Parser Block Unification**: Replaced legacy `<execute_tool>` / `<execute_storage>` with unified `<tool>` and `<storage>` blocks using action-first payload contracts.
+- [x] **ParserEngine + EventBus Stop Signal**: Added `ParserEngine` session-targeted emits and stop control via EventBus (`parser_result:session`, `parser_control:session_stop`) with parser interrupt propagation into gateway stream handling.
+- [x] **Parser Domain Decoupling in RegistryEngine**: Removed hard parser imports from `RegistryEngine`; parser lookup now resolved from registered `parsers` domain entries.
+- [x] **Schema Boundary Split**: Moved generic parser contracts to `src/schemas/parser.ts`; block-attached types (`context`, `history_summary_*`) now live inside their parser files.
+
 ---
 
 ## Current Focus
@@ -63,6 +69,226 @@ Notes:
 
 #### AI Parser
 - [~] Token stream reader: handled in gateway stream handler path (dedicated session stream key pending)
+- [ ] Thought/Thinking context block parser: parse context blocks (thoughts / thinking) into dedicated structured payloads
+- [ ] Thought printer channel: add dedicated printer flow to render thoughts / thinking output separately from normal assistant reply
+- [ ] Planning context block parser: parse context blocks for planning into structured plan payloads
+- [ ] Planning split model: support grand_plan (multi-conversation objective) and current_conversation_plan (active plan in current chain response loop)
+- [ ] AI-driven loop policy: next action decided by latest AI response; planning blocks are context memory and soft guidance only
+
+#### Response Loop Policy Draft (Audit First, No Implementation Yet)
+
+Status:
+- Draft specification only
+- No runtime implementation in this phase
+- Goal: freeze AI-driven loop mechanism and contract before touching parser, gateway, or context engines
+
+Scope:
+- Define AI-driven response loop mechanism
+- Define priority order for deciding next instruction
+- Define contract payload for planning context blocks
+- Define RAM and event contract for observability
+
+Core Principle:
+- Latest AI response is the source of truth for next instruction.
+- Plan artifacts (`grand_plan`, `current_conversation_plan`) are memory context, not a strict controller.
+- System policy acts as guardrail, not the main navigator.
+
+Decision Priority (Highest -> Lowest):
+1. Latest AI action/context blocks
+2. Latest system/tool execution result
+3. Plan memory (`current_conversation_plan`, `grand_plan`)
+4. Safety and runtime guardrails
+
+Initiation Pattern:
+1. User prompt enters active session
+2. AI returns first actionable response block (or plain response)
+3. System executes action (if any) and sends execution result back into loop context
+4. AI decides next instruction from updated context
+5. Loop continues until AI declares done or guardrail stops the loop
+
+State Machine (Draft):
+- idle -> initiated -> awaiting_ai -> executing_action -> waiting_system_result -> awaiting_ai -> completed
+- Abort states:
+  - aborted_by_user
+  - aborted_by_guardrail
+  - aborted_by_timeout
+
+Transition Rules (Core):
+- If AI emits actionable block -> execute and feed result back to AI loop context
+- If AI emits planning block update -> store/update plan memory only (no forced execution)
+- If AI emits no actionable next step -> resolve conversation or ask clarification
+- If tool/system fails -> feed failure back to AI for adaptive next instruction
+- If guardrail is hit -> stop loop safely with explicit stop reason
+
+Plan Semantics:
+- `grand_plan`: strategic memory across conversation boundaries
+- `current_conversation_plan`: tactical memory for the running conversation
+- Both are mutable by AI and may be partially ignored if latest response requires a better path
+
+Planning Context Block Contract (Draft):
+
+```json
+{
+  "block_type": "planning",
+  "plan_type": "grand_plan | current_plan",
+  "plan_status": "draft | active | blocked | done | dropped",
+  "decision_reason": "ai reasoning summary",
+  "requires_new_conversation": false,
+  "grand_plan": {
+    "goal": "string",
+    "milestones": [
+      { "id": "m1", "title": "string", "status": "todo | doing | done | blocked" }
+    ],
+    "checkpoint_key": "optional memory uid"
+  },
+  "current_conversation_plan": {
+    "goal": "string",
+    "steps": [
+      { "id": "s1", "title": "string", "status": "todo | doing | done | blocked" }
+    ],
+    "current_step_id": "optional step id",
+    "next_step_id": "optional step id"
+  },
+  "plan_refs": ["memory uid"],
+  "meta": {
+    "confidence": 0.0,
+    "created_at": "iso datetime",
+    "updated_at": "iso datetime"
+  }
+}
+```
+
+Event Contract (Draft):
+- action: planning_loop_update
+- payload fields:
+  - session_id
+  - feedback_loop_status (`none` | `active` | `interrupted`)
+  - feedback_loop_reason
+  - plan_status
+  - decision_source (`ai_response` | `system_result` | `plan_memory` | `guardrail`)
+  - current_step_id
+  - next_step_id
+  - requires_new_conversation
+
+RAM Contract (Draft Keys):
+- system:session:<uid>:feedback_loop
+- system:session:<uid>:current_plan
+- system:session:<uid>:grand_plan
+- system:session:<uid>:planning_trace
+
+Policy Guardrails (Draft):
+- max_loop_turn_per_cycle: 6
+- max_replan_per_cycle: 2
+- max_external_wait_ms: configurable
+- forced_stop_on_low_confidence: configurable threshold
+- mandatory_reason_code_on_loop_stop: true
+
+Implementation Plan (No Code Yet):
+1. Finalize AI-driven loop semantics and decision priority order
+2. Finalize planning block schema naming and compatibility rules
+3. Add parser extraction contract tests for actionable blocks vs planning blocks
+4. Add context ingestion tests for grand plan and current plan separation
+5. Add gateway tests for AI-driven loop continuation after system/tool feedback
+6. Add guardrail tests for timeout, retry cap, and loop turn cap
+7. Add RAM monitor fields for decision_source, feedback_loop_status, and plan status visibility
+8. Roll out in shadow mode (log-only), then enforce guardrails
+
+Session Feedback Loop Contract (Draft):
+
+```json
+{
+  "feedback_loop_status": "none | active | interrupted",
+  "feedback_loop_reason": "optional stop/interrupt reason",
+  "last_feedback_at": "iso datetime",
+  "last_action": "optional action name",
+  "last_action_result_status": "success | error | skipped"
+}
+```
+
+Integration Blueprint (Current Block Pattern, No Code Yet):
+
+1. Block Classification Layer (Parser)
+- `event` block:
+  - actionable instruction candidates (tool execution, window actions, interaction actions)
+- `context` block:
+  - memory-only updates (`thoughts`, `thinking`, `planning`, summaries, constraints)
+- plain text:
+  - conversational output for user-facing stream
+
+2. Runtime Decision Layer (Gateway Loop)
+- Read latest AI output in this order:
+  1. actionable `event` block
+  2. memory `context` block updates
+  3. plain text fallback
+- If actionable block exists:
+  - execute action
+  - capture system result
+  - feed result back to AI as next loop context
+- If only context blocks exist:
+  - persist memory updates
+  - request next AI continuation
+- If only plain text exists and no actionable continuation:
+  - resolve turn as completed response
+
+3. Planning as Context Memory (Soft)
+- `grand_plan`:
+  - long-horizon memory across multiple conversations
+  - can survive chain boundaries and session handoff
+- `current_conversation_plan`:
+  - tactical memory for active conversation chain
+- Neither plan object force-executes next action.
+- Next action remains AI-response-first.
+
+4. System Feedback Injection
+- Every handled action writes structured feedback into loop context:
+  - action name
+  - execution status
+  - output summary or error summary
+  - refs to RAM payloads
+- AI uses this feedback to decide whether to continue, branch, retry, or stop.
+
+5. Guardrail Envelope (Non-Controller)
+- Guardrails only stop or constrain unsafe/infinite loops:
+  - turn cap
+  - retry cap
+  - external wait timeout
+  - safety policy violations
+- Guardrails do not decide business next steps while loop is healthy.
+
+6. Observability Contract
+- Per-turn trace should expose:
+  - `decision_source`
+  - `feedback_loop_status`
+  - `last_action`
+  - `last_action_result_status`
+  - `plan_status`
+  - `stop_reason` (if stopped)
+
+7. Example Flow (Prompt: do x then y then z)
+- Turn A:
+  - AI emits action block: do x
+  - system executes x
+  - system injects result(x) back to loop context
+- Turn B:
+  - AI reads result(x)
+  - AI decides next: do y (or retry x, or branch)
+  - system executes chosen action
+- Turn C:
+  - same pattern until AI declares done or guardrail stops
+
+8. Rollout Stages (Documentation-Only Plan)
+- Stage 0: finalize contracts and examples in docs
+- Stage 1: parser shadow extraction logs for block classification
+- Stage 2: gateway shadow loop trace (no behavior change)
+- Stage 3: controlled enablement with guardrail-only enforcement
+- Stage 4: full adoption and telemetry-driven tuning
+
+Audit Checklist:
+- Is AI-response-first priority acceptable?
+- Is grand_plan boundary definition clear enough?
+- Is current_conversation_plan lifecycle clear enough?
+- Are guardrails strict enough without forcing plan lock?
+- Are guardrail defaults aligned with expected UX?
 
 #### Prompt Bar and Chat Bar UI
 - [ ] PromptBar window: submit fires `send_gateway`, includes thinking state
@@ -77,6 +303,7 @@ Notes:
 
 #### AI Context Engine (NEW)
 - [ ] ContextSchema: define context block schema (`summary`, `intent`, `constraints`, `decisions`, `next_actions`, `confidence`)
+- [ ] ContextPlanningSchema: define planning block schema (grand_plan, current_conversation_plan, plan_status, plan_steps, plan_refs)
 
 #### Context Layers (Design Tasks)
 - [ ] ContextLayerTooling: maintain tool catalog summary + on-demand deep docs retrieval flow
@@ -87,6 +314,7 @@ Notes:
 - [ ] ContextRAGRetention: trim/archive old references without breaking active session keys
 
 #### Tooling Discovery Flow Tasks
+- [ ] ContextToolingContext: use `<context>` block payload for tooling knowledge snapshots (catalog, usage, schemas)
 - [ ] ContextToolingList: add `list_tooling` event/action (tool names + short descriptions)
 - [ ] ContextToolingDescribe: add `describe_tooling` event/action (usage guide for selected tool)
 - [ ] ContextToolingExecute: add `execute_tooling` event/action (validated payload execution)
@@ -94,6 +322,7 @@ Notes:
 - [ ] ContextToolingSafety: add allowlist/permission gating for sensitive tools
 
 #### ACE Application Context Tasks
+- [ ] ContextACEContext: use `<context>` block payload for ACE app contract snapshots (eventbus/bridge/domains/boot/runtime keys)
 - [ ] ContextACEEventBus: provide compact EventBus contract map (event_type, action, sub_action, payload patterns)
 - [ ] ContextACEBridge: provide `window.ACE` capability map (registry, window, event, storage, tool, process, pipeline)
 - [ ] ContextACEDomains: provide package/domain map (`components`, `windows`, `tools`, `processes`, `pipelines`, `widgets`)
@@ -109,7 +338,7 @@ Notes:
 ## Development Roadmap
 
 ### Phase 2 - Engine Alignment and Schema Refactor
-- [ ] AI Parser: structured event tokens (tool calls, text blocks, metadata)
+- [~] AI Parser: structured block parsing (`event`, `context`, `tool`, `storage`, history summary) done, advanced planning/thinking schemas pending
 - [ ] Align Tools Engine to Pre-Allocation Protocol for all results
 
 ### Phase 3 - Development UI Kit

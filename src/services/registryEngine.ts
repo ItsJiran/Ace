@@ -6,13 +6,7 @@ import {
     type RegistryDomainEntry,
 } from '../schemas/registry';
 import { LoggerEngine } from './loggerEngine';
-import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime } from '#/schemas/parserBlocks';
-import ContextBlockHandler, { registry as ContextBlockRegistry } from '#/core/packages/system/parsers/ContextBlock';
-import EventBlockHandler, { registry as EventBlockRegistry } from '#/core/packages/system/parsers/EventBlock';
-import ExecuteStorageBlockHandler, { registry as ExecuteStorageBlockRegistry } from '#/core/packages/system/parsers/ExecuteStorageBlock';
-import ExecuteToolBlockHandler, { registry as ExecuteToolBlockRegistry } from '#/core/packages/system/parsers/ExecuteToolBlock';
-import HistorySummaryPromptBlockHandler, { registry as HistorySummaryPromptBlockRegistry } from '#/core/packages/system/parsers/HistorySummaryPromptBlock';
-import HistorySummaryResponseBlockHandler, { registry as HistorySummaryResponseBlockRegistry } from '#/core/packages/system/parsers/HistorySummaryResponseBlock';
+import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime } from '#/schemas/parser';
 
 /**
  * ============================================================================
@@ -180,23 +174,23 @@ class RegistryEngineSingleton {
     }
 
     getParserBlock(tagName: string): ParserBlockRuntime | null {
-        this.ensureDefaultParserBlocks();
+        this.ensureParserBlockIndexes();
         return this.parserBlockByTag.get(tagName) ?? null;
     }
 
     getParserBlockByNamespace(namespaceRef: string): ParserBlockRuntime | null {
-        this.ensureDefaultParserBlocks();
+        this.ensureParserBlockIndexes();
         return this.parserBlockByNamespace.get(namespaceRef) ?? null;
     }
 
     listParserBlocks(): ParserBlockRuntime[] {
-        this.ensureDefaultParserBlocks();
+        this.ensureParserBlockIndexes();
         return Array.from(this.parserBlockByNamespace.values())
             .sort((a, b) => `${a.package_name}:${a.slug}`.localeCompare(`${b.package_name}:${b.slug}`));
     }
 
     buildParserBlockProtocolLines(): string {
-        this.ensureDefaultParserBlocks();
+        this.ensureParserBlockIndexes();
         const schemas: BlockProtocolSchema[] = this.listParserBlocks().map((item) => item.schema);
         const lines: string[] = [
             '=== ACE RUNTIME BLOCK CATALOG ===',
@@ -227,58 +221,9 @@ class RegistryEngineSingleton {
         return lines.join('\n');
     }
 
-    private ensureDefaultParserBlocks() {
+    private ensureParserBlockIndexes() {
         if (this.parserBlockByNamespace.size > 0) return;
-
-        const defaults: Array<{ package_name: string; slug: string; metadata: Record<string, unknown>; handler: ParserBlockHandler }> = [
-            { package_name: 'itsjiran/ace-system', slug: ContextBlockRegistry.slug, metadata: ContextBlockRegistry as unknown as Record<string, unknown>, handler: ContextBlockHandler },
-            { package_name: 'itsjiran/ace-system', slug: HistorySummaryPromptBlockRegistry.slug, metadata: HistorySummaryPromptBlockRegistry as unknown as Record<string, unknown>, handler: HistorySummaryPromptBlockHandler },
-            { package_name: 'itsjiran/ace-system', slug: HistorySummaryResponseBlockRegistry.slug, metadata: HistorySummaryResponseBlockRegistry as unknown as Record<string, unknown>, handler: HistorySummaryResponseBlockHandler },
-            { package_name: 'itsjiran/ace-system', slug: ExecuteToolBlockRegistry.slug, metadata: ExecuteToolBlockRegistry as unknown as Record<string, unknown>, handler: ExecuteToolBlockHandler },
-            { package_name: 'itsjiran/ace-system', slug: ExecuteStorageBlockRegistry.slug, metadata: ExecuteStorageBlockRegistry as unknown as Record<string, unknown>, handler: ExecuteStorageBlockHandler },
-            { package_name: 'itsjiran/ace-system', slug: EventBlockRegistry.slug, metadata: EventBlockRegistry as unknown as Record<string, unknown>, handler: EventBlockHandler },
-        ];
-
-        for (const item of defaults) {
-            const tagNameCandidate = item.metadata.tag_name ?? item.metadata.name ?? item.metadata.slug ?? item.slug;
-            const tagName = typeof tagNameCandidate === 'string' && tagNameCandidate.trim().length > 0
-                ? tagNameCandidate.trim()
-                : item.slug;
-
-            const aliases = Array.isArray(item.metadata.aliases)
-                ? item.metadata.aliases.filter((alias): alias is string => typeof alias === 'string' && alias.trim().length > 0).map((alias) => alias.trim())
-                : [];
-
-            const blockSchemaMetadata = (item.metadata.block_schema ?? {}) as Record<string, unknown>;
-            const schema: BlockProtocolSchema = {
-                name: tagName,
-                purpose: typeof blockSchemaMetadata.purpose === 'string' ? blockSchemaMetadata.purpose : (typeof item.metadata.description === 'string' ? item.metadata.description : `${tagName} parser block.`),
-                requiredFields: typeof blockSchemaMetadata.requiredFields === 'string' ? blockSchemaMetadata.requiredFields : undefined,
-                optionalFields: typeof blockSchemaMetadata.optionalFields === 'string' ? blockSchemaMetadata.optionalFields : undefined,
-                payloadNote: Array.isArray(blockSchemaMetadata.payloadNote)
-                    ? blockSchemaMetadata.payloadNote.filter((line): line is string => typeof line === 'string')
-                    : undefined,
-                exampleLines: Array.isArray(blockSchemaMetadata.exampleLines)
-                    ? blockSchemaMetadata.exampleLines.filter((line): line is string => typeof line === 'string')
-                    : [],
-            };
-
-            const runtimeBlock: ParserBlockRuntime = {
-                package_name: item.package_name,
-                slug: item.slug,
-                tag_name: tagName,
-                aliases,
-                schema,
-                handler: item.handler,
-            };
-
-            const namespaceRef = `${item.package_name}:parsers:${item.slug}`;
-            this.parserBlockByNamespace.set(namespaceRef, runtimeBlock);
-            this.parserBlockByTag.set(tagName, runtimeBlock);
-            for (const alias of aliases) {
-                this.parserBlockByTag.set(alias, runtimeBlock);
-            }
-        }
+        this.rebuildParserBlockIndexes();
     }
 
     private createRegistryPackage(pkg: RegistryPackage) {
@@ -359,6 +304,16 @@ class RegistryEngineSingleton {
                     tag_name: tagName,
                     aliases,
                     schema,
+                    runtime_behavior: (metadata.runtime_behavior && typeof metadata.runtime_behavior === 'object')
+                        ? {
+                            interrupt_mode: typeof (metadata.runtime_behavior as Record<string, unknown>).interrupt_mode === 'string'
+                                ? (metadata.runtime_behavior as Record<string, unknown>).interrupt_mode as 'none' | 'pause_stream' | 'hard_stop'
+                                : undefined,
+                            interrupt_on_complete: typeof (metadata.runtime_behavior as Record<string, unknown>).interrupt_on_complete === 'boolean'
+                                ? (metadata.runtime_behavior as Record<string, unknown>).interrupt_on_complete as boolean
+                                : undefined,
+                        }
+                        : undefined,
                     handler: handler as ParserBlockHandler,
                 };
 

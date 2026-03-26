@@ -1,7 +1,32 @@
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { parseAIStreamChunk } from '#/services/aiParser';
+import { RegistryEngine } from '#/services/registryEngine';
 
 describe('AI Stream Parser (Fault-Tolerant)', () => {
+    beforeAll(async () => {
+        RegistryEngine.registerPackage({
+            manifest: {
+                namespace: 'itsjiran/ace-system',
+                package_name: 'itsjiran/ace-system',
+                version: '1.0.0',
+                owner_scope: 'core',
+                source_scope: 'core',
+            },
+            domains: {
+                parsers: {},
+            },
+        });
+
+        RegistryEngine.registerPackageModules('itsjiran/ace-system', {
+            '/src/core/packages/system/parsers/EventBlock.ts': await import('#/core/packages/system/parsers/EventBlock'),
+            '/src/core/packages/system/parsers/ContextBlock.ts': await import('#/core/packages/system/parsers/ContextBlock'),
+            '/src/core/packages/system/parsers/ToolBlock.ts': await import('#/core/packages/system/parsers/ToolBlock'),
+            '/src/core/packages/system/parsers/StorageBlock.ts': await import('#/core/packages/system/parsers/StorageBlock'),
+            '/src/core/packages/system/parsers/HistorySummaryPromptBlock.ts': await import('#/core/packages/system/parsers/HistorySummaryPromptBlock'),
+            '/src/core/packages/system/parsers/HistorySummaryResponseBlock.ts': await import('#/core/packages/system/parsers/HistorySummaryResponseBlock'),
+        });
+    });
+
     it('should successfully parse a perfect tagged event block', () => {
         const streamChunk = `
 Here is a message for you.
@@ -87,26 +112,30 @@ end_event
         expect(result!.blocks.some((b) => b.type === 'event')).toBe(true);
     });
 
-    it('should parse execute_tool block with status and memory fields', () => {
+    it('should parse tool block with action, tool_slug, status and memory fields', () => {
         const streamChunk = `
 Sebelum eksekusi tool.
-<execute_tool>
+<tool>
 {
-  "tool": "calendar.create",
+  "action": "execute",
+  "tool_slug": "calendar.create",
+  "package_ref": "itsjiran/ace-system",
   "status": "running",
   "memory_uid": "system:loop:tool:123",
   "result_memory_uid": "system:loop:tool:123:result"
 }
-</execute_tool>
+</tool>
 Setelah eksekusi tool.
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const execBlock = result.blocks.find((b) => b.type === 'execute_tool');
+        const execBlock = result.blocks.find((b) => b.type === 'tool');
 
         expect(execBlock).toBeDefined();
-        if (execBlock && execBlock.type === 'execute_tool') {
-            expect(execBlock.operation).toBe('calendar.create');
+        if (execBlock && execBlock.type === 'tool') {
+            expect(execBlock.action).toBe('execute');
+            expect(execBlock.tool_slug).toBe('calendar.create');
+            expect(execBlock.package_ref).toBe('itsjiran/ace-system');
             expect(execBlock.status).toBe('running');
             expect(execBlock.memory_uid).toBe('system:loop:tool:123');
             expect(execBlock.result_memory_uid).toBe('system:loop:tool:123:result');
@@ -155,24 +184,64 @@ Saya bantu membuatkan todo.
         }
     });
 
-    it('should parse execute_storage block and default status from completion', () => {
+    it('should parse storage block with action, memory_uid and default completed status', () => {
         const streamChunk = `
-<execute_storage>
+<storage>
 {
-  "operation": "write_memory",
+  "action": "write",
   "memory_uid": "system:loop:storage:999"
 }
-</execute_storage>
+</storage>
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const block = result.blocks.find((b) => b.type === 'execute_storage');
+        const block = result.blocks.find((b) => b.type === 'storage');
 
         expect(block).toBeDefined();
-        if (block && block.type === 'execute_storage') {
-            expect(block.operation).toBe('write_memory');
+        if (block && block.type === 'storage') {
+            expect(block.action).toBe('write');
             expect(block.memory_uid).toBe('system:loop:storage:999');
             expect(block.status).toBe('completed');
+        }
+    });
+
+    it('should parse tool block when payload is accidentally wrapped by inner <tool> tag', () => {
+        const streamChunk = `
+<tool>
+<tool>{"action":"list","status":"pending"}</tool>
+</tool>
+`;
+
+        const result = parseAIStreamChunk(streamChunk);
+        const block = result.blocks.find((b) => b.type === 'tool');
+
+        expect(block).toBeDefined();
+        if (block && block.type === 'tool') {
+            expect(block.action).toBe('list');
+            expect(block.status).toBe('pending');
+            expect(block.payload_parse_error).toBeUndefined();
+        }
+    });
+
+    it('should parse storage block when payload is wrapped by fenced json', () => {
+        const streamChunk = `
+<storage>
+
+\`\`\`json
+{"action":"read","memory_uid":"system:memory:abc"}
+\`\`\`
+
+</storage>
+`;
+
+        const result = parseAIStreamChunk(streamChunk);
+        const block = result.blocks.find((b) => b.type === 'storage');
+
+        expect(block).toBeDefined();
+        if (block && block.type === 'storage') {
+            expect(block.action).toBe('read');
+            expect(block.memory_uid).toBe('system:memory:abc');
+            expect(block.payload_parse_error).toBeUndefined();
         }
     });
 

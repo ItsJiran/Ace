@@ -2,99 +2,142 @@
 
 ## Current Canonical Runtime
 
-This file explains parser concepts. For the full current implementation flow (gateway + parser + context + RAG), refer to:
+For full end-to-end gateway + context + RAG behavior, refer to:
 
 - `docs/GATEWAY_CONTEXT_MECHANISM.md`
 
-Because AI responses arrive asynchronously via streaming tokens, waiting for a massive, strictly typed JSON Array to close before the UI can react creates a horribly sluggish User Experience.
+This file focuses on the parser block protocol and stream interrupt mechanics currently used in runtime.
 
-If the AI decides to perform three actions (look up a repository, open a tab, and send a message), the Gateway issues a specialized **Markdown-style Event Block** format.
+## Stream Block Format (Canonical)
 
-## The Streaming Format
+The AI stream supports structured tag blocks (not markdown fence payload contracts):
 
-The system prompts the AI Gateway to output a sequence of instructions using a markdown code block tagged as `event`:
+- `<event>...</event>`
+- `<context>...</context>`
+- `<tool>...</tool>`
+- `<storage>...</storage>`
+- `<history_summary_ai_prompt>...</history_summary_ai_prompt>`
+- `<history_summary_ai_response>...</history_summary_ai_response>`
 
-```event
-<event_type>, <window_uid>, <process_uid>, <widget_uid>, <action>, <sub_action?>
-... arbitrary payload text, markdown, or JSON string buffer goes here ...
-... it builds up asynchronously line by line ...
-end_event
-```
+Anything outside tags is user-visible prose. Anything inside tags is machine payload.
 
-### Example Gateway Stream
-```text
-I am going to open the search tab for you now.
+### Event Block
 
-\`\`\`event
-interaction, main_window, null, null, open, open_tab
-{
-  "tab_id": "search_view"
-}
-end_event
-\`\`\`
+`<event>` body format:
 
-I will now send the query to it:
+1. Header line: `event_type, window_uid, process_uid, widget_uid, action, sub_action`
+2. Payload body: JSON object
+3. Last marker: `end_event`
 
-\`\`\`event
-interaction, main_window, null, search_tab, send, send_widget
-{
-  "query": "React Zod documentation"
-}
-end_event
-\`\`\`
-```
+This block becomes an `Interaction` event and is emitted to `EventBus`.
 
-## Tag Block Mechanism
+### Tool Block (Unified)
 
-The parser also supports `context` tag blocks that carry structured metadata from the AI response:
+`<tool>` replaces legacy `<execute_tool>` and uses action-first payload:
 
-```context
-<block_type>
-... content (text, JSON, markdown) ...
-end_context
-```
+- `action`: `list | view_schema | execute`
+- optional: `tool_slug`, `package_ref`, `memory_uid`, `result_memory_uid`, `status`
 
-Known block types:
-- `summary` — Session summary extracted by the AI.
-- `history_summary` — Compressed conversation history for long sessions.
-- Custom block types are forwarded to `aiContextEngine.ingestContextBlock()`.
+### Storage Block (Unified)
 
-Context blocks are intercepted during stream parsing and ingested into `aiContextEngine` session state. They do not appear in the user-visible response text.
+`<storage>` replaces legacy `<execute_storage>` and uses action-first payload:
 
-## How the Async Parser Handles It
-1. **Stream Scanning**: The incoming Gateway Process simply prints conversational text to Global RAM so the UI can stream it visually to the user.
-2. **Interception**: The split-second it detects the ` ```event ` or ` ```context ` tag, the Process spawns a sub-process `ai_parser`.
-3. **Buffering**: The sub-process hides the text from the UI, buffering the inner tokens into a string payload in RAM.
-4. **Instant Firing**: The exact millisecond the Engine receives `end_event` or `end_context`, it converts the block headers into an `InteractionSchema` JSON object and drops it onto the EventBus (for events) or ingests into context state (for context blocks).
-5. **Multi-Agent Simultaneity**: The AI continues generating the second event block, while the UI instantly reacts to the first one entirely asynchronously.
+- `action`: `read | list | view_db | write | delete`
+- legacy aliases are normalized (e.g. `write_memory -> write`)
 
-## Protocol Lifecycle (protocolLifecycle.ts)
+### Context + History Summary Blocks
 
-The gateway request/response cycle wraps each interaction in a protocol state managed by `services/aiGateway/protocolLifecycle.ts`:
+- `<context>` updates session context memory through `AIContextEngine.ingestContextBlock(...)`
+- `<history_summary_ai_prompt>` and `<history_summary_ai_response>` are validated against protocol state and ingested via `AIContextEngine.ingestHistorySummaryBlock(...)`
 
-### Initialization (`initializeRequestProtocolState`)
-- Snapshots the request prompt, timestamps, and session/model metadata.
-- Stores initial state in RAM under protocol keys.
+## Runtime Dispatch Model
 
-### Finalization (`finalizeRequestProtocolState`)
-- Reads the accumulated response text from RAM.
-- Counts paragraphs against `HISTORY_SUMMARY_PARAGRAPH_THRESHOLD` (default: 2).
-- Determines if the response qualifies as a history summary candidate.
-- Stores finalized protocol state.
+### aiParser Role
 
-### Sanitization (`stripHistorySummaryBlocksFromText`)
-- Strips `history_summary` context blocks from the raw response text before persisting.
-- Ensures saved text contains only user-visible content.
+`services/aiParser.ts` is the stream tokenizer and block extractor. For every detected tag block, dispatch goes through:
 
-### Recovery
-- If protocol finalization encounters malformed data, it logs warnings and falls back to safe defaults rather than throwing.
+- `ParserEngine.dispatchParsedBlock(...)`
 
-## Normalization Rule
+If the tag is unknown, parser emits a `directive` block fallback.
 
-The current runtime prefers direct routed actions such as `open_window`, `close_window`, and `send_gateway`.
+### ParserEngine Role
 
-- Older blocks using `action + sub_action` pairs may still be parsed for compatibility.
-- New parser output should normalize them into the direct action form before routing through `eventEngine`.
+`services/parserEngine.ts` is the parser domain orchestrator:
+
+- resolves parser handlers from registry parser domain
+- injects handler callbacks (`emit_result`, `request_interrupt`)
+- forwards parser outcomes to `EventBus`
+- maintains per-session result queues for stream handler consumption
+
+No direct parser import coupling in `aiParser` runtime path.
+
+## Interrupt Mechanism (Session-Targeted)
+
+Interrupt is now event-driven and session-scoped.
+
+### 1) Handler Requests Stop
+
+Inside parser handler:
+
+- `request_interrupt(reason)` sets parser result interrupt flags
+- `ParserEngine` emits EventBus interaction:
+  - `action: parser_control`
+  - `sub_action: session_stop`
+  - payload: `{ session_id, tag, reason, interrupt_mode, at }`
+
+### 2) ParserEngine Captures Stop Signal
+
+`ParserEngine.registerEventRoutes()` listens on:
+
+- `parser_control:session_stop`
+
+and stores it in `sessionStopQueue[session_id]`.
+
+### 3) Stream Handler Applies Stop
+
+`handleSessionStreamChunk(...)` drains per-session stop queue:
+
+- `ParserEngine.drainSessionStopSignals(sessionId)`
+
+and returns:
+
+- `{ interrupted: true, reason, mode }` when stop exists.
+
+### 4) Gateway Cancels Reader
+
+`services/aiGateway/httpClient.ts` checks parse outcome per chunk.
+
+If interrupted:
+
+- `reader.cancel()` is called
+- RAM output status set to `interrupted`
+- `parser_interrupt_reason` stored in output payload
+
+## Observability Keys in Stream RAM Payload
+
+Current streamed RAM payload tracks parser diagnostics:
+
+- `parser_batches`
+- `parser_batch_count`
+- `parser_handler_results`
+- `parser_handler_result_count`
+- `parser_handler_last_result_at`
+- `parser_stop_signals`
+- `parser_stop_signal_count`
+- `parser_last_stop_at`
+
+## Protocol Lifecycle (History Summary)
+
+Gateway request/response still uses protocol lifecycle in `services/aiGateway/protocolLifecycle.ts`:
+
+- initialize protocol state
+- validate summary blocks (prompt/response)
+- finalize and sanitize persisted user-visible text
+- fallback safely on malformed data
 
 ## Fault Tolerance
-The `ai_parser` logic is heavily fortified with defensive Regex. Local LLMs (especially smaller ones like 8B variants) historically hallucinate escaping quotes, malformed JSON, or forgetting the `end_event` closer tag. If structural violations occur, the Process Engine aborts the block execution and falls back gracefully to standard conversational text output instead of crashing the UI.
+
+- partial/unclosed tag blocks are buffered via `carryoverBuffer`
+- malformed event JSON payloads are skipped without crashing stream
+- unknown tags become directive blocks instead of hard failure
+- interrupt and parse result channels are isolated by `session_id`
