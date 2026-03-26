@@ -315,7 +315,7 @@ Audit Checklist:
 #### Tooling Mechanism
 - [x] Tool result write-back to RAM: `tool:list`, `tool:view_schema`, `tool:execute` routes write structured results to RAM and emit parser result events back to session
 - [x] Tool lifecycle observability: `tool_action_dispatch` → `tool_action_started` → `tool_action_result/error` events tracked per session in response RAM
-- [ ] Resume session context after tool result: AI continuation loop after tool execution result is ingested (feedback injection)
+- [x] Resume session context after tool result: AI continuation loop now waits for terminal tool event (`tool_action_result/error`), injects tool feedback payload as continuation prompt, and re-runs the same session up to guardrail turn cap
 - [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
 
 #### AI Context Engine (NEW)
@@ -336,10 +336,6 @@ Audit Checklist:
 - [ ] ContextTests: add tests for merge, budget trimming, and reference retrieval correctness
 
 ## Development Roadmap
-
-### Phase 2 - Engine Alignment and Schema Refactor
-- [~] AI Parser: structured block parsing (`event`, `context`, `tool`, `storage`, history summary) done, advanced planning/thinking schemas pending
-- [ ] Align Tools Engine to Pre-Allocation Protocol for all results
 
 ### Phase 3 - Development UI Kit
 - [~] Layout Persistence
@@ -367,12 +363,6 @@ Core widgets:
 - [ ] Prompt Bar Widget
 
 ### Phase 6 - AI Gateway, Parser, Chat Surface
-
-#### Step 1.6 - Multi-SDK Contract Hardening
-- [ ] Normalized streaming event envelope across providers
-- [ ] `gateway_contract_version` enforcement on boot
-- [ ] Fallback provider chain
-- [ ] Capability map per provider (`supports_stream`, `supports_tools`, `supports_vision`)
 
 #### Step 1.7 - Sidecar Process Manager
 - [ ] Auto-spawn/restart Python sidecar from app binary

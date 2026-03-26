@@ -44,6 +44,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     const [sortAsc, setSortAsc] = useState(false);
     const [filter, setFilter] = useState('');
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
+    const [collapsedHierarchyNodes, setCollapsedHierarchyNodes] = useState<Record<string, boolean>>({});
     const [detailsCache, setDetailsCache] = useState<Record<string, string>>({});
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -116,26 +117,112 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
         return sortAsc ? cmp : -cmp;
     });
 
-    const childrenByParent = new Map<string, string[]>();
+    const rowByUid = new Map<string, RAMEntry>();
     allRows.forEach((row) => {
-        if (!row.parent_memory_uid) return;
-        const bucket = childrenByParent.get(row.parent_memory_uid) || [];
-        childrenByParent.set(row.parent_memory_uid, [...bucket, row.memory_uid]);
+        rowByUid.set(row.memory_uid, row);
     });
 
-    const rootRows = allRows
-        .filter((row) => !row.parent_memory_uid)
-        .sort((a, b) => a.memory_uid.localeCompare(b.memory_uid));
+    const ensureRow = (memory_uid: string): RAMEntry => {
+        const existing = rowByUid.get(memory_uid);
+        if (existing) return existing;
 
-    const hierarchyLines: Array<{ uid: string; depth: number }> = [];
-    const appendHierarchy = (uid: string, depth: number, seen = new Set<string>()) => {
-        if (seen.has(uid)) return;
-        seen.add(uid);
-        hierarchyLines.push({ uid, depth });
-        const children = (childrenByParent.get(uid) || []).slice().sort((a, b) => a.localeCompare(b));
-        children.forEach((childUid) => appendHierarchy(childUid, depth + 1, seen));
+        const synthesized: RAMEntry = {
+            memory_uid,
+            approx_bytes: 0,
+            type: '—',
+            listeners: listenerMap.get(memory_uid) ?? 0,
+            parent_memory_uid: undefined,
+            child_count: 0,
+        };
+        rowByUid.set(memory_uid, synthesized);
+        return synthesized;
     };
-    rootRows.forEach((row) => appendHierarchy(row.memory_uid, 0));
+
+    // Build parent->children graph from explicit hierarchy links first,
+    // then backfill from row metadata for compatibility.
+    const childrenByParent = new Map<string, Set<string>>();
+    const parentByChild = new Map<string, string>();
+
+    stats.hierarchy_links.forEach((link) => {
+        const childUid = link.child_memory_uid;
+        const parentUid = link.parent_memory_uid;
+        if (!childUid || !parentUid || childUid === parentUid) return;
+
+        ensureRow(childUid);
+        ensureRow(parentUid);
+
+        parentByChild.set(childUid, parentUid);
+        const bucket = childrenByParent.get(parentUid) || new Set<string>();
+        bucket.add(childUid);
+        childrenByParent.set(parentUid, bucket);
+    });
+
+    rowByUid.forEach((row) => {
+        const childUid = row.memory_uid;
+        const parentUid = row.parent_memory_uid;
+        if (!parentUid || childUid === parentUid) return;
+        if (parentByChild.has(childUid)) return;
+
+        ensureRow(parentUid);
+        parentByChild.set(childUid, parentUid);
+        const bucket = childrenByParent.get(parentUid) || new Set<string>();
+        bucket.add(childUid);
+        childrenByParent.set(parentUid, bucket);
+    });
+
+    // Refresh child_count from the reconciled graph so synthesized parents show accurate counts.
+    rowByUid.forEach((row) => {
+        row.child_count = (childrenByParent.get(row.memory_uid) || new Set<string>()).size;
+        row.parent_memory_uid = parentByChild.get(row.memory_uid);
+    });
+
+    const rootUids = Array.from(rowByUid.keys())
+        .filter((uid) => {
+            const parentUid = parentByChild.get(uid);
+            return !parentUid || !rowByUid.has(parentUid);
+        })
+        .sort((a, b) => a.localeCompare(b));
+
+    const hierarchyLines: Array<{ uid: string; depth: number; hasChildren: boolean }> = [];
+    const visitedGlobal = new Set<string>();
+    const appendHierarchy = (uid: string, depth: number, activePath = new Set<string>()) => {
+        if (visitedGlobal.has(uid) || activePath.has(uid)) return;
+
+        visitedGlobal.add(uid);
+        const nextPath = new Set(activePath);
+        nextPath.add(uid);
+
+        const children = Array.from(childrenByParent.get(uid) || new Set<string>()).sort((a, b) => a.localeCompare(b));
+        hierarchyLines.push({ uid, depth, hasChildren: children.length > 0 });
+        children.forEach((childUid) => appendHierarchy(childUid, depth + 1, nextPath));
+    };
+
+    rootUids.forEach((uid) => appendHierarchy(uid, 0));
+    Array.from(rowByUid.keys())
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((uid) => {
+            if (!visitedGlobal.has(uid)) appendHierarchy(uid, 0);
+        });
+
+    const visibleHierarchyLines: Array<{ uid: string; depth: number; hasChildren: boolean }> = [];
+    const expandedPath: boolean[] = [];
+
+    hierarchyLines.forEach((line) => {
+        const isVisible = line.depth === 0 ? true : (expandedPath[line.depth - 1] ?? false);
+        expandedPath.length = line.depth;
+
+        const isExpanded = !collapsedHierarchyNodes[line.uid];
+        expandedPath[line.depth] = isVisible && (line.hasChildren ? isExpanded : true);
+
+        if (isVisible) visibleHierarchyLines.push(line);
+    });
+
+    const toggleHierarchyNode = (uid: string) => {
+        setCollapsedHierarchyNodes((prev) => ({
+            ...prev,
+            [uid]: !prev[uid],
+        }));
+    };
 
     const SortIndicator = ({ k }: { k: SortKey }) =>
         sortKey === k ? <span className="ml-0.5 text-zinc-400">{sortAsc ? '↑' : '↓'}</span> : null;
@@ -201,13 +288,21 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                 <div className="px-3 py-2 border-b border-zinc-800/40 bg-zinc-950/20">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Hierarchy</div>
                     <div className="max-h-28 overflow-auto rounded border border-zinc-800/50 bg-zinc-950/40 p-2 text-[10px] font-mono">
-                        {hierarchyLines.length > 0 ? hierarchyLines.map((line) => {
+                        {visibleHierarchyLines.length > 0 ? visibleHierarchyLines.map((line) => {
                             const isRoot = line.depth === 0;
+                            const isExpanded = !collapsedHierarchyNodes[line.uid];
                             return (
-                                <div key={`tree:${line.uid}`} className="whitespace-pre text-zinc-300">
-                                    <span className="text-zinc-600">{'  '.repeat(line.depth)}{isRoot ? '' : '↳ '}</span>
-                                    <span className={isRoot ? 'text-cyan-300' : 'text-zinc-400'}>{line.uid}</span>
-                                </div>
+                                <button
+                                    type="button"
+                                    key={`tree:${line.uid}`}
+                                    onClick={() => line.hasChildren && toggleHierarchyNode(line.uid)}
+                                    className="w-full flex items-center text-left text-zinc-300 hover:bg-zinc-800/40 rounded px-1 py-0.5"
+                                >
+                                    <span className="text-zinc-600" style={{ paddingLeft: `${line.depth * 12}px` }}>
+                                        {line.hasChildren ? (isExpanded ? '▾' : '▸') : '•'}
+                                    </span>
+                                    <span className={`ml-1 ${isRoot ? 'text-cyan-300' : 'text-zinc-400'}`}>{line.uid}</span>
+                                </button>
                             );
                         }) : (
                             <div className="text-zinc-600">No parent-child references yet.</div>

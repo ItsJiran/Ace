@@ -31,16 +31,11 @@
  */
 
 import { AISessionManager } from './aiGateway/sessionManager';
-import { sendToSession as _sendToSession } from './aiGateway/httpClient';
 import { registerSendGatewayRoute } from './aiGateway/sendGatewayRoute';
-import { prepareGatewaySessionRequest } from './aiGateway/requestPreparation';
-import { finalizeGatewaySessionResponse } from './aiGateway/responseFinalization';
 import { AIConfigManager } from './aiGateway/configManager';
 import { HealthProbe } from './aiGateway/healthProbe';
 import { fetchModels as _fetchModels, testResponse as _testResponse } from './aiGateway/providerClient';
-import {
-    finalizeRequestProtocolState,
-} from './aiGateway/protocolLifecycle';
+import { executeSessionInteractionLoop } from './aiGateway/interactionLoop';
 import { AIContextEngine } from './aiContextEngine';
 import { AIContextRagEngine } from './aiContextRagEngine';
 import { StorageEngine } from './storageEngine';
@@ -50,6 +45,7 @@ import type {
     AIGatewaySidecarHealthResult,
     AIGatewayRadarScanResult,
 } from '../schemas/ai_gateway';
+
 
 export type { SDKProvider, AISession, AISessionSnapshot } from './aiGateway/types';
 import type { SDKProvider, AISessionSnapshot } from './aiGateway/types';
@@ -215,46 +211,11 @@ class AIGatewayEngineSingleton {
         const session = AISessionManager.get(sessionId);
         if (!session) throw new Error(`Session ${sessionId} not found.`);
 
-        const prepared = prepareGatewaySessionRequest({
+        await executeSessionInteractionLoop({
             session,
             sessionId,
             prompt,
-        });
-
-        await _sendToSession(
-            session,
-            prepared.composed_prompt,
-            reply_to_ram_key,
-            AIConfigManager.get(),
-            () => HealthProbe.ensure(),
-            {
-                original_prompt: prompt,
-                used_contexts: prepared.used_contexts,
-                prompt_reference: prepared.prompt_reference,
-                response_reference: prepared.response_reference,
-            },
-        );
-
-        finalizeGatewaySessionResponse({
-            session,
-            sessionId,
-            prompt,
-            reply_to_ram_key,
-            response_reference: prepared.response_reference,
-        });
-    }
-
-    finalizeProtocolState(
-        session: Parameters<typeof finalizeRequestProtocolState>[0]['session'],
-        prompt: string,
-        responseText: string,
-        rawResponse: string,
-    ) {
-        return finalizeRequestProtocolState({
-            session,
-            prompt,
-            responseText,
-            rawResponse,
+            replyToRamKey: reply_to_ram_key,
         });
     }
 

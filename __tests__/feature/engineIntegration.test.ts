@@ -7,9 +7,9 @@ import type { Interaction } from '#/schemas/events';
 describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket Workflow', () => {
     beforeEach(() => {
         (EventBus as any).routes.clear();
-        (Storage as any).global_ram.clear();
-        (Storage as any).classification_ram.clear();
-        (Storage as any).memory_sockets.clear();
+        (StorageEngine as any).global_ram.clear();
+        (StorageEngine as any).classification_ram.clear();
+        (StorageEngine as any).memory_sockets.clear();
     });
 
     it('should route an AI Stream block to the EventBus, trigger a Mock Process, and verify the Storage sockets fire', () => {

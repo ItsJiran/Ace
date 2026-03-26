@@ -5,6 +5,11 @@ import type { AIGatewayConfig } from '../../schemas/ai_gateway';
 
 const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
 
+export interface SendSessionStreamResult {
+    interrupted: boolean;
+    interruptReason?: string;
+}
+
 /**
  * Sends a prompt to the gateway server for a specific session and streams the
  * response token-by-token into RAM via handleSessionStreamChunk.
@@ -27,7 +32,7 @@ export async function sendToSession(
         prompt_reference?: { ref_uid: string; storage_key: string };
         response_reference?: { ref_uid: string; storage_key: string };
     },
-): Promise<void> {
+): Promise<SendSessionStreamResult> {
     console.log(`[AIGatewayEngine] [${session.sessionId}] Sending: "${prompt}"`);
     session.status = 'streaming';
     session.activeOutputRamKey = replyToRamKey;
@@ -70,7 +75,9 @@ export async function sendToSession(
             classifications: CLASSIFICATIONS,
         });
         session.status = 'connected';
-        return;
+        return {
+            interrupted: false,
+        };
     }
 
     const baseUrl = await ensureGatewayServerUrl();
@@ -86,7 +93,9 @@ export async function sendToSession(
             classifications: CLASSIFICATIONS,
         });
         session.status = 'connected';
-        return;
+        return {
+            interrupted: false,
+        };
     }
 
     try {
@@ -112,7 +121,9 @@ export async function sendToSession(
                 classifications: CLASSIFICATIONS,
             });
             session.status = 'connected';
-            return;
+            return {
+                interrupted: false,
+            };
         }
 
         const reader = response.body.getReader();
@@ -160,7 +171,10 @@ export async function sendToSession(
                 },
                 classifications: CLASSIFICATIONS,
             });
-            return;
+            return {
+                interrupted: true,
+                interruptReason: interruptReason ?? 'parser_interrupt_requested',
+            };
         }
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -175,7 +189,9 @@ export async function sendToSession(
             classifications: CLASSIFICATIONS,
         });
         session.status = 'connected';
-        return;
+        return {
+            interrupted: false,
+        };
     }
 
     // ── FINALIZE ─────────────────────────────────────────────────────────────
@@ -186,4 +202,8 @@ export async function sendToSession(
         payload: { status: 'completed', finished_at: Date.now() },
         classifications: CLASSIFICATIONS,
     });
+
+    return {
+        interrupted: false,
+    };
 }
