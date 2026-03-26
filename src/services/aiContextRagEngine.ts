@@ -110,6 +110,7 @@ class AIContextRagEngineSingleton {
         StorageEngine.dispatchRAMAction({
             action: 'create_memory',
             memory_uid: storage_key,
+            parent_memory_uid: `system:session:${input.source_session}:context`,
             payload: input.payload ?? null,
             classifications: ['system:core', 'system:ai_context_rag'],
         });

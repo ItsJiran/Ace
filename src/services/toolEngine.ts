@@ -1,5 +1,7 @@
 import { RegistryEngine } from './registryEngine';
 import { ProcessEngine } from './processEngine';
+import { EventBus } from './eventEngine';
+import { StorageEngine } from './storageEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
 
 export interface ToolManifestEntry {
@@ -11,6 +13,8 @@ export interface ToolManifestEntry {
 }
 
 class ToolEngineSingleton {
+    private isRouteBound = false;
+
     /**
      * Retrieve a specific tool definition from the registry.
      * Wraps RegistryEngine.getDomainEntry with 'tools' domain preset.
@@ -101,6 +105,75 @@ class ToolEngineSingleton {
                 return toolDef.handler(validatedArgs, process_uid);
             },
         );
+    }
+
+    registerEventRoutes() {
+        if (this.isRouteBound) return;
+
+        EventBus.registerProcessRoute('execute_tool', async ({ payload, preallocated_memory }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown> }) => {
+            const raw = (payload ?? {}) as {
+                package_ref?: string;
+                tool_slug?: string;
+                payload?: unknown;
+                [k: string]: unknown;
+            };
+
+            const package_ref = typeof raw.package_ref === 'string' ? raw.package_ref : '';
+            const tool_slug = typeof raw.tool_slug === 'string' ? raw.tool_slug : '';
+
+            const toolPayload =
+                raw.payload !== undefined
+                    ? raw.payload
+                    : Object.fromEntries(
+                        Object.entries(raw).filter(([k]) => k !== 'package_ref' && k !== 'tool_slug'),
+                    );
+
+            if (!package_ref || !tool_slug) {
+                console.warn('[execute_tool] Missing package_ref or tool_slug in payload.');
+                return;
+            }
+
+            const resultKey =
+                typeof preallocated_memory?.reply_to_ram_key === 'string'
+                    ? preallocated_memory.reply_to_ram_key
+                    : undefined;
+
+            try {
+                const result = await this.execute(package_ref, tool_slug, toolPayload);
+                if (resultKey) {
+                    StorageEngine.dispatchRAMAction({
+                        action: 'create_memory',
+                        memory_uid: resultKey,
+                        payload: {
+                            status: 'ok',
+                            package_ref,
+                            tool_slug,
+                            result,
+                            finished_at: Date.now(),
+                        },
+                        classifications: ['system:dev', 'system:tool_runner'],
+                    });
+                }
+            } catch (error) {
+                if (resultKey) {
+                    StorageEngine.dispatchRAMAction({
+                        action: 'create_memory',
+                        memory_uid: resultKey,
+                        payload: {
+                            status: 'error',
+                            package_ref,
+                            tool_slug,
+                            error_message: error instanceof Error ? error.message : String(error),
+                            finished_at: Date.now(),
+                        },
+                        classifications: ['system:dev', 'system:tool_runner'],
+                    });
+                }
+                throw error;
+            }
+        });
+
+        this.isRouteBound = true;
     }
 }
 

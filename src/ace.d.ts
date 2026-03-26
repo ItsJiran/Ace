@@ -39,6 +39,7 @@ interface AIGatewaySessionSnapshot {
   history_summaries?: Array<{
     at: number;
     block_type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+    source: 'ai_parsed' | 'raw' | 'fallback';
     summary: string;
     memory_key?: string;
     ref_uid?: string;
@@ -56,6 +57,11 @@ interface AIGatewaySessionSnapshot {
   protocol_state?: {
     request_started_at: number;
     finished_at?: number;
+    summary_paragraph_threshold: number;
+    prompt_paragraph_count: number;
+    response_paragraph_count: number;
+    require_prompt_summary: boolean;
+    require_response_summary: boolean;
     prompt_memory_key: string;
     prompt_ref_uid?: string;
     response_memory_key: string;

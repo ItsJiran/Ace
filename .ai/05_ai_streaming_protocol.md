@@ -44,12 +44,50 @@ end_event
 \`\`\`
 ```
 
+## Tag Block Mechanism
+
+The parser also supports `context` tag blocks that carry structured metadata from the AI response:
+
+```context
+<block_type>
+... content (text, JSON, markdown) ...
+end_context
+```
+
+Known block types:
+- `summary` — Session summary extracted by the AI.
+- `history_summary` — Compressed conversation history for long sessions.
+- Custom block types are forwarded to `aiContextEngine.ingestContextBlock()`.
+
+Context blocks are intercepted during stream parsing and ingested into `aiContextEngine` session state. They do not appear in the user-visible response text.
+
 ## How the Async Parser Handles It
-1.  **Stream Scanning**: The incoming Gateway Process simply prints conversational text to Global RAM so the UI can stream it visually to the user.
-2.  **Interception**: The split-second it detects the ` ```event ` tag, the Process spawns a sub-process `ai_parser`.
-3.  **Buffering**: The sub-process hides the text from the UI, buffering the inner tokens into a string payload in RAM.
-4.  **Instant Firing**: The exact millisecond the Engine receives `end_event`, it converts the block headers into an `InteractionSchema` JSON object and drops it onto the EventBus.
-5.  **Multi-Agent Simultaneity**: The AI continues generating the second event block, while the UI instantly reacts to the first one entirely asynchronously.
+1. **Stream Scanning**: The incoming Gateway Process simply prints conversational text to Global RAM so the UI can stream it visually to the user.
+2. **Interception**: The split-second it detects the ` ```event ` or ` ```context ` tag, the Process spawns a sub-process `ai_parser`.
+3. **Buffering**: The sub-process hides the text from the UI, buffering the inner tokens into a string payload in RAM.
+4. **Instant Firing**: The exact millisecond the Engine receives `end_event` or `end_context`, it converts the block headers into an `InteractionSchema` JSON object and drops it onto the EventBus (for events) or ingests into context state (for context blocks).
+5. **Multi-Agent Simultaneity**: The AI continues generating the second event block, while the UI instantly reacts to the first one entirely asynchronously.
+
+## Protocol Lifecycle (protocolLifecycle.ts)
+
+The gateway request/response cycle wraps each interaction in a protocol state managed by `services/aiGateway/protocolLifecycle.ts`:
+
+### Initialization (`initializeRequestProtocolState`)
+- Snapshots the request prompt, timestamps, and session/model metadata.
+- Stores initial state in RAM under protocol keys.
+
+### Finalization (`finalizeRequestProtocolState`)
+- Reads the accumulated response text from RAM.
+- Counts paragraphs against `HISTORY_SUMMARY_PARAGRAPH_THRESHOLD` (default: 2).
+- Determines if the response qualifies as a history summary candidate.
+- Stores finalized protocol state.
+
+### Sanitization (`stripHistorySummaryBlocksFromText`)
+- Strips `history_summary` context blocks from the raw response text before persisting.
+- Ensures saved text contains only user-visible content.
+
+### Recovery
+- If protocol finalization encounters malformed data, it logs warnings and falls back to safe defaults rather than throwing.
 
 ## Normalization Rule
 

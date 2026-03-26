@@ -3,6 +3,11 @@ export type SDKProvider = 'openai' | 'google' | 'anthropic';
 export interface AIRequestProtocolState {
     request_started_at: number;
     finished_at?: number;
+    summary_paragraph_threshold: number;
+    prompt_paragraph_count: number;
+    response_paragraph_count: number;
+    require_prompt_summary: boolean;
+    require_response_summary: boolean;
     prompt_memory_key: string;
     prompt_ref_uid?: string;
     response_memory_key: string;

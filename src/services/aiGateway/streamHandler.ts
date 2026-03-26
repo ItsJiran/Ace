@@ -42,14 +42,21 @@ function validateHistorySummaryBlock(
         ? protocol.prompt_ref_uid
         : protocol.response_ref_uid;
     const actualRefUid = readHistorySummaryRefUid(block.payload_json) ?? undefined;
+    const isRequired = block.type === 'history_summary_ai_prompt'
+        ? protocol.require_prompt_summary
+        : protocol.require_response_summary;
 
     if (block.type === 'history_summary_ai_prompt' && protocol.prompt_summary_valid) {
-        pushViolationOnce(protocol.violations, 'Duplicate history_summary_ai_prompt block ignored after first valid block.');
+        if (isRequired) {
+            pushViolationOnce(protocol.violations, 'Duplicate history_summary_ai_prompt block ignored after first valid block.');
+        }
         return false;
     }
 
     if (block.type === 'history_summary_ai_response' && protocol.response_summary_valid) {
-        pushViolationOnce(protocol.violations, 'Duplicate history_summary_ai_response block ignored after first valid block.');
+        if (isRequired) {
+            pushViolationOnce(protocol.violations, 'Duplicate history_summary_ai_response block ignored after first valid block.');
+        }
         return false;
     }
 
@@ -58,7 +65,7 @@ function validateHistorySummaryBlock(
     if (block.type === 'history_summary_ai_prompt') {
         protocol.prompt_summary_received = true;
         protocol.prompt_summary_valid = isValid;
-        if (!isValid) {
+        if (isRequired && !isValid) {
             pushViolationOnce(protocol.violations, `Invalid history_summary_ai_prompt block memory binding. expected=${expectedKey}`);
         }
         return isValid;
@@ -66,7 +73,7 @@ function validateHistorySummaryBlock(
 
     protocol.response_summary_received = true;
     protocol.response_summary_valid = isValid;
-    if (!isValid) {
+    if (isRequired && !isValid) {
         pushViolationOnce(protocol.violations, `Invalid history_summary_ai_response block memory binding. expected=${expectedKey}`);
     }
     return isValid;

@@ -36,6 +36,7 @@ export async function sendToSession(
     StorageEngine.dispatchRAMAction({
         action: 'create_memory',
         memory_uid: replyToRamKey,
+        parent_memory_uid: `system:session:${session.sessionId}:context`,
         payload: {
             original_prompt: metadata?.original_prompt ?? prompt,
             prompt,

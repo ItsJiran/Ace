@@ -20,13 +20,15 @@ export const registry: AceRegistryType.Window = {
     },
 };
 
-type SortKey = 'memory_uid' | 'approx_bytes' | 'listeners' | 'type';
+type SortKey = 'memory_uid' | 'approx_bytes' | 'listeners' | 'type' | 'parent_memory_uid' | 'child_count';
 
 interface RAMEntry {
     memory_uid: string;
     approx_bytes: number;
     type: string;
     listeners: number;
+    parent_memory_uid?: string;
+    child_count: number;
 }
 
 function formatBytes(b: number): string {
@@ -95,7 +97,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     // Keys that have listeners but no memory entry (subscriptions to non-existent keys)
     const orphanListeners: RAMEntry[] = stats.listeners_by_key
         .filter(l => !rows.find(r => r.memory_uid === l.key))
-        .map(l => ({ memory_uid: l.key, approx_bytes: 0, type: '—', listeners: l.listeners }));
+        .map(l => ({ memory_uid: l.key, approx_bytes: 0, type: '—', listeners: l.listeners, child_count: 0 }));
 
     const allRows = [...rows, ...orphanListeners];
 
@@ -109,8 +111,31 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
         else if (sortKey === 'approx_bytes') cmp = a.approx_bytes - b.approx_bytes;
         else if (sortKey === 'listeners') cmp = a.listeners - b.listeners;
         else if (sortKey === 'type') cmp = a.type.localeCompare(b.type);
+        else if (sortKey === 'parent_memory_uid') cmp = (a.parent_memory_uid || '').localeCompare(b.parent_memory_uid || '');
+        else if (sortKey === 'child_count') cmp = a.child_count - b.child_count;
         return sortAsc ? cmp : -cmp;
     });
+
+    const childrenByParent = new Map<string, string[]>();
+    allRows.forEach((row) => {
+        if (!row.parent_memory_uid) return;
+        const bucket = childrenByParent.get(row.parent_memory_uid) || [];
+        childrenByParent.set(row.parent_memory_uid, [...bucket, row.memory_uid]);
+    });
+
+    const rootRows = allRows
+        .filter((row) => !row.parent_memory_uid)
+        .sort((a, b) => a.memory_uid.localeCompare(b.memory_uid));
+
+    const hierarchyLines: Array<{ uid: string; depth: number }> = [];
+    const appendHierarchy = (uid: string, depth: number, seen = new Set<string>()) => {
+        if (seen.has(uid)) return;
+        seen.add(uid);
+        hierarchyLines.push({ uid, depth });
+        const children = (childrenByParent.get(uid) || []).slice().sort((a, b) => a.localeCompare(b));
+        children.forEach((childUid) => appendHierarchy(childUid, depth + 1, seen));
+    };
+    rootRows.forEach((row) => appendHierarchy(row.memory_uid, 0));
 
     const SortIndicator = ({ k }: { k: SortKey }) =>
         sortKey === k ? <span className="ml-0.5 text-zinc-400">{sortAsc ? '↑' : '↓'}</span> : null;
@@ -173,6 +198,23 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                 </div>
 
                 {/* ─── Table ────────────────────────────────────── */}
+                <div className="px-3 py-2 border-b border-zinc-800/40 bg-zinc-950/20">
+                    <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Hierarchy</div>
+                    <div className="max-h-28 overflow-auto rounded border border-zinc-800/50 bg-zinc-950/40 p-2 text-[10px] font-mono">
+                        {hierarchyLines.length > 0 ? hierarchyLines.map((line) => {
+                            const isRoot = line.depth === 0;
+                            return (
+                                <div key={`tree:${line.uid}`} className="whitespace-pre text-zinc-300">
+                                    <span className="text-zinc-600">{'  '.repeat(line.depth)}{isRoot ? '' : '↳ '}</span>
+                                    <span className={isRoot ? 'text-cyan-300' : 'text-zinc-400'}>{line.uid}</span>
+                                </div>
+                            );
+                        }) : (
+                            <div className="text-zinc-600">No parent-child references yet.</div>
+                        )}
+                    </div>
+                </div>
+
                 <div className="flex-1 overflow-auto min-h-0">
                     <table className="w-full text-xs border-collapse">
                         <thead className="sticky top-0 bg-zinc-900/90 backdrop-blur-sm z-10">
@@ -188,6 +230,12 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                                 </th>
                                 <th className={`${thClass}`} onClick={() => handleSort('type')}>
                                     Type <SortIndicator k="type" />
+                                </th>
+                                <th className={`${thClass}`} onClick={() => handleSort('parent_memory_uid')}>
+                                    Parent <SortIndicator k="parent_memory_uid" />
+                                </th>
+                                <th className={`${thClass} text-right`} onClick={() => handleSort('child_count')}>
+                                    Children <SortIndicator k="child_count" />
                                 </th>
                             </tr>
                         </thead>
@@ -229,10 +277,16 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                                             <td className="px-2 py-1 font-mono text-zinc-500">
                                                 {row.type}
                                             </td>
+                                            <td className="px-2 py-1 font-mono text-[10px] text-zinc-500 max-w-[200px] truncate" title={row.parent_memory_uid || '-'}>
+                                                {row.parent_memory_uid || '—'}
+                                            </td>
+                                            <td className="px-2 py-1 text-right font-mono text-zinc-400">
+                                                {row.child_count > 0 ? row.child_count : '—'}
+                                            </td>
                                         </tr>
                                         {isExpanded && (
                                             <tr className="border-b border-zinc-800/40 bg-black/20">
-                                                <td colSpan={4} className="px-2 py-2">
+                                                <td colSpan={6} className="px-2 py-2">
                                                     <pre className="max-h-60 overflow-auto text-[10px] leading-4 font-mono text-zinc-300 bg-zinc-950/70 border border-zinc-800/70 rounded p-2 whitespace-pre-wrap break-all">
                                                         {detailsCache[row.memory_uid] ?? 'Loading...'}
                                                     </pre>
@@ -244,7 +298,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                             })}
                             {sorted.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-3 py-6 text-center text-zinc-600 text-xs">
+                                    <td colSpan={6} className="px-3 py-6 text-center text-zinc-600 text-xs">
                                         No entries match the filter.
                                     </td>
                                 </tr>

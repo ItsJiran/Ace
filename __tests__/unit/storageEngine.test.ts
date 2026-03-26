@@ -5,9 +5,11 @@ import type { RAMInteractivity } from '#/schemas/storage';
 describe('Global RAM Storage Engine (Pure Map & Sockets)', () => {
     beforeEach(() => {
         // Clear the Singletons via internal state bypass for clean test runs
-        (Storage as any).global_ram.clear();
-        (Storage as any).classification_ram.clear();
-        (Storage as any).memory_sockets.clear();
+        (StorageEngine as any).global_ram.clear();
+        (StorageEngine as any).classification_ram.clear();
+        (StorageEngine as any).memory_sockets.clear();
+        (StorageEngine as any).parent_children.clear();
+        (StorageEngine as any).child_parent.clear();
     });
 
     it('should create memory, generate a memory_uid, and trigger sockets', () => {

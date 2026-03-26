@@ -6,11 +6,18 @@ This document outlines the step-by-step lifecycle of data and events across the 
 
 ## 🏛️ The Golden Rules of the Flow
 Before reading the cases, developers must understand the two unbreachable laws of this architecture:
-
 1. **The Pre-Allocation Protocol (UI Data Loop):** React components **never** listen to the Event Bus for data. If a component wants data back, it must generate a correlation ID (RAM Key), start listening to that RAM location (`useAceMemory`), and then include that key in the `Interaction` payload. The backend will write the result directly to that pre-allocated key.
 2. **The High-Frequency Bypass:** The `eventEngine` is for macro-commands (intents) only. High-frequency data streams (LLM tokens, audio frequencies, file bytes) **must bypass the Event Bus** and write directly to the `storageEngine` (RAM) to preserve O(1) performance.
 
+---
 
+## Centralized Route Gate Model
+
+All engine EventBus routes are registered in a single boot phase (Phase 7: Init Engine Routes) via each engine's `registerEventRoutes()` method. No engine registers routes during its own `boot()`. This ensures:
+
+- All routes are declared in one place for auditability.
+- Route conflicts are caught during boot, not at runtime.
+- `send_gateway` is owned by `aiGatewayEngine.registerEventRoutes()`, which delegates to `registerSendGatewayRoute()` in `services/aiGateway/sendGatewayRoute.ts`.
 
 ---
 
@@ -20,14 +27,13 @@ Before reading the cases, developers must understand the two unbreachable laws o
 1. **Pre-Allocate RAM:** The `<ChatInput />` component generates a unique `message_uid` (e.g., `msg-123`) and knows its active `session_id` (e.g., `sess-A`).
 2. **Listen First:** The `<ChatBubble />` component mounts and begins observing `storageEngine` at the key `msg-123`.
 3. **Emit Intent:** `<ChatInput />` emits -> `{ action: 'send_gateway', payload: { text: 'Hello' }, preallocated_memory: { message_uid: 'msg-123', session_id: 'sess-A' } }`.
-4. **Route:** The `eventEngine` validates the payload and routes a standardized `CoreEngineHandlerArgs` object to the `aiGatewayEngine`.
-5. **Session Lookup:** `aiGatewayEngine` reads `preallocated_memory.session_id`. It locates the correct `AISession` object for the chosen provider.
-6. **Streaming & Parsing:** The provider streams chunks back. The engine appends these chunks to **Session A's private buffer** (preventing crosstalk if Session B is also streaming).
-7. **Direct RAM Write:** The parser updates `storageEngine` at `msg-123`.
-8. **React:** The UI updates in real-time.
-9. **Resolution:** The TCP stream closes. The `aiGatewayEngine` marks its own PID as `completed` in the `processEngine` registry.
-
-
+4. **Route:** The `eventEngine` validates the payload and routes a standardized `CoreEngineHandlerArgs` object to `aiGatewayEngine`.
+5. **Route Gate Handler:** The `send_gateway` route handler (in `sendGatewayRoute.ts`) validates the prompt, resolves the active SDK/model/session, and delegates to the engine's `sendToSession()`.
+6. **Request Preparation:** `requestPreparation.ts` reserves RAG references, initializes protocol state, builds composed context via `aiContextEngine`, and ingests the user turn.
+7. **Streaming & Parsing:** `httpClient.ts` opens the SSE stream to the sidecar. The stream handler writes chunks to RAM. Parent-child references link stream RAM entries back to the session context.
+8. **Response Finalization:** `responseFinalization.ts` reads the accumulated RAM text, sanitizes it (strip history summary blocks), persists to RAG, finalizes protocol state, prunes stale references, and ingests the assistant turn into context.
+9. **React:** The UI updates in real-time via `useAceMemory` hooks.
+10. **Resolution:** The stream closes. The engine marks the process as `completed`.
 
 ---
 
@@ -54,8 +60,6 @@ Before reading the cases, developers must understand the two unbreachable laws o
 5. **Parallel Work:** The `eventEngine` routes these tickets to each domain engine's listener (`fsEngine`, `webSearchEngine`), each of which opts into the `processEngine` registry (`PID_2`, `PID_3`).
 6. **Explicit Waiting (New):** The parent `PID_1` updates its own registry entry with `{ waiting_for_processes: ['PID_2', 'PID_3'] }`. The `processEngine` registry now acts as a passive dependency graph.
 7. **Re-awakening:** `PID_2` and `PID_3` finish and write to their RAM keys. The `aiGatewayEngine` (observing those keys AND/OR the process registry state) detects the dependency resolution, wakes `PID_1`, aggregates results, and closes `PID_1`.
-
-
 
 ---
 
@@ -86,10 +90,10 @@ Before reading the cases, developers must understand the two unbreachable laws o
 *Scenario: The user asks a highly complex question. Gathering the system context and chat history takes a few seconds before the AI can even start thinking.*
 
 1. **Emit Intent:** User submits the prompt.
-2. **Pre-Flight:** Before opening the TCP socket, the `aiGatewayEngine` runs the context-building pipeline directly.
-3. **Loading State:** The `aiGatewayEngine` writes to `storageEngine`: `{ ai_status: 'thinking', current_step: 'Gathering context...' }`.
-4. **UI Observation:** `<ChatInput />` observes `ai_status`. It automatically disables the input field and renders a "Thinking..." animation.
-5. **Execution:** The `aiGatewayEngine` runs the context-building `AcePipeline` directly — reads relevant files, retrieves history, calculates token limits, and builds the final prompt string.
+2. **Pre-Flight:** Before opening the TCP socket, the `aiGatewayEngine` delegates to `requestPreparation.ts` which runs the context-building flow.
+3. **Context Assembly:** `aiContextEngine` (facade) delegates to `contextBuilderService.ts` which composes: app bridge context, parser protocol, history summaries, conversation turns, context blocks, and the current user prompt.
+4. **Loading State:** The `aiGatewayEngine` writes to `storageEngine`: `{ ai_status: 'thinking', current_step: 'Gathering context...' }`.
+5. **UI Observation:** `<ChatInput />` observes `ai_status`. It automatically disables the input field and renders a "Thinking..." animation.
 6. **Resolution:** Context is ready. The `aiGatewayEngine` initiates **Case 1** (TCP Stream) and updates RAM to `{ ai_status: 'idle' }`, re-enabling the UI input.
 
 ---

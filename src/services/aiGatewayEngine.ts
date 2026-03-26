@@ -30,13 +30,17 @@
  * every other concern to the appropriate sub-module.
  */
 
-import { EventBus } from './eventEngine';
-import { StorageEngine } from './storageEngine';
 import { AISessionManager } from './aiGateway/sessionManager';
 import { sendToSession as _sendToSession } from './aiGateway/httpClient';
+import { registerSendGatewayRoute } from './aiGateway/sendGatewayRoute';
+import { prepareGatewaySessionRequest } from './aiGateway/requestPreparation';
+import { finalizeGatewaySessionResponse } from './aiGateway/responseFinalization';
 import { AIConfigManager } from './aiGateway/configManager';
 import { HealthProbe } from './aiGateway/healthProbe';
 import { fetchModels as _fetchModels, testResponse as _testResponse } from './aiGateway/providerClient';
+import {
+    finalizeRequestProtocolState,
+} from './aiGateway/protocolLifecycle';
 import { AIContextEngine } from './aiContextEngine';
 import { AIContextRagEngine } from './aiContextRagEngine';
 import type {
@@ -47,7 +51,7 @@ import type {
 } from '../schemas/ai_gateway';
 
 export type { SDKProvider, AISession, AISessionSnapshot } from './aiGateway/types';
-import type { AIRequestProtocolState, SDKProvider, AISessionSnapshot } from './aiGateway/types';
+import type { SDKProvider, AISessionSnapshot } from './aiGateway/types';
 
 class AIGatewayEngineSingleton {
     /**
@@ -76,7 +80,6 @@ class AIGatewayEngineSingleton {
     async boot() {
         if (this.isBooted) return;
 
-        this.bindEventRoutes();
         AIContextEngine.boot();
         await AIConfigManager.load();
 
@@ -114,55 +117,14 @@ class AIGatewayEngineSingleton {
      *  - SDK/model:  preallocated_memory overrides → active config → hardcoded fallback
      *  - Session ID: preallocated_memory.session_id → auto-create fresh session
      */
-    private bindEventRoutes() {
+    registerEventRoutes() {
         if (this.isRouteBound) return;
 
-        EventBus.registerProcessRoute('send_gateway', async ({ payload, preallocated_memory }) => {
-            const prompt = typeof payload?.prompt === 'string' ? payload.prompt.trim() : '';
-            const replyToRamKey =
-                typeof preallocated_memory?.reply_to_ram_key === 'string'
-                    ? preallocated_memory.reply_to_ram_key
-                    : typeof payload?.reply_to_ram_key === 'string'
-                        ? payload.reply_to_ram_key
-                        : `system:ai_parser:test:${Date.now()}`;
-
-            // Reject empty prompts early — write an error record so UI subscribers
-            // surface a clear message rather than silently dropping the event
-            if (!prompt) {
-                StorageEngine.dispatchRAMAction({
-                    action: 'create_memory',
-                    memory_uid: replyToRamKey,
-                    payload: {
-                        prompt,
-                        text: '',
-                        raw_response: '',
-                        parser_batches: [],
-                        status: 'error',
-                        error_message: 'Prompt is required for send_gateway.',
-                        finished_at: Date.now(),
-                    },
-                    classifications: ['system:dev', 'system:ai_parser'],
-                });
-                return;
-            }
-
-            const preferredSdk =
-                typeof preallocated_memory?.sdk === 'string'
-                    ? (preallocated_memory.sdk as SDKProvider)
-                    : (AIConfigManager.getActiveSDK() ?? 'openai');
-
-            const preferredModel =
-                typeof preallocated_memory?.model === 'string'
-                    ? preallocated_memory.model
-                    : (AIConfigManager.getActiveModel() ?? 'gpt-4o-mini');
-
-            // Reuse a pre-allocated session or create a fresh one
-            const sessionId =
-                typeof preallocated_memory?.session_id === 'string'
-                    ? preallocated_memory.session_id
-                    : await this.createSession(preferredSdk, preferredModel);
-
-            await this.sendToSession(sessionId, prompt, replyToRamKey);
+        registerSendGatewayRoute({
+            createSession: (sdk, model) => this.createSession(sdk, model),
+            sendToSession: (sessionId, prompt, replyToRamKey) => this.sendToSession(sessionId, prompt, replyToRamKey),
+            getActiveSDK: () => AIConfigManager.getActiveSDK(),
+            getActiveModel: () => AIConfigManager.getActiveModel(),
         });
 
         this.isRouteBound = true;
@@ -215,181 +177,47 @@ class AIGatewayEngineSingleton {
         const session = AISessionManager.get(sessionId);
         if (!session) throw new Error(`Session ${sessionId} not found.`);
 
-        AIContextEngine.attachSession(sessionId);
-
-        const promptReference = AIContextRagEngine.reserveReference({
-            type: 'prompt',
-            title: 'Raw user prompt history',
-            summary: 'Raw prompt for compact history reconstruction.',
-            source_session: sessionId,
-            tags: ['history', 'prompt', 'raw'],
-            payload: {
-                session_id: sessionId,
-                sdk: session.sdk,
-                model: session.model,
-                original_prompt: prompt,
-                status: 'reserved',
-                created_at: Date.now(),
-            },
+        const prepared = prepareGatewaySessionRequest({
+            session,
+            sessionId,
+            prompt,
         });
-
-        const responseReference = AIContextRagEngine.reserveReference({
-            type: 'response',
-            title: 'Raw assistant response history',
-            summary: 'Raw response stream for compact history reconstruction.',
-            source_session: sessionId,
-            tags: ['history', 'response', 'raw'],
-            payload: {
-                session_id: sessionId,
-                sdk: session.sdk,
-                model: session.model,
-                raw_response: '',
-                text: '',
-                status: 'reserved',
-                created_at: Date.now(),
-            },
-        });
-
-        session.currentProtocolState = {
-            request_started_at: Date.now(),
-            prompt_memory_key: promptReference.storage_key,
-            prompt_ref_uid: promptReference.ref_uid,
-            response_memory_key: responseReference.storage_key,
-            response_ref_uid: responseReference.ref_uid,
-            prompt_summary_received: false,
-            prompt_summary_valid: false,
-            response_summary_received: false,
-            response_summary_valid: false,
-            fallback_prompt_summary_used: false,
-            fallback_response_summary_used: false,
-            violations: [],
-        };
-
-        // Build the outbound prompt from the session context BEFORE appending the
-        // current user turn into history. This avoids duplicating the same user
-        // prompt in both [RECENT_TURNS] and [USER_PROMPT].
-        const contextBuild = AIContextEngine.buildContext(sessionId, prompt, {
-            sdk: session.sdk,
-            model: session.model,
-            promptHistoryMemoryKey: promptReference.storage_key,
-            promptHistoryRefUid: promptReference.ref_uid,
-            responseHistoryMemoryKey: responseReference.storage_key,
-            responseHistoryRefUid: responseReference.ref_uid,
-        });
-
-        AIContextRagEngine.writeReferencePayload(promptReference.storage_key, {
-            session_id: sessionId,
-            sdk: session.sdk,
-            model: session.model,
-            original_prompt: prompt,
-            composed_prompt: contextBuild.composed_prompt,
-            used_contexts: contextBuild.used_contexts,
-            status: 'ready',
-            updated_at: Date.now(),
-        });
-
-        // Persist the user turn after prompt composition so future requests can
-        // still see it in historical context.
-        AIContextEngine.ingestTurn(sessionId, { at: Date.now(), role: 'user', text: prompt });
 
         await _sendToSession(
             session,
-            contextBuild.composed_prompt,
+            prepared.composed_prompt,
             reply_to_ram_key,
             AIConfigManager.get(),
             () => HealthProbe.ensure(),
             {
                 original_prompt: prompt,
-                used_contexts: contextBuild.used_contexts,
-                prompt_reference: promptReference,
-                response_reference: responseReference,
+                used_contexts: prepared.used_contexts,
+                prompt_reference: prepared.prompt_reference,
+                response_reference: prepared.response_reference,
             },
         );
 
-        const responseMemory = StorageEngine.readMemory(reply_to_ram_key) as { text?: unknown } | undefined;
-        const responseText = typeof responseMemory?.text === 'string' ? responseMemory.text : '';
-        const rawResponse = StorageEngine.readMemory(reply_to_ram_key) as {
-            raw_response?: unknown;
-            blocks?: unknown;
-            status?: unknown;
-            error_message?: unknown;
-        } | undefined;
-        AIContextRagEngine.writeReferencePayload(responseReference.storage_key, {
-            session_id: sessionId,
-            sdk: session.sdk,
-            model: session.model,
-            raw_response: typeof rawResponse?.raw_response === 'string' ? rawResponse.raw_response : '',
-            text: responseText,
-            blocks: Array.isArray(rawResponse?.blocks) ? rawResponse.blocks : [],
-            status: typeof rawResponse?.status === 'string' ? rawResponse.status : 'completed',
-            error_message: typeof rawResponse?.error_message === 'string' ? rawResponse.error_message : undefined,
-            updated_at: Date.now(),
+        finalizeGatewaySessionResponse({
+            session,
+            sessionId,
+            prompt,
+            reply_to_ram_key,
+            response_reference: prepared.response_reference,
         });
-
-        const protocolState = this.finalizeProtocolState(session, prompt, responseText);
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: reply_to_ram_key,
-            payload: {
-                protocol_validation: protocolState,
-            },
-            classifications: ['system:dev', 'system:ai_parser'],
-        });
-
-        AIContextRagEngine.pruneSessionRawHistoryReferences(sessionId, 12);
-
-        if (responseText.trim().length > 0) {
-            AIContextEngine.ingestTurn(sessionId, {
-                at: Date.now(),
-                role: 'assistant',
-                text: responseText,
-            });
-            AIContextEngine.buildContext(sessionId, prompt, { sdk: session.sdk, model: session.model });
-        }
     }
 
-    private finalizeProtocolState(
-        session: { currentProtocolState?: AIRequestProtocolState; lastProtocolState?: AIRequestProtocolState; sessionId: string },
+    finalizeProtocolState(
+        session: Parameters<typeof finalizeRequestProtocolState>[0]['session'],
         prompt: string,
         responseText: string,
-    ): AIRequestProtocolState | null {
-        const protocol = session.currentProtocolState;
-        if (!protocol) {
-            return null;
-        }
-
-        if (!protocol.prompt_summary_valid) {
-            AIContextEngine.ingestRuntimeHistorySummaryFallback(session.sessionId, {
-                block_type: 'history_summary_ai_prompt',
-                memory_key: protocol.prompt_memory_key,
-                ref_uid: protocol.prompt_ref_uid,
-                summary_source_text: prompt,
-                protocol_reason: protocol.prompt_summary_received ? 'invalid_block' : 'missing_block',
-            });
-            protocol.fallback_prompt_summary_used = true;
-            if (!protocol.prompt_summary_received) {
-                protocol.violations.push('Missing required history_summary_ai_prompt block.');
-            }
-        }
-
-        if (!protocol.response_summary_valid && responseText.trim().length > 0) {
-            AIContextEngine.ingestRuntimeHistorySummaryFallback(session.sessionId, {
-                block_type: 'history_summary_ai_response',
-                memory_key: protocol.response_memory_key,
-                ref_uid: protocol.response_ref_uid,
-                summary_source_text: responseText,
-                protocol_reason: protocol.response_summary_received ? 'invalid_block' : 'missing_block',
-            });
-            protocol.fallback_response_summary_used = true;
-            if (!protocol.response_summary_received) {
-                protocol.violations.push('Missing required history_summary_ai_response block.');
-            }
-        }
-
-        protocol.finished_at = Date.now();
-        session.lastProtocolState = { ...protocol, violations: [...protocol.violations] };
-        session.currentProtocolState = undefined;
-        return session.lastProtocolState;
+        rawResponse: string,
+    ) {
+        return finalizeRequestProtocolState({
+            session,
+            prompt,
+            responseText,
+            rawResponse,
+        });
     }
 
     // ── Health / Discovery ────────────────────────────────────────────────────

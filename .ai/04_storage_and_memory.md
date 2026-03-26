@@ -21,3 +21,39 @@ In early designs, what happened if an AI sent a chat message 10 milliseconds *be
 1. **Segregation**: The AI Process skips the EventBus entirely. It writes the massive 10-page text response directly into the **Global RAM Storage Engine**.
 2. **Instant Delivery**: When the frontend React component finally finishes mounting 150ms later, its `useAceMemory('mem-123')` hook simply performs a `getSnapshot()`. The massive text block is already sitting in RAM waiting for it. The Ghost Town is physically impossible.
 3. **O(1) Reactivity**: If the backend Process streaming the AI response updates `mem-123` ten times a second, *only* the specific `<ChatBubble />` component listening to that exact ID re-renders. The rest of the overlay app utilizes 0% CPU.
+
+## 🔗 Parent-Child Hierarchy
+
+RAM entries can declare a parent via the `parent_memory_uid` field in `RAMInteractivitySchema`. This enables tree-structured memory relationships — for example, stream RAM entries linking back to their session context.
+
+### Implementation
+
+StorageEngine maintains two additional maps:
+
+- **`parent_children: Map<string, string[]>`** — Forward reference: parent UID → array of child UIDs.
+- **`child_parent: Map<string, string>`** — Back-reference: child UID → single parent UID.
+
+### Lifecycle Rules
+
+| Operation | Behavior |
+|-----------|----------|
+| `create_memory` with `parent_memory_uid` | `setParentLink()` establishes the relationship in both maps. |
+| `update_memory` with changed `parent_memory_uid` | Old parent link is cleaned up before establishing the new one. |
+| `delete_memory` on a child | Removes the child from its parent's children list and deletes the back-reference. |
+| `delete_memory` on a parent | **Orphans** all children (removes their back-references) but does **not** cascade-delete them. |
+
+### Invariants
+- A child has **exactly one parent** (or none).
+- A parent can have **multiple children**.
+- Self-referencing (`parent_memory_uid === memory_uid`) is silently ignored.
+
+### Usage in AI Runtime
+- `aiContextRagEngine.reserveReference()` sets `parent_memory_uid: system:session:<sessionId>:context` on reserved references.
+- `httpClient.ts` stream RAM pre-allocation sets the same parent pattern, linking stream data back to the session context.
+- `RamMonitorWindow` visualizes the hierarchy as a tree panel and exposes parent/children columns in the RAM table.
+
+### RAM Stats Extension
+`StorageEngine.getRAMStats()` includes:
+- `hierarchy_links`: total number of parent-child links.
+- `hierarchy_roots`: number of RAM entries that are parents but not children.
+- Per-entry: `parent_memory_uid` and `child_count` fields.

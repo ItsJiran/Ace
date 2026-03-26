@@ -33,6 +33,21 @@ Notes:
 
 ---
 
+## Completed (Mar 2026)
+
+### Engine Architecture Refactors
+- [x] **AIGatewayEngine Facade Split**: Extracted heavy logic into sub-modules under `services/aiGateway/` — `protocolLifecycle.ts`, `sendGatewayRoute.ts`, `requestPreparation.ts`, `responseFinalization.ts`. Engine is now a thin orchestrator.
+- [x] **AIContextEngine Facade Split**: Extracted context logic into sub-services under `services/aiContent/` — `types.ts`, `protocolTextService.ts`, `contextBlockService.ts`, `historySummaryService.ts`, `contextBuilderService.ts`, `syncService.ts`. Engine is now a facade delegator.
+
+### Storage & RAM
+- [x] **RAM Parent-Child Hierarchy**: Added `parent_memory_uid` field to `RAMInteractivitySchema`. StorageEngine tracks hierarchy via `parent_children` and `child_parent` Maps with full reparent/orphan lifecycle.
+- [x] **RAM Monitor Hierarchy Panel**: `RamMonitorWindow` extended with hierarchy tree visualization, parent/children columns, and sort support.
+
+### Boot & Routing
+- [x] **Centralized Route Gate**: All engine EventBus routes (`send_gateway`, `open_window`, `keybind`, `execute_tool`) registered in boot Phase 7 via `registerEventRoutes()` pattern.
+
+---
+
 ## Current Focus
 
 ### In Progress - UI Shell

@@ -12,6 +12,10 @@ class StorageEngineSingleton {
     // 3. THE SOCKETS: key => [array of callback functions]
     private memory_sockets = new Map<string, Function[]>();
 
+    // 4. RAM hierarchy references: parent -> children and child -> parent
+    private parent_children = new Map<string, string[]>();
+    private child_parent = new Map<string, string>();
+
     // Lightweight cache for UTF-8 encoder used by memory size estimation.
     private textEncoder = new TextEncoder();
 
@@ -96,12 +100,12 @@ class StorageEngineSingleton {
      * Processes an interaction request to mutate the Storage Engine.
      */
     dispatchRAMAction(request: RAMInteractivity) {
-        const { action, memory_uid, payload, classifications } = request;
+        const { action, memory_uid, payload, classifications, parent_memory_uid } = request;
 
         switch (action) {
             case 'create_memory': {
                 const newUid = memory_uid || generateUid();
-                this.writeMemory(newUid, payload, classifications);
+                this.writeMemory(newUid, payload, classifications, parent_memory_uid);
                 return newUid;
             }
 
@@ -118,11 +122,13 @@ class StorageEngineSingleton {
 
                 // No-op guard: if payload didn't actually change and no new classifications,
                 // skip write + socket fan-out to avoid unnecessary rerenders.
-                if (this.isShallowEqual(existingPayload, mergedPayload) && (!classifications || classifications.length === 0)) {
+                const currentParent = this.child_parent.get(memory_uid);
+                const parentChanged = parent_memory_uid !== undefined && parent_memory_uid !== currentParent;
+                if (this.isShallowEqual(existingPayload, mergedPayload) && (!classifications || classifications.length === 0) && !parentChanged) {
                     return true;
                 }
 
-                this.writeMemory(memory_uid, mergedPayload, classifications);
+                this.writeMemory(memory_uid, mergedPayload, classifications, parent_memory_uid);
                 return true;
             }
 
@@ -131,6 +137,25 @@ class StorageEngineSingleton {
 
                 // 1. Remove from Global RAM
                 this.global_ram.delete(memory_uid);
+
+                // 1b. Remove hierarchy links (child link and all immediate child back-links)
+                const parentUid = this.child_parent.get(memory_uid);
+                if (parentUid) {
+                    const siblings = this.parent_children.get(parentUid) || [];
+                    const nextSiblings = siblings.filter((id) => id !== memory_uid);
+                    if (nextSiblings.length === 0) {
+                        this.parent_children.delete(parentUid);
+                    } else {
+                        this.parent_children.set(parentUid, nextSiblings);
+                    }
+                    this.child_parent.delete(memory_uid);
+                }
+
+                const children = this.parent_children.get(memory_uid) || [];
+                children.forEach((childUid) => {
+                    this.child_parent.delete(childUid);
+                });
+                this.parent_children.delete(memory_uid);
 
                 // 2. Remove from Classification RAM
                 const affectedTags: string[] = [];
@@ -162,7 +187,7 @@ class StorageEngineSingleton {
     /**
      * Internal write function that instantly fires the reactive sockets.
      */
-    private writeMemory(uid: string, payload: any, classifications: string[] = []) {
+    private writeMemory(uid: string, payload: any, classifications: string[] = [], parent_memory_uid?: string) {
         const existingPayload = this.global_ram.get(uid);
 
         // 1) Determine whether classification index truly changes.
@@ -187,6 +212,11 @@ class StorageEngineSingleton {
         // 1. Update Global RAM
         this.global_ram.set(uid, immutablePayload);
 
+        // 1b. Update hierarchy links when parent is explicitly provided.
+        if (parent_memory_uid !== undefined) {
+            this.setParentLink(uid, parent_memory_uid);
+        }
+
         // 2. Update Classification RAM
         classifications.forEach(tag => {
             if (!this.classification_ram.has(tag)) {
@@ -207,6 +237,33 @@ class StorageEngineSingleton {
         });
     }
 
+    private setParentLink(childUid: string, parentUidRaw?: string) {
+        const parentUid = typeof parentUidRaw === 'string' ? parentUidRaw.trim() : '';
+        const normalizedParent = parentUid.length > 0 ? parentUid : undefined;
+
+        const previousParent = this.child_parent.get(childUid);
+        if (previousParent && previousParent !== normalizedParent) {
+            const currentChildren = this.parent_children.get(previousParent) || [];
+            const nextChildren = currentChildren.filter((id) => id !== childUid);
+            if (nextChildren.length === 0) {
+                this.parent_children.delete(previousParent);
+            } else {
+                this.parent_children.set(previousParent, nextChildren);
+            }
+        }
+
+        if (!normalizedParent || normalizedParent === childUid) {
+            this.child_parent.delete(childUid);
+            return;
+        }
+
+        this.child_parent.set(childUid, normalizedParent);
+        const children = this.parent_children.get(normalizedParent) || [];
+        if (!children.includes(childUid)) {
+            this.parent_children.set(normalizedParent, [...children, childUid]);
+        }
+    }
+
     private fireSockets(key: string, data: any) {
         if (this.memory_sockets.has(key)) {
             this.memory_sockets.get(key)!.forEach(callback => {
@@ -224,7 +281,7 @@ class StorageEngineSingleton {
      * Note: this is an estimate based on UTF-8 byte size of serialized payloads.
      */
     getRAMStats() {
-        const byKey: Array<{ memory_uid: string; approx_bytes: number; type: string }> = [];
+        const byKey: Array<{ memory_uid: string; approx_bytes: number; type: string; parent_memory_uid?: string; child_count: number }> = [];
         let approxTotalBytes = 0;
 
         for (const [memory_uid, payload] of this.global_ram.entries()) {
@@ -234,6 +291,8 @@ class StorageEngineSingleton {
                 memory_uid,
                 approx_bytes,
                 type: Array.isArray(payload) ? 'array' : typeof payload,
+                parent_memory_uid: this.child_parent.get(memory_uid),
+                child_count: (this.parent_children.get(memory_uid) || []).length,
             });
         }
 
@@ -253,6 +312,16 @@ class StorageEngineSingleton {
             approx_total_mb: approxTotalBytes / (1024 * 1024),
             largest_memories: byKey,
             listeners_by_key: listenerSummary,
+            hierarchy_links: Array.from(this.child_parent.entries()).map(([child, parent]) => ({
+                child_memory_uid: child,
+                parent_memory_uid: parent,
+            })),
+            hierarchy_roots: Array.from(this.global_ram.keys())
+                .filter((uid) => !this.child_parent.has(uid))
+                .map((uid) => ({
+                    memory_uid: uid,
+                    children: [...(this.parent_children.get(uid) || [])],
+                })),
             sampled_at: Date.now(),
         };
     }

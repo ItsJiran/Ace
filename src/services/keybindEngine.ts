@@ -7,6 +7,7 @@ import type { Keybind } from '#/schemas/keybinds';
 
 class KeybindEngineSingleton {
     private isInitialized = false;
+    private isRouteBound = false;
     private allKeybinds: Keybind[] = [];
     private activeKeybinds: Keybind[] = [];
     private handleKeyDownRef?: (event: KeyboardEvent) => void;
@@ -16,7 +17,6 @@ class KeybindEngineSingleton {
     init() {
         if (this.isInitialized) return;
 
-        this.registerEventRoutes();
         this.syncActiveKeybinds();
         void this.syncGlobalShortcutRegistrations();
 
@@ -272,7 +272,9 @@ class KeybindEngineSingleton {
         return [...mods, key].join('+');
     }
 
-    private registerEventRoutes() {
+    registerEventRoutes() {
+        if (this.isRouteBound) return;
+
         EventBus.registerProcessRoute('lookup', async (args) => {
             if (args.sub_action === 'toggle_overlay_mode') {
                 const currentMode = GlobalStateManager.readState().focus.overlay_mode;
@@ -309,6 +311,8 @@ class KeybindEngineSingleton {
                 }
             }
         });
+
+        this.isRouteBound = true;
     }
 
     private matchesShortcut(event: KeyboardEvent, shortcut: string) {

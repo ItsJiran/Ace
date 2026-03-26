@@ -27,6 +27,7 @@ interface SessionSnapshot {
     history_summaries?: Array<{
         at: number;
         block_type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+        source: 'ai_parsed' | 'raw' | 'fallback';
         summary: string;
         memory_key?: string;
         ref_uid?: string;
@@ -36,6 +37,11 @@ interface SessionSnapshot {
     protocol_state?: {
         request_started_at: number;
         finished_at?: number;
+        summary_paragraph_threshold: number;
+        prompt_paragraph_count: number;
+        response_paragraph_count: number;
+        require_prompt_summary: boolean;
+        require_response_summary: boolean;
         prompt_memory_key: string;
         prompt_ref_uid?: string;
         response_memory_key: string;
@@ -153,9 +159,19 @@ function HistorySummaryCard({ item }: { item: NonNullable<SessionSnapshot['histo
     const [expanded, setExpanded] = useState(false);
     const storageMemory = useAceMemory<HistoryMemorySnapshot>(item.memory_key || 'system:dev:ai_session_monitor:history_idle');
     const title = item.block_type === 'history_summary_ai_prompt' ? 'Prompt Summary' : 'Response Summary';
+    // For the raw payload panel: show clean text (not raw_response which includes block XML).
     const rawBody = item.block_type === 'history_summary_ai_prompt'
         ? storageMemory?.original_prompt || '-'
-        : storageMemory?.raw_response || storageMemory?.text || '-';
+        : storageMemory?.text || storageMemory?.raw_response || '-';
+
+    const sourceBadgeClass =
+        item.source === 'ai_parsed' ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-300' :
+        item.source === 'raw'       ? 'bg-zinc-800/60 border-zinc-600/60 text-zinc-400' :
+                                      'bg-amber-950/40 border-amber-700/60 text-amber-300';
+    const sourceLabel =
+        item.source === 'ai_parsed' ? 'ai' :
+        item.source === 'raw'       ? 'raw' :
+                                      'fallback';
 
     return (
         <div className="border border-zinc-800 rounded bg-zinc-900/30 overflow-hidden">
@@ -165,8 +181,11 @@ function HistorySummaryCard({ item }: { item: NonNullable<SessionSnapshot['histo
             >
                 {expanded ? <ChevronDown size={12} className="mt-0.5 text-zinc-500 shrink-0" /> : <ChevronRight size={12} className="mt-0.5 text-zinc-500 shrink-0" />}
                 <div className="flex-1 min-w-0">
-                    <div className="flex justify-between gap-3">
-                        <span className="text-zinc-200 text-[11px] font-semibold">{title}</span>
+                    <div className="flex justify-between gap-3 items-center">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-zinc-200 text-[11px] font-semibold">{title}</span>
+                            <span className={`inline-block border rounded px-1 py-px text-[8px] uppercase font-bold tracking-wider ${sourceBadgeClass}`}>{sourceLabel}</span>
+                        </div>
                         <span className="text-[9px] text-zinc-500 shrink-0">{new Date(item.at).toLocaleTimeString()}</span>
                     </div>
                     <div className="text-zinc-400 text-[11px] whitespace-pre-wrap mt-1">{item.summary}</div>
@@ -184,7 +203,7 @@ function HistorySummaryCard({ item }: { item: NonNullable<SessionSnapshot['histo
                         <span className="text-zinc-300">{storageMemory?.status || '-'}</span>
                     </div>
                     <div>
-                        <div className="text-zinc-500 uppercase mb-1">Raw Payload</div>
+                        <div className="text-zinc-500 uppercase mb-1">{item.source === 'raw' ? 'Raw Text' : item.source === 'fallback' ? 'Fallback Source' : 'Raw Payload'}</div>
                         <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{rawBody}</pre>
                     </div>
                 </div>
@@ -344,6 +363,14 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                 <span className="text-zinc-300 font-mono text-[10px] break-all">{responseMemory?.response_reference?.storage_key || '-'}</span>
                                 <span className="text-zinc-500">Protocol</span>
                                 <span className="text-zinc-300">{responseMemory?.protocol_validation?.violations?.length ? 'issues' : 'ok'}</span>
+                            </div>
+                            <div className="pt-1">
+                                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Quick Copy</div>
+                                <div className="flex flex-wrap gap-2">
+                                    <CopyTextButton label="output text" value={responseMemory?.text} />
+                                    <CopyTextButton label="raw response" value={responseMemory?.raw_response} />
+                                    <CopyTextButton label="raw prompt" value={responseMemory?.original_prompt} />
+                                </div>
                             </div>
                             {responseMemory?.error_message && (
                                 <div className="text-red-300 bg-red-950/20 border border-red-900/40 rounded p-2 whitespace-pre-wrap">

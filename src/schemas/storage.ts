@@ -60,6 +60,9 @@ export const RAMInteractivitySchema = z.object({
     /** The specific ID of the memory block being modified. (Generated securely on 'create_memory') */
     memory_uid: z.string().optional(),
 
+    /** Optional parent link for memory hierarchy visualization (parent -> child). */
+    parent_memory_uid: z.string().optional(),
+
     /** The arbitrary payload data to store */
     payload: z.any().optional(),
 

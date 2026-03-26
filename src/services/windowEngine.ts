@@ -43,6 +43,7 @@ export interface SpawnWindowOptions {
  */
 class WindowEngineSingleton {
     private highest_z_index = 100;
+    private isRouteBound = false;
     
     // Sub-systems
     
@@ -169,7 +170,6 @@ class WindowEngineSingleton {
         this.startAdaptivePacingLoop();
 
         this.initializeState();
-        this.registerEventHandlers();
         
         // Start background bridges
         this.cursorBridge.start();
@@ -235,7 +235,9 @@ class WindowEngineSingleton {
             .catch(() => {});
     }
 
-    private registerEventHandlers() {
+    registerEventRoutes() {
+        if (this.isRouteBound) return;
+
         const coreHandler = async (interaction: any) => {
             const { action, payload } = interaction;
 
@@ -261,6 +263,8 @@ class WindowEngineSingleton {
         EventBus.registerProcessRoute('close_window', coreHandler);
         EventBus.registerProcessRoute('set_overlay_mode', coreHandler);
         EventBus.registerProcessRoute('debug_action', coreHandler);
+
+        this.isRouteBound = true;
     }
 
     private async handleDebugAction(payload: any) {

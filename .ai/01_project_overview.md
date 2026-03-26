@@ -9,7 +9,7 @@ This project is an AI-powered personal assistant overlay designed for extreme mo
 The ecosystem operates on a strict 5-layer hierarchy:
 
 1. **The Transparent Layer**: The absolute base. A single, borderless Tauri `WebviewWindow`. Using OS-level content protection, screen-sharing apps cannot capture the assistant, and users can click "through" it into their IDE.
-2. **Global RAM (Storage Engine)**: Heavy payload data and durable shared state stored in indexable memory. This is the source of truth for cross-system data, but not for high-frequency local UI interaction loops such as hover, drag frames, or spring motion.
+2. **Global RAM (Storage Engine)**: Heavy payload data and durable shared state stored in indexable memory. This is the source of truth for cross-system data, but not for high-frequency local UI interaction loops such as hover, drag frames, or spring motion. RAM entries can declare a `parent_memory_uid` to form parent-child hierarchies (tracked via `parent_children` and `child_parent` maps in StorageEngine).
 3. **The Window (Spatial Shell)**: Handles X/Y coordinates, width/height, dragging, focus, lock state, opacity, always-on-top, and chrome metadata. It still does not know widget business logic. Hot runtime interaction should stay local to the shell and commit only durable state back into RAM.
 4. **The Component (Active UI)**: Small, downloadable React components (`<ChatBubble />`, `<CalendarWidget />`). They capture human inputs, emit requests, and re-render purely by observing the RAM.
 5. **The Domain Engines & Process Registry**: 
@@ -121,7 +121,19 @@ Each domain engine is autonomous. It registers its own Event Bus listeners for t
 
   toolsEngine (The Library/Registry): The static dictionary of system capabilities. It maintains the registry of all available OS-level tools, providing the exact Zod schemas for the EventEngine to use during validation, and the mapped TypeScript handlers for the executing engine.
 
-  aiGatewayEngine: The LLM communicator. It communicates with the `src-gateway-server` Python sidecar over HTTP rather than connecting to AI providers directly. At boot it loads `gateway.json` from AppConfig, runs a health check against `http://127.0.0.1:8888`, and falls back to a port radar scan (8888–8930) if the default port is unavailable. Config is published to `system:ai_gateway_config` and live connection state to `system:ai_gateway_runtime` in RAM. It manages per-session streaming contexts, coordinates parsed AI responses, and escalates executable work back to the Event Bus.
+  aiGatewayEngine: The LLM communicator (facade). It communicates with the `src-gateway-server` Python sidecar over HTTP rather than connecting to AI providers directly. At boot it loads `gateway.json` from AppConfig, runs a health check against `http://127.0.0.1:8888`, and falls back to a port radar scan (8888–8930) if the default port is unavailable. Config is published to `system:ai_gateway_config` and live connection state to `system:ai_gateway_runtime` in RAM. Heavy logic is delegated to sub-modules in `services/aiGateway/`:
+  - `protocolLifecycle.ts` — protocol init/finalize/recovery/sanitize.
+  - `sendGatewayRoute.ts` — `send_gateway` EventBus route handler.
+  - `requestPreparation.ts` — reserve RAG refs, build context, init protocol.
+  - `responseFinalization.ts` — sanitize text, persist RAG, finalize protocol, ingest turns.
+  - Pre-existing: `configManager.ts`, `healthProbe.ts`, `httpClient.ts`, `providerClient.ts`, `sessionManager.ts`, `streamHandler.ts`.
+
+  aiContextEngine: The AI context manager (facade). It maintains per-session context state (turns, blocks, history summaries) and composes the full prompt payload via `buildContext()`. Heavy logic is delegated to sub-services in `services/aiContent/`:
+  - `contextBuilderService.ts` — full prompt composition.
+  - `contextBlockService.ts` — context block ingestion.
+  - `historySummaryService.ts` — history summary ingestion and fallback.
+  - `syncService.ts` — session memory and index sync to RAM.
+  - `protocolTextService.ts` — default app bridge and parser protocol text.
 
   pipelineEngine (The Pipeline): The linear execution engine. Any engine can use it directly to orchestrate a complex step-by-step sequence with built-in observability and cancellation.
 
