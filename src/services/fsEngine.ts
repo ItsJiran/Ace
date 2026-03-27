@@ -1,5 +1,5 @@
 import { BaseDirectory, writeTextFile, readTextFile, exists, mkdir, readDir, remove } from '@tauri-apps/plugin-fs';
-import { appConfigDir, join } from '@tauri-apps/api/path';
+import { appConfigDir, homeDir, join, normalize } from '@tauri-apps/api/path';
 
 // Late binding to avoid circular dep: processEngine → registryEngine → fsEngine → processEngine
 type ProcessTracker = {
@@ -11,6 +11,66 @@ const getProcessEngine = (): ProcessTracker | null =>
 class FSEngineSingleton {
     private hasShownPermissionPopup = false;
     private readonly fallbackPrefix = 'ace:appconfig:';
+
+    private readonly homePathPattern = /^(~(?:[\\/]|$)|[a-zA-Z]:[\\/]|\\\\|\/)/;
+
+    private toFsOptions(baseDir?: BaseDirectory) {
+        return baseDir ? { baseDir } : undefined;
+    }
+
+    private normalizeSeparators(value: string): string {
+        return value.replace(/\\/g, '/');
+    }
+
+    private async resolveFsTarget(path: string): Promise<{
+        requested_path: string;
+        fs_path: string;
+        absolute_path: string;
+        baseDir?: BaseDirectory;
+        isExternal: boolean;
+    }> {
+        const requested_path = path.trim();
+        if (!requested_path) {
+            throw new Error('FSEngine: path is required');
+        }
+
+        if (!this.homePathPattern.test(requested_path)) {
+            return {
+                requested_path,
+                fs_path: requested_path,
+                absolute_path: await this.resolveAppConfigPath(requested_path),
+                baseDir: BaseDirectory.AppConfig,
+                isExternal: false,
+            };
+        }
+
+        const home = await homeDir();
+        const normalizedHome = this.normalizeSeparators(await normalize(home)).replace(/\/$/, '');
+
+        if (requested_path === '~' || requested_path.startsWith('~/') || requested_path.startsWith('~\\')) {
+            const relativePath = requested_path === '~' ? '' : requested_path.slice(2);
+            const absolute_path = relativePath ? await join(home, relativePath) : home;
+            return {
+                requested_path,
+                fs_path: absolute_path,
+                absolute_path,
+                isExternal: true,
+            };
+        }
+
+        const absolute_path = await normalize(requested_path);
+        const normalizedAbsolute = this.normalizeSeparators(absolute_path);
+        if (normalizedAbsolute !== normalizedHome && !normalizedAbsolute.startsWith(`${normalizedHome}/`)) {
+            throw new Error(`FSEngine: external path must stay inside current user home: ${requested_path}`);
+        }
+
+        return {
+            requested_path,
+            fs_path: absolute_path,
+            absolute_path,
+            isExternal: true,
+        };
+    }
 
     private getFallbackKey(filename: string): string {
         return `${this.fallbackPrefix}${filename}`;
@@ -44,9 +104,10 @@ class FSEngineSingleton {
      */
     async createDirectory(path: string): Promise<boolean> {
         try {
-            const dirExists = await exists(path, { baseDir: BaseDirectory.AppConfig });
+            const target = await this.resolveFsTarget(path);
+            const dirExists = await exists(target.fs_path, this.toFsOptions(target.baseDir));
             if (!dirExists) {
-                 await mkdir(path, { baseDir: BaseDirectory.AppConfig, recursive: true });
+                 await mkdir(target.fs_path, { ...this.toFsOptions(target.baseDir), recursive: true });
             }
             return true;
         } catch (error) {
@@ -60,7 +121,8 @@ class FSEngineSingleton {
      */
     async readDirectory(path: string) {
         try {
-            return await readDir(path, { baseDir: BaseDirectory.AppConfig });
+            const target = await this.resolveFsTarget(path);
+            return await readDir(target.fs_path, this.toFsOptions(target.baseDir));
         } catch (error) {
             console.error(`FSEngine: Failed to read directory ${path}:`, error);
             return [];
@@ -72,11 +134,16 @@ class FSEngineSingleton {
      */
     async writeFile(filename: string, content: string): Promise<boolean> {
         try {
-            await writeTextFile(filename, content, { baseDir: BaseDirectory.AppConfig });
+            const target = await this.resolveFsTarget(filename);
+            await writeTextFile(target.fs_path, content, this.toFsOptions(target.baseDir));
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to write file ${filename}:`, error);
             this.showPermissionDeniedPopup(filename, error);
+            const target = await this.resolveFsTarget(filename).catch(() => null);
+            if (target?.isExternal) {
+                return false;
+            }
             // Dev/runtime fallback (non-Tauri or denied capability)
             const fallbackOk = this.writeFallbackRaw(filename, content);
             if (fallbackOk) {
@@ -92,13 +159,18 @@ class FSEngineSingleton {
      */
     async ensureFile(filename: string, defaultData: any): Promise<boolean> {
         try {
-            const fileExists = await exists(filename, { baseDir: BaseDirectory.AppConfig });
+            const target = await this.resolveFsTarget(filename);
+            const fileExists = await exists(target.fs_path, this.toFsOptions(target.baseDir));
             if (!fileExists) {
                 return await this.saveFile(filename, defaultData);
             }
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to ensure file ${filename}:`, error);
+            const target = await this.resolveFsTarget(filename).catch(() => null);
+            if (target?.isExternal) {
+                return false;
+            }
             if (this.hasFallbackFile(filename)) {
                 return true;
             }
@@ -109,11 +181,16 @@ class FSEngineSingleton {
     async saveFile(filename: string, data: any): Promise<boolean> {
         const content = JSON.stringify(data, null, 2);
         try {
-            await writeTextFile(filename, content, { baseDir: BaseDirectory.AppConfig });
+            const target = await this.resolveFsTarget(filename);
+            await writeTextFile(target.fs_path, content, this.toFsOptions(target.baseDir));
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to save file ${filename}:`, error);
             this.showPermissionDeniedPopup(filename, error);
+            const target = await this.resolveFsTarget(filename).catch(() => null);
+            if (target?.isExternal) {
+                return false;
+            }
             const fallbackOk = this.writeFallbackRaw(filename, content);
             if (fallbackOk) {
                 console.warn(`FSEngine: save fallback to localStorage for ${filename}`);
@@ -124,10 +201,15 @@ class FSEngineSingleton {
 
     async readFile(filename: string) {
         try {
-            const content = await readTextFile(filename, { baseDir: BaseDirectory.AppConfig });
+            const target = await this.resolveFsTarget(filename);
+            const content = await readTextFile(target.fs_path, this.toFsOptions(target.baseDir));
             return JSON.parse(content);
         } catch (error) {
             console.error(`FSEngine: Failed to read file ${filename}:`, error);
+            const target = await this.resolveFsTarget(filename).catch(() => null);
+            if (target?.isExternal) {
+                return null;
+            }
             const fallbackRaw = this.readFallbackRaw(filename);
             if (fallbackRaw !== null) {
                 try {
@@ -145,9 +227,14 @@ class FSEngineSingleton {
      */
     async readRaw(filename: string): Promise<string | null> {
         try {
-            return await readTextFile(filename, { baseDir: BaseDirectory.AppConfig });
+            const target = await this.resolveFsTarget(filename);
+            return await readTextFile(target.fs_path, this.toFsOptions(target.baseDir));
         } catch (error) {
             console.error(`FSEngine: Failed to read raw file ${filename}:`, error);
+            const target = await this.resolveFsTarget(filename).catch(() => null);
+            if (target?.isExternal) {
+                return null;
+            }
             return this.readFallbackRaw(filename);
         }
     }
@@ -157,7 +244,8 @@ class FSEngineSingleton {
      */
     async deleteFile(filename: string): Promise<boolean> {
         try {
-            await remove(filename, { baseDir: BaseDirectory.AppConfig });
+            const target = await this.resolveFsTarget(filename);
+            await remove(target.fs_path, this.toFsOptions(target.baseDir));
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to delete file ${filename}:`, error);
@@ -176,6 +264,15 @@ class FSEngineSingleton {
         } catch {
             // Fallback when path API is unavailable (e.g. web runtime)
             return `AppConfig:${filename}`;
+        }
+    }
+
+    async resolvePath(filename: string): Promise<string> {
+        try {
+            const target = await this.resolveFsTarget(filename);
+            return target.absolute_path;
+        } catch {
+            return `Unknown:${filename}`;
         }
     }
 
@@ -232,6 +329,8 @@ class FSEngineSingleton {
                 '- fs:allow-appconfig-read',
                 '- fs:allow-appconfig-write',
                 '- fs:scope-appconfig-recursive',
+                '- fs:allow-home-read-recursive',
+                '- fs:allow-home-write-recursive',
             ].join('\n')
         );
     }

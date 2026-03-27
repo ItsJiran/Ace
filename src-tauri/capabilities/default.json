@@ -24,6 +24,8 @@
     "fs:allow-write-file",
     "fs:allow-appconfig-read",
     "fs:allow-appconfig-write",
-    "fs:scope-appconfig-recursive"
+    "fs:scope-appconfig-recursive",
+    "fs:allow-home-read-recursive",
+    "fs:allow-home-write-recursive"
   ]
 }
