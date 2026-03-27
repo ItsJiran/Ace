@@ -11,6 +11,26 @@ import type {
 
 type ContextMemorySource = ContextMemoryItem['source'];
 
+interface ContextMemoryPayloadSource {
+    package_ref?: string;
+    handler_ref?: string;
+    block_tag?: string;
+    action?: string;
+    event_name?: string;
+    session_id?: string;
+    memory_uid?: string;
+    at: number;
+    source: ContextMemorySource;
+    source_ref?: string;
+}
+
+interface ContextMemoryPayloadEnvelope {
+    payload: unknown;
+    source: ContextMemoryPayloadSource;
+    session_id: string;
+    memory_uid: string;
+}
+
 export interface CreateContextMemoryInput {
     uid?: string;
     memory_key?: string;
@@ -85,7 +105,16 @@ class AIContextMemoryEngineSingleton {
             ...(input.metadata ?? {}),
             ...(memory_key ? { memory_key } : {}),
         };
-        const payload = input.payload ?? existing?.payload ?? null;
+        const payload = this.normalizePayloadEnvelope({
+            uid,
+            sessionId: input.session_id,
+            source: input.source,
+            sourceRef: input.source_ref ?? existing?.source_ref,
+            type: input.type,
+            metadata,
+            payload: input.payload ?? existing?.payload ?? null,
+            at: now,
+        });
 
         const item: ContextMemoryItem = {
             uid,
@@ -455,6 +484,84 @@ class AIContextMemoryEngineSingleton {
         } catch {
             return this.textEncoder.encode(String(payload)).length;
         }
+    }
+
+    private normalizePayloadEnvelope(input: {
+        uid: string;
+        sessionId: string;
+        source: ContextMemorySource;
+        sourceRef?: string;
+        type: ContextMemoryType;
+        metadata: Record<string, unknown>;
+        payload: unknown;
+        at: number;
+    }): ContextMemoryPayloadEnvelope {
+        const {
+            uid,
+            sessionId,
+            source,
+            sourceRef,
+            type,
+            metadata,
+            payload,
+            at,
+        } = input;
+
+        if (this.isPayloadEnvelope(payload)) {
+            const envelopeSource = payload.source ?? { at, source };
+            return {
+                ...payload,
+                source: {
+                    ...envelopeSource,
+                    at: typeof envelopeSource.at === 'number' ? envelopeSource.at : at,
+                    source,
+                    source_ref: sourceRef ?? envelopeSource.source_ref,
+                    package_ref: this.readString(metadata.package_ref) ?? envelopeSource.package_ref,
+                    handler_ref: this.readString(metadata.handler_ref) ?? envelopeSource.handler_ref,
+                    memory_uid: uid,
+                    session_id: sessionId,
+                },
+                session_id: sessionId,
+                memory_uid: uid,
+            };
+        }
+
+        return {
+            payload,
+            source: {
+                package_ref: this.readString(metadata.package_ref),
+                handler_ref: this.readString(metadata.handler_ref) ?? `${source}:${type}`,
+                at,
+                source,
+                source_ref: sourceRef,
+                memory_uid: uid,
+                session_id: sessionId,
+            },
+            session_id: sessionId,
+            memory_uid: uid,
+        };
+    }
+
+    private isPayloadEnvelope(value: unknown): value is ContextMemoryPayloadEnvelope {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+
+        const candidate = value as Record<string, unknown>;
+        if (!('payload' in candidate)) {
+            return false;
+        }
+
+        if (!candidate.source || typeof candidate.source !== 'object') {
+            return false;
+        }
+
+        const source = candidate.source as Record<string, unknown>;
+        return typeof source.at === 'number' || typeof source.source === 'string';
+    }
+
+    private readString(value: unknown): string | undefined {
+        return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
     }
 
     private priorityScore(priority: ContextMemoryPriority) {

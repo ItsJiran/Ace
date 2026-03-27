@@ -1,6 +1,7 @@
 
 import { StorageEngine } from '../storageEngine';
 import { ParserEngine } from '../parserEngine';
+import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { AIConfigManager } from './configManager';
 import { HealthProbe } from './healthProbe';
 import { sendToSession as sendStreamRequest } from './httpClient';
@@ -8,6 +9,7 @@ import { prepareGatewaySessionRequest } from './requestPreparation';
 import { finalizeGatewaySessionResponse } from './responseFinalization';
 import type { AISession } from './types';
 import type { ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
+import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 
 const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
 const TOOL_FEEDBACK_LOOP_MAX_TURNS = 6;
@@ -137,11 +139,11 @@ function getLatestActionTerminalEvent(records: ParserSessionEmitRecord[]): Parse
                 : undefined;
         const isActionableBlock = blockType === 'tool' || blockType === 'context';
         const isTerminalEvent =
-            eventName === 'parser_handler_result' ||
-            eventName === 'parser_handler_error' ||
+            eventName === PARSER_RUNTIME_EVENT.HANDLER_RESULT ||
+            eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR ||
             // Keep compatibility for older sessions still emitting legacy names.
-            eventName === 'tool_action_result' ||
-            eventName === 'tool_action_error';
+            eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_RESULT ||
+            eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR;
         if (isActionableBlock && isTerminalEvent) {
             return record;
         }
@@ -163,7 +165,12 @@ async function waitForActionTerminalEvent(sessionId: string, replyToRamKey: stri
     return getLatestActionTerminalEvent(finalState.mergedResults);
 }
 
-function buildActionContinuationPrompt(originalPrompt: string, terminalEvent: ParserSessionEmitRecord): string | null {
+function buildActionContinuationPrompt(input: {
+    originalPrompt: string;
+    sessionId: string;
+    terminalEvent: ParserSessionEmitRecord;
+}): string | null {
+    const { originalPrompt, sessionId, terminalEvent } = input;
     const payload = terminalEvent.payload && typeof terminalEvent.payload === 'object'
         ? terminalEvent.payload
         : null;
@@ -171,42 +178,38 @@ function buildActionContinuationPrompt(originalPrompt: string, terminalEvent: Pa
 
     const action = typeof payload.action === 'string' ? payload.action : 'unknown';
     const blockType = typeof payload.block_type === 'string' ? payload.block_type : (typeof terminalEvent.tag === 'string' ? terminalEvent.tag : 'tool');
-    const rawEventName = typeof terminalEvent.event_name === 'string' ? terminalEvent.event_name : 'parser_handler_result';
-    const eventName = rawEventName === 'tool_action_error' ? 'parser_handler_error' : rawEventName;
+    const rawEventName = typeof terminalEvent.event_name === 'string'
+        ? terminalEvent.event_name
+        : PARSER_RUNTIME_EVENT.HANDLER_RESULT;
+    const eventName = rawEventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR
+        ? PARSER_RUNTIME_EVENT.HANDLER_ERROR
+        : rawEventName;
     const resultMemoryUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
+    const packageRef = typeof payload.package_ref === 'string' ? payload.package_ref : undefined;
+    const toolSlug = typeof payload.tool_slug === 'string' ? payload.tool_slug : undefined;
+    const presentationComponentSlug = resolvePresentationComponentSlug(action, blockType);
 
-    const resultMemory = resultMemoryUid
-        ? (StorageEngine.readMemory(resultMemoryUid) as Record<string, unknown> | undefined)
-        : undefined;
-    const summarizedResult = resultMemory ?? {
-        status: eventName === 'parser_handler_error' ? 'error' : 'ok',
-        block_type: blockType,
+    const feedbackMemoryKey = upsertActionFeedbackContextMemory({
+        sessionId,
+        blockType,
         action,
-        package_ref: payload.package_ref,
-        tool_slug: payload.tool_slug,
-        memory_key: payload.memory_key,
-        uid: payload.uid,
-        title: payload.title,
-        summary: payload.summary,
-        type: payload.type,
-        result: payload.result,
-        error_message: payload.error_message,
-    };
-
-    const serializedResult = JSON.stringify(summarizedResult, null, 2);
-    const safeResult = serializedResult.length > 8000
-        ? `${serializedResult.slice(0, 8000)}\n... [truncated]`
-        : serializedResult;
+        eventName,
+        packageRef,
+        toolSlug,
+        resultMemoryUid,
+        at: terminalEvent.at,
+    });
 
     const feedbackPacket = {
         source: 'system_action_runtime',
         block_type: blockType,
         event_name: eventName,
         action,
-        package_ref: typeof payload.package_ref === 'string' ? payload.package_ref : undefined,
-        tool_slug: typeof payload.tool_slug === 'string' ? payload.tool_slug : undefined,
+        package_ref: packageRef,
+        tool_slug: toolSlug,
         memory_key: typeof payload.memory_key === 'string' ? payload.memory_key : undefined,
         result_memory_uid: resultMemoryUid,
+        feedback_context_memory_key: feedbackMemoryKey,
         at: terminalEvent.at,
     };
 
@@ -214,19 +217,105 @@ function buildActionContinuationPrompt(originalPrompt: string, terminalEvent: Pa
         `Original user prompt: ${originalPrompt}`,
         '',
         'System feedback: the previous response requested a parser action block and the runtime has completed it.',
-        'Use the action outcome below to continue the same task.',
+        'IMPORTANT: tool output is stored in memory pointers. Do not inline raw tool payload into prose.',
+        'Use presentation blocks to render memory-backed results.',
         '',
         'Action feedback envelope:',
         JSON.stringify(feedbackPacket, null, 2),
         '',
-        'Action result payload:',
-        safeResult,
-        '',
         'Instruction:',
-        '- Continue the conversation based on this result.',
+        '- Continue the conversation based on action feedback + memory pointers.',
+        '- If user needs tool output, emit a <presentation> block with memory_uid = result_memory_uid.',
+        `- Recommended component_slug for this action: "${presentationComponentSlug}".`,
+        '- Do not paste full tool result JSON/text directly into assistant prose.',
         '- If another action block is required, emit a valid <tool> or <context> block.',
         '- If the task is complete, answer the user directly without another action block.',
+        '',
+        'Presentation template:',
+        '<presentation>',
+        JSON.stringify({
+            package_ref: 'itsjiran/ace-system',
+            component_slug: presentationComponentSlug,
+            memory_uid: resultMemoryUid || '<result_memory_uid>',
+            format: action === 'view_schema' ? 'table' : 'list',
+        }),
+        '</presentation>',
     ].join('\n');
+}
+
+function resolvePresentationComponentSlug(action: string, blockType: string): string {
+    if (blockType === 'tool') {
+        if (action === 'view_schema') return 'ai_data_table';
+        if (action === 'list') return 'ai_output_list';
+    }
+    return 'ai_output_list';
+}
+
+function upsertActionFeedbackContextMemory(input: {
+    sessionId: string;
+    blockType: string;
+    action: string;
+    eventName: string;
+    packageRef?: string;
+    toolSlug?: string;
+    resultMemoryUid?: string;
+    at: number;
+}): string {
+    const {
+        sessionId,
+        blockType,
+        action,
+        eventName,
+        packageRef,
+        toolSlug,
+        resultMemoryUid,
+        at,
+    } = input;
+
+    const feedbackMemoryKey = `system:session:${sessionId}:context_feedback:action:${at}`;
+
+    AIContextMemoryEngine.createMemory({
+        memory_key: feedbackMemoryKey,
+        type: 'feedback',
+        session_id: sessionId,
+        status: 'in',
+        priority: 'high',
+        title: `Action feedback ${blockType}:${action}`,
+        summary: `Action ${blockType}:${action} finished with ${eventName}. Use result memory pointer for rendering.`,
+        payload: {
+            payload: {
+                block_type: blockType,
+                event_name: eventName,
+                action,
+                package_ref: packageRef,
+                tool_slug: toolSlug,
+                result_memory_uid: resultMemoryUid,
+                at,
+            },
+            source: {
+                package_ref: packageRef,
+                handler_ref: `parser:${blockType}:${action}:${packageRef || 'unknown'}:${toolSlug || 'n/a'}`,
+                block_tag: blockType,
+                action,
+                event_name: eventName,
+                session_id: sessionId,
+                at,
+            },
+        },
+        metadata: {
+            memory_key: feedbackMemoryKey,
+            result_memory_uid: resultMemoryUid,
+            block_type: blockType,
+            action,
+            event_name: eventName,
+        },
+        source: 'system',
+        source_ref: 'interaction_loop_action_feedback',
+        tags: ['loop_feedback', blockType, action],
+        auto_expire: true,
+    });
+
+    return feedbackMemoryKey;
 }
 
 export async function executeSessionInteractionLoop(input: {
@@ -353,7 +442,11 @@ export async function executeSessionInteractionLoop(input: {
             return;
         }
 
-        const continuationPrompt = buildActionContinuationPrompt(prompt, terminalActionEvent);
+        const continuationPrompt = buildActionContinuationPrompt({
+            originalPrompt: prompt,
+            sessionId,
+            terminalEvent: terminalActionEvent,
+        });
         if (!continuationPrompt) {
             currentTurn.finished_at = Date.now();
             StorageEngine.dispatchRAMAction({

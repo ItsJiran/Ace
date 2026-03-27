@@ -31,6 +31,17 @@ Notes:
 - This README now tracks active and pending work only.
 - Completed details and long examples are maintained in `.ai/` documentation.
 
+## Recently Completed (2026-03-28)
+
+- Parser block contract simplified to `BaseBlock` + `payload_raw` + `payload_json` (app layer no longer depends on large block unions).
+- Built-in parser outputs (`paragraph`, `event`, `directive`) now follow the same base payload contract.
+- Added generic typed payload helper: `getBlockPayloadAs<T>()` in parser schema.
+- Started parser-owned typed payload exports for cross-package use (`PresentationPayload`, `getPresentationPayload`).
+- `PresentationRenderer` now acts as strict executor: resolve target from presentation block, read memory target, pass envelope to component.
+- Presentation contract hardened: complete block requires `component_slug` + memory target (`memory_uid` preferred; `memory_key` kept as legacy fallback).
+- AI context memory envelope normalization moved to `AIContextMemoryEngine` so all context writers store consistent source-aware payload envelopes.
+- Gateway continuation guidance now points AI to render via `<presentation>` using memory pointer (`memory_uid = result_memory_uid`).
+
 ## Current Focus
 
 ### In Progress - UI Shell

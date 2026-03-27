@@ -418,6 +418,11 @@ export function handleSessionStreamChunk(
             requestedAction === 'retrieve' || requestedAction === 'store' || requestedAction === 'update'
                 ? requestedAction
                 : 'update';
+        const memoryUid = typeof payload.memory_uid === 'string'
+            ? payload.memory_uid
+            : typeof payload.memory_key === 'string'
+                ? payload.memory_key
+                : undefined;
         const memoryKey = typeof payload.memory_key === 'string' ? payload.memory_key : undefined;
         const requestedResultUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
 
@@ -711,6 +716,7 @@ export function handleSessionStreamChunk(
                 component_ref: componentRef,
                 component_slug: componentSlug,
                 component_resolved: Boolean(resolvedComponent),
+                memory_uid: memoryUid,
                 memory_key: memoryKey,
                 format,
                 props,

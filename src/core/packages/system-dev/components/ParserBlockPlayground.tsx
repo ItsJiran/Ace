@@ -3,6 +3,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import { parseAIStreamChunk } from '#/services/aiParser';
 import { ParserEngine } from '#/services/parserEngine';
 import type { AIParseResult, ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
+import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 
 export const registry: AceRegistryType.Component = {
     name: 'parser_block_playground',
@@ -35,10 +36,10 @@ function buildContinuationPromptPreview(inputPrompt: string, handlerResults: Par
     const latestStop = stopSignals.length > 0 ? stopSignals[stopSignals.length - 1] : null;
     const latestTerminalEvent = [...handlerResults].reverse().find((record) => {
         const eventName = typeof record.event_name === 'string' ? record.event_name : '';
-        return eventName === 'parser_handler_result'
-            || eventName === 'parser_handler_error'
-            || eventName === 'tool_action_result'
-            || eventName === 'tool_action_error';
+        return eventName === PARSER_RUNTIME_EVENT.HANDLER_RESULT
+            || eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR
+            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_RESULT
+            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR;
     }) ?? null;
 
     if (!latestTerminalEvent) {
@@ -201,13 +202,13 @@ export default function ParserBlockPlayground() {
             session_id: sessionRef.current,
             tag: 'tool',
             at: now,
-            event_name: 'parser_handler_result',
+            event_name: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
             payload: {
                 session_id: sessionRef.current,
                 tag: 'tool',
                 block_type: 'tool',
                 at: now,
-                event_name: 'parser_handler_result',
+                event_name: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
                 action: 'list',
                 status: 'completed',
                 result: {
@@ -246,10 +247,10 @@ export default function ParserBlockPlayground() {
 
     const latestStop = result.stopSignals.length > 0 ? result.stopSignals[result.stopSignals.length - 1] : null;
     const isToolListPendingInPlayground =
-        !result.handlerResults.some((item) => item.event_name === 'parser_handler_result'
-            || item.event_name === 'parser_handler_error'
-            || item.event_name === 'tool_action_result'
-            || item.event_name === 'tool_action_error') &&
+        !result.handlerResults.some((item) => item.event_name === PARSER_RUNTIME_EVENT.HANDLER_RESULT
+            || item.event_name === PARSER_RUNTIME_EVENT.HANDLER_ERROR
+            || item.event_name === PARSER_RUNTIME_EVENT.TOOL_ACTION_RESULT
+            || item.event_name === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR) &&
         latestStop?.reason === 'tool_list_requested';
 
     const continuationDisplayText = isToolListPendingInPlayground

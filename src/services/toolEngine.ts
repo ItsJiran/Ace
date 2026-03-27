@@ -3,6 +3,7 @@ import { ProcessEngine } from './processEngine';
 import { EventBus } from './eventEngine';
 import { StorageEngine } from './storageEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
+import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 
 export interface ToolManifestEntry {
     slug: string;
@@ -22,13 +23,62 @@ interface ToolActionPayload {
 }
 
 type HandlerLifecycleEventName =
-    | 'parser_handler_dispatch'
-    | 'parser_handler_started'
-    | 'parser_handler_result'
-    | 'parser_handler_error';
+    | typeof PARSER_RUNTIME_EVENT.HANDLER_DISPATCH
+    | typeof PARSER_RUNTIME_EVENT.HANDLER_STARTED
+    | typeof PARSER_RUNTIME_EVENT.HANDLER_RESULT
+    | typeof PARSER_RUNTIME_EVENT.HANDLER_ERROR;
 
 class ToolEngineSingleton {
     private isRouteBound = false;
+
+    private buildToolMemoryEnvelope(input: {
+        status: 'ok' | 'error';
+        action: 'list' | 'view_schema' | 'execute';
+        packageRef?: string;
+        toolSlug?: string;
+        resultMemoryUid?: string;
+        sessionId?: string;
+        data: Record<string, unknown>;
+    }) {
+        const {
+            status,
+            action,
+            packageRef,
+            toolSlug,
+            resultMemoryUid,
+            sessionId,
+            data,
+        } = input;
+
+        const at = Date.now();
+        const eventName = status === 'error'
+            ? PARSER_RUNTIME_EVENT.HANDLER_ERROR
+            : PARSER_RUNTIME_EVENT.HANDLER_RESULT;
+
+        return {
+            // Backward-compatible top-level fields.
+            status,
+            action,
+            package_ref: packageRef,
+            tool_slug: toolSlug,
+            result_memory_uid: resultMemoryUid,
+            finished_at: at,
+            ...data,
+
+            // Source-aware envelope (package + handler + payload only).
+            payload: data,
+            source: {
+                package_ref: packageRef,
+                handler_ref: `tool:${action}:${packageRef || 'unknown'}:${toolSlug || 'n/a'}`,
+                block_tag: 'tool',
+                action,
+                event_name: eventName,
+                result_memory_uid: resultMemoryUid,
+                session_id: sessionId,
+                at,
+            },
+        };
+    }
 
     private resolveResultKey(raw: ToolActionPayload, preallocated_memory?: Record<string, unknown>): string | undefined {
         return typeof preallocated_memory?.reply_to_ram_key === 'string'
@@ -70,7 +120,7 @@ class ToolEngineSingleton {
     }) {
         this.publishToolActionResult({
             sessionId: input.sessionId,
-            eventName: 'parser_handler_started',
+            eventName: PARSER_RUNTIME_EVENT.HANDLER_STARTED,
             payload: {
                 action: input.action,
                 ...input.payload,
@@ -190,20 +240,23 @@ class ToolEngineSingleton {
                 StorageEngine.dispatchRAMAction({
                     action: 'create_memory',
                     memory_uid: resultKey,
-                    payload: {
+                    payload: this.buildToolMemoryEnvelope({
                         status: 'ok',
                         action: 'list',
-                        tools,
-                        total: tools.length,
-                        finished_at: Date.now(),
-                    },
+                        resultMemoryUid: resultKey,
+                        sessionId,
+                        data: {
+                            tools,
+                            total: tools.length,
+                        },
+                    }),
                     classifications: ['system:dev', 'system:tool_runner'],
                 });
             }
 
             this.publishToolActionResult({
                 sessionId,
-                eventName: 'parser_handler_result',
+                eventName: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
                 payload: {
                     action: 'list',
                     result_memory_uid: resultKey,
@@ -232,7 +285,7 @@ class ToolEngineSingleton {
             if (!package_ref || !tool_slug) {
                 this.publishToolActionResult({
                     sessionId,
-                    eventName: 'parser_handler_error',
+                    eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                     payload: {
                         action: 'view_schema',
                         package_ref,
@@ -252,23 +305,26 @@ class ToolEngineSingleton {
                 StorageEngine.dispatchRAMAction({
                     action: 'create_memory',
                     memory_uid: resultKey,
-                    payload: {
+                    payload: this.buildToolMemoryEnvelope({
                         status: result?.entry ? 'ok' : 'error',
                         action: 'view_schema',
-                        package_ref,
-                        tool_slug,
-                        schema: toolSchema,
-                        description,
-                        error_message: result?.entry ? undefined : `Tool ${package_ref}/${tool_slug} not found.`,
-                        finished_at: Date.now(),
-                    },
+                        packageRef: package_ref,
+                        toolSlug: tool_slug,
+                        resultMemoryUid: resultKey,
+                        sessionId,
+                        data: {
+                            schema: toolSchema,
+                            description,
+                            error_message: result?.entry ? undefined : `Tool ${package_ref}/${tool_slug} not found.`,
+                        },
+                    }),
                     classifications: ['system:dev', 'system:tool_runner'],
                 });
             }
 
             this.publishToolActionResult({
                 sessionId,
-                eventName: result?.entry ? 'parser_handler_result' : 'parser_handler_error',
+                eventName: result?.entry ? PARSER_RUNTIME_EVENT.HANDLER_RESULT : PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                 payload: {
                     action: 'view_schema',
                     package_ref,
@@ -311,7 +367,7 @@ class ToolEngineSingleton {
             if (!package_ref || !tool_slug) {
                 this.publishToolActionResult({
                     sessionId,
-                    eventName: 'parser_handler_error',
+                    eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                     payload: {
                         action: 'execute',
                         package_ref,
@@ -328,21 +384,24 @@ class ToolEngineSingleton {
                     StorageEngine.dispatchRAMAction({
                         action: 'create_memory',
                         memory_uid: resultKey,
-                        payload: {
+                        payload: this.buildToolMemoryEnvelope({
                             status: 'ok',
                             action: 'execute',
-                            package_ref,
-                            tool_slug,
-                            result,
-                            finished_at: Date.now(),
-                        },
+                            packageRef: package_ref,
+                            toolSlug: tool_slug,
+                            resultMemoryUid: resultKey,
+                            sessionId,
+                            data: {
+                                result,
+                            },
+                        }),
                         classifications: ['system:dev', 'system:tool_runner'],
                     });
                 }
 
                 this.publishToolActionResult({
                     sessionId,
-                    eventName: 'parser_handler_result',
+                    eventName: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
                     payload: {
                         action: 'execute',
                         package_ref,
@@ -357,21 +416,24 @@ class ToolEngineSingleton {
                     StorageEngine.dispatchRAMAction({
                         action: 'create_memory',
                         memory_uid: resultKey,
-                        payload: {
+                        payload: this.buildToolMemoryEnvelope({
                             status: 'error',
                             action: 'execute',
-                            package_ref,
-                            tool_slug,
-                            error_message,
-                            finished_at: Date.now(),
-                        },
+                            packageRef: package_ref,
+                            toolSlug: tool_slug,
+                            resultMemoryUid: resultKey,
+                            sessionId,
+                            data: {
+                                error_message,
+                            },
+                        }),
                         classifications: ['system:dev', 'system:tool_runner'],
                     });
                 }
 
                 this.publishToolActionResult({
                     sessionId,
-                    eventName: 'parser_handler_error',
+                    eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                     payload: {
                         action: 'execute',
                         package_ref,
@@ -417,13 +479,17 @@ class ToolEngineSingleton {
                     StorageEngine.dispatchRAMAction({
                         action: 'create_memory',
                         memory_uid: resultKey,
-                        payload: {
+                        payload: this.buildToolMemoryEnvelope({
                             status: 'ok',
-                            package_ref,
-                            tool_slug,
-                            result,
-                            finished_at: Date.now(),
-                        },
+                            action: 'execute',
+                            packageRef: package_ref,
+                            toolSlug: tool_slug,
+                            resultMemoryUid: resultKey,
+                            sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
+                            data: {
+                                result,
+                            },
+                        }),
                         classifications: ['system:dev', 'system:tool_runner'],
                     });
                 }
@@ -432,13 +498,17 @@ class ToolEngineSingleton {
                     StorageEngine.dispatchRAMAction({
                         action: 'create_memory',
                         memory_uid: resultKey,
-                        payload: {
+                        payload: this.buildToolMemoryEnvelope({
                             status: 'error',
-                            package_ref,
-                            tool_slug,
-                            error_message: error instanceof Error ? error.message : String(error),
-                            finished_at: Date.now(),
-                        },
+                            action: 'execute',
+                            packageRef: package_ref,
+                            toolSlug: tool_slug,
+                            resultMemoryUid: resultKey,
+                            sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
+                            data: {
+                                error_message: error instanceof Error ? error.message : String(error),
+                            },
+                        }),
                         classifications: ['system:dev', 'system:tool_runner'],
                     });
                 }

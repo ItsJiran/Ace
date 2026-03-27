@@ -1,4 +1,5 @@
 import { EventBus } from '#/services/eventEngine';
+import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 import type {
     ParserBlockHandlerContext,
     ParserBlockRuntime,
@@ -28,7 +29,7 @@ export class ParserBlockDispatchService {
             processUid,
             tag,
             payload: {
-                event_name: 'parser_block_detected',
+                event_name: PARSER_RUNTIME_EVENT.BLOCK_DETECTED,
                 block_id: blockId,
                 block_tag: tag,
                 is_complete: isComplete,
@@ -44,7 +45,7 @@ export class ParserBlockDispatchService {
                 processUid,
                 tag,
                 payload: {
-                    event_name: 'parser_block_registry_missing',
+                    event_name: PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_MISSING,
                     block_id: blockId,
                     block_tag: tag,
                     status: 'unhandled',
@@ -58,7 +59,7 @@ export class ParserBlockDispatchService {
             processUid,
             tag,
             payload: {
-                event_name: 'parser_block_registry_found',
+                event_name: PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_FOUND,
                 block_id: blockId,
                 block_tag: tag,
                 status: 'registered',
@@ -128,7 +129,7 @@ export class ParserBlockDispatchService {
             processUid,
             tag,
             payload: {
-                event_name: 'parser_block_handler_started',
+                event_name: PARSER_RUNTIME_EVENT.BLOCK_HANDLER_STARTED,
                 block_id: blockId,
                 block_tag: tag,
                 status: 'running',
@@ -156,7 +157,7 @@ export class ParserBlockDispatchService {
                 processUid,
                 tag,
                 payload: {
-                    event_name: 'parser_block_validator_failed',
+                    event_name: PARSER_RUNTIME_EVENT.BLOCK_VALIDATOR_FAILED,
                     block_id: blockId,
                     block_tag: tag,
                     status: 'failed',
@@ -184,7 +185,7 @@ export class ParserBlockDispatchService {
                 processUid,
                 tag,
                 payload: {
-                    event_name: 'parser_block_handler_failed',
+                    event_name: PARSER_RUNTIME_EVENT.BLOCK_HANDLER_FAILED,
                     block_id: blockId,
                     block_tag: tag,
                     status: 'failed',
@@ -224,7 +225,7 @@ export class ParserBlockDispatchService {
             processUid,
             tag,
             payload: {
-                event_name: 'parser_block_handler_completed',
+                event_name: PARSER_RUNTIME_EVENT.BLOCK_HANDLER_COMPLETED,
                 block_id: blockId,
                 block_tag: tag,
                 status: result.interrupt_requested ? 'interrupted' : 'completed',

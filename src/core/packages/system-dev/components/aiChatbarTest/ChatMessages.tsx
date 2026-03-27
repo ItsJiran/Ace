@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
+import type { BaseBlock } from '#/schemas/parser';
 import type { ChatMessage, ParserBatchMemory } from './types';
 import { PresentationRenderer } from './PresentationRenderer';
+import { getPresentationPayload } from '#/core/packages/system/parsers/PresentationBlock';
 
 interface ChatMessagesProps {
     messages: ChatMessage[];
@@ -11,7 +13,11 @@ interface ChatMessagesProps {
 export function ChatMessages({ messages, responseMemory, bottomRef }: ChatMessagesProps) {
     const presentationBlocks = useMemo(() => {
         const blocks = responseMemory?.blocks || [];
-        return blocks.filter((block) => block.type === 'presentation' && block.is_complete);
+        return blocks.filter((block) => {
+            if (block.type !== 'presentation' || !block.is_complete) return false;
+            const payload = getPresentationPayload(block as BaseBlock);
+            return Boolean(payload?.component_slug);
+        });
     }, [responseMemory?.blocks]);
 
     return (
@@ -39,7 +45,7 @@ export function ChatMessages({ messages, responseMemory, bottomRef }: ChatMessag
                         {msg.role === 'assistant' && msg.turnId && presentationBlocks.length > 0 && (
                             <div className="mt-2 space-y-2">
                                 {presentationBlocks.map((block, idx) => (
-                                    <PresentationRenderer key={`presentation-${msg.turnId}-${idx}`} block={block as any} />
+                                    <PresentationRenderer key={`presentation-${msg.turnId}-${idx}`} block={block as BaseBlock} />
                                 ))}
                             </div>
                         )}

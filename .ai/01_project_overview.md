@@ -430,3 +430,15 @@ Latest runtime synchronization applied:
 Documentation note:
 - Response debugging should be analyzed per prompt turn and per attempt, not as one flat stream.
 - Auto-loop continuations belong to the same prompt turn unless a new user prompt starts a new turn.
+
+## Sync Update 2026-03-28
+
+Status sync for current architecture and runtime progress:
+- Parser block communication is standardized on BaseBlock with payload_raw + payload_json.
+- Built-in block outputs (paragraph, event, directive) now follow the same BaseBlock payload contract.
+- Typed payload reader helper added in parser schema: getBlockPayloadAs<T>().
+- Parser-owned payload typing pattern started with presentation parser exports (PresentationPayload and getPresentationPayload).
+- Presentation flow is now explicit: AI emits presentation target (package/component + memory uid), renderer resolves registry entry and passes memory envelope to component.
+- Presentation block validation hardened: component_slug is required and memory_uid is preferred (memory_key remains temporary legacy fallback).
+- Context memory envelope normalization is centralized in AIContextMemoryEngine to avoid tool-only coupling.
+- Gateway continuation contract uses memory pointers for rendering instead of injecting raw tool payloads into prose.

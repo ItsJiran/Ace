@@ -1,3 +1,5 @@
+import type { BaseBlock } from '#/schemas/parser';
+
 export type SDKProvider = 'openai' | 'google' | 'anthropic';
 export type ChatRole = 'user' | 'assistant';
 
@@ -16,15 +18,7 @@ export interface ParserBatchMemory {
     prompt?: string;
     text?: string;
     raw_response?: string;
-    blocks?: Array<
-        | { type: 'paragraph'; content: string }
-        | { type: 'context'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
-        | { type: 'history_summary_ai_prompt' | 'history_summary_ai_response'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
-        | { type: 'presentation'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean; package_ref?: string; component_slug: string; memory_key?: string; props?: Record<string, unknown>; format?: string }
-        | { type: 'tool' | 'storage'; payload_raw: string; payload_json: Record<string, unknown> | null; status: string; is_complete: boolean; action?: string; memory_uid?: string; result_memory_uid?: string }
-        | { type: 'event'; event: { headers: Record<string, unknown>; raw_payload_buffer: string; is_complete: boolean } }
-        | { type: 'directive'; directive_name: string; content: string; is_complete: boolean }
-    >;
+    blocks?: BaseBlock[];
     parser_handler_results?: Array<{
         session_id: string;
         tag: string;

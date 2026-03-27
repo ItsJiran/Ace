@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
+import type { BaseBlock } from '#/schemas/parser';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit, Copy, Check } from 'lucide-react';
+import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 
 type SessionStatus = 'idle' | 'connected' | 'streaming' | 'error';
 type SDKProvider = 'openai' | 'google' | 'anthropic';
@@ -71,14 +73,7 @@ interface ResponseMemorySnapshot {
     response_reference?: { ref_uid: string; storage_key: string };
     text?: string;
     raw_response?: string;
-    blocks?: Array<
-        | { type: 'paragraph'; content: string }
-        | { type: 'context'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
-        | { type: 'history_summary_ai_prompt' | 'history_summary_ai_response'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
-        | { type: 'tool' | 'storage'; payload_raw: string; payload_json: Record<string, unknown> | null; status: string; is_complete: boolean; action?: string; memory_uid?: string; result_memory_uid?: string }
-        | { type: 'event'; event: { headers: Record<string, unknown>; raw_payload_buffer: string; is_complete: boolean } }
-        | { type: 'directive'; directive_name: string; content: string; is_complete: boolean }
-    >;
+    blocks?: BaseBlock[];
     parser_batch_count?: number;
     events_total?: number;
     parser_handler_results?: Array<{
@@ -314,10 +309,10 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
         if (tokenTraces.length > 0) return tokenTraces;
 
         const started = parserResults
-            .filter((record) => record.event_name === 'parser_parsing_started')
+            .filter((record) => record.event_name === PARSER_RUNTIME_EVENT.PARSING_STARTED)
             .sort((a, b) => a.at - b.at);
         const completed = parserResults
-            .filter((record) => record.event_name === 'parser_parsing_completed')
+            .filter((record) => record.event_name === PARSER_RUNTIME_EVENT.PARSING_COMPLETED)
             .sort((a, b) => a.at - b.at);
 
         const pairedCount = Math.min(started.length, completed.length);
@@ -373,13 +368,15 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
 
         if (blockType === 'tool') return true;
 
-        const normalized = eventName.toLowerCase();
-        if (normalized.startsWith('tool_')) return true;
-        if (normalized.includes('handler') && (normalized.endsWith('_dispatch') || normalized.endsWith('_started') || normalized.endsWith('_result') || normalized.endsWith('_error'))) {
-            return true;
-        }
-
-        return false;
+        return eventName === PARSER_RUNTIME_EVENT.HANDLER_DISPATCH
+            || eventName === PARSER_RUNTIME_EVENT.HANDLER_STARTED
+            || eventName === PARSER_RUNTIME_EVENT.HANDLER_RESULT
+            || eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR
+            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_DISPATCH
+            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_STARTED
+            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_RESULT
+            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR
+            || eventName === PARSER_RUNTIME_EVENT.TOOL_BLOCK_PARSED;
     });
 
     const responseTokenTraces = useMemo(
@@ -440,14 +437,14 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
 
     const blockLifecycleTimeline = useMemo(() => {
         const lifecycleEventNames = new Set([
-            'parser_block_detected',
-            'parser_block_registry_found',
-            'parser_block_registry_missing',
-            'parser_block_handler_started',
-            'parser_block_handler_completed',
-            'parser_block_handler_failed',
-            'tool_block_parsed',
-            'storage_block_parsed',
+            PARSER_RUNTIME_EVENT.BLOCK_DETECTED,
+            PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_FOUND,
+            PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_MISSING,
+            PARSER_RUNTIME_EVENT.BLOCK_HANDLER_STARTED,
+            PARSER_RUNTIME_EVENT.BLOCK_HANDLER_COMPLETED,
+            PARSER_RUNTIME_EVENT.BLOCK_HANDLER_FAILED,
+            PARSER_RUNTIME_EVENT.TOOL_BLOCK_PARSED,
+            PARSER_RUNTIME_EVENT.STORAGE_BLOCK_PARSED,
         ]);
 
         type BlockTimelineStep = {
@@ -499,17 +496,17 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
             };
 
             const nextStatus =
-                eventName === 'parser_block_registry_missing'
+                eventName === PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_MISSING
                     ? 'registry_missing'
-                    : eventName === 'parser_block_handler_started'
+                    : eventName === PARSER_RUNTIME_EVENT.BLOCK_HANDLER_STARTED
                         ? 'running'
-                        : eventName === 'parser_block_handler_completed'
+                        : eventName === PARSER_RUNTIME_EVENT.BLOCK_HANDLER_COMPLETED
                             ? (stepStatus || 'completed')
-                            : eventName === 'parser_block_handler_failed'
+                            : eventName === PARSER_RUNTIME_EVENT.BLOCK_HANDLER_FAILED
                                 ? 'failed'
-                                : eventName === 'tool_block_parsed' || eventName === 'storage_block_parsed'
+                                : eventName === PARSER_RUNTIME_EVENT.TOOL_BLOCK_PARSED || eventName === PARSER_RUNTIME_EVENT.STORAGE_BLOCK_PARSED
                                     ? (stepStatus || 'parsed')
-                                    : eventName === 'parser_block_registry_found'
+                                    : eventName === PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_FOUND
                                         ? 'registry_found'
                                         : existing.status;
 

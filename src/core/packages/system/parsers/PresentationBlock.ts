@@ -1,16 +1,31 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
+import { getBlockPayloadAs } from '#/schemas/parser';
 import type { BaseBlock, ParserBlockHandler, ParserBlockValidator } from '#/schemas/parser';
 
 type PresentationFormat = 'list' | 'table' | 'card' | 'markdown' | string;
 
-/** Internal block shape used by this parser implementation. */
-interface PresentationBlock extends BaseBlock {
-    type: 'presentation';
+export interface PresentationPayload {
     package_ref?: string;
     component_slug: string;
+    memory_uid?: string;
     memory_key?: string;
     props?: Record<string, unknown>;
     format?: PresentationFormat;
+}
+
+/** Internal block shape used by this parser implementation. */
+export interface PresentationBlock extends BaseBlock {
+    type: 'presentation';
+    package_ref?: string;
+    component_slug: string;
+    memory_uid?: string;
+    memory_key?: string;
+    props?: Record<string, unknown>;
+    format?: PresentationFormat;
+}
+
+export function getPresentationPayload(block: BaseBlock | null | undefined): PresentationPayload | null {
+    return getBlockPayloadAs<PresentationPayload>(block, 'presentation');
 }
 
 export const validator: ParserBlockValidator = ({ isComplete, payload_json, payload_parse_error }) => {
@@ -19,11 +34,24 @@ export const validator: ParserBlockValidator = ({ isComplete, payload_json, payl
         throw new Error(payload_parse_error || 'presentation block requires a valid JSON payload');
     }
 
+    const componentSlug = typeof payload_json.component_slug === 'string' ? payload_json.component_slug.trim() : '';
+    const memoryUid = typeof payload_json.memory_uid === 'string' ? payload_json.memory_uid.trim() : '';
+    const memoryKey = typeof payload_json.memory_key === 'string' ? payload_json.memory_key.trim() : '';
+
+    if (!componentSlug) {
+        throw new Error('presentation block requires a non-empty component_slug');
+    }
+
+    if (!memoryUid && !memoryKey) {
+        throw new Error('presentation block requires memory_uid (legacy memory_key is temporarily supported)');
+    }
+
     return {
         ...payload_json,
         package_ref: typeof payload_json.package_ref === 'string' ? payload_json.package_ref.trim() || undefined : undefined,
-        component_slug: typeof payload_json.component_slug === 'string' ? payload_json.component_slug.trim() : '',
-        memory_key: typeof payload_json.memory_key === 'string' ? payload_json.memory_key.trim() || undefined : undefined,
+        component_slug: componentSlug,
+        memory_uid: memoryUid || undefined,
+        memory_key: memoryKey || undefined,
         props:
             payload_json.props && typeof payload_json.props === 'object' && !Array.isArray(payload_json.props)
                 ? payload_json.props
@@ -39,20 +67,20 @@ export const registry: AceRegistryType.Parser = {
     description: 'Embed a registered component reference for client-side rendering. Resolves via RegistryEngine on the client.',
     block_schema: {
         purpose: 'Embed a reference to a registered UI component. The client resolves the component slug via RegistryEngine and renders it, optionally bound to a context memory payload.',
-        requiredFields: '"component_slug" — the registered component slug (e.g. "ai_output_list").',
-        optionalFields: '"package_ref" (package namespace for lookup, default: "itsjiran/ace-system"), "memory_key" (bind a context memory payload as the component\'s data), "props" (inline prop overrides), "format" (hint: "list" | "table" | "card" | "markdown")',
+        requiredFields: '"component_slug" — the registered component slug (e.g. "ai_output_list"), "memory_uid" — target memory uid containing the render payload envelope.',
+        optionalFields: '"package_ref" (package namespace for lookup, default: "itsjiran/ace-system"), "memory_key" (legacy fallback pointer, still supported), "props" (inline prop overrides), "format" (hint: "list" | "table" | "card" | "markdown")',
         payloadNote: [
             'The component reference is resolved via RegistryEngine.resolveEntry("{pkg}:components:{slug}").',
-            'If memory_key is provided the client loads the corresponding context memory and passes it as data props.',
+            'The client loads memory by memory_uid (or legacy memory_key fallback) and passes envelope payload to the target component.',
             'The block is non-interrupting — the stream continues while the client renders the component.',
         ],
         exampleLines: [
             '  <presentation>',
-            '  {"package_ref":"itsjiran/ace-system","component_slug":"ai_output_list","memory_key":"system:session:abc:tool_result:1","format":"list"}',
+            '  {"package_ref":"itsjiran/ace-system","component_slug":"ai_output_list","memory_uid":"system:session:abc:tool_result:1","format":"list"}',
             '  </presentation>',
             '',
             '  <presentation>',
-            '  {"component_slug":"ai_data_table","props":{"title":"Results"},"format":"table"}',
+            '  {"component_slug":"ai_data_table","memory_uid":"system:session:abc:tool_schema:1","props":{"title":"Results"},"format":"table"}',
             '  </presentation>',
         ],
     },
@@ -63,17 +91,32 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
 
     const packageRef = typeof json?.package_ref === 'string' ? json.package_ref.trim() || undefined : undefined;
     const componentSlug = typeof json?.component_slug === 'string' ? json.component_slug.trim() : '';
+    const memoryUid = typeof json?.memory_uid === 'string' ? json.memory_uid.trim() || undefined : undefined;
     const memoryKey = typeof json?.memory_key === 'string' ? json.memory_key.trim() || undefined : undefined;
+    const memoryTarget = memoryUid || memoryKey;
     const props =
         json?.props && typeof json.props === 'object' && !Array.isArray(json.props)
             ? (json.props as Record<string, unknown>)
             : undefined;
     const format = typeof json?.format === 'string' ? json.format.trim() || undefined : undefined;
 
+    if (isComplete && (!componentSlug || !memoryTarget)) {
+        emit_result?.({
+            event_name: 'presentation_block_invalid',
+            block_type: 'presentation',
+            error_message: 'presentation block requires component_slug and memory_uid (legacy memory_key supported).',
+            component_slug: componentSlug,
+            memory_uid: memoryUid,
+            memory_key: memoryKey,
+        });
+        return;
+    }
+
     const block: PresentationBlock = {
         type: 'presentation',
         package_ref: packageRef,
         component_slug: componentSlug,
+        memory_uid: memoryUid,
         memory_key: memoryKey,
         props,
         format,
@@ -95,6 +138,7 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
         block_type: 'presentation',
         package_ref: packageRef,
         component_slug: componentSlug,
+        memory_uid: memoryUid,
         memory_key: memoryKey,
         props,
         format,

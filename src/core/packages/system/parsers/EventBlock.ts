@@ -74,9 +74,23 @@ export const handler: ParserBlockHandler = ({ body, result }) => {
     const parsed = parseEventBlock(body);
     if (parsed.event) {
         result.events.push(parsed.event);
-        result.blocks.push({ type: 'event', event: parsed.event });
+        result.blocks.push({
+            type: 'event',
+            payload_raw: body,
+            payload_json: {
+                headers: parsed.event.headers,
+                raw_payload_buffer: parsed.event.raw_payload_buffer,
+                is_complete: parsed.event.is_complete,
+            },
+            is_complete: parsed.event.is_complete,
+        });
     } else if (parsed.fallbackText) {
-        result.blocks.push({ type: 'paragraph', content: parsed.fallbackText });
+        result.blocks.push({
+            type: 'paragraph',
+            payload_raw: parsed.fallbackText,
+            payload_json: { content: parsed.fallbackText },
+            is_complete: true,
+        });
         result.textToPrint += parsed.fallbackText;
     }
 };
