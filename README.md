@@ -31,18 +31,6 @@ Notes:
 - This README now tracks active and pending work only.
 - Completed details and long examples are maintained in `.ai/` documentation.
 
-## Priority Architecture Notice
-
-- Current `parserEngine` is getting bloated after multiple feature updates.
-- Refactor priority: split parser runtime responsibilities into focused subservices under a dedicated folder (`src/services/parserEngine/`), instead of continuing to grow logic inside a single parser file path (including `aiParser`).
-- Target shape:
-  - `src/services/parserEngine.ts` (main facade/orchestrator)
-  - `src/services/parserEngine/sessionStateService.ts`
-  - `src/services/parserEngine/blockDispatchService.ts`
-  - `src/services/parserEngine/tokenTraceService.ts`
-  - `src/services/parserEngine/controlSignalService.ts`
-- Rule moving forward: parser orchestration stays in facade, heavy logic belongs to subservices.
-
 ## Current Focus
 
 ### In Progress - UI Shell
@@ -355,7 +343,7 @@ Lifespan Policy (Draft):
 
 Implementation Tasks:
 - [ ] Add `context:store_heavy_result` internal route for tool/system handlers.
-- [ ] Add standardized memory envelope (`memory_key`, `summary`, `payload_type`, `size`, `created_at`, `expires_at`, `source`).
+- [x] Add standardized memory envelope — `ContextMemoryItem` / `ContextMemorySnapshot` in `src/schemas/contextMemory.ts`.
 - [ ] Add parser block `context_retrieve` for explicit memory fetch by key/address + optional lifespan override.
 - [ ] Add parser block `presentation` to render referenced memory into UI-safe output slices.
 - [ ] Add gateway auto-injection for `available_context_memories` + compact summaries each turn.
@@ -365,14 +353,204 @@ Implementation Tasks:
 - [ ] Add monitor panel fields: memory address usage, retrieval counts, expiry state, and hit/miss metrics.
 - [ ] Add integration tests for pointer-only flow (no full payload leakage into main response unless requested).
 
+## Implementation Plan: AIContextMemoryEngine
+
+### Overview
+Unified context memory system combining AIContextEngine + AIContextMemoryEngine into a single lifecycle-aware value object store. Every memory item is self-contained with inline content (no separate lookup tables) and managed by status-based filtering.
+
+### Core Architecture
+
+**Implemented.** See `src/schemas/contextMemory.ts` and `src/services/aiContextMemoryEngine.ts`.
+
+Key types: `ContextMemoryItem`, `ContextMemorySnapshot`, `ContextBuildOptions`, `ContextBuildResult`.
+
+Key engine API: `createMemory`, `reserveMemory`, `writeMemoryPayload`, `getMemory`, `listMemories`, `deleteMemory`, `pruneSessionMemories`, `expireStaleMemories`, `buildContext`.
+
+Lifecycle statuses: `reserved` → `in` (active, injected) → `out` (excluded) → `expired` → `archived`.
+Inclusion in `buildContext` is purely status-driven — set `status: 'in'` to inject, `status: 'out'` to suppress.
+
+### Implementation Phases
+
+#### Phase 3: Integration Routes
+1. Create `context:store_heavy_result` event route (for tool handlers to register):
+   ```typescript
+   interface StoreHeavyResultPayload {
+     type: MemoryType;
+     key: string;
+     content: string;
+     source: string;
+     ttlTurns?: number;
+     summary?: string;
+   }
+   ```
+   - Emit from tool handlers after execution
+   - Returns compact metadata pointer (not full payload)
+
+2. Create `context:retrieve_by_key` internal route (for AI parser to request memory):
+   ```typescript
+   interface RetrieveByKeyPayload {
+     key: string;
+     refreshTtl?: boolean;
+   }
+   ```
+   - Returns full `ContextMemoryItem` (for AI context injection)
+   - Increments `accessCount` and updates `lastAccessedAt`
+
+3. Wire TooEngine to emit `context:store_heavy_result` after tool execution (instead of inline payload).
+
+4. **Location:** Define in `src/schemas/events.ts`, wire in EventBus handlers
+5. **Testable:** Event firing, payload validation, handler routing
+
+#### Phase 4: Parser Blocks for Context Operations
+1. **`context_retrieve` block:** AI-driven retrieval by key
+   ```json
+   {
+     "block_type": "context",
+     "context_action": "retrieve_by_key",
+     "memory_key": "rag:memory:file:/path/to/file",
+     "reason": "need full file content to understand logic"
+   }
+   ```
+   - Parser extracts and calls `context:retrieve_by_key` route
+   - Returns memory item to next turn context
+
+2. **`presentation` block:** Render memory-backed output
+   ```json
+   {
+     "block_type": "presentation",
+     "memory_key": "rag:memory:tool_output:fs_list:result_1",
+     "format": "list",
+     "user_visible": true
+   }
+   ```
+   - References memory without full payload in response
+   - UI fetches and renders separately
+
+3. **Location:** Parser extraction logic in `src/services/parserEngine.ts`
+4. **Testable:** Block extraction unit tests, integration tests with memory store
+
+#### Phase 5: buildContext + Injection
+1. Implement `buildContext(sessionId, filters)` in AIContextMemoryEngine:
+   - Filter items by status="in"
+   - Sort by `usageScore` descending
+   - Apply optional type/tag filters
+   - Return ordered list for prompt assembly
+
+2. Expose via new route: `context:buildContext(sessionId, filters)`
+
+3. Gateway injects available memories each turn:
+   ```typescript
+   // Instead of injecting full item content:
+   const availableMemories = engine.buildContext(sessionId);
+   const compactIndex = availableMemories.map(item => ({
+     key: item.key,
+     summary: item.summary,
+     type: item.type,
+     source: item.source,
+     score: item.usageScore,
+   }));
+   // Inject into prompt as reference index
+   ```
+
+4. **Location:** Gateway continuation loop, context assembly in `src/services/aiGatewayEngine.ts`
+5. **Testable:** Filter correctness, ranking, injection completeness
+
+#### Phase 6: Retention & Archival Worker
+1. Implement background worker in `AIContextMemoryEngine`:
+   - Trigger at turn boundary or on-demand
+   - For items expiring with active refs: generate summary before archive
+   - Move expired items to storage checkpoint (persist for audit/replay)
+   - Log eviction trace (key, reason, summary)
+
+2. Add configuration:
+   - Default TTL: 5 turns (configurable per type)
+   - Summary strategy: inherit from memory type (e.g., file = path + size, output = "stored result")
+   - Checkpoint location: RAM + optional persist to StorageEngine
+
+3. **Location:** `AIContextMemoryEngine` lifecycle tick + async archival
+4. **Testable:** TTL expiry, summary generation, checkpoint correctness
+
+#### Phase 7: Observability & Monitoring
+1. Add monitor fields (inject into session RAM):
+   - `context:session:<uid>:memory_map` — active memory keys + summary
+   - `context:session:<uid>:memory_metrics` — {totalCount, activeCount, expiredCount, totalSize}
+   - `context:session:<uid>:retrieval_trace` — {key, accessCount, lastAccessed} for each item
+
+2. Add logger events:
+   - `memory_stored` — when new memory added
+   - `memory_retrieved` — when AI accesses memory
+   - `memory_expired` — when TTL reached
+   - `memory_archived` — when moved to storage
+
+3. **Location:** Monitor widget can subscribe to RAM keys, logger hooks in engine methods
+4. **Testable:** Event emission, RAM state correctness
+
+#### Phase 8: Safeguards & Error Handling
+1. **Size cap:** Reject store request if total memory > configurable limit (e.g., 10MB)
+2. **Retrieval loop cap:** Prevent AI from repeatedly fetching same large memory in single turn (max 3 fetches per turn)
+3. **Malformed key fallback:** If AI requests unknown key, return polite error + suggest available keys
+4. **Circular ref detection:** Warn if memory A refs memory B which refs A (don't break, just log)
+5. **Lifespan override bounds:** User/system can extend TTL but can't infinitely lock memory
+6. **Location:** Validation in `storeMemory`, guards in `getMemoryByKey`, checks in turn engine
+7. **Testable:** Boundary tests, error scenarios
+
+###  Integration Checklist
+
+- [x] **ParserEngine:** Refactored, ready to accept context blocks
+- [x] **AIContextRagEngine:** Removed — all call sites migrated to `AIContextMemoryEngine`
+- [ ] **EventBus:** Wire `context:store_heavy_result` and `context:retrieve_by_key` routes
+- [ ] **ToolEngine:** Update all tool handlers to emit `context:store_heavy_result` instead of inline heavy payloads
+- [ ] **AIGatewayEngine:** Inject `available_context_memories` index in each continuation turn (Phase 5)
+- [ ] **StorageEngine:** Optional: hook for checkpoint archival (Phase 6)
+- [ ] **MonitorPanel:** Subscribe to context RAM keys for visibility (Phase 7)
+
+### Testing Strategy
+
+**Unit Tests:**
+- Memory item validation (Zod schemas)
+- Lifecycle transitions (TTL decrement, status changes)
+- buildContext filtering and ranking
+- Key pattern parsing
+
+**Integration Tests:**
+- Store → retrieve → expire flow
+- Tool execution → heavy result store → AI continuation with pointer
+- buildContext injection during gateway loop
+- Retention worker eviction + summary
+
+**E2E Tests:**
+- Full session: user prompt → tool execution → heavy memory store → AI reads memory pointer → AI requests retrieval → parser extracts content → next turn respects TTL
+
+**Performance Tests:**
+- Store/retrieve latency (target: <5ms per op)
+- GC pressure with high memory churn (tool output cycling)
+- Memory footprint with 100+ items active
+
+### Estimated Effort
+
+| Phase | Tasks | Status |
+|-------|-------|--------|
+| 1. Schema | Interfaces, types | ✅ done |
+| 2. Core Engine | Store, query, lifecycle | ✅ done |
+| 3. Routes | Events, payloads, wiring | pending |
+| 4. Parser Blocks | Extract, block types | pending |
+| 5. buildContext + Injection | Gateway loop, indexing | pending |
+| 6. Retention Worker | TTL, archival, summary | pending |
+| 7. Observability | Logging, monitor fields | pending |
+| 8. Safeguards | Caps, loops, error handling | pending |
+
+---
+
 Sprint Breakdown (Implementation):
 
 Sprint 1 - ParserEngine Refactor + Core Contract
 - [x] Create `parserEngine` subservice folder and move parser session state/token trace/control logic out of bloated runtime file.
 - [x] Keep backward-compatible facade API so gateway flow remains stable.
-- [ ] Finalize context memory envelope contract and typed schemas.
+- [x] Finalize context memory envelope contract and typed schemas (`src/schemas/contextMemory.ts`).
+- [x] Implement `AIContextMemoryEngine` — lifecycle-driven unified store (`src/services/aiContextMemoryEngine.ts`).
+- [x] Remove `AIContextRagEngine` — all call sites migrated to `AIContextMemoryEngine`.
+- [x] Add unit + feature tests for context memory engine and gateway protocol (21 tests passing).
 - [ ] Add `context:store_heavy_result` route and wire tool handlers to store heavy outputs by pointer.
-- [ ] Add baseline tests for parserEngine split and pointer storage contract.
 
 Sprint 2 - Context Retrieval + Presentation Flow
 - [ ] Implement parser block `context_retrieve` and validate address/key retrieval path.

@@ -10,6 +10,21 @@ If your package interacts with AI sessions or emits AI-compatible structured blo
 
 This keeps package behavior aligned with parser and context-engine expectations.
 
+## Parser Block Authoring Contract
+
+For parser modules under `parsers/`, use this convention:
+
+- `export const registry` — metadata including `tag_name`, optional `block_schema`, optional `validator`.
+- `export const validator` — optional payload transform/guard stage. Throw on invalid payload, return transformed payload when normalization is needed.
+- `export const handler` — parser implementation function consuming the validated payload.
+- Do not use default export for parser handlers.
+
+Why:
+
+- Keeps parser discovery deterministic (`handler` naming is stable).
+- Makes docs and code generation simpler for contributors.
+- Allows centralized payload parse + validator-first flow before handler execution.
+
 ## Architecture Overview
 
 ACE uses a **Host-Guest Architecture**. 

@@ -19,8 +19,9 @@ export class ParserBlockDispatchService {
     }
 
     dispatchParsedBlock(input: DispatchBlockInput): boolean {
-        const { tag, body, isComplete, result, sessionId, processUid } = input;
+        const { tag, body, payload_json, payload_parse_error, isComplete, result, sessionId, processUid } = input;
         const blockId = this.deps.nextBlockId(sessionId);
+        let normalizedPayload = payload_json;
 
         this.deps.emitSessionResult({
             sessionId,
@@ -73,6 +74,8 @@ export class ParserBlockDispatchService {
         const context: ParserBlockHandlerContext = {
             tag,
             body,
+            payload_json: normalizedPayload,
+            payload_parse_error,
             isComplete,
             result,
             session_id: sessionId,
@@ -133,6 +136,46 @@ export class ParserBlockDispatchService {
         });
 
         try {
+            const validatorResult = definition.validator?.({
+                tag,
+                body,
+                payload_json: normalizedPayload,
+                payload_parse_error,
+                isComplete,
+                session_id: sessionId,
+                block_id: blockId,
+            });
+            if (validatorResult !== undefined) {
+                normalizedPayload = validatorResult;
+                context.payload_json = normalizedPayload;
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.deps.emitSessionResult({
+                sessionId,
+                processUid,
+                tag,
+                payload: {
+                    event_name: 'parser_block_validator_failed',
+                    block_id: blockId,
+                    block_tag: tag,
+                    status: 'failed',
+                    error_message: errorMessage,
+                },
+            });
+
+            result.blocks.push({
+                type: tag,
+                payload_raw: body,
+                payload_json: normalizedPayload,
+                payload_parse_error: errorMessage,
+                is_complete: isComplete,
+            });
+
+            return true;
+        }
+
+        try {
             definition.handler(context);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -148,7 +191,16 @@ export class ParserBlockDispatchService {
                     error_message: errorMessage,
                 },
             });
-            throw error;
+
+            result.blocks.push({
+                type: tag,
+                payload_raw: body,
+                payload_json: normalizedPayload,
+                payload_parse_error: errorMessage,
+                is_complete: isComplete,
+            });
+
+            return true;
         }
 
         if (

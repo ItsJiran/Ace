@@ -24,6 +24,7 @@ describe('AI Stream Parser (Fault-Tolerant)', () => {
             '/src/core/packages/system/parsers/StorageBlock.ts': await import('#/core/packages/system/parsers/StorageBlock'),
             '/src/core/packages/system/parsers/HistorySummaryPromptBlock.ts': await import('#/core/packages/system/parsers/HistorySummaryPromptBlock'),
             '/src/core/packages/system/parsers/HistorySummaryResponseBlock.ts': await import('#/core/packages/system/parsers/HistorySummaryResponseBlock'),
+            '/src/core/packages/system/parsers/PresentationBlock.ts': await import('#/core/packages/system/parsers/PresentationBlock'),
         });
     });
 
@@ -301,4 +302,45 @@ Saya bantu?
             expect(toolBlock.status).toBe('pending');
         }
     });
+
+    it('should parse context retrieve action with memory pointers', () => {
+        const streamChunk = `
+<context>
+{"action":"retrieve","memory_key":"system:ai_context_rag:payload:ctxref-123","result_memory_uid":"system:session:test:ctx_result:1"}
+</context>
+`;
+
+        const result = parseAIStreamChunk(streamChunk);
+        const contextBlock = result.blocks.find((b) => b.type === 'context');
+
+        expect(contextBlock).toBeDefined();
+        if (contextBlock && contextBlock.type === 'context') {
+            expect(contextBlock.is_complete).toBe(true);
+            expect(contextBlock.action).toBe('retrieve');
+            expect(contextBlock.memory_key).toBe('system:ai_context_rag:payload:ctxref-123');
+            expect(contextBlock.result_memory_uid).toBe('system:session:test:ctx_result:1');
+        }
+    });
+
+    it('should parse presentation block with component reference', () => {
+        const streamChunk = `
+<presentation>
+{"package_ref":"itsjiran/ace-system","component_slug":"ai_output_list","memory_key":"system:session:test:tool_result:1","format":"list","props":{"title":"Results"}}
+</presentation>
+`;
+
+        const result = parseAIStreamChunk(streamChunk);
+        const presentationBlock = result.blocks.find((b) => b.type === 'presentation');
+
+        expect(presentationBlock).toBeDefined();
+        if (presentationBlock && presentationBlock.type === 'presentation') {
+            expect(presentationBlock.is_complete).toBe(true);
+            expect(presentationBlock.package_ref).toBe('itsjiran/ace-system');
+            expect(presentationBlock.component_slug).toBe('ai_output_list');
+            expect(presentationBlock.memory_key).toBe('system:session:test:tool_result:1');
+            expect(presentationBlock.format).toBe('list');
+            expect((presentationBlock.props as Record<string, unknown>)?.title).toBe('Results');
+        }
+    });
+
 });

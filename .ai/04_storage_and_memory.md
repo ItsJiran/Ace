@@ -48,7 +48,7 @@ StorageEngine maintains two additional maps:
 - Self-referencing (`parent_memory_uid === memory_uid`) is silently ignored.
 
 ### Usage in AI Runtime
-- `aiContextRagEngine.reserveReference()` sets `parent_memory_uid: system:session:<sessionId>:context` on reserved references.
+- `AIContextEngine.registerEventRoutes()` sets `parent_memory_uid: system:session:<sessionId>:context` on reserved references.
 - `httpClient.ts` stream RAM pre-allocation sets the same parent pattern, linking stream data back to the session context.
 - `RamMonitorWindow` visualizes the hierarchy as a tree panel and exposes parent/children columns in the RAM table.
 

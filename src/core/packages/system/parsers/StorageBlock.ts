@@ -1,63 +1,15 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import type { ActionBlock, ParserBlockHandler } from '#/schemas/parser';
+import type { BaseBlock, ParserBlockHandler, ParserBlockValidator } from '#/schemas/parser';
 
-export type StorageBlockAction = 'read' | 'list' | 'view_db' | 'write' | 'delete';
-export type StorageBlockStatus = 'pending' | 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | 'unknown';
+type StorageBlockAction = 'read' | 'list' | 'view_db' | 'write' | 'delete';
+type StorageBlockStatus = 'pending' | 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | 'unknown';
 
-export interface StorageBlock extends ActionBlock {
+interface StorageBlock extends BaseBlock {
     type: 'storage';
+    memory_uid?: string;
+    result_memory_uid?: string;
     action?: StorageBlockAction;
     status: StorageBlockStatus;
-}
-
-function parseJsonLoose(raw: string): {
-    json: Record<string, unknown> | null;
-    error?: string;
-} {
-    const trimmed = raw.trim();
-    if (!trimmed) return { json: null };
-
-    const stripOuterTag = (input: string): string => {
-        const match = input.match(/^<storage>\s*([\s\S]*?)\s*<\/storage>$/i);
-        return match ? match[1].trim() : input;
-    };
-
-    const stripCodeFence = (input: string): string => {
-        const match = input.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-        return match ? match[1].trim() : input;
-    };
-
-    const extractObjectCandidate = (input: string): string => {
-        const start = input.indexOf('{');
-        const end = input.lastIndexOf('}');
-        if (start === -1 || end === -1 || end <= start) return input;
-        return input.slice(start, end + 1).trim();
-    };
-
-    const candidates = [
-        trimmed,
-        stripOuterTag(trimmed),
-        stripCodeFence(trimmed),
-        stripCodeFence(stripOuterTag(trimmed)),
-        extractObjectCandidate(trimmed),
-        extractObjectCandidate(stripCodeFence(stripOuterTag(trimmed))),
-    ].filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index);
-
-    let lastError = 'Invalid JSON payload.';
-
-    for (const candidate of candidates) {
-        try {
-            const parsed = JSON.parse(candidate) as unknown;
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                return { json: parsed as Record<string, unknown> };
-            }
-            return { json: { value: parsed } };
-        } catch (error) {
-            lastError = error instanceof Error ? error.message : String(error);
-        }
-    }
-
-    return { json: null, error: lastError };
 }
 
 function normalizeAction(value: unknown): StorageBlockAction | undefined {
@@ -79,8 +31,12 @@ function normalizeStatus(value: unknown, isComplete: boolean): StorageBlockStatu
     return isComplete ? 'completed' : 'pending';
 }
 
-function extractStorageBlock(body: string, isComplete: boolean): StorageBlock {
-    const { json, error } = parseJsonLoose(body);
+function extractStorageBlock(
+    body: string,
+    json: Record<string, unknown> | null,
+    parseError: string | undefined,
+    isComplete: boolean,
+): StorageBlock {
 
     const action = normalizeAction(json?.action ?? json?.operation);
     const status = normalizeStatus(json?.status ?? json?.state, isComplete);
@@ -103,10 +59,31 @@ function extractStorageBlock(body: string, isComplete: boolean): StorageBlock {
         result_memory_uid: resultMemoryUid,
         payload_raw: body,
         payload_json: json,
-        payload_parse_error: error,
+        payload_parse_error: parseError,
         is_complete: isComplete,
     };
 }
+
+export const validator: ParserBlockValidator = ({ isComplete, payload_json, payload_parse_error }) => {
+    if (!isComplete) return;
+    if (!payload_json) {
+        throw new Error(payload_parse_error || 'storage block requires a valid JSON payload');
+    }
+
+    return {
+        ...payload_json,
+        action: normalizeAction(payload_json.action ?? payload_json.operation),
+        status: normalizeStatus(payload_json.status ?? payload_json.state, isComplete),
+        memory_uid:
+            typeof payload_json.memory_uid === 'string' ? payload_json.memory_uid :
+            typeof payload_json.memory_key === 'string' ? payload_json.memory_key :
+            undefined,
+        result_memory_uid:
+            typeof payload_json.result_memory_uid === 'string' ? payload_json.result_memory_uid :
+            typeof payload_json.result_key === 'string' ? payload_json.result_key :
+            undefined,
+    };
+};
 
 export const registry: AceRegistryType.Parser = {
     name: 'storage',
@@ -144,8 +121,8 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-const storageBlockHandler: ParserBlockHandler = ({ body, isComplete, result, emit_result, request_interrupt }) => {
-    const block = extractStorageBlock(body, isComplete);
+export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt }) => {
+    const block = extractStorageBlock(body, payload_json, payload_parse_error, isComplete);
     result.blocks.push(block);
 
     if (!isComplete) return;
@@ -168,5 +145,3 @@ const storageBlockHandler: ParserBlockHandler = ({ body, isComplete, result, emi
         memory_uid: block.memory_uid,
     });
 };
-
-export default storageBlockHandler;

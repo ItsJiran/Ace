@@ -70,7 +70,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-const eventBlockHandler: ParserBlockHandler = ({ body, result }) => {
+export const handler: ParserBlockHandler = ({ body, result }) => {
     const parsed = parseEventBlock(body);
     if (parsed.event) {
         result.events.push(parsed.event);
@@ -80,5 +80,3 @@ const eventBlockHandler: ParserBlockHandler = ({ body, result }) => {
         result.textToPrint += parsed.fallbackText;
     }
 };
-
-export default eventBlockHandler;

@@ -123,7 +123,7 @@ function drainParserRuntimeToResponseMemory(sessionId: string, replyToRamKey: st
     };
 }
 
-function getLatestToolTerminalEvent(records: ParserSessionEmitRecord[]): ParserSessionEmitRecord | null {
+function getLatestActionTerminalEvent(records: ParserSessionEmitRecord[]): ParserSessionEmitRecord | null {
     for (let index = records.length - 1; index >= 0; index -= 1) {
         const record = records[index];
         const eventName = typeof record.event_name === 'string' ? record.event_name : '';
@@ -135,41 +135,42 @@ function getLatestToolTerminalEvent(records: ParserSessionEmitRecord[]): ParserS
             : typeof record.tag === 'string'
                 ? record.tag
                 : undefined;
-        const isToolBlock = blockType === 'tool';
+        const isActionableBlock = blockType === 'tool' || blockType === 'context';
         const isTerminalEvent =
             eventName === 'parser_handler_result' ||
             eventName === 'parser_handler_error' ||
             // Keep compatibility for older sessions still emitting legacy names.
             eventName === 'tool_action_result' ||
             eventName === 'tool_action_error';
-        if (isToolBlock && isTerminalEvent) {
+        if (isActionableBlock && isTerminalEvent) {
             return record;
         }
     }
     return null;
 }
 
-async function waitForToolTerminalEvent(sessionId: string, replyToRamKey: string): Promise<ParserSessionEmitRecord | null> {
+async function waitForActionTerminalEvent(sessionId: string, replyToRamKey: string): Promise<ParserSessionEmitRecord | null> {
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < TOOL_FEEDBACK_WAIT_TIMEOUT_MS) {
         const runtimeState = drainParserRuntimeToResponseMemory(sessionId, replyToRamKey);
-        const terminalEvent = getLatestToolTerminalEvent(runtimeState.mergedResults);
+        const terminalEvent = getLatestActionTerminalEvent(runtimeState.mergedResults);
         if (terminalEvent) return terminalEvent;
         await waitMs(TOOL_FEEDBACK_WAIT_INTERVAL_MS);
     }
 
     const finalState = drainParserRuntimeToResponseMemory(sessionId, replyToRamKey);
-    return getLatestToolTerminalEvent(finalState.mergedResults);
+    return getLatestActionTerminalEvent(finalState.mergedResults);
 }
 
-function buildToolContinuationPrompt(originalPrompt: string, terminalEvent: ParserSessionEmitRecord): string | null {
+function buildActionContinuationPrompt(originalPrompt: string, terminalEvent: ParserSessionEmitRecord): string | null {
     const payload = terminalEvent.payload && typeof terminalEvent.payload === 'object'
         ? terminalEvent.payload
         : null;
     if (!payload) return null;
 
     const action = typeof payload.action === 'string' ? payload.action : 'unknown';
+    const blockType = typeof payload.block_type === 'string' ? payload.block_type : (typeof terminalEvent.tag === 'string' ? terminalEvent.tag : 'tool');
     const rawEventName = typeof terminalEvent.event_name === 'string' ? terminalEvent.event_name : 'parser_handler_result';
     const eventName = rawEventName === 'tool_action_error' ? 'parser_handler_error' : rawEventName;
     const resultMemoryUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
@@ -179,9 +180,15 @@ function buildToolContinuationPrompt(originalPrompt: string, terminalEvent: Pars
         : undefined;
     const summarizedResult = resultMemory ?? {
         status: eventName === 'parser_handler_error' ? 'error' : 'ok',
+        block_type: blockType,
         action,
         package_ref: payload.package_ref,
         tool_slug: payload.tool_slug,
+        memory_key: payload.memory_key,
+        uid: payload.uid,
+        title: payload.title,
+        summary: payload.summary,
+        type: payload.type,
         result: payload.result,
         error_message: payload.error_message,
     };
@@ -192,11 +199,13 @@ function buildToolContinuationPrompt(originalPrompt: string, terminalEvent: Pars
         : serializedResult;
 
     const feedbackPacket = {
-        source: 'system_tool_runtime',
+        source: 'system_action_runtime',
+        block_type: blockType,
         event_name: eventName,
         action,
         package_ref: typeof payload.package_ref === 'string' ? payload.package_ref : undefined,
         tool_slug: typeof payload.tool_slug === 'string' ? payload.tool_slug : undefined,
+        memory_key: typeof payload.memory_key === 'string' ? payload.memory_key : undefined,
         result_memory_uid: resultMemoryUid,
         at: terminalEvent.at,
     };
@@ -204,19 +213,19 @@ function buildToolContinuationPrompt(originalPrompt: string, terminalEvent: Pars
     return [
         `Original user prompt: ${originalPrompt}`,
         '',
-        'System feedback: the previous response requested a tool action and the tool has completed.',
-        'Use the tool outcome below to continue the same task.',
+        'System feedback: the previous response requested a parser action block and the runtime has completed it.',
+        'Use the action outcome below to continue the same task.',
         '',
-        'Tool feedback envelope:',
+        'Action feedback envelope:',
         JSON.stringify(feedbackPacket, null, 2),
         '',
-        'Tool result payload:',
+        'Action result payload:',
         safeResult,
         '',
         'Instruction:',
         '- Continue the conversation based on this result.',
-        '- If another tool call is required, emit a valid <tool> block.',
-        '- If the task is complete, answer the user directly without another tool call.',
+        '- If another action block is required, emit a valid <tool> or <context> block.',
+        '- If the task is complete, answer the user directly without another action block.',
     ].join('\n');
 }
 
@@ -323,8 +332,8 @@ export async function executeSessionInteractionLoop(input: {
             return;
         }
 
-        const terminalToolEvent = await waitForToolTerminalEvent(sessionId, replyToRamKey);
-        if (!terminalToolEvent) {
+        const terminalActionEvent = await waitForActionTerminalEvent(sessionId, replyToRamKey);
+        if (!terminalActionEvent) {
             currentTurn.finished_at = Date.now();
             StorageEngine.dispatchRAMAction({
                 action: 'update_memory',
@@ -344,7 +353,7 @@ export async function executeSessionInteractionLoop(input: {
             return;
         }
 
-        const continuationPrompt = buildToolContinuationPrompt(prompt, terminalToolEvent);
+        const continuationPrompt = buildActionContinuationPrompt(prompt, terminalActionEvent);
         if (!continuationPrompt) {
             currentTurn.finished_at = Date.now();
             StorageEngine.dispatchRAMAction({

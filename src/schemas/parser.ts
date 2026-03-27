@@ -8,21 +8,10 @@ export interface BaseBlock {
     is_complete: boolean;
 }
 
-/** Generic actionable block shape used by parser runtime consumers. */
-export interface ActionBlock extends BaseBlock {
-    type: 'tool' | 'storage';
-    status: string;
-    action?: string;
-    memory_uid?: string;
-    result_memory_uid?: string;
-}
-
 export type AIMessageBlock =
     | { type: 'paragraph'; content: string }
     | { type: 'event'; event: BufferedAIEvent }
-    | ActionBlock
-    | (BaseBlock & { type: 'context' })
-    | (BaseBlock & { type: 'history_summary_ai_prompt' | 'history_summary_ai_response' })
+    | BaseBlock
     | {
         type: 'directive';
         directive_name: string;
@@ -81,6 +70,8 @@ export interface BlockProtocolSchema {
 export interface ParserBlockHandlerContext {
     tag: string;
     body: string;
+    payload_json: Record<string, unknown> | null;
+    payload_parse_error?: string;
     isComplete: boolean;
     result: AIParseResult;
     session_id?: string;
@@ -88,6 +79,20 @@ export interface ParserBlockHandlerContext {
     emit_result?: (payload: ParserEmitPayload) => void;
     request_interrupt?: (reason?: string) => void;
 }
+
+export interface ParserBlockValidatorContext {
+    tag: string;
+    body: string;
+    payload_json: Record<string, unknown> | null;
+    payload_parse_error?: string;
+    isComplete: boolean;
+    session_id?: string;
+    block_id?: number;
+}
+
+export type ParserBlockValidator = (
+    context: ParserBlockValidatorContext,
+) => Record<string, unknown> | null | void;
 
 export type ParserBlockHandler = (context: ParserBlockHandlerContext) => void;
 
@@ -98,5 +103,6 @@ export interface ParserBlockRuntime {
     aliases: string[];
     schema: BlockProtocolSchema;
     runtime_behavior?: ParserRuntimeBehavior;
+    validator?: ParserBlockValidator;
     handler: ParserBlockHandler;
 }

@@ -1,52 +1,7 @@
-/**
- * AIContextEngine
- *
- * Facade over session context services under `services/aiContext`.
- * Core responsibilities stay the same, while heavy logic is delegated to
- * focused sub-services for composition, ingestion, and synchronization.
- *
- * Sub-service: ContextMemoryBlockHandler (integrated here, not standalone).
- * Registers EventBus routes for 'context:retrieve' and 'context:store' actions.
- */
-import { EventBus } from './eventEngine';
-import { StorageEngine } from './storageEngine';
-import { AIContextMemoryEngine, type CreateContextMemoryInput } from './aiContextMemoryEngine';
-import {
-    buildContextForSession,
-} from './aiContext/contextBuilderService';
-import {
-    ingestContextBlockToState,
-} from './aiContext/contextBlockService';
-import {
-    buildFallbackHistorySummaryPayload,
-    buildRawHistorySummaryPayload,
-    ingestHistorySummaryToState,
-} from './aiContext/historySummaryService';
-import {
-    sessionMemoryUid,
-    syncContextIndex,
-    syncSessionMemory,
-} from './aiContext/syncService';
-import type {
-    BuildContextOptions,
-    RuntimeHistorySummaryFallbackInput,
-    SessionContextState,
-    SessionTurn,
-    SessionHistorySummary,
-} from './aiContext/types';
+import { EventBus } from '../eventEngine';
+import { StorageEngine } from '../storageEngine';
+import { AIContextMemoryEngine, type CreateContextMemoryInput } from '../aiContextMemoryEngine';
 
-export type {
-    BuildContextOptions,
-    RuntimeHistorySummaryFallbackInput,
-    SessionContextState,
-    SessionContextRef,
-    SessionTurn,
-    SessionHistorySummary,
-} from './aiContext/types';
-
-/**
- * Payload shape for context:retrieve and context:store actions
- */
 interface ContextActionPayload {
     session_id?: string;
     memory_key?: string;
@@ -59,151 +14,38 @@ interface ContextActionPayload {
     [k: string]: unknown;
 }
 
-class AIContextEngineSingleton {
-    private readonly sessions = new Map<string, SessionContextState>();
+type HandlerLifecycleEventName =
+    | 'parser_handler_result'
+    | 'parser_handler_error';
 
-    private readonly maxTurns = 20;
-    private readonly maxContextBlocks = 8;
-    private readonly maxHistorySummaries = 16;
+class ContextMemoryBlockHandlerSingleton {
+    private isRouteBound = false;
 
-    private readonly indexMemoryUid = 'system:ai_context_engine:sessions';
-    private isEventRoutesBound = false;
+    private publishResult(input: {
+        sessionId?: string;
+        eventName: HandlerLifecycleEventName;
+        payload: Record<string, unknown>;
+    }) {
+        const { sessionId, eventName, payload } = input;
+        if (!sessionId) return;
 
-    boot() {
-        AIContextMemoryEngine.boot();
-        this.syncIndex();
-    }
-
-    attachSession(sessionId: string): SessionContextState {
-        const existing = this.sessions.get(sessionId);
-        if (existing) return existing;
-
-        const state: SessionContextState = {
-            session_id: sessionId,
-            attached_at: Date.now(),
-            updated_at: Date.now(),
-            summary: '',
-            turns: [],
-            history_summaries: [],
-            used_contexts: [],
-            context_blocks: [],
-        };
-
-        this.sessions.set(sessionId, state);
-        this.syncSessionMemory(state);
-        this.syncIndex();
-        return state;
-    }
-
-    evictContext(sessionId: string): boolean {
-        const existed = this.sessions.delete(sessionId);
-        if (!existed) return false;
-
-        StorageEngine.dispatchRAMAction({
-            action: 'delete_memory',
-            memory_uid: sessionMemoryUid(sessionId),
+        EventBus.emit({
+            event_type: 'interaction',
+            action: 'parser_result',
+            sub_action: 'session',
+            payload: {
+                session_id: sessionId,
+                tag: 'context',
+                block_type: 'context',
+                at: Date.now(),
+                event_name: eventName,
+                ...payload,
+            },
         });
-
-        this.syncIndex();
-        return true;
     }
 
-    ingestTurn(sessionId: string, turn: SessionTurn): SessionContextState {
-        const state = this.attachSession(sessionId);
-        state.turns.push(turn);
-
-        if (state.turns.length > this.maxTurns) {
-            state.turns = state.turns.slice(-this.maxTurns);
-        }
-
-        state.updated_at = Date.now();
-        this.syncSessionMemory(state);
-        return state;
-    }
-
-    ingestContextBlock(sessionId: string, payload: Record<string, unknown>): SessionContextState {
-        const state = this.attachSession(sessionId);
-
-        ingestContextBlockToState({
-            state,
-            sessionId,
-            payload,
-            maxContextBlocks: this.maxContextBlocks,
-        });
-
-        this.syncSessionMemory(state);
-        this.syncIndex();
-        return state;
-    }
-
-    ingestHistorySummaryBlock(
-        sessionId: string,
-        blockType: SessionHistorySummary['block_type'],
-        payload: Record<string, unknown>,
-    ): SessionContextState {
-        const state = this.attachSession(sessionId);
-
-        ingestHistorySummaryToState({
-            state,
-            blockType,
-            payload,
-            maxHistorySummaries: this.maxHistorySummaries,
-        });
-
-        this.syncSessionMemory(state);
-        this.syncIndex();
-        return state;
-    }
-
-    ingestRuntimeHistorySummaryFallback(
-        sessionId: string,
-        input: RuntimeHistorySummaryFallbackInput,
-    ): SessionContextState {
-        return this.ingestHistorySummaryBlock(
-            sessionId,
-            input.block_type,
-            buildFallbackHistorySummaryPayload(input),
-        );
-    }
-
-    ingestRawHistorySummary(
-        sessionId: string,
-        input: { block_type: SessionHistorySummary['block_type']; memory_key: string; ref_uid?: string; text: string },
-    ): SessionContextState {
-        return this.ingestHistorySummaryBlock(
-            sessionId,
-            input.block_type,
-            buildRawHistorySummaryPayload(input),
-        );
-    }
-
-    buildContext(sessionId: string, prompt: string, options: BuildContextOptions = {}) {
-        const state = this.attachSession(sessionId);
-        const result = buildContextForSession(state, prompt, options);
-
-        state.used_contexts = result.used_contexts;
-        state.updated_at = Date.now();
-        this.syncSessionMemory(state);
-
-        return result;
-    }
-
-    getSessionContext(sessionId: string): SessionContextState | null {
-        return this.sessions.get(sessionId) ?? null;
-    }
-
-    listSessionContexts(): SessionContextState[] {
-        return Array.from(this.sessions.values()).sort((a, b) => a.session_id.localeCompare(b.session_id));
-    }
-
-    /**
-     * Register EventBus routes for context memory actions.
-     * This sub-service (formerly ContextMemoryBlockHandler) handles:
-     * - 'context:retrieve' — fetch memory by key
-     * - 'context:store' — create new memory item
-     */
     registerEventRoutes() {
-        if (this.isEventRoutesBound) return;
+        if (this.isRouteBound) return;
 
         EventBus.registerProcessRoute(
             'context:retrieve',
@@ -224,7 +66,7 @@ class AIContextEngineSingleton {
                             : undefined;
 
                 if (!memoryKey) {
-                    this.publishContextResult({
+                    this.publishResult({
                         sessionId,
                         eventName: 'parser_handler_error',
                         payload: {
@@ -255,7 +97,7 @@ class AIContextEngineSingleton {
                         });
                     }
 
-                    this.publishContextResult({
+                    this.publishResult({
                         sessionId,
                         eventName: 'parser_handler_error',
                         payload: {
@@ -293,7 +135,7 @@ class AIContextEngineSingleton {
                     });
                 }
 
-                this.publishContextResult({
+                this.publishResult({
                     sessionId,
                     eventName: 'parser_handler_result',
                     payload: {
@@ -333,7 +175,7 @@ class AIContextEngineSingleton {
                 const type = typeof raw.type === 'string' ? raw.type : 'fact';
 
                 if (!sessionId) {
-                    this.publishContextResult({
+                    this.publishResult({
                         sessionId,
                         eventName: 'parser_handler_error',
                         payload: {
@@ -378,7 +220,7 @@ class AIContextEngineSingleton {
                     });
                 }
 
-                this.publishContextResult({
+                this.publishResult({
                     sessionId,
                     eventName: 'parser_handler_result',
                     payload: {
@@ -393,39 +235,8 @@ class AIContextEngineSingleton {
             },
         );
 
-        this.isEventRoutesBound = true;
-    }
-
-    private publishContextResult(input: {
-        sessionId?: string;
-        eventName: 'parser_handler_result' | 'parser_handler_error';
-        payload: Record<string, unknown>;
-    }) {
-        const { sessionId, eventName, payload } = input;
-        if (!sessionId) return;
-
-        EventBus.emit({
-            event_type: 'interaction',
-            action: 'parser_result',
-            sub_action: 'session',
-            payload: {
-                session_id: sessionId,
-                tag: 'context',
-                block_type: 'context',
-                at: Date.now(),
-                event_name: eventName,
-                ...payload,
-            },
-        });
-    }
-
-    private syncSessionMemory(state: SessionContextState) {
-        syncSessionMemory(state);
-    }
-
-    private syncIndex() {
-        syncContextIndex(this.indexMemoryUid, Array.from(this.sessions.values()));
+        this.isRouteBound = true;
     }
 }
 
-export const AIContextEngine = new AIContextEngineSingleton();
+export const ContextMemoryBlockHandler = new ContextMemoryBlockHandlerSingleton();

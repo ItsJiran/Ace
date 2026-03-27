@@ -14,7 +14,8 @@ import { LoggerEngine } from '#/services/loggerEngine';
 import { AIGatewayEngine } from './services/aiGatewayEngine';
 import { ShellEngine } from '#/services/shellEngine';
 import { AIContextEngine } from '#/services/aiContextEngine';
-import { AIContextRagEngine } from '#/services/aiContextRagEngine';
+import { AIContextMemoryEngine } from '#/services/aiContextMemoryEngine';
+
 import { ParserEngine } from '#/services/parserEngine';
 import type { PipelineContext } from '#/services/pipelineEngine';
 
@@ -52,7 +53,7 @@ export async function bootACE() {
                 ai_gateway: AIGatewayEngine,
                 shell: ShellEngine,
                 context: AIContextEngine,
-                context_rag: AIContextRagEngine,
+                context_memory: AIContextMemoryEngine,
                 parser: ParserEngine,
             };
             console.log('🔌 ACE Registry Bridge Initialized.');

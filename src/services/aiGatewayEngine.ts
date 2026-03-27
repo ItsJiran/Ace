@@ -36,8 +36,9 @@ import { AIConfigManager } from './aiGateway/configManager';
 import { HealthProbe } from './aiGateway/healthProbe';
 import { fetchModels as _fetchModels, testResponse as _testResponse } from './aiGateway/providerClient';
 import { executeSessionInteractionLoop } from './aiGateway/interactionLoop';
+import { finalizeRequestProtocolState } from './aiGateway/protocolLifecycle';
 import { AIContextEngine } from './aiContextEngine';
-import { AIContextRagEngine } from './aiContextRagEngine';
+import { AIContextMemoryEngine } from './aiContextMemoryEngine';
 import { StorageEngine } from './storageEngine';
 import type {
     AIGatewayFetchModelsResult,
@@ -157,7 +158,7 @@ class AIGatewayEngineSingleton {
     closeSession(sessionId: string): void {
         AISessionManager.close(sessionId);
         AIContextEngine.evictContext(sessionId);
-        AIContextRagEngine.deleteReferencesBySession(sessionId);
+        AIContextMemoryEngine.deleteMemoriesBySession(sessionId, { source_ref: 'ai_context_rag' });
     }
 
     /**
@@ -265,6 +266,20 @@ class AIGatewayEngineSingleton {
             sessionId,
             prompt,
             replyToRamKey: reply_to_ram_key,
+        });
+    }
+
+    finalizeProtocolState(
+        session: { sessionId: string; currentProtocolState?: import('./aiGateway/types').AIRequestProtocolState; lastProtocolState?: import('./aiGateway/types').AIRequestProtocolState },
+        prompt: string,
+        responseText: string,
+        rawResponse: string,
+    ) {
+        return finalizeRequestProtocolState({
+            session,
+            prompt,
+            responseText,
+            rawResponse,
         });
     }
 

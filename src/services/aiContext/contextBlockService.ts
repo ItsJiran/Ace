@@ -1,4 +1,4 @@
-import { AIContextRagEngine } from '../aiContextRagEngine';
+import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import type { SessionContextRef, SessionContextState } from './types';
 
 function extractSummaryFromContextPayload(payload: Record<string, unknown>): string | null {
@@ -65,22 +65,28 @@ export function ingestContextBlockToState(input: {
 
     const payloadText = JSON.stringify(payload);
     if (payloadText.length > 900) {
-        const reference = AIContextRagEngine.createReference({
-            type: 'context_block',
+        const refUid = `ctxref-${crypto.randomUUID()}`;
+        const storageKey = `system:ai_context_rag:payload:${refUid}`;
+        AIContextMemoryEngine.createMemory({
+            uid: refUid,
+            memory_key: storageKey,
+            type: 'summary',
+            session_id: sessionId,
+            status: 'out',
             title: 'AI context block',
             summary: typeof payload.summary === 'string' ? payload.summary.slice(0, 200) : 'Context block snapshot',
-            source_session: sessionId,
-            tags: ['context', 'ai_parser'],
-            token_estimate: Math.ceil(payloadText.length / 4),
             payload,
+            source: 'system',
+            source_ref: 'ai_context_rag',
+            tags: ['context', 'ai_parser'],
         });
 
         nextContexts.push({
-            key: reference.storage_key,
+            key: storageKey,
             label: 'RAG reference: context block',
             kind: 'tooling',
-            detail: reference.ref_uid,
-            token_estimate: reference.token_estimate,
+            detail: refUid,
+            token_estimate: Math.ceil(payloadText.length / 4),
         });
     }
 

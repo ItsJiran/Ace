@@ -201,7 +201,7 @@ const InitLayoutEngineStep: PipelineStep<void, void> = {
 
 /**
  * Phase 7: Engine Event Routes
- * Register EventBus routes for engine-backed actions (tool execution, etc.)
+ * Register EventBus routes for engine-backed actions (tool execution, context memory, etc.)
  */
 const InitEngineRoutesStep: PipelineStep<void, void> = {
     name: 'Init Engine Routes',
@@ -210,6 +210,7 @@ const InitEngineRoutesStep: PipelineStep<void, void> = {
         const KeybindEngine = window.ACE.keybind as unknown as { registerEventRoutes?: () => void };
         const AIGatewayEngine = window.ACE.ai_gateway as unknown as { registerEventRoutes?: () => void };
         const ToolEngine = window.ACE.tool as unknown as { registerEventRoutes?: () => void };
+        const AIContextEngine = window.ACE.context as unknown as { registerEventRoutes?: () => void };
         const ParserEngine = window.ACE.parser as unknown as { registerEventRoutes?: () => void };
 
         // Centralized route gate: all engine-backed EventBus routes are mounted here.
@@ -217,9 +218,10 @@ const InitEngineRoutesStep: PipelineStep<void, void> = {
         KeybindEngine.registerEventRoutes?.();
         AIGatewayEngine.registerEventRoutes?.();
         ToolEngine.registerEventRoutes?.();
+        AIContextEngine.registerEventRoutes?.();
         ParserEngine.registerEventRoutes?.();
 
-        console.log('[Boot] Phase 7: Engine event routes registered (window, keybind, ai_gateway, tool, parser).');
+        console.log('[Boot] Phase 7: Engine event routes registered (window, keybind, ai_gateway, tool, ai_context, parser).');
     }
 };
 

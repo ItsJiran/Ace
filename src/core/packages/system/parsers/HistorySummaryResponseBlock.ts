@@ -1,5 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import type { BaseBlock, ParserBlockHandler } from '#/schemas/parser';
+import type { BaseBlock, ParserBlockHandler, ParserBlockValidator } from '#/schemas/parser';
 
 type HistorySummaryResponseType = 'history_summary_ai_response';
 
@@ -7,23 +7,14 @@ export interface HistorySummaryResponseParserBlock extends BaseBlock {
     type: HistorySummaryResponseType;
 }
 
-function parseJsonLoose(raw: string): {
-    json: Record<string, unknown> | null;
-    error?: string;
-} {
-    const trimmed = raw.trim();
-    if (!trimmed) return { json: null };
-
-    try {
-        const parsed = JSON.parse(trimmed) as unknown;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            return { json: parsed as Record<string, unknown> };
-        }
-        return { json: { value: parsed } };
-    } catch (error) {
-        return { json: null, error: error instanceof Error ? error.message : String(error) };
+export const validator: ParserBlockValidator = ({ isComplete, payload_json, payload_parse_error }) => {
+    if (!isComplete) return;
+    if (!payload_json) {
+        throw new Error(payload_parse_error || 'history_summary_ai_response requires a valid JSON payload');
     }
-}
+
+    return normalizeHistorySummaryPayload(payload_json, '', 'history_summary_ai_response') ?? payload_json;
+};
 
 function normalizeHistorySummaryPayload(
     payload: Record<string, unknown> | null,
@@ -73,16 +64,13 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-const historySummaryResponseHandler: ParserBlockHandler = ({ body, isComplete, result }) => {
+export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result }) => {
     const blockType: HistorySummaryResponseType = 'history_summary_ai_response';
-    const parsed = parseJsonLoose(body);
     result.blocks.push({
         type: blockType,
         payload_raw: body,
-        payload_json: normalizeHistorySummaryPayload(parsed.json, body, blockType),
-        payload_parse_error: parsed.error,
+        payload_json,
+        payload_parse_error,
         is_complete: isComplete,
     });
 };
-
-export default historySummaryResponseHandler;

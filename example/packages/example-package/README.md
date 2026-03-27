@@ -10,6 +10,15 @@ When building package features that interact with gateway/context runtime, follo
 
 Especially for parser block shapes (`event`, `execute_tool`, `context`) and context-summary updates.
 
+### Parser Convention
+
+If your package ships custom parsers:
+
+- Export `registry` metadata.
+- Optionally export named `validator` function.
+- Export named `handler` function.
+- Do not use default export for parser handlers.
+
 ## Structure
 
 ```

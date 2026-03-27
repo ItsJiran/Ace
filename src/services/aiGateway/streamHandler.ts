@@ -1,15 +1,37 @@
 import { StorageEngine } from '../storageEngine';
 import { EventBus } from '../eventEngine';
+import { RegistryEngine } from '../registryEngine';
 import { AIContextEngine } from '../aiContextEngine';
-import { AIContextRagEngine } from '../aiContextRagEngine';
+import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { ParserEngine } from '../parserEngine';
 import { parseAIStreamChunk } from '#/services/aiParser';
 import type { AIMessageBlock } from '#/services/aiParser';
 import type { AISession, ParsedBatchEvent, ParserBatchRecord } from './types';
 import type { Interaction } from '../../schemas/events';
-import type { ActionBlock, ParserInterruptMode, ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
+import type { BaseBlock, ParserInterruptMode, ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
 
 const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
+
+type RuntimeActionBlock = {
+    type: 'tool' | 'storage';
+    payload_raw: string;
+    payload_json: Record<string, unknown> | null;
+    payload_parse_error?: string;
+    is_complete: boolean;
+    status?: string;
+    action?: string;
+    memory_uid?: string;
+    result_memory_uid?: string;
+};
+
+type HistorySummaryBlock = BaseBlock & {
+    type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+};
+
+function asRuntimeActionBlock(block: AIMessageBlock): RuntimeActionBlock | null {
+    if (block.type !== 'tool' && block.type !== 'storage') return null;
+    return block as unknown as RuntimeActionBlock;
+}
 
 function pushViolationOnce(violations: string[], message: string): void {
     if (!violations.includes(message)) {
@@ -29,7 +51,7 @@ function readHistorySummaryRefUid(payload: Record<string, unknown>): string | nu
 
 function validateHistorySummaryBlock(
     session: AISession,
-    block: Extract<AIMessageBlock, { type: 'history_summary_ai_prompt' | 'history_summary_ai_response' }>,
+    block: HistorySummaryBlock,
 ): boolean {
     const protocol = session.currentProtocolState;
     if (!protocol || !block.payload_json) {
@@ -102,21 +124,24 @@ function mergeBlocks(
         // For execute blocks in looped responses, update the latest block sharing
         // the same memory identity instead of always appending duplicates.
         if (block.type === 'tool' || block.type === 'storage') {
-            const identity = block.memory_uid || block.result_memory_uid;
+            const actionBlock = asRuntimeActionBlock(block);
+            if (!actionBlock) return;
+            const identity = actionBlock.memory_uid || actionBlock.result_memory_uid;
             if (identity) {
                 for (let i = merged.length - 1; i >= 0; i -= 1) {
                     const candidate = merged[i];
+                    const candidateActionBlock = asRuntimeActionBlock(candidate);
                     if (
-                        (candidate.type === 'tool' || candidate.type === 'storage') &&
+                        candidateActionBlock &&
                         candidate.type === block.type &&
-                        (candidate.memory_uid === identity || candidate.result_memory_uid === identity)
+                        (candidateActionBlock.memory_uid === identity || candidateActionBlock.result_memory_uid === identity)
                     ) {
                         merged[i] = {
                             ...candidate,
                             ...block,
                             payload_raw: block.payload_raw || candidate.payload_raw,
                             payload_json: block.payload_json ?? candidate.payload_json,
-                            status: block.status === 'unknown' ? candidate.status : block.status,
+                            status: actionBlock.status === 'unknown' ? candidateActionBlock.status : actionBlock.status,
                         };
                         return;
                     }
@@ -178,7 +203,7 @@ function buildNextBatches(
 }
 
 function buildToolInteractionFromBlock(input: {
-    block: ActionBlock & { type: 'tool' };
+    block: RuntimeActionBlock & { type: 'tool' };
     session: AISession;
     processUid?: string;
     fallbackResultKey: string;
@@ -386,9 +411,60 @@ export function handleSessionStreamChunk(
     // Direct parser -> context bridge:
     // any complete `context` block from aiParser is immediately ingested.
     blocks.forEach((block) => {
-        if (block.type !== 'context' || !block.is_complete) return;
-        if (!block.payload_json) return;
-        AIContextEngine.ingestContextBlock(session.sessionId, block.payload_json);
+        if (block.type !== 'context' || !block.is_complete || !block.payload_json) return;
+        const payload = block.payload_json as Record<string, unknown>;
+        const requestedAction = typeof payload.action === 'string' ? payload.action.trim().toLowerCase() : '';
+        const action =
+            requestedAction === 'retrieve' || requestedAction === 'store' || requestedAction === 'update'
+                ? requestedAction
+                : 'update';
+        const memoryKey = typeof payload.memory_key === 'string' ? payload.memory_key : undefined;
+        const requestedResultUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
+
+        if (action === 'update') {
+            AIContextEngine.ingestContextBlock(session.sessionId, block.payload_json);
+            return;
+        }
+
+        // retrieve / store: dispatch to EventBus route handled by ContextMemoryBlockHandler
+        const fallbackResultKey =
+            requestedResultUid ??
+            `system:session:${session.sessionId}:ctx_result:${Date.now()}`;
+
+        EventBus.emit({
+            event_type: 'interaction',
+            action: 'parser_result',
+            sub_action: 'session',
+            process_uid: processUid,
+            payload: {
+                session_id: session.sessionId,
+                tag: 'context',
+                at: Date.now(),
+                event_name: 'parser_handler_dispatch',
+                block_type: 'context',
+                action,
+                memory_key: memoryKey,
+                result_memory_uid: fallbackResultKey,
+            },
+        });
+
+        EventBus.emit({
+            event_type: 'interaction',
+            action: `context:${action}`,
+            process_uid: processUid,
+            payload: {
+                ...(block.payload_json as Record<string, unknown>),
+                session_id: session.sessionId,
+                memory_key: memoryKey,
+                result_memory_uid: fallbackResultKey,
+            },
+            preallocated_memory: {
+                session_id: session.sessionId,
+                sdk: session.sdk,
+                model: session.model,
+                result_memory_uid: fallbackResultKey,
+            },
+        });
     });
 
     blocks.forEach((block) => {
@@ -472,8 +548,8 @@ export function handleSessionStreamChunk(
     const nextTokenTraces = [...currentTokenTraces, ...parserTokenTraces].slice(-300);
 
     const malformedBlocks = blocks
-        .filter((block) => (block.type === 'tool' || block.type === 'storage') && 'payload_parse_error' in block)
-        .map((block) => block as ActionBlock & { payload_parse_error?: string; payload_raw?: string });
+        .map((block) => asRuntimeActionBlock(block))
+        .filter((block): block is RuntimeActionBlock => Boolean(block));
 
     let parserRuntimeStatus: 'idle' | 'failed' = 'idle';
     let parserLastError: string | undefined;
@@ -547,7 +623,7 @@ export function handleSessionStreamChunk(
     });
 
     if (memoryState.response_reference?.storage_key) {
-        AIContextRagEngine.writeReferencePayload(memoryState.response_reference.storage_key, {
+        AIContextMemoryEngine.writeMemoryPayload(memoryState.response_reference.storage_key, {
             session_id: session.sessionId,
             sdk: session.sdk,
             model: session.model,
@@ -555,7 +631,7 @@ export function handleSessionStreamChunk(
             text: currentText + textToPrint,
             status: 'streaming',
             updated_at: Date.now(),
-        });
+        }, { status: 'out' });
     }
 
     // ── PATHWAY B: dispatch complete events onto the EventBus ─────────────────
@@ -601,6 +677,48 @@ export function handleSessionStreamChunk(
         }
     });
 
+    blocks.forEach((block) => {
+        if (block.type !== 'presentation' || !block.is_complete) return;
+
+        const payload = (block.payload_json ?? {}) as Record<string, unknown>;
+        const componentSlug = typeof payload.component_slug === 'string' ? payload.component_slug.trim() : '';
+        if (!componentSlug) return;
+
+        const memoryKey = typeof payload.memory_key === 'string' ? payload.memory_key : undefined;
+        const format = typeof payload.format === 'string' ? payload.format : undefined;
+        const props = payload.props && typeof payload.props === 'object' && !Array.isArray(payload.props)
+            ? payload.props as Record<string, unknown>
+            : undefined;
+        const packageRef =
+            typeof payload.package_ref === 'string' && payload.package_ref.trim().length > 0
+                ? payload.package_ref.trim()
+                : 'itsjiran/ace-system';
+        const componentRef = `${packageRef}:components:${componentSlug}`;
+        const resolvedComponent = RegistryEngine.resolveEntry(componentRef);
+
+        EventBus.emit({
+            event_type: 'interaction',
+            action: 'parser_result',
+            sub_action: 'session',
+            process_uid: processUid,
+            payload: {
+                session_id: session.sessionId,
+                tag: 'presentation',
+                at: Date.now(),
+                event_name: 'parser_handler_result',
+                block_type: 'presentation',
+                package_ref: packageRef,
+                component_ref: componentRef,
+                component_slug: componentSlug,
+                component_resolved: Boolean(resolvedComponent),
+                memory_key: memoryKey,
+                format,
+                props,
+                payload,
+            },
+        });
+    });
+
     blocks.forEach((block, index) => {
         if (block.type !== 'tool' || !block.is_complete) return;
 
@@ -609,7 +727,7 @@ export function handleSessionStreamChunk(
             `system:session:${session.sessionId}:tool_result:${Date.now()}:${index}`;
 
         const interaction = buildToolInteractionFromBlock({
-            block: block as ActionBlock & { type: 'tool' },
+            block: block as unknown as RuntimeActionBlock & { type: 'tool' },
             session,
             processUid,
             fallbackResultKey,

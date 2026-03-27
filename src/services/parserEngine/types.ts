@@ -24,6 +24,8 @@ export type ParserTokenTraceRecord = {
 export interface DispatchBlockInput {
     tag: string;
     body: string;
+    payload_json: Record<string, unknown> | null;
+    payload_parse_error?: string;
     isComplete: boolean;
     result: AIParseResult;
     sessionId?: string;

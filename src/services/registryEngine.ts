@@ -6,7 +6,7 @@ import {
     type RegistryDomainEntry,
 } from '../schemas/registry';
 import { LoggerEngine } from './loggerEngine';
-import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime } from '#/schemas/parser';
+import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime, ParserBlockValidator } from '#/schemas/parser';
 
 /**
  * ============================================================================
@@ -270,6 +270,7 @@ class RegistryEngineSingleton {
                 const entry = rawEntry as RegistryDomainEntry;
                 const metadata = (entry.metadata ?? {}) as Record<string, unknown>;
                 const handler = entry.implementation;
+                const validator = (entry as RegistryDomainEntry & { validator?: unknown }).validator;
 
                 if (typeof handler !== 'function') continue;
 
@@ -313,6 +314,9 @@ class RegistryEngineSingleton {
                                 ? (metadata.runtime_behavior as Record<string, unknown>).interrupt_on_complete as boolean
                                 : undefined,
                         }
+                        : undefined,
+                    validator: typeof validator === 'function'
+                        ? validator as ParserBlockValidator
                         : undefined,
                     handler: handler as ParserBlockHandler,
                 };
@@ -415,16 +419,21 @@ class RegistryEngineSingleton {
             
             // We expect a Module Namespace Object with exports
             if (domain && moduleNamespace && typeof moduleNamespace === 'object') {
-                const exports = moduleNamespace as { default?: any; registry?: any };
+                const exports = moduleNamespace as { default?: any; registry?: any; handler?: any; validator?: any };
                 
                 // 1. Detect 'registry' export (Identity/Metadata)
                 const registryData = exports.registry || {};
                 
-                // 2. Detect 'default' export (The Implementation)
-                const implementation = exports.default;
+                // 2. Resolve implementation export.
+                // Parsers are standardized to named export `handler`.
+                // Other domains keep using default export for now.
+                const implementation = domain === 'parsers' ? exports.handler : exports.default;
 
                 if (!implementation) {
-                    // Skip files that don't export a default implementation (utils, types, etc.)
+                    if (domain === 'parsers') {
+                        console.warn(`[RegistryEngine] Parser module missing named export 'handler': ${path}`);
+                    }
+                    // Skip files that don't expose expected implementation export.
                     continue;
                 }
 
@@ -455,6 +464,10 @@ class RegistryEngineSingleton {
                     metadata: normalizedMeta, // The exported registry constant
                     locator: { module_path: path }
                 };
+
+                if (domain === 'parsers' && typeof exports.validator === 'function') {
+                    (entry as RegistryDomainEntry & { validator?: unknown }).validator = exports.validator;
+                }
 
                 // Add to aggregated list
                 aggregated[domain][entrySlug] = entry; 

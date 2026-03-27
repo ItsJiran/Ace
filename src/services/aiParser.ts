@@ -4,7 +4,6 @@ import type {
 } from '#/schemas/parser';
 
 export type {
-    ActionBlock,
     AIMessageBlock,
     AIParseResult,
     BaseBlock,
@@ -42,6 +41,102 @@ export interface ParseAIStreamOptions {
     processUid?: string;
     rawChunk?: string;
     incomingCarryover?: string;
+}
+
+function parseStructuredPayload(raw: string): {
+    json: Record<string, unknown> | null;
+    error?: string;
+} {
+    const trimmed = raw.trim();
+    if (!trimmed) return { json: null };
+
+    const stripCodeFence = (input: string): string => {
+        const match = input.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+        return match ? match[1].trim() : input;
+    };
+
+    const extractObjectCandidate = (input: string): string => {
+        const start = input.indexOf('{');
+        const end = input.lastIndexOf('}');
+        if (start === -1 || end === -1 || end <= start) return input;
+        return input.slice(start, end + 1).trim();
+    };
+
+    const candidates = [
+        trimmed,
+        stripCodeFence(trimmed),
+        extractObjectCandidate(trimmed),
+        extractObjectCandidate(stripCodeFence(trimmed)),
+    ].filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index);
+
+    let lastError = 'Invalid JSON payload.';
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = JSON.parse(candidate) as unknown;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return { json: parsed as Record<string, unknown> };
+            }
+            return { json: { value: parsed } };
+        } catch (error) {
+            lastError = error instanceof Error ? error.message : String(error);
+        }
+    }
+
+    return { json: null, error: lastError };
+}
+
+function normalizeHistorySummaryPayload(
+    payload: Record<string, unknown> | null,
+    rawBody: string,
+    blockType: 'history_summary_ai_prompt' | 'history_summary_ai_response',
+): Record<string, unknown> | null {
+    if (!payload) {
+        const fallback = rawBody.trim();
+        return fallback ? { type: blockType, summary: fallback } : null;
+    }
+
+    const normalized: Record<string, unknown> = { ...payload };
+    if (typeof normalized.type !== 'string') normalized.type = blockType;
+    if (typeof normalized.memory_key !== 'string') {
+        const memoryKey = payload.memory_uid ?? payload.ram_key_id ?? payload.storage_key;
+        if (typeof memoryKey === 'string' && memoryKey.trim().length > 0) {
+            normalized.memory_key = memoryKey.trim();
+        }
+    }
+    if (typeof normalized.ref_uid !== 'string') {
+        const refUid = payload.reference_uid;
+        if (typeof refUid === 'string' && refUid.trim().length > 0) {
+            normalized.ref_uid = refUid.trim();
+        }
+    }
+    if (typeof normalized.summary !== 'string') {
+        if (typeof normalized.text === 'string') normalized.summary = normalized.text;
+        else if (typeof normalized.content === 'string') normalized.summary = normalized.content;
+    }
+
+    return normalized;
+}
+
+function appendBuiltInStructuredBlock(
+    tag: string,
+    body: string,
+    isComplete: boolean,
+    result: AIParseResult,
+): boolean {
+    if (tag !== 'history_summary_ai_prompt' && tag !== 'history_summary_ai_response') {
+        return false;
+    }
+
+    const parsed = parseStructuredPayload(body);
+    result.blocks.push({
+        type: tag,
+        payload_raw: body,
+        payload_json: normalizeHistorySummaryPayload(parsed.json, body, tag),
+        payload_parse_error: parsed.error,
+        is_complete: isComplete,
+    });
+    return true;
 }
 
 function findNextStructuredTagStart(chunk: string, cursor: number): number {
@@ -118,10 +213,14 @@ function extractStructuredBlock(
     result: AIParseResult,
     options?: ParseAIStreamOptions,
 ) {
+    const parsedPayload = parseStructuredPayload(body);
+
     try {
         const handled = ParserEngine.dispatchParsedBlock({
             tag,
             body,
+            payload_json: parsedPayload.json,
+            payload_parse_error: parsedPayload.error,
             isComplete,
             result,
             sessionId: options?.sessionId,
@@ -134,6 +233,10 @@ function extractStructuredBlock(
         const reason = error instanceof Error ? error.message : String(error);
         result.interrupt_requested = true;
         result.interrupt_reason = `parser_handler_exception:${tag}:${reason}`;
+    }
+
+    if (appendBuiltInStructuredBlock(tag, body, isComplete, result)) {
+        return;
     }
 
     result.blocks.push({

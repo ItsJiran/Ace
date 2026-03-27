@@ -23,7 +23,7 @@ This document explains how AI requests move through the ACE runtime, how context
 5. Stream chunks are parsed by `aiParser` into typed blocks.
 6. `streamHandler` writes parser output to RAM and dispatches complete events.
 7. Any complete `context` block is ingested by `AIContextEngine.ingestContextBlock()`.
-8. `AIContextEngine` updates summary/context refs and offloads large payloads into `AIContextRagEngine`.
+8. `AIContextEngine` manages heavy payloads via `AIContextMemoryEngine` with status-driven filtering.
 
 ## Core Components
 
@@ -44,22 +44,26 @@ This document explains how AI requests move through the ACE runtime, how context
   - summary changes only from parser `context` block payload.
 - Publishes context state into RAM for monitor tooling.
 
-### `AIContextRagEngine`
+### `AIContextMemoryEngine`
 
-- Stores heavy context payloads as references.
-- Keeps lightweight metadata in context while payload stays in dedicated RAM key.
-- Supports listing and retrieval by session.
+- Unified lifecycle-aware value object store for all context memory.
+- Manages status-driven filtering ('in'/'out'/'reserved'/'expired'/'archived').
+- Self-contained items with inline payloads, no separate lookup tables.
+- Supports listing, retrieval, and session-based pruning.
 
 ### `aiParser`
 
-- Parses stream chunks into typed blocks:
-  - paragraph
-  - event
-  - execute_tool
-  - execute_storage
-  - context
-  - directive
-- Normalizes `context` payload shape to improve compatibility.
+- Parses stream chunks and detects structured block boundaries (`<tag>...</tag>` / fenced blocks).
+- Resolves parser implementation from registry by `tag_name`.
+- Parses payload once at runtime, then passes normalized payload to parser dispatch.
+- Runs parser `validator` (if declared) before `handler`.
+- Wraps validator/handler errors into parser block error payloads and continues stream.
+
+### Parser Module Convention
+
+- `registry.block_schema` is documentation metadata for protocol generation (not runtime enforcement).
+- Named export `validator` is optional runtime gate/transform called before handler.
+- Parser implementation must be exported as named `handler` (no default export).
 
 ### `streamHandler`
 
@@ -160,5 +164,5 @@ If context does not appear in model behavior:
 - `src/services/aiGateway/streamHandler.ts`
 - `src/services/aiParser.ts`
 - `src/services/aiContextEngine.ts`
-- `src/services/aiContextRagEngine.ts`
+- `src/services/aiContextMemoryEngine.ts`
 - `src/core/packages/system-dev/components/AISessionMonitor.tsx`

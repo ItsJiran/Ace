@@ -1,6 +1,6 @@
 import { StorageEngine } from '../storageEngine';
 import { AIContextEngine } from '../aiContextEngine';
-import { AIContextRagEngine } from '../aiContextRagEngine';
+import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { finalizeRequestProtocolState, stripHistorySummaryBlocksFromText } from './protocolLifecycle';
 import type { AISession } from './types';
 
@@ -36,7 +36,7 @@ export function finalizeGatewaySessionResponse(input: {
     } | undefined;
     const rawResponseText = typeof rawResponseMemory?.raw_response === 'string' ? rawResponseMemory.raw_response : '';
 
-    AIContextRagEngine.writeReferencePayload(response_reference.storage_key, {
+    AIContextMemoryEngine.writeMemoryPayload(response_reference.storage_key, {
         session_id: sessionId,
         sdk: session.sdk,
         model: session.model,
@@ -46,7 +46,7 @@ export function finalizeGatewaySessionResponse(input: {
         status: typeof rawResponseMemory?.status === 'string' ? rawResponseMemory.status : 'completed',
         error_message: typeof rawResponseMemory?.error_message === 'string' ? rawResponseMemory.error_message : undefined,
         updated_at: Date.now(),
-    });
+    }, { status: 'out' });
 
     const protocolState = finalizeRequestProtocolState({
         session,
@@ -64,7 +64,7 @@ export function finalizeGatewaySessionResponse(input: {
         classifications: CLASSIFICATIONS,
     });
 
-    AIContextRagEngine.pruneSessionRawHistoryReferences(sessionId, 12);
+    AIContextMemoryEngine.pruneSessionMemories({ session_id: sessionId, retainPerType: 12, tags: ['history', 'raw'] });
 
     if (responseText.trim().length > 0) {
         AIContextEngine.ingestTurn(sessionId, {

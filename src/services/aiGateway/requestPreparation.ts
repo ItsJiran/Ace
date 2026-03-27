@@ -1,5 +1,5 @@
 import { AIContextEngine } from '../aiContextEngine';
-import { AIContextRagEngine } from '../aiContextRagEngine';
+import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import {
     HISTORY_SUMMARY_PARAGRAPH_THRESHOLD,
     countParagraphs,
@@ -23,12 +23,15 @@ export function prepareGatewaySessionRequest(input: {
 
     AIContextEngine.attachSession(sessionId);
 
-    const promptReference = AIContextRagEngine.reserveReference({
-        type: 'prompt',
+    const promptRefUid = `ctxref-${crypto.randomUUID()}`;
+    const promptStorageKey = `system:ai_context_rag:payload:${promptRefUid}`;
+    AIContextMemoryEngine.reserveMemory({
+        uid: promptRefUid,
+        memory_key: promptStorageKey,
+        type: 'conversation_history',
+        session_id: sessionId,
         title: 'Raw user prompt history',
         summary: 'Raw prompt for compact history reconstruction.',
-        source_session: sessionId,
-        tags: ['history', 'prompt', 'raw'],
         payload: {
             session_id: sessionId,
             sdk: session.sdk,
@@ -37,14 +40,21 @@ export function prepareGatewaySessionRequest(input: {
             status: 'reserved',
             created_at: Date.now(),
         },
+        source: 'system',
+        source_ref: 'ai_context_rag',
+        tags: ['history', 'prompt', 'raw'],
     });
+    const promptReference = { ref_uid: promptRefUid, storage_key: promptStorageKey };
 
-    const responseReference = AIContextRagEngine.reserveReference({
-        type: 'response',
+    const responseRefUid = `ctxref-${crypto.randomUUID()}`;
+    const responseStorageKey = `system:ai_context_rag:payload:${responseRefUid}`;
+    AIContextMemoryEngine.reserveMemory({
+        uid: responseRefUid,
+        memory_key: responseStorageKey,
+        type: 'conversation_history',
+        session_id: sessionId,
         title: 'Raw assistant response history',
         summary: 'Raw response stream for compact history reconstruction.',
-        source_session: sessionId,
-        tags: ['history', 'response', 'raw'],
         payload: {
             session_id: sessionId,
             sdk: session.sdk,
@@ -54,7 +64,11 @@ export function prepareGatewaySessionRequest(input: {
             status: 'reserved',
             created_at: Date.now(),
         },
+        source: 'system',
+        source_ref: 'ai_context_rag',
+        tags: ['history', 'response', 'raw'],
     });
+    const responseReference = { ref_uid: responseRefUid, storage_key: responseStorageKey };
 
     const promptParagraphCount = countParagraphs(prompt);
     const requirePromptSummary = promptParagraphCount >= HISTORY_SUMMARY_PARAGRAPH_THRESHOLD;
@@ -78,7 +92,7 @@ export function prepareGatewaySessionRequest(input: {
         responseHistoryRefUid: responseReference.ref_uid,
     });
 
-    AIContextRagEngine.writeReferencePayload(promptReference.storage_key, {
+    AIContextMemoryEngine.writeMemoryPayload(promptReference.storage_key, {
         session_id: sessionId,
         sdk: session.sdk,
         model: session.model,
@@ -87,7 +101,7 @@ export function prepareGatewaySessionRequest(input: {
         used_contexts: contextBuild.used_contexts,
         status: 'ready',
         updated_at: Date.now(),
-    });
+    }, { status: 'out' });
 
     AIContextEngine.ingestTurn(sessionId, { at: Date.now(), role: 'user', text: prompt });
 

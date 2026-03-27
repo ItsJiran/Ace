@@ -24,6 +24,7 @@ interface ParserBatchMemory {
         | { type: 'paragraph'; content: string }
         | { type: 'context'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
         | { type: 'history_summary_ai_prompt' | 'history_summary_ai_response'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean }
+        | { type: 'presentation'; payload_raw: string; payload_json: Record<string, unknown> | null; is_complete: boolean; package_ref?: string; component_slug: string; memory_key?: string; props?: Record<string, unknown>; format?: string }
         | { type: 'tool' | 'storage'; payload_raw: string; payload_json: Record<string, unknown> | null; status: string; is_complete: boolean; action?: string; memory_uid?: string; result_memory_uid?: string }
         | { type: 'event'; event: { headers: Record<string, unknown>; raw_payload_buffer: string; is_complete: boolean } }
         | { type: 'directive'; directive_name: string; content: string; is_complete: boolean }
@@ -108,6 +109,11 @@ export default function AIChatbarTest() {
             if (block.type !== 'tool' && block.type !== 'storage') return false;
             return block.status === 'pending' || block.status === 'queued' || block.status === 'running';
         });
+    }, [responseMemory?.blocks]);
+
+    const presentationBlocks = useMemo(() => {
+        const blocks = responseMemory?.blocks || [];
+        return blocks.filter((block) => block.type === 'presentation' && block.is_complete);
     }, [responseMemory?.blocks]);
 
     const handlerRunningLabel = useMemo(() => {
@@ -219,6 +225,62 @@ export default function AIChatbarTest() {
         setPrompt('');
     };
 
+    const PresentationRenderer = ({ block }: { block: any }) => {
+        const componentSlug = block.component_slug || '';
+        const packageRef = block.package_ref || 'itsjiran/ace-system';
+        const memoryKeyProp = block.memory_key;
+        const inlineProps = block.props || {};
+        
+        // Try to resolve component from registry
+        try {
+            const registryEntry = window.ACE.registry?.resolveEntry?.(`${packageRef}:components:${componentSlug}`);
+            if (!registryEntry) {
+                return (
+                    <div className="text-xs text-zinc-500 border border-zinc-800 rounded p-2 bg-black/30">
+                        ⚠ Component not found: {componentSlug}
+                    </div>
+                );
+            }
+
+            // Dynamically render the component
+            const Component = registryEntry.component;
+            if (!Component) {
+                return (
+                    <div className="text-xs text-zinc-500 border border-zinc-800 rounded p-2 bg-black/30">
+                        ⚠ Component {componentSlug} has no render function
+                    </div>
+                );
+            }
+
+            // Load data from memory if memory_key exists
+            let componentData: Record<string, unknown> = inlineProps;
+            if (memoryKeyProp) {
+                try {
+                    const memoryData = window.ACE.memory?.read?.(memoryKeyProp);
+                    if (memoryData) {
+                        componentData = { ...memoryData, ...inlineProps };
+                    }
+                } catch (err) {
+                    console.warn(`Failed to load memory ${memoryKeyProp}:`, err);
+                }
+            }
+
+            // Render component with resolved props
+            return (
+                <div className="my-2 rounded border border-zinc-700 bg-zinc-900/40 p-3 overflow-auto max-h-96">
+                    <Component {...componentData} />
+                </div>
+            );
+        } catch (err) {
+            console.error(`Presentation render error:`, err);
+            return (
+                <div className="text-xs text-red-400 border border-red-700 rounded p-2 bg-black/30">
+                    ✕ Error rendering {componentSlug}: {err instanceof Error ? err.message : String(err)}
+                </div>
+            );
+        }
+    };
+
     return (
         <div className="w-full h-full flex flex-col bg-zinc-950 text-zinc-200">
             <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
@@ -316,14 +378,23 @@ export default function AIChatbarTest() {
 
                 {messages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] rounded-xl px-3 py-2 border whitespace-pre-wrap text-sm ${msg.role === 'user' ? 'bg-cyan-700/40 border-cyan-500/40 text-cyan-50' : 'bg-zinc-900 border-zinc-700 text-zinc-200'}`}>
-                            <div className="text-[10px] uppercase tracking-wide mb-1 opacity-70">
-                                {msg.role === 'user' ? 'You' : 'Assistant'}
+                        <div className="w-full">
+                            <div className={`max-w-[85%] rounded-xl px-3 py-2 border whitespace-pre-wrap text-sm ${msg.role === 'user' ? 'bg-cyan-700/40 border-cyan-500/40 text-cyan-50 ml-auto' : 'bg-zinc-900 border-zinc-700 text-zinc-200'}`}>
+                                <div className="text-[10px] uppercase tracking-wide mb-1 opacity-70">
+                                    {msg.role === 'user' ? 'You' : 'Assistant'}
+                                </div>
+                                <div>{msg.content || (msg.role === 'assistant' ? '...' : '')}</div>
+                                {msg.role === 'assistant' && (
+                                    <div className="mt-2 text-[10px] text-zinc-500">
+                                        status: {msg.status || '-'} | batches: {msg.parserBatchCount ?? 0} | events: {msg.eventsTotal ?? 0}
+                                    </div>
+                                )}
                             </div>
-                            <div>{msg.content || (msg.role === 'assistant' ? '...' : '')}</div>
-                            {msg.role === 'assistant' && (
-                                <div className="mt-2 text-[10px] text-zinc-500">
-                                    status: {msg.status || '-'} | batches: {msg.parserBatchCount ?? 0} | events: {msg.eventsTotal ?? 0}
+                            {msg.role === 'assistant' && msg.turnId && presentationBlocks.length > 0 && (
+                                <div className="mt-2 space-y-2">
+                                    {presentationBlocks.map((block, idx) => (
+                                        <PresentationRenderer key={`presentation-${msg.turnId}-${idx}`} block={block} />
+                                    ))}
                                 </div>
                             )}
                         </div>

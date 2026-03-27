@@ -1,65 +1,17 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import type { ActionBlock, ParserBlockHandler } from '#/schemas/parser';
+import type { BaseBlock, ParserBlockHandler, ParserBlockValidator } from '#/schemas/parser';
 
-export type ToolBlockAction = 'list' | 'view_schema' | 'execute';
-export type ToolBlockStatus = 'pending' | 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | 'unknown';
+type ToolBlockAction = 'list' | 'view_schema' | 'execute';
+type ToolBlockStatus = 'pending' | 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | 'unknown';
 
-export interface ToolBlock extends ActionBlock {
+interface ToolBlock extends BaseBlock {
     type: 'tool';
+    memory_uid?: string;
+    result_memory_uid?: string;
     action?: ToolBlockAction;
     status: ToolBlockStatus;
     tool_slug?: string;
     package_ref?: string;
-}
-
-function parseJsonLoose(raw: string): {
-    json: Record<string, unknown> | null;
-    error?: string;
-} {
-    const trimmed = raw.trim();
-    if (!trimmed) return { json: null };
-
-    const stripOuterTag = (input: string): string => {
-        const match = input.match(/^<tool>\s*([\s\S]*?)\s*<\/tool>$/i);
-        return match ? match[1].trim() : input;
-    };
-
-    const stripCodeFence = (input: string): string => {
-        const match = input.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-        return match ? match[1].trim() : input;
-    };
-
-    const extractObjectCandidate = (input: string): string => {
-        const start = input.indexOf('{');
-        const end = input.lastIndexOf('}');
-        if (start === -1 || end === -1 || end <= start) return input;
-        return input.slice(start, end + 1).trim();
-    };
-
-    const candidates = [
-        trimmed,
-        stripOuterTag(trimmed),
-        stripCodeFence(trimmed),
-        stripCodeFence(stripOuterTag(trimmed)),
-        extractObjectCandidate(trimmed),
-        extractObjectCandidate(stripCodeFence(stripOuterTag(trimmed))),
-    ].filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index);
-
-    let lastError = 'Invalid JSON payload.';
-
-    for (const candidate of candidates) {
-        try {
-            const parsed = JSON.parse(candidate) as unknown;
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                return { json: parsed as Record<string, unknown> };
-            }
-            return { json: { value: parsed } };
-        } catch (error) {
-            lastError = error instanceof Error ? error.message : String(error);
-        }
-    }
-
-    return { json: null, error: lastError };
 }
 
 function normalizeAction(value: unknown): ToolBlockAction {
@@ -77,47 +29,35 @@ function normalizeStatus(value: unknown, isComplete: boolean): ToolBlockStatus {
     return isComplete ? 'completed' : 'pending';
 }
 
-function extractToolBlock(body: string, isComplete: boolean): ToolBlock {
-    const { json, error } = parseJsonLoose(body);
-
-    const action = normalizeAction(json?.action);
-    const status = normalizeStatus(json?.status ?? json?.state, isComplete);
-
-    const toolSlug =
-        typeof json?.tool_slug === 'string' ? json.tool_slug.trim() :
-        typeof json?.tool === 'string'      ? json.tool.trim() :
-        typeof json?.name === 'string'      ? json.name.trim() :
-        undefined;
-
-    const packageRef =
-        typeof json?.package_ref === 'string' ? json.package_ref.trim() :
-        typeof json?.package === 'string'     ? json.package.trim() :
-        undefined;
-
-    const memoryUid =
-        typeof json?.memory_uid === 'string' ? json.memory_uid :
-        typeof json?.memory_key === 'string' ? json.memory_key :
-        undefined;
-
-    const resultMemoryUid =
-        typeof json?.result_memory_uid === 'string' ? json.result_memory_uid :
-        typeof json?.result_key === 'string'         ? json.result_key :
-        undefined;
+export const validator: ParserBlockValidator = ({ isComplete, payload_json, payload_parse_error }) => {
+    if (!isComplete) return;
+    if (!payload_json) {
+        throw new Error(payload_parse_error || 'tool block requires a valid JSON payload');
+    }
 
     return {
-        type: 'tool',
-        status,
-        action,
-        tool_slug: toolSlug,
-        package_ref: packageRef,
-        memory_uid: memoryUid,
-        result_memory_uid: resultMemoryUid,
-        payload_raw: body,
-        payload_json: json,
-        payload_parse_error: error,
-        is_complete: isComplete,
+        ...payload_json,
+        action: normalizeAction(payload_json.action),
+        status: normalizeStatus(payload_json.status ?? payload_json.state, isComplete),
+        tool_slug:
+            typeof payload_json.tool_slug === 'string' ? payload_json.tool_slug.trim() :
+            typeof payload_json.tool === 'string' ? payload_json.tool.trim() :
+            typeof payload_json.name === 'string' ? payload_json.name.trim() :
+            undefined,
+        package_ref:
+            typeof payload_json.package_ref === 'string' ? payload_json.package_ref.trim() :
+            typeof payload_json.package === 'string' ? payload_json.package.trim() :
+            undefined,
+        memory_uid:
+            typeof payload_json.memory_uid === 'string' ? payload_json.memory_uid :
+            typeof payload_json.memory_key === 'string' ? payload_json.memory_key :
+            undefined,
+        result_memory_uid:
+            typeof payload_json.result_memory_uid === 'string' ? payload_json.result_memory_uid :
+            typeof payload_json.result_key === 'string' ? payload_json.result_key :
+            undefined,
     };
-}
+};
 
 export const registry: AceRegistryType.Parser = {
     name: 'tool',
@@ -155,8 +95,20 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-const toolBlockHandler: ParserBlockHandler = ({ body, isComplete, result, emit_result, request_interrupt }) => {
-    const block = extractToolBlock(body, isComplete);
+export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt }) => {
+    const block: ToolBlock = {
+        type: 'tool',
+        action: normalizeAction(payload_json?.action),
+        status: normalizeStatus(payload_json?.status ?? payload_json?.state, isComplete),
+        tool_slug: typeof payload_json?.tool_slug === 'string' ? payload_json.tool_slug : undefined,
+        package_ref: typeof payload_json?.package_ref === 'string' ? payload_json.package_ref : undefined,
+        memory_uid: typeof payload_json?.memory_uid === 'string' ? payload_json.memory_uid : typeof payload_json?.memory_key === 'string' ? payload_json.memory_key : undefined,
+        result_memory_uid: typeof payload_json?.result_memory_uid === 'string' ? payload_json.result_memory_uid : typeof payload_json?.result_key === 'string' ? payload_json.result_key : undefined,
+        payload_raw: body,
+        payload_json,
+        payload_parse_error,
+        is_complete: isComplete,
+    };
     result.blocks.push(block);
 
     if (!isComplete) return;
@@ -184,5 +136,3 @@ const toolBlockHandler: ParserBlockHandler = ({ body, isComplete, result, emit_r
         });
     }
 };
-
-export default toolBlockHandler;
