@@ -46,6 +46,22 @@ import type {
     AIGatewayRadarScanResult,
 } from '../schemas/ai_gateway';
 
+function getLifecyclePhase(eventName?: string): 'dispatch' | 'started' | 'result' | 'error' | 'failed' | 'other' {
+    if (!eventName) return 'other';
+    const normalized = eventName.toLowerCase();
+    if (normalized.endsWith('_dispatch')) return 'dispatch';
+    if (normalized.endsWith('_started') || normalized.includes('parsing_started')) return 'started';
+    if (normalized.endsWith('_result') || normalized.includes('parsing_completed')) return 'result';
+    if (normalized.endsWith('_error')) return 'error';
+    if (normalized.endsWith('_failed') || normalized.includes('parse_failed')) return 'failed';
+    return 'other';
+}
+
+function isLifecycleEventName(eventName?: string): boolean {
+    const phase = getLifecyclePhase(eventName);
+    return phase !== 'other';
+}
+
 
 export type { SDKProvider, AISession, AISessionSnapshot } from './aiGateway/types';
 import type { SDKProvider, AISessionSnapshot } from './aiGateway/types';
@@ -162,7 +178,7 @@ class AIGatewayEngineSingleton {
             const lifecycleEvents = parserResults
                 .filter((record) => {
                     const eventName = typeof record.event_name === 'string' ? record.event_name : '';
-                    return eventName === 'tool_action_dispatch' || eventName === 'tool_action_started' || eventName === 'tool_action_result' || eventName === 'tool_action_error';
+                    return isLifecycleEventName(eventName);
                 })
                 .sort((a, b) => {
                     const atA = typeof a.at === 'number' ? a.at : 0;
@@ -178,7 +194,40 @@ class AIGatewayEngineSingleton {
             const latestAction = typeof latestPayload?.action === 'string' ? latestPayload.action : undefined;
             const latestResultMemoryUid = typeof latestPayload?.result_memory_uid === 'string' ? latestPayload.result_memory_uid : undefined;
             const latestAt = typeof latestLifecycle?.at === 'number' ? latestLifecycle.at : undefined;
-            const handlerRunning = latestEventName === 'tool_action_dispatch' || latestEventName === 'tool_action_started';
+            const latestPhase = getLifecyclePhase(latestEventName);
+            const latestBlockType = typeof latestPayload?.block_type === 'string'
+                ? latestPayload.block_type
+                : typeof latestLifecycle?.tag === 'string'
+                    ? latestLifecycle.tag
+                    : undefined;
+            const handlerRunning = latestPhase === 'dispatch' || latestPhase === 'started';
+            const parserRuntimeStatus = typeof responseMemory?.parser_runtime_status === 'string' ? responseMemory.parser_runtime_status : undefined;
+            const parserFailed =
+                latestPhase === 'failed' ||
+                (latestBlockType === 'parser' && latestPhase === 'error') ||
+                parserRuntimeStatus === 'failed';
+            const parserParsing =
+                snapshot.status === 'streaming' &&
+                !parserFailed &&
+                ((latestBlockType === 'parser' && handlerRunning) || (!latestBlockType && !handlerRunning));
+
+            const derivedStatus: 'idle' | 'running' | 'parsing' | 'failed' =
+                parserFailed
+                    ? 'failed'
+                    : handlerRunning
+                        ? (latestBlockType === 'parser' ? 'parsing' : 'running')
+                        : parserParsing
+                            ? 'parsing'
+                            : 'idle';
+
+            const derivedBlockType =
+                latestBlockType
+                    ? latestBlockType
+                    : latestEventName
+                        ? 'handler'
+                    : parserFailed
+                            ? 'parser'
+                            : undefined;
 
             return {
                 ...snapshot,
@@ -190,8 +239,8 @@ class AIGatewayEngineSingleton {
                 context_blocks: contextState?.context_blocks ?? [],
                 protocol_state: snapshot.protocol_state,
                 block_handler_state: {
-                    status: handlerRunning ? 'running' : 'idle',
-                    block_type: latestEventName ? 'tool' : undefined,
+                    status: derivedStatus,
+                    block_type: derivedBlockType,
                     action: latestAction,
                     event_name: latestEventName,
                     result_memory_uid: latestResultMemoryUid,

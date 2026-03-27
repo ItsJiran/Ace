@@ -137,7 +137,7 @@ export const registry: AceRegistryType.Parser = {
             '"memory_uid" (where to store result), ' +
             '"result_memory_uid", ' +
             '"status" (pending | running | completed | error), ' +
-            'plus any tool-specific arguments for execute.',
+            '"payload" or "input" for tool-specific arguments when execute is used.',
         exampleLines: [
             '  <tool>',
             '  {"action":"list","status":"pending"}',
@@ -148,7 +148,7 @@ export const registry: AceRegistryType.Parser = {
             '  </tool>',
             '',
             '  <tool>',
-            '  {"action":"execute","tool_slug":"fs-tool","package_ref":"itsjiran/ace-system","memory_uid":"system:tool:exec:123","result_memory_uid":"system:tool:result:123","status":"pending","path":"notes/todo.md"}',
+            '  {"action":"execute","tool_slug":"fs-tool","package_ref":"itsjiran/ace-system","memory_uid":"system:tool:exec:123","result_memory_uid":"system:tool:result:123","status":"pending","payload":{"action":"list_directory","path":"~/"}}',
             '  </tool>',
             '  Saya sedang membaca file tersebut.',
         ],

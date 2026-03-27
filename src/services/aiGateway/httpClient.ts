@@ -31,6 +31,9 @@ export async function sendToSession(
         used_contexts?: unknown[];
         prompt_reference?: { ref_uid: string; storage_key: string };
         response_reference?: { ref_uid: string; storage_key: string };
+        prompt_turn_id?: string;
+        response_attempt_index?: number;
+        response_turns_seed?: unknown[];
     },
 ): Promise<SendSessionStreamResult> {
     console.log(`[AIGatewayEngine] [${session.sessionId}] Sending: "${prompt}"`);
@@ -57,6 +60,9 @@ export async function sendToSession(
             events_total: 0,
             status: 'streaming',
             session_id: session.sessionId,
+            response_turns: Array.isArray(metadata?.response_turns_seed) ? metadata.response_turns_seed : [],
+            active_response_turn_id: metadata?.prompt_turn_id,
+            active_response_attempt_index: metadata?.response_attempt_index,
             started_at: Date.now(),
         },
         classifications: CLASSIFICATIONS,

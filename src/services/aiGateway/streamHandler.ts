@@ -230,6 +230,55 @@ function buildToolInteractionFromBlock(input: {
     };
 }
 
+function emitParserSessionResult(input: {
+    sessionId: string;
+    processUid?: string;
+    eventName: string;
+    payload?: Record<string, unknown>;
+}) {
+    const { sessionId, processUid, eventName, payload } = input;
+    EventBus.emit({
+        event_type: 'interaction',
+        action: 'parser_result',
+        sub_action: 'session',
+        process_uid: processUid,
+        payload: {
+            session_id: sessionId,
+            tag: 'parser',
+            at: Date.now(),
+            event_name: eventName,
+            ...(payload || {}),
+        },
+    });
+}
+
+function writeParserFailureMemory(input: {
+    session: AISession;
+    ramKey: string;
+    reason: string;
+    processUid?: string;
+    details?: Record<string, unknown>;
+}): string {
+    const { session, ramKey, reason, processUid, details } = input;
+    const parserErrorMemoryUid = `${ramKey}:parser_error`;
+
+    StorageEngine.dispatchRAMAction({
+        action: 'update_memory',
+        memory_uid: parserErrorMemoryUid,
+        payload: {
+            session_id: session.sessionId,
+            process_uid: processUid,
+            error_type: 'parser_failure',
+            reason,
+            details: details || {},
+            at: Date.now(),
+        },
+        classifications: CLASSIFICATIONS,
+    });
+
+    return parserErrorMemoryUid;
+}
+
 /**
  * Processes one incoming chunk of AI stream data for a session.
  *
@@ -245,13 +294,89 @@ export function handleSessionStreamChunk(
     processUid?: string,
 ): { interrupted: boolean; reason?: string; mode?: ParserInterruptMode } {
     // Prepend any carryover from an unclosed fenced block in the previous chunk
+    const incomingCarryover = session.activeEventBuffer;
     const hadCarryoverBuffer = session.activeEventBuffer.length > 0;
     const fullStream = session.activeEventBuffer + chunk;
     session.activeEventBuffer = '';
 
-    const { blocks, events, textToPrint, carryoverBuffer, interrupt_requested, interrupt_reason } = parseAIStreamChunk(fullStream, {
+    emitParserSessionResult({
         sessionId: session.sessionId,
         processUid,
+        eventName: 'parser_parsing_started',
+        payload: {
+            chunk_bytes: chunk.length,
+            carryover_bytes: incomingCarryover.length,
+            chunk_preview: chunk.length > 0 ? chunk.slice(0, 600) : '(empty)',
+            carryover_preview: incomingCarryover.length > 0 ? incomingCarryover.slice(0, 600) : '(none)',
+            ram_key: ramKey,
+        },
+    });
+
+    let parsed;
+    try {
+        parsed = parseAIStreamChunk(fullStream, {
+            sessionId: session.sessionId,
+            processUid,
+            rawChunk: chunk,
+            incomingCarryover,
+        });
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const parserErrorMemoryUid = writeParserFailureMemory({
+            session,
+            ramKey,
+            reason: `parseAIStreamChunk_exception:${reason}`,
+            processUid,
+            details: {
+                chunk_preview: chunk.slice(0, 600),
+                full_stream_preview: fullStream.slice(0, 1200),
+            },
+        });
+
+        StorageEngine.dispatchRAMAction({
+            action: 'update_memory',
+            memory_uid: ramKey,
+            payload: {
+                parser_runtime_status: 'failed',
+                parser_last_error: reason,
+                parser_error_memory_uid: parserErrorMemoryUid,
+                last_updated_at: Date.now(),
+            },
+            classifications: CLASSIFICATIONS,
+        });
+
+        emitParserSessionResult({
+            sessionId: session.sessionId,
+            processUid,
+            eventName: 'parser_parse_failed',
+            payload: {
+                reason,
+                parser_error_memory_uid: parserErrorMemoryUid,
+            },
+        });
+
+        return {
+            interrupted: true,
+            reason: `parser_parse_failed:${reason}`,
+            mode: 'hard_stop',
+        };
+    }
+
+    const { blocks, events, textToPrint, carryoverBuffer, interrupt_requested, interrupt_reason } = parsed;
+
+    emitParserSessionResult({
+        sessionId: session.sessionId,
+        processUid,
+        eventName: 'parser_parsing_completed',
+        payload: {
+            chunk_bytes: chunk.length,
+            produced_blocks: blocks.length,
+            produced_events: events.length,
+            carryover_bytes: carryoverBuffer.length,
+            output_text_bytes: textToPrint.length,
+            output_text_preview: textToPrint.length > 0 ? textToPrint.slice(0, 600) : '(empty)',
+            carryover_preview: carryoverBuffer.length > 0 ? carryoverBuffer.slice(0, 600) : '(none)',
+        },
     });
 
     // Save carryover immediately so non-event fenced blocks (e.g. context)
@@ -332,6 +457,7 @@ export function handleSessionStreamChunk(
     );
     const parserHandlerResults: ParserSessionEmitRecord[] = ParserEngine.drainSessionResults(session.sessionId);
     const parserStopSignals: ParserSessionStopSignal[] = ParserEngine.drainSessionStopSignals(session.sessionId);
+    const parserTokenTraces = ParserEngine.drainTokenTraces(session.sessionId);
     const currentHandlerResults = Array.isArray((memoryState as Record<string, unknown>).parser_handler_results)
         ? ((memoryState as Record<string, unknown>).parser_handler_results as ParserSessionEmitRecord[])
         : [];
@@ -340,6 +466,50 @@ export function handleSessionStreamChunk(
         ? ((memoryState as Record<string, unknown>).parser_stop_signals as ParserSessionStopSignal[])
         : [];
     const nextStopSignals = [...currentStopSignals, ...parserStopSignals].slice(-40);
+    const currentTokenTraces = Array.isArray((memoryState as Record<string, unknown>).parser_token_traces)
+        ? ((memoryState as Record<string, unknown>).parser_token_traces as Array<Record<string, unknown>>)
+        : [];
+    const nextTokenTraces = [...currentTokenTraces, ...parserTokenTraces].slice(-300);
+
+    const malformedBlocks = blocks
+        .filter((block) => (block.type === 'tool' || block.type === 'storage') && 'payload_parse_error' in block)
+        .map((block) => block as ActionBlock & { payload_parse_error?: string; payload_raw?: string });
+
+    let parserRuntimeStatus: 'idle' | 'failed' = 'idle';
+    let parserLastError: string | undefined;
+    let parserErrorMemoryUid: string | undefined;
+
+    if (malformedBlocks.some((block) => typeof block.payload_parse_error === 'string' && block.payload_parse_error.length > 0)) {
+        const malformedErrorBlocks = malformedBlocks.filter((block) => typeof block.payload_parse_error === 'string' && block.payload_parse_error.length > 0);
+
+        parserRuntimeStatus = 'failed';
+        parserLastError = `${malformedErrorBlocks.length} malformed parser block(s)`;
+        parserErrorMemoryUid = writeParserFailureMemory({
+            session,
+            ramKey,
+            reason: parserLastError,
+            processUid,
+            details: {
+                malformed_blocks: malformedErrorBlocks.map((block) => ({
+                    type: block.type,
+                    action: block.action,
+                    status: block.status,
+                    payload_parse_error: block.payload_parse_error,
+                    payload_raw: block.payload_raw,
+                })),
+            },
+        });
+
+        emitParserSessionResult({
+            sessionId: session.sessionId,
+            processUid,
+            eventName: 'parser_block_parse_error',
+            payload: {
+                count: malformedErrorBlocks.length,
+                parser_error_memory_uid: parserErrorMemoryUid,
+            },
+        });
+    }
 
     // ── PATHWAY A: write updated stream state to RAM ──────────────────────────
     StorageEngine.dispatchRAMAction({
@@ -365,6 +535,11 @@ export function handleSessionStreamChunk(
                 nextStopSignals.length > 0
                     ? nextStopSignals[nextStopSignals.length - 1].at
                     : undefined,
+            parser_token_traces: nextTokenTraces,
+            parser_token_trace_count: nextTokenTraces.length,
+            parser_runtime_status: parserRuntimeStatus,
+            parser_last_error: parserLastError,
+            parser_error_memory_uid: parserErrorMemoryUid,
             last_updated_at: Date.now(),
             protocol_validation: session.currentProtocolState ?? memoryState.protocol_validation ?? null,
         },
@@ -451,7 +626,8 @@ export function handleSessionStreamChunk(
                 session_id: session.sessionId,
                 tag: 'tool',
                 at: Date.now(),
-                event_name: 'tool_action_dispatch',
+                event_name: 'parser_handler_dispatch',
+                block_type: 'tool',
                 action: interaction.sub_action,
                 result_memory_uid: (interaction.payload as Record<string, unknown>).result_memory_uid,
                 payload: interaction.payload,

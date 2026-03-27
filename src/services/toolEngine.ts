@@ -21,6 +21,12 @@ interface ToolActionPayload {
     [k: string]: unknown;
 }
 
+type HandlerLifecycleEventName =
+    | 'parser_handler_dispatch'
+    | 'parser_handler_started'
+    | 'parser_handler_result'
+    | 'parser_handler_error';
+
 class ToolEngineSingleton {
     private isRouteBound = false;
 
@@ -36,7 +42,7 @@ class ToolEngineSingleton {
 
     private publishToolActionResult(input: {
         sessionId?: string;
-        eventName: string;
+        eventName: HandlerLifecycleEventName;
         payload: Record<string, unknown>;
     }) {
         const { sessionId, eventName, payload } = input;
@@ -49,6 +55,7 @@ class ToolEngineSingleton {
             payload: {
                 session_id: sessionId,
                 tag: 'tool',
+                block_type: 'tool',
                 at: Date.now(),
                 event_name: eventName,
                 ...payload,
@@ -63,7 +70,7 @@ class ToolEngineSingleton {
     }) {
         this.publishToolActionResult({
             sessionId: input.sessionId,
-            eventName: 'tool_action_started',
+            eventName: 'parser_handler_started',
             payload: {
                 action: input.action,
                 ...input.payload,
@@ -196,7 +203,7 @@ class ToolEngineSingleton {
 
             this.publishToolActionResult({
                 sessionId,
-                eventName: 'tool_action_result',
+                eventName: 'parser_handler_result',
                 payload: {
                     action: 'list',
                     result_memory_uid: resultKey,
@@ -225,7 +232,7 @@ class ToolEngineSingleton {
             if (!package_ref || !tool_slug) {
                 this.publishToolActionResult({
                     sessionId,
-                    eventName: 'tool_action_error',
+                    eventName: 'parser_handler_error',
                     payload: {
                         action: 'view_schema',
                         package_ref,
@@ -261,7 +268,7 @@ class ToolEngineSingleton {
 
             this.publishToolActionResult({
                 sessionId,
-                eventName: result?.entry ? 'tool_action_result' : 'tool_action_error',
+                eventName: result?.entry ? 'parser_handler_result' : 'parser_handler_error',
                 payload: {
                     action: 'view_schema',
                     package_ref,
@@ -290,14 +297,21 @@ class ToolEngineSingleton {
                 },
             });
 
-            const toolPayload = Object.fromEntries(
-                Object.entries(raw).filter(([k]) => !['package_ref', 'tool_slug', 'result_memory_uid', 'memory_uid', 'session_id', 'status', 'action'].includes(k)),
+            const nestedPayload =
+                raw.payload && typeof raw.payload === 'object'
+                    ? raw.payload
+                    : raw.input && typeof raw.input === 'object'
+                        ? raw.input
+                        : undefined;
+
+            const toolPayload = nestedPayload ?? Object.fromEntries(
+                Object.entries(raw).filter(([k]) => !['package_ref', 'tool_slug', 'result_memory_uid', 'memory_uid', 'session_id', 'status', 'action', 'payload', 'input'].includes(k)),
             );
 
             if (!package_ref || !tool_slug) {
                 this.publishToolActionResult({
                     sessionId,
-                    eventName: 'tool_action_error',
+                    eventName: 'parser_handler_error',
                     payload: {
                         action: 'execute',
                         package_ref,
@@ -328,7 +342,7 @@ class ToolEngineSingleton {
 
                 this.publishToolActionResult({
                     sessionId,
-                    eventName: 'tool_action_result',
+                    eventName: 'parser_handler_result',
                     payload: {
                         action: 'execute',
                         package_ref,
@@ -357,7 +371,7 @@ class ToolEngineSingleton {
 
                 this.publishToolActionResult({
                     sessionId,
-                    eventName: 'tool_action_error',
+                    eventName: 'parser_handler_error',
                     payload: {
                         action: 'execute',
                         package_ref,

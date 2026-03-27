@@ -55,7 +55,7 @@ interface SessionSnapshot {
         violations: string[];
     };
     block_handler_state?: {
-        status: 'idle' | 'running';
+        status: 'idle' | 'running' | 'parsing' | 'failed';
         block_type?: string;
         action?: string;
         event_name?: string;
@@ -95,16 +95,62 @@ interface ResponseMemorySnapshot {
         session_id: string;
         tag: string;
         at: number;
+        block_id?: number;
         reason: string;
         interrupt_mode: 'none' | 'pause_stream' | 'hard_stop';
     }>;
     parser_stop_signal_count?: number;
     parser_last_stop_at?: number;
+    parser_token_traces?: Array<{
+        at: number;
+        sequenceNumber: number;
+        inputBytes: number;
+        inputPreview: string;
+        carryoverInputBytes: number;
+        carryoverPreview: string;
+        outputBlocks: number;
+        outputEvents: number;
+        outputTextBytes: number;
+        outputTextPreview: string;
+        outputCarryoverBytes: number;
+        outputCarryoverPreview: string;
+        interruptRequested: boolean;
+        interruptReason?: string;
+    }>;
+    parser_token_trace_count?: number;
+    parser_runtime_status?: 'idle' | 'failed';
+    parser_last_error?: string;
+    parser_error_memory_uid?: string;
     ignored_after_interrupt_chunks?: number;
     ignored_after_interrupt_bytes?: number;
     protocol_validation?: SessionSnapshot['protocol_state'];
     status?: string;
     error_message?: string;
+    response_turns?: Array<{
+        turn_id: string;
+        original_prompt: string;
+        started_at: number;
+        finished_at?: number;
+        attempts: Array<{
+            attempt_index: number;
+            prompt: string;
+            started_at: number;
+            finished_at?: number;
+            status?: string;
+            error_message?: string;
+            text?: string;
+            raw_response?: string;
+            blocks?: ResponseMemorySnapshot['blocks'];
+            parser_batches?: unknown[];
+            parser_batch_count?: number;
+            events_total?: number;
+            parser_handler_results?: ResponseMemorySnapshot['parser_handler_results'];
+            parser_stop_signals?: ResponseMemorySnapshot['parser_stop_signals'];
+            parser_token_traces?: ResponseMemorySnapshot['parser_token_traces'];
+        }>;
+    }>;
+    active_response_turn_id?: string;
+    active_response_attempt_index?: number;
 }
 
 interface HistoryMemorySnapshot {
@@ -256,14 +302,233 @@ const statusColor: Record<SessionStatus, string> = {
 
 function SessionDetailView({ session }: { session: SessionSnapshot }) {
     const [activeTab, setActiveTab] = useState<'context' | 'history' | 'blocks' | 'response' | 'storage'>('context');
+    const [selectedResponseTokenIndex, setSelectedResponseTokenIndex] = useState<number | null>(null);
+    const [selectedResponseTurnId, setSelectedResponseTurnId] = useState<string | null>(null);
+    const [selectedResponseAttemptIndex, setSelectedResponseAttemptIndex] = useState<number | null>(null);
     const responseMemory = useAceMemory<ResponseMemorySnapshot>(session.activeOutputRamKey || 'system:dev:ai_session_monitor:idle');
     const parsedBlocks = responseMemory?.blocks || [];
     const parserResults = responseMemory?.parser_handler_results || [];
     const parserStops = responseMemory?.parser_stop_signals || [];
+    const tokenTraces = responseMemory?.parser_token_traces || [];
+    const effectiveTokenTraces = useMemo(() => {
+        if (tokenTraces.length > 0) return tokenTraces;
+
+        const started = parserResults
+            .filter((record) => record.event_name === 'parser_parsing_started')
+            .sort((a, b) => a.at - b.at);
+        const completed = parserResults
+            .filter((record) => record.event_name === 'parser_parsing_completed')
+            .sort((a, b) => a.at - b.at);
+
+        const pairedCount = Math.min(started.length, completed.length);
+        const fallback: Array<NonNullable<ResponseMemorySnapshot['parser_token_traces']>[number]> = [];
+
+        for (let index = 0; index < pairedCount; index += 1) {
+            const startedPayload = started[index].payload || {};
+            const completedPayload = completed[index].payload || {};
+
+            const inputBytes = typeof startedPayload.chunk_bytes === 'number' ? startedPayload.chunk_bytes : 0;
+            const carryoverInputBytes = typeof startedPayload.carryover_bytes === 'number' ? startedPayload.carryover_bytes : 0;
+            const inputPreview = typeof startedPayload.chunk_preview === 'string'
+                ? startedPayload.chunk_preview
+                : '(from parser_parsing_started event)';
+            const carryoverPreview = typeof startedPayload.carryover_preview === 'string'
+                ? startedPayload.carryover_preview
+                : '(from parser_parsing_started event)';
+            const outputBlocks = typeof completedPayload.produced_blocks === 'number' ? completedPayload.produced_blocks : 0;
+            const outputEvents = typeof completedPayload.produced_events === 'number' ? completedPayload.produced_events : 0;
+            const outputTextBytes = typeof completedPayload.output_text_bytes === 'number' ? completedPayload.output_text_bytes : 0;
+            const outputTextPreview = typeof completedPayload.output_text_preview === 'string'
+                ? completedPayload.output_text_preview
+                : '(unavailable from parser events fallback)';
+            const outputCarryoverBytes = typeof completedPayload.carryover_bytes === 'number' ? completedPayload.carryover_bytes : 0;
+            const outputCarryoverPreview = typeof completedPayload.carryover_preview === 'string'
+                ? completedPayload.carryover_preview
+                : '(from parser_parsing_completed event)';
+
+            fallback.push({
+                at: completed[index].at,
+                sequenceNumber: index + 1,
+                inputBytes,
+                inputPreview,
+                carryoverInputBytes,
+                carryoverPreview,
+                outputBlocks,
+                outputEvents,
+                outputTextBytes,
+                outputTextPreview,
+                outputCarryoverBytes,
+                outputCarryoverPreview,
+                interruptRequested: false,
+                interruptReason: undefined,
+            });
+        }
+
+        return fallback;
+    }, [tokenTraces, parserResults]);
     const toolRuntimeEvents = parserResults.filter((result) => {
-        if (!result.event_name) return false;
-        return result.event_name === 'tool_action_dispatch' || result.event_name === 'tool_action_started' || result.event_name === 'tool_action_result' || result.event_name === 'tool_action_error';
+        const eventName = typeof result.event_name === 'string' ? result.event_name : '';
+        const payload = result.payload && typeof result.payload === 'object' ? result.payload : undefined;
+        const blockType = typeof payload?.block_type === 'string' ? payload.block_type : undefined;
+
+        if (blockType === 'tool') return true;
+
+        const normalized = eventName.toLowerCase();
+        if (normalized.startsWith('tool_')) return true;
+        if (normalized.includes('handler') && (normalized.endsWith('_dispatch') || normalized.endsWith('_started') || normalized.endsWith('_result') || normalized.endsWith('_error'))) {
+            return true;
+        }
+
+        return false;
     });
+
+    const responseTokenTraces = useMemo(
+        () => [...effectiveTokenTraces].sort((a, b) => a.sequenceNumber - b.sequenceNumber),
+        [effectiveTokenTraces],
+    );
+
+    const responseTurns = useMemo(
+        () => Array.isArray(responseMemory?.response_turns) ? responseMemory.response_turns : [],
+        [responseMemory?.response_turns],
+    );
+
+    const activeResponseTurn = useMemo(() => {
+        if (responseTurns.length === 0) return undefined;
+        const preferredTurnId = selectedResponseTurnId ?? responseMemory?.active_response_turn_id;
+        const preferred = preferredTurnId
+            ? responseTurns.find((turn) => turn.turn_id === preferredTurnId)
+            : undefined;
+        return preferred ?? responseTurns[responseTurns.length - 1];
+    }, [responseTurns, selectedResponseTurnId, responseMemory?.active_response_turn_id]);
+
+    const activeResponseAttempt = useMemo(() => {
+        if (!activeResponseTurn || activeResponseTurn.attempts.length === 0) return undefined;
+        const preferredAttempt = selectedResponseAttemptIndex ?? responseMemory?.active_response_attempt_index;
+        const matched = typeof preferredAttempt === 'number'
+            ? activeResponseTurn.attempts.find((attempt) => attempt.attempt_index === preferredAttempt)
+            : undefined;
+        return matched ?? activeResponseTurn.attempts[activeResponseTurn.attempts.length - 1];
+    }, [activeResponseTurn, selectedResponseAttemptIndex, responseMemory?.active_response_attempt_index]);
+
+    const responseView = activeResponseAttempt ?? responseMemory;
+
+    const responseViewTokenTraces = useMemo(() => {
+        const traces = responseView?.parser_token_traces;
+        return Array.isArray(traces)
+            ? [...traces].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+            : responseTokenTraces;
+    }, [responseView, responseTokenTraces]);
+
+    const responseViewExportJson = useMemo(() => {
+        const payload = {
+            session_id: session.sessionId,
+            turn_id: activeResponseTurn?.turn_id,
+            attempt_index: activeResponseAttempt?.attempt_index,
+            generated_at: Date.now(),
+            trace_count: responseViewTokenTraces.length,
+            traces: responseViewTokenTraces,
+        };
+        return JSON.stringify(payload, null, 2);
+    }, [session.sessionId, activeResponseTurn?.turn_id, activeResponseAttempt?.attempt_index, responseViewTokenTraces]);
+
+    const responseViewOutputText = useMemo(() => {
+        if (responseViewTokenTraces.length === 0) return '';
+        return responseViewTokenTraces
+            .map((trace) => `#${trace.sequenceNumber}\n${trace.outputTextPreview || '(empty)'}`)
+            .join('\n\n-----\n\n');
+    }, [responseViewTokenTraces]);
+
+    const blockLifecycleTimeline = useMemo(() => {
+        const lifecycleEventNames = new Set([
+            'parser_block_detected',
+            'parser_block_registry_found',
+            'parser_block_registry_missing',
+            'parser_block_handler_started',
+            'parser_block_handler_completed',
+            'parser_block_handler_failed',
+            'tool_block_parsed',
+            'storage_block_parsed',
+        ]);
+
+        type BlockTimelineStep = {
+            at: number;
+            event_name: string;
+            status?: string;
+            payload: Record<string, unknown>;
+        };
+
+        type BlockTimelineItem = {
+            block_id: number;
+            tag: string;
+            type: string;
+            status: string;
+            last_at: number;
+            steps: BlockTimelineStep[];
+        };
+
+        const byBlockId = new Map<number, BlockTimelineItem>();
+        let syntheticId = 1000000;
+
+        const sorted = [...parserResults].sort((a, b) => a.at - b.at);
+        sorted.forEach((record) => {
+            const eventName = typeof record.event_name === 'string' ? record.event_name : '';
+            if (!lifecycleEventNames.has(eventName)) return;
+
+            const payload = record.payload && typeof record.payload === 'object'
+                ? record.payload
+                : {};
+
+            const payloadBlockId = typeof payload.block_id === 'number' ? payload.block_id : undefined;
+            const blockId = payloadBlockId ?? syntheticId++;
+
+            const blockTag = typeof payload.block_tag === 'string'
+                ? payload.block_tag
+                : typeof payload.block_type === 'string'
+                    ? payload.block_type
+                    : record.tag;
+            const blockType = typeof payload.block_type === 'string' ? payload.block_type : blockTag;
+            const stepStatus = typeof payload.status === 'string' ? payload.status : undefined;
+
+            const existing = byBlockId.get(blockId) ?? {
+                block_id: blockId,
+                tag: blockTag,
+                type: blockType,
+                status: 'detected',
+                last_at: record.at,
+                steps: [],
+            };
+
+            const nextStatus =
+                eventName === 'parser_block_registry_missing'
+                    ? 'registry_missing'
+                    : eventName === 'parser_block_handler_started'
+                        ? 'running'
+                        : eventName === 'parser_block_handler_completed'
+                            ? (stepStatus || 'completed')
+                            : eventName === 'parser_block_handler_failed'
+                                ? 'failed'
+                                : eventName === 'tool_block_parsed' || eventName === 'storage_block_parsed'
+                                    ? (stepStatus || 'parsed')
+                                    : eventName === 'parser_block_registry_found'
+                                        ? 'registry_found'
+                                        : existing.status;
+
+            existing.tag = blockTag || existing.tag;
+            existing.type = blockType || existing.type;
+            existing.status = nextStatus;
+            existing.last_at = Math.max(existing.last_at, record.at);
+            existing.steps.push({
+                at: record.at,
+                event_name: eventName,
+                status: stepStatus,
+                payload,
+            });
+
+            byBlockId.set(blockId, existing);
+        });
+
+        return Array.from(byBlockId.values()).sort((a, b) => b.last_at - a.last_at);
+    }, [parserResults]);
 
     return (
         <div className="mt-3 border-t border-zinc-800 pt-3">
@@ -382,11 +647,108 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                 <span className="text-zinc-300">{responseMemory?.ignored_after_interrupt_chunks ?? 0}</span>
                                 <span className="text-zinc-500">Ignored Bytes</span>
                                 <span className="text-zinc-300">{responseMemory?.ignored_after_interrupt_bytes ?? 0}</span>
+                                <span className="text-zinc-500">Parser Runtime</span>
+                                <span className={responseMemory?.parser_runtime_status === 'failed' ? 'text-rose-300' : 'text-zinc-300'}>{responseMemory?.parser_runtime_status ?? 'idle'}</span>
+                                <span className="text-zinc-500">Parser Error</span>
+                                <span className="text-zinc-300 whitespace-pre-wrap break-words">{responseMemory?.parser_last_error || '-'}</span>
+                                <span className="text-zinc-500">Parser Error Key</span>
+                                <span className="text-zinc-300 font-mono text-[10px] break-all">{responseMemory?.parser_error_memory_uid || '-'}</span>
                             </div>
                         </div>
 
                         <div>
-                            <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Tool Runtime Monitor ({toolRuntimeEvents.length})</div>
+                            <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Parsed Block Timeline ({blockLifecycleTimeline.length})</div>
+                            <div className="space-y-2">
+                                {blockLifecycleTimeline.map((item) => (
+                                    <div key={item.block_id} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
+                                        <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-semibold text-zinc-300">#{item.block_id}</span>
+                                                <span className="text-zinc-500">{item.tag}</span>
+                                                <span className="text-zinc-500">type: {item.type}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`font-mono px-1.5 py-0.5 rounded border ${
+                                                    item.status === 'failed' || item.status === 'registry_missing'
+                                                        ? 'text-rose-300 border-rose-700/60 bg-rose-950/30'
+                                                        : item.status === 'running'
+                                                            ? 'text-amber-300 border-amber-700/60 bg-amber-950/30'
+                                                            : item.status === 'completed' || item.status === 'interrupted'
+                                                                ? 'text-emerald-300 border-emerald-700/60 bg-emerald-950/30'
+                                                                : 'text-zinc-300 border-zinc-700/60 bg-zinc-900/50'
+                                                }`}>{item.status}</span>
+                                                <span className="font-mono opacity-50">{new Date(item.last_at).toLocaleTimeString()}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-3 space-y-2">
+                                            {item.steps.map((step, index) => (
+                                                <div key={`${item.block_id}-${step.at}-${index}`} className="rounded border border-zinc-800 bg-zinc-950/40 px-2 py-1.5">
+                                                    <div className="flex justify-between items-center gap-2 text-[10px]">
+                                                        <span className="text-zinc-300 font-semibold">{step.event_name}</span>
+                                                        <div className="flex items-center gap-2 text-zinc-500">
+                                                            {step.status ? <span>{step.status}</span> : null}
+                                                            <span>{new Date(step.at).toLocaleTimeString()}</span>
+                                                        </div>
+                                                    </div>
+                                                    <pre className="mt-1 text-[10px] text-zinc-400 font-mono overflow-auto max-h-[120px] whitespace-pre-wrap">
+                                                        {JSON.stringify(step.payload, null, 2)}
+                                                    </pre>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                                {blockLifecycleTimeline.length === 0 && (
+                                    <div className="text-zinc-600 italic text-xs text-center py-6">Belum ada trace parser block lifecycle.</div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Parser Token Traces ({effectiveTokenTraces.length})</div>
+                                {effectiveTokenTraces.length > 0 ? (
+                                    <div className="overflow-x-auto pb-2">
+                                        <table className="w-full text-[9px] font-mono border-collapse">
+                                            <thead>
+                                                <tr className="border-b border-zinc-800 sticky top-0">
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">#</th>
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">In Bytes</th>
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Preview</th>
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Carry In</th>
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Blocks Out</th>
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Text Out</th>
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Carry Out</th>
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Carry Preview</th>
+                                                    <th className="bg-zinc-900/80 px-2 py-1 text-left text-zinc-400 whitespace-nowrap">Result</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {effectiveTokenTraces.map((trace, index) => (
+                                                    <tr key={`trace-${trace.sequenceNumber}`} className={`border-b border-zinc-800/50 ${index % 2 === 0 ? 'bg-zinc-950/30' : 'bg-black/30'} hover:bg-zinc-900/40`}>
+                                                        <td className="px-2 py-1 text-zinc-400 border-r border-zinc-800/50">{trace.sequenceNumber}</td>
+                                                        <td className="px-2 py-1 text-cyan-300 font-bold border-r border-zinc-800/50">{trace.inputBytes}</td>
+                                                        <td className="px-2 py-1 text-zinc-300 truncate max-w-xs border-r border-zinc-800/50 font-mono" title={trace.inputPreview}>{trace.inputPreview.length > 40 ? trace.inputPreview.substring(0, 40) + '...' : trace.inputPreview}</td>
+                                                        <td className="px-2 py-1 text-amber-300 border-r border-zinc-800/50">{trace.carryoverInputBytes}</td>
+                                                        <td className="px-2 py-1 text-emerald-300 font-bold text-center border-r border-zinc-800/50">{trace.outputBlocks}</td>
+                                                        <td className="px-2 py-1 text-cyan-300 font-bold text-center border-r border-zinc-800/50">{trace.outputTextBytes}</td>
+                                                        <td className="px-2 py-1 text-amber-300 font-bold text-center border-r border-zinc-800/50">{trace.outputCarryoverBytes}</td>
+                                                        <td className="px-2 py-1 text-zinc-400 truncate max-w-xs border-r border-zinc-800/50 font-mono" title={trace.outputCarryoverPreview}>{trace.outputCarryoverPreview.length > 30 ? trace.outputCarryoverPreview.substring(0, 30) + '...' : trace.outputCarryoverPreview}</td>
+                                                        <td className={`px-2 py-1 ${trace.interruptRequested ? 'text-rose-400 font-bold' : 'text-emerald-400'}`}>
+                                                            {trace.interruptRequested ? `STOP: ${trace.interruptReason || 'unknown'}` : 'OK'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="text-zinc-600 italic text-xs text-center py-4">Belum ada parser token traces.</div>
+                                )}
+                            </div>
+
+                            <div>
+                                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-2">Tool Runtime Monitor ({toolRuntimeEvents.length})</div>
                             <div className="space-y-2">
                                 {toolRuntimeEvents.map((event, index) => (
                                     <div key={`${event.at}-${index}`} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
@@ -477,14 +839,63 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                 {activeTab === 'response' && (
                     <div className="space-y-4 text-xs">
                         <div className="border border-zinc-800 rounded bg-zinc-900/20 p-3 space-y-2">
+                            <div className="text-[10px] uppercase font-bold text-zinc-500">Response Timeline</div>
+                            <div className="flex flex-wrap gap-2">
+                                {responseTurns.map((turn, index) => {
+                                    const isActive = activeResponseTurn?.turn_id === turn.turn_id;
+                                    return (
+                                        <button
+                                            key={turn.turn_id}
+                                            onClick={() => {
+                                                setSelectedResponseTurnId(turn.turn_id);
+                                                setSelectedResponseAttemptIndex(null);
+                                                setSelectedResponseTokenIndex(null);
+                                            }}
+                                            className={`text-[10px] px-2 py-1 rounded border font-mono ${isActive ? 'border-cyan-700/70 bg-cyan-950/30 text-cyan-300' : 'border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'}`}
+                                            title={turn.original_prompt}
+                                        >
+                                            P{index + 1} ({turn.attempts.length})
+                                        </button>
+                                    );
+                                })}
+                                {responseTurns.length === 0 && (
+                                    <div className="text-zinc-600 italic">Belum ada response turn terekam.</div>
+                                )}
+                            </div>
+
+                            {activeResponseTurn && (
+                                <div className="space-y-2">
+                                    <div className="text-[10px] uppercase font-bold text-zinc-500">Response Attempts</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {activeResponseTurn.attempts.map((attempt) => {
+                                            const isActiveAttempt = activeResponseAttempt?.attempt_index === attempt.attempt_index;
+                                            return (
+                                                <button
+                                                    key={`${activeResponseTurn.turn_id}-${attempt.attempt_index}`}
+                                                    onClick={() => {
+                                                        setSelectedResponseAttemptIndex(attempt.attempt_index);
+                                                        setSelectedResponseTokenIndex(null);
+                                                    }}
+                                                    className={`text-[10px] px-2 py-1 rounded border font-mono ${isActiveAttempt ? 'border-emerald-700/70 bg-emerald-950/30 text-emerald-300' : 'border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'}`}
+                                                >
+                                                    R{attempt.attempt_index} {attempt.status ? `(${attempt.status})` : ''}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="border border-zinc-800 rounded bg-zinc-900/20 p-3 space-y-2">
                             <div className="text-[10px] uppercase font-bold text-zinc-500">Output Memory Snapshot</div>
                             <div className="grid grid-cols-[110px_1fr] gap-2 items-start">
                                 <span className="text-zinc-500">Status</span>
-                                <span className="text-zinc-300">{responseMemory?.status || '-'}</span>
+                                <span className="text-zinc-300">{responseView?.status || '-'}</span>
                                 <span className="text-zinc-500">Batches</span>
-                                <span className="text-zinc-300">{responseMemory?.parser_batch_count ?? 0}</span>
+                                <span className="text-zinc-300">{responseView?.parser_batch_count ?? 0}</span>
                                 <span className="text-zinc-500">Events</span>
-                                <span className="text-zinc-300">{responseMemory?.events_total ?? 0}</span>
+                                <span className="text-zinc-300">{responseView?.events_total ?? 0}</span>
                                 <span className="text-zinc-500">Prompt Ref</span>
                                 <span className="text-zinc-300 font-mono text-[10px] break-all">{responseMemory?.prompt_reference?.storage_key || '-'}</span>
                                 <span className="text-zinc-500">Response Ref</span>
@@ -495,14 +906,14 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                             <div className="pt-1">
                                 <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Quick Copy</div>
                                 <div className="flex flex-wrap gap-2">
-                                    <CopyTextButton label="output text" value={responseMemory?.text} />
-                                    <CopyTextButton label="raw response" value={responseMemory?.raw_response} />
-                                    <CopyTextButton label="raw prompt" value={responseMemory?.original_prompt} />
+                                    <CopyTextButton label="output text" value={responseView?.text} />
+                                    <CopyTextButton label="raw response" value={responseView?.raw_response} />
+                                    <CopyTextButton label="raw prompt" value={activeResponseTurn?.original_prompt || responseMemory?.original_prompt} />
                                 </div>
                             </div>
-                            {responseMemory?.error_message && (
+                            {responseView?.error_message && (
                                 <div className="text-red-300 bg-red-950/20 border border-red-900/40 rounded p-2 whitespace-pre-wrap">
-                                    {responseMemory.error_message}
+                                    {responseView.error_message}
                                 </div>
                             )}
                             {responseMemory?.protocol_validation && (
@@ -524,28 +935,92 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                             <div>
                                 <div className="mb-1 flex items-center justify-between gap-2">
                                     <div className="text-[10px] uppercase font-bold text-zinc-500">Original Prompt</div>
-                                    <CopyTextButton label="raw prompt" value={responseMemory?.original_prompt} />
+                                    <CopyTextButton label="raw prompt" value={activeResponseTurn?.original_prompt || responseMemory?.original_prompt} />
                                 </div>
-                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[120px] whitespace-pre-wrap">{responseMemory?.original_prompt || '-'}</pre>
+                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[120px] whitespace-pre-wrap">{activeResponseTurn?.original_prompt || responseMemory?.original_prompt || '-'}</pre>
                             </div>
                             <div>
                                 <div className="mb-1 flex items-center justify-between gap-2">
                                     <div className="text-[10px] uppercase font-bold text-zinc-500">Composed Prompt</div>
-                                    <CopyTextButton label="composed prompt" value={responseMemory?.prompt} />
+                                    <CopyTextButton label="composed prompt" value={activeResponseAttempt?.prompt || responseMemory?.prompt} />
                                 </div>
-                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{responseMemory?.prompt || '-'}</pre>
+                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{activeResponseAttempt?.prompt || responseMemory?.prompt || '-'}</pre>
                             </div>
                             <div>
                                 <div className="mb-1 flex items-center justify-between gap-2">
                                     <div className="text-[10px] uppercase font-bold text-zinc-500">Raw Response</div>
-                                    <CopyTextButton label="raw response" value={responseMemory?.raw_response} />
+                                    <CopyTextButton label="raw response" value={responseView?.raw_response} />
                                 </div>
-                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{responseMemory?.raw_response || '-'}</pre>
+                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{responseView?.raw_response || '-'}</pre>
                             </div>
                             <div>
-                                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Parsed Blocks ({responseMemory?.blocks?.length ?? 0})</div>
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                    <div className="text-[10px] uppercase font-bold text-zinc-500">Token Traces ({responseViewTokenTraces.length})</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <CopyTextButton label="token traces json" value={responseViewExportJson} />
+                                        <CopyTextButton label="token outputs" value={responseViewOutputText} />
+                                    </div>
+                                </div>
+                                {responseViewTokenTraces.length > 0 ? (
+                                    <div className="border border-zinc-800 rounded bg-zinc-900/30 overflow-x-auto">
+                                        <table className="w-full text-[9px] font-mono border-collapse">
+                                            <thead>
+                                                <tr className="border-b border-zinc-800 bg-zinc-900/70">
+                                                    <th className="px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">#</th>
+                                                    <th className="px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">In</th>
+                                                    <th className="px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Carry In</th>
+                                                    <th className="px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Blocks</th>
+                                                    <th className="px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Text</th>
+                                                    <th className="px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Carry Out</th>
+                                                    <th className="px-2 py-1 text-left text-zinc-400 border-r border-zinc-800 whitespace-nowrap">Output Text</th>
+                                                    <th className="px-2 py-1 text-left text-zinc-400 whitespace-nowrap">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {responseViewTokenTraces.map((trace, index) => (
+                                                        <tr
+                                                            key={`response-trace-${trace.sequenceNumber}-${index}`}
+                                                            onClick={() => setSelectedResponseTokenIndex(index)}
+                                                            className={`border-b border-zinc-800/50 cursor-pointer transition-colors ${index % 2 === 0 ? 'bg-zinc-950/30' : 'bg-black/20'} ${selectedResponseTokenIndex === index ? 'ring-1 ring-cyan-700/60 bg-cyan-950/20' : 'hover:bg-zinc-900/50'}`}
+                                                        >
+                                                            <td className="px-2 py-1 text-zinc-400 border-r border-zinc-800/50">{trace.sequenceNumber}</td>
+                                                            <td className="px-2 py-1 text-cyan-300 border-r border-zinc-800/50">{trace.inputBytes}</td>
+                                                            <td className="px-2 py-1 text-amber-300 border-r border-zinc-800/50">{trace.carryoverInputBytes}</td>
+                                                            <td className="px-2 py-1 text-emerald-300 border-r border-zinc-800/50">{trace.outputBlocks}</td>
+                                                            <td className="px-2 py-1 text-cyan-300 border-r border-zinc-800/50">{trace.outputTextBytes}</td>
+                                                            <td className="px-2 py-1 text-amber-300 border-r border-zinc-800/50">{trace.outputCarryoverBytes}</td>
+                                                            <td className="px-2 py-1 text-zinc-400 border-r border-zinc-800/50 truncate max-w-[260px]" title={trace.outputTextPreview}>{trace.outputTextPreview.length > 60 ? `${trace.outputTextPreview.slice(0, 60)}...` : trace.outputTextPreview}</td>
+                                                            <td className={`px-2 py-1 ${trace.interruptRequested ? 'text-rose-300' : 'text-emerald-300'}`}>{trace.interruptRequested ? `STOP: ${trace.interruptReason || '-'}` : 'OK'}</td>
+                                                        </tr>
+                                                    ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="text-zinc-600 italic px-2">No token traces recorded.</div>
+                                )}
+                                {responseViewTokenTraces.length > 0 && selectedResponseTokenIndex !== null && responseViewTokenTraces[selectedResponseTokenIndex] ? (
+                                    <div className="mt-2 border border-zinc-800 rounded bg-black/20 p-2 space-y-2">
+                                        <div className="text-[10px] uppercase font-bold text-zinc-500">Selected Token Text</div>
+                                        <div className="grid grid-cols-[100px_1fr] gap-2 text-[10px] items-start">
+                                            <span className="text-zinc-500">Sequence</span>
+                                            <span className="text-zinc-300">#{responseViewTokenTraces[selectedResponseTokenIndex].sequenceNumber}</span>
+                                            <span className="text-zinc-500">Input Text</span>
+                                            <pre className="text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded p-2 whitespace-pre-wrap break-all max-h-[120px] overflow-auto">{responseViewTokenTraces[selectedResponseTokenIndex].inputPreview || '(empty)'}</pre>
+                                            <span className="text-zinc-500">Output Text</span>
+                                            <pre className="text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded p-2 whitespace-pre-wrap break-all max-h-[120px] overflow-auto">{responseViewTokenTraces[selectedResponseTokenIndex].outputTextPreview || '(empty)'}</pre>
+                                            <span className="text-zinc-500">Carry In Text</span>
+                                            <pre className="text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded p-2 whitespace-pre-wrap break-all max-h-[120px] overflow-auto">{responseViewTokenTraces[selectedResponseTokenIndex].carryoverPreview || '(none)'}</pre>
+                                            <span className="text-zinc-500">Carry Out Text</span>
+                                            <pre className="text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded p-2 whitespace-pre-wrap break-all max-h-[120px] overflow-auto">{responseViewTokenTraces[selectedResponseTokenIndex].outputCarryoverPreview || '(none)'}</pre>
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Parsed Blocks ({responseView?.blocks?.length ?? 0})</div>
                                 <div className="space-y-2">
-                                    {responseMemory?.blocks?.map((block, index) => (
+                                    {responseView?.blocks?.map((block, index) => (
                                         <div key={index} className="border border-zinc-800 rounded bg-zinc-900/30 overflow-hidden">
                                             <div className="px-3 py-1.5 text-[10px] bg-zinc-900/80 border-b border-zinc-800 text-zinc-400 flex justify-between">
                                                 <span className="font-semibold text-zinc-300">{block.type}</span>
@@ -719,7 +1194,15 @@ export default function AISessionMonitor() {
                                 </div>
                                 <div className="flex gap-1.5 items-center">
                                     <span className="opacity-50">Handler</span>
-                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold ${session.block_handler_state?.status === 'running' ? 'text-amber-300 bg-amber-950/30 border-amber-700/60' : 'text-zinc-400 bg-zinc-900/50 border-zinc-700/50'}`}>
+                                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold ${
+                                        session.block_handler_state?.status === 'running'
+                                            ? 'text-amber-300 bg-amber-950/30 border-amber-700/60'
+                                            : session.block_handler_state?.status === 'parsing'
+                                                ? 'text-cyan-300 bg-cyan-950/30 border-cyan-700/60'
+                                                : session.block_handler_state?.status === 'failed'
+                                                    ? 'text-rose-300 bg-rose-950/30 border-rose-700/60'
+                                                    : 'text-zinc-400 bg-zinc-900/50 border-zinc-700/50'
+                                    }`}>
                                         {session.block_handler_state?.status || 'idle'}
                                     </span>
                                     {session.block_handler_state?.action ? (

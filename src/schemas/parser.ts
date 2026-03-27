@@ -84,6 +84,7 @@ export interface ParserBlockHandlerContext {
     isComplete: boolean;
     result: AIParseResult;
     session_id?: string;
+    block_id?: number;
     emit_result?: (payload: ParserEmitPayload) => void;
     request_interrupt?: (reason?: string) => void;
 }

@@ -9,6 +9,24 @@ import type {
     ParserSessionStopSignal,
 } from '#/schemas/parser';
 
+type ParserTokenTraceRecord = {
+    sessionId?: string;
+    at: number;
+    sequenceNumber: number;
+    inputBytes: number;
+    inputPreview: string;
+    carryoverInputBytes: number;
+    carryoverPreview: string;
+    outputBlocks: number;
+    outputEvents: number;
+    outputTextBytes: number;
+    outputTextPreview: string;
+    outputCarryoverBytes: number;
+    outputCarryoverPreview: string;
+    interruptRequested: boolean;
+    interruptReason?: string;
+};
+
 interface DispatchBlockInput {
     tag: string;
     body: string;
@@ -22,6 +40,38 @@ class ParserEngineSingleton {
     private isRouteBound = false;
     private sessionEmitQueue = new Map<string, ParserSessionEmitRecord[]>();
     private sessionStopQueue = new Map<string, ParserSessionStopSignal[]>();
+    private sessionBlockSequence = new Map<string, number>();
+    private sessionTokenTraces = new Map<string, ParserTokenTraceRecord[]>();
+
+    private nextBlockId(sessionId?: string): number | undefined {
+        if (!sessionId) return undefined;
+        const next = (this.sessionBlockSequence.get(sessionId) ?? 0) + 1;
+        this.sessionBlockSequence.set(sessionId, next);
+        return next;
+    }
+
+    private emitSessionResult(input: {
+        sessionId?: string;
+        processUid?: string;
+        tag: string;
+        payload: Record<string, unknown>;
+    }) {
+        const { sessionId, processUid, tag, payload } = input;
+        if (!sessionId) return;
+
+        EventBus.emit({
+            event_type: 'interaction',
+            action: 'parser_result',
+            sub_action: 'session',
+            process_uid: processUid,
+            payload: {
+                session_id: sessionId,
+                tag,
+                at: Date.now(),
+                ...payload,
+            },
+        });
+    }
 
     getParserBlock(tagName: string): ParserBlockRuntime | null {
         return RegistryEngine.getParserBlock(tagName);
@@ -37,8 +87,53 @@ class ParserEngineSingleton {
 
     dispatchParsedBlock(input: DispatchBlockInput): boolean {
         const { tag, body, isComplete, result, sessionId, processUid } = input;
+        const blockId = this.nextBlockId(sessionId);
+
+        this.emitSessionResult({
+            sessionId,
+            processUid,
+            tag,
+            payload: {
+                event_name: 'parser_block_detected',
+                block_id: blockId,
+                block_tag: tag,
+                is_complete: isComplete,
+                body_bytes: body.length,
+                body_preview: body.slice(0, 300),
+            },
+        });
+
         const definition = this.getParserBlock(tag);
-        if (!definition) return false;
+        if (!definition) {
+            this.emitSessionResult({
+                sessionId,
+                processUid,
+                tag,
+                payload: {
+                    event_name: 'parser_block_registry_missing',
+                    block_id: blockId,
+                    block_tag: tag,
+                    status: 'unhandled',
+                },
+            });
+            return false;
+        }
+
+        this.emitSessionResult({
+            sessionId,
+            processUid,
+            tag,
+            payload: {
+                event_name: 'parser_block_registry_found',
+                block_id: blockId,
+                block_tag: tag,
+                status: 'registered',
+                parser_ref: `${definition.package_name}:parsers:${definition.slug}`,
+                schema_name: definition.schema.name,
+                schema_required_fields: definition.schema.requiredFields,
+                schema_optional_fields: definition.schema.optionalFields,
+            },
+        });
 
         let interruptReason: string | undefined;
 
@@ -48,17 +143,15 @@ class ParserEngineSingleton {
             isComplete,
             result,
             session_id: sessionId,
+            block_id: blockId,
             emit_result: (payload: ParserEmitPayload) => {
-                if (!sessionId) return;
-                EventBus.emit({
-                    event_type: 'interaction',
-                    action: 'parser_result',
-                    sub_action: 'session',
-                    process_uid: processUid,
+                this.emitSessionResult({
+                    sessionId,
+                    processUid,
+                    tag,
                     payload: {
-                        session_id: sessionId,
-                        tag,
-                        at: Date.now(),
+                        block_id: blockId,
+                        block_tag: tag,
                         ...payload,
                     },
                 });
@@ -86,6 +179,7 @@ class ParserEngineSingleton {
                     payload: {
                         session_id: sessionId,
                         tag,
+                        block_id: blockId,
                         reason: stopReason,
                         interrupt_mode: interruptMode,
                         at: Date.now(),
@@ -94,7 +188,36 @@ class ParserEngineSingleton {
             },
         };
 
-        definition.handler(context);
+        this.emitSessionResult({
+            sessionId,
+            processUid,
+            tag,
+            payload: {
+                event_name: 'parser_block_handler_started',
+                block_id: blockId,
+                block_tag: tag,
+                status: 'running',
+            },
+        });
+
+        try {
+            definition.handler(context);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.emitSessionResult({
+                sessionId,
+                processUid,
+                tag,
+                payload: {
+                    event_name: 'parser_block_handler_failed',
+                    block_id: blockId,
+                    block_tag: tag,
+                    status: 'failed',
+                    error_message: errorMessage,
+                },
+            });
+            throw error;
+        }
 
         if (
             isComplete &&
@@ -111,6 +234,20 @@ class ParserEngineSingleton {
         if (result.interrupt_requested && !result.interrupt_reason && interruptReason) {
             result.interrupt_reason = interruptReason;
         }
+
+        this.emitSessionResult({
+            sessionId,
+            processUid,
+            tag,
+            payload: {
+                event_name: 'parser_block_handler_completed',
+                block_id: blockId,
+                block_tag: tag,
+                status: result.interrupt_requested ? 'interrupted' : 'completed',
+                interrupt_requested: Boolean(result.interrupt_requested),
+                interrupt_reason: result.interrupt_reason,
+            },
+        });
 
         return true;
     }
@@ -154,6 +291,15 @@ class ParserEngineSingleton {
             this.sessionStopQueue.set(sessionId, queue);
         });
 
+        EventBus.registerProcessRoute('ai_gateway:close_session', ({ payload }) => {
+            const sessionId = typeof payload?.session_id === 'string' ? payload.session_id : '';
+            if (!sessionId) return;
+            this.sessionBlockSequence.delete(sessionId);
+            this.sessionEmitQueue.delete(sessionId);
+            this.sessionStopQueue.delete(sessionId);
+            this.sessionTokenTraces.delete(sessionId);
+        });
+
         this.isRouteBound = true;
     }
 
@@ -166,6 +312,19 @@ class ParserEngineSingleton {
     drainSessionStopSignals(sessionId: string): ParserSessionStopSignal[] {
         const queue = this.sessionStopQueue.get(sessionId) ?? [];
         this.sessionStopQueue.delete(sessionId);
+        return queue;
+    }
+
+    recordTokenTrace(trace: ParserTokenTraceRecord): void {
+        if (!trace.sessionId) return;
+        const queue = this.sessionTokenTraces.get(trace.sessionId) ?? [];
+        queue.push(trace);
+        this.sessionTokenTraces.set(trace.sessionId, queue);
+    }
+
+    drainTokenTraces(sessionId: string): ParserTokenTraceRecord[] {
+        const queue = this.sessionTokenTraces.get(sessionId) ?? [];
+        this.sessionTokenTraces.delete(sessionId);
         return queue;
     }
 }

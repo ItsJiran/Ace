@@ -14,6 +14,59 @@ const TOOL_FEEDBACK_LOOP_MAX_TURNS = 6;
 const TOOL_FEEDBACK_WAIT_TIMEOUT_MS = 12000;
 const TOOL_FEEDBACK_WAIT_INTERVAL_MS = 120;
 
+type ResponseAttemptSnapshot = {
+    attempt_index: number;
+    prompt: string;
+    started_at: number;
+    finished_at?: number;
+    status?: string;
+    error_message?: string;
+    text?: string;
+    raw_response?: string;
+    blocks?: unknown[];
+    parser_batches?: unknown[];
+    parser_batch_count?: number;
+    events_total?: number;
+    parser_handler_results?: unknown[];
+    parser_stop_signals?: unknown[];
+    parser_token_traces?: unknown[];
+};
+
+type ResponseTurnSnapshot = {
+    turn_id: string;
+    original_prompt: string;
+    started_at: number;
+    finished_at?: number;
+    attempts: ResponseAttemptSnapshot[];
+};
+
+function snapshotResponseAttemptFromMemory(input: {
+    replyToRamKey: string;
+    attemptIndex: number;
+    prompt: string;
+}): ResponseAttemptSnapshot {
+    const { replyToRamKey, attemptIndex, prompt } = input;
+    const memory = (StorageEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
+
+    return {
+        attempt_index: attemptIndex,
+        prompt,
+        started_at: typeof memory.started_at === 'number' ? memory.started_at : Date.now(),
+        finished_at: typeof memory.finished_at === 'number' ? memory.finished_at : undefined,
+        status: typeof memory.status === 'string' ? memory.status : undefined,
+        error_message: typeof memory.error_message === 'string' ? memory.error_message : undefined,
+        text: typeof memory.text === 'string' ? memory.text : undefined,
+        raw_response: typeof memory.raw_response === 'string' ? memory.raw_response : undefined,
+        blocks: Array.isArray(memory.blocks) ? memory.blocks : undefined,
+        parser_batches: Array.isArray(memory.parser_batches) ? memory.parser_batches : undefined,
+        parser_batch_count: typeof memory.parser_batch_count === 'number' ? memory.parser_batch_count : undefined,
+        events_total: typeof memory.events_total === 'number' ? memory.events_total : undefined,
+        parser_handler_results: Array.isArray(memory.parser_handler_results) ? memory.parser_handler_results : undefined,
+        parser_stop_signals: Array.isArray(memory.parser_stop_signals) ? memory.parser_stop_signals : undefined,
+        parser_token_traces: Array.isArray(memory.parser_token_traces) ? memory.parser_token_traces : undefined,
+    };
+}
+
 function waitMs(ms: number): Promise<void> {
     return new Promise((resolve) => {
         setTimeout(resolve, ms);
@@ -26,6 +79,7 @@ function drainParserRuntimeToResponseMemory(sessionId: string, replyToRamKey: st
 } {
     const drainedResults = ParserEngine.drainSessionResults(sessionId);
     const drainedStopSignals = ParserEngine.drainSessionStopSignals(sessionId);
+    const drainedTokenTraces = ParserEngine.drainTokenTraces(sessionId);
 
     const memory = (StorageEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
     const currentResults = Array.isArray(memory.parser_handler_results)
@@ -34,11 +88,15 @@ function drainParserRuntimeToResponseMemory(sessionId: string, replyToRamKey: st
     const currentStopSignals = Array.isArray(memory.parser_stop_signals)
         ? (memory.parser_stop_signals as ParserSessionStopSignal[])
         : [];
+    const currentTokenTraces = Array.isArray(memory.parser_token_traces)
+        ? (memory.parser_token_traces as Array<Record<string, unknown>>)
+        : [];
 
     const mergedResults = [...currentResults, ...drainedResults].slice(-120);
     const mergedStopSignals = [...currentStopSignals, ...drainedStopSignals].slice(-40);
+    const mergedTokenTraces = [...currentTokenTraces, ...drainedTokenTraces].slice(-200);
 
-    if (drainedResults.length > 0 || drainedStopSignals.length > 0) {
+    if (drainedResults.length > 0 || drainedStopSignals.length > 0 || drainedTokenTraces.length > 0) {
         StorageEngine.dispatchRAMAction({
             action: 'update_memory',
             memory_uid: replyToRamKey,
@@ -51,6 +109,8 @@ function drainParserRuntimeToResponseMemory(sessionId: string, replyToRamKey: st
                 parser_stop_signal_count: mergedStopSignals.length,
                 parser_last_stop_at:
                     mergedStopSignals.length > 0 ? mergedStopSignals[mergedStopSignals.length - 1].at : undefined,
+                parser_token_traces: mergedTokenTraces,
+                parser_token_trace_count: mergedTokenTraces.length,
                 last_updated_at: Date.now(),
             },
             classifications: CLASSIFICATIONS,
@@ -67,7 +127,22 @@ function getLatestToolTerminalEvent(records: ParserSessionEmitRecord[]): ParserS
     for (let index = records.length - 1; index >= 0; index -= 1) {
         const record = records[index];
         const eventName = typeof record.event_name === 'string' ? record.event_name : '';
-        if (eventName === 'tool_action_result' || eventName === 'tool_action_error') {
+        const payload = record.payload && typeof record.payload === 'object'
+            ? (record.payload as Record<string, unknown>)
+            : undefined;
+        const blockType = typeof payload?.block_type === 'string'
+            ? payload.block_type
+            : typeof record.tag === 'string'
+                ? record.tag
+                : undefined;
+        const isToolBlock = blockType === 'tool';
+        const isTerminalEvent =
+            eventName === 'parser_handler_result' ||
+            eventName === 'parser_handler_error' ||
+            // Keep compatibility for older sessions still emitting legacy names.
+            eventName === 'tool_action_result' ||
+            eventName === 'tool_action_error';
+        if (isToolBlock && isTerminalEvent) {
             return record;
         }
     }
@@ -95,14 +170,15 @@ function buildToolContinuationPrompt(originalPrompt: string, terminalEvent: Pars
     if (!payload) return null;
 
     const action = typeof payload.action === 'string' ? payload.action : 'unknown';
-    const eventName = typeof terminalEvent.event_name === 'string' ? terminalEvent.event_name : 'tool_action_result';
+    const rawEventName = typeof terminalEvent.event_name === 'string' ? terminalEvent.event_name : 'parser_handler_result';
+    const eventName = rawEventName === 'tool_action_error' ? 'parser_handler_error' : rawEventName;
     const resultMemoryUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
 
     const resultMemory = resultMemoryUid
         ? (StorageEngine.readMemory(resultMemoryUid) as Record<string, unknown> | undefined)
         : undefined;
     const summarizedResult = resultMemory ?? {
-        status: eventName === 'tool_action_error' ? 'error' : 'ok',
+        status: eventName === 'parser_handler_error' ? 'error' : 'ok',
         action,
         package_ref: payload.package_ref,
         tool_slug: payload.tool_slug,
@@ -151,6 +227,19 @@ export async function executeSessionInteractionLoop(input: {
     replyToRamKey: string;
 }): Promise<void> {
     const { session, sessionId, prompt, replyToRamKey } = input;
+    const memoryBefore = (StorageEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
+    const existingTurns = Array.isArray(memoryBefore.response_turns)
+        ? (memoryBefore.response_turns as ResponseTurnSnapshot[])
+        : [];
+
+    const promptTurnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const currentTurn: ResponseTurnSnapshot = {
+        turn_id: promptTurnId,
+        original_prompt: prompt,
+        started_at: Date.now(),
+        attempts: [],
+    };
+
     let activePrompt = prompt;
     let continuationTurns = 0;
 
@@ -172,6 +261,9 @@ export async function executeSessionInteractionLoop(input: {
                 used_contexts: prepared.used_contexts,
                 prompt_reference: prepared.prompt_reference,
                 response_reference: prepared.response_reference,
+                prompt_turn_id: promptTurnId,
+                response_attempt_index: continuationTurns + 1,
+                response_turns_seed: [...existingTurns, currentTurn].slice(-20),
             },
         );
 
@@ -185,11 +277,22 @@ export async function executeSessionInteractionLoop(input: {
             response_reference: prepared.response_reference,
         });
 
+        const attemptSnapshot = snapshotResponseAttemptFromMemory({
+            replyToRamKey,
+            attemptIndex: continuationTurns + 1,
+            prompt: activePrompt,
+        });
+        currentTurn.attempts = [...currentTurn.attempts, attemptSnapshot].slice(-12);
+
         if (!streamOutcome.interrupted) {
+            currentTurn.finished_at = Date.now();
             StorageEngine.dispatchRAMAction({
                 action: 'update_memory',
                 memory_uid: replyToRamKey,
                 payload: {
+                    response_turns: [...existingTurns, currentTurn].slice(-20),
+                    active_response_turn_id: promptTurnId,
+                    active_response_attempt_index: continuationTurns + 1,
                     feedback_loop_status: continuationTurns > 0 ? 'completed' : 'none',
                     feedback_loop_reason: continuationTurns > 0 ? 'tool_feedback_completed' : undefined,
                     feedback_loop_turn: continuationTurns,
@@ -201,10 +304,14 @@ export async function executeSessionInteractionLoop(input: {
         }
 
         if (continuationTurns >= TOOL_FEEDBACK_LOOP_MAX_TURNS) {
+            currentTurn.finished_at = Date.now();
             StorageEngine.dispatchRAMAction({
                 action: 'update_memory',
                 memory_uid: replyToRamKey,
                 payload: {
+                    response_turns: [...existingTurns, currentTurn].slice(-20),
+                    active_response_turn_id: promptTurnId,
+                    active_response_attempt_index: continuationTurns + 1,
                     feedback_loop_status: 'interrupted',
                     feedback_loop_reason: 'tool_feedback_loop_turn_cap_reached',
                     feedback_loop_turn: continuationTurns,
@@ -218,10 +325,14 @@ export async function executeSessionInteractionLoop(input: {
 
         const terminalToolEvent = await waitForToolTerminalEvent(sessionId, replyToRamKey);
         if (!terminalToolEvent) {
+            currentTurn.finished_at = Date.now();
             StorageEngine.dispatchRAMAction({
                 action: 'update_memory',
                 memory_uid: replyToRamKey,
                 payload: {
+                    response_turns: [...existingTurns, currentTurn].slice(-20),
+                    active_response_turn_id: promptTurnId,
+                    active_response_attempt_index: continuationTurns + 1,
                     feedback_loop_status: 'interrupted',
                     feedback_loop_reason: 'tool_feedback_result_timeout',
                     feedback_loop_turn: continuationTurns,
@@ -235,10 +346,14 @@ export async function executeSessionInteractionLoop(input: {
 
         const continuationPrompt = buildToolContinuationPrompt(prompt, terminalToolEvent);
         if (!continuationPrompt) {
+            currentTurn.finished_at = Date.now();
             StorageEngine.dispatchRAMAction({
                 action: 'update_memory',
                 memory_uid: replyToRamKey,
                 payload: {
+                    response_turns: [...existingTurns, currentTurn].slice(-20),
+                    active_response_turn_id: promptTurnId,
+                    active_response_attempt_index: continuationTurns + 1,
                     feedback_loop_status: 'interrupted',
                     feedback_loop_reason: 'tool_feedback_payload_unavailable',
                     feedback_loop_turn: continuationTurns,
@@ -256,6 +371,9 @@ export async function executeSessionInteractionLoop(input: {
             action: 'update_memory',
             memory_uid: replyToRamKey,
             payload: {
+                response_turns: [...existingTurns, currentTurn].slice(-20),
+                active_response_turn_id: promptTurnId,
+                active_response_attempt_index: continuationTurns + 1,
                 feedback_loop_status: 'active',
                 feedback_loop_reason: 'tool_feedback_injected',
                 feedback_loop_turn: continuationTurns,

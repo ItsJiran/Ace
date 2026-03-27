@@ -283,4 +283,22 @@ Saya bantu?
 
         expect(result.carryoverBuffer).toContain('<history_summary_ai_response>');
     });
+
+    it('should keep lone < as carryover and recover tool block in next chunk', () => {
+        const chunk1 = '<';
+        const result1 = parseAIStreamChunk(chunk1);
+
+        expect(result1.carryoverBuffer).toBe('<');
+        expect(result1.textToPrint).toBe('');
+
+        const chunk2 = `${result1.carryoverBuffer}tool>\n{"action":"list","status":"pending"}\n</tool>`;
+        const result2 = parseAIStreamChunk(chunk2);
+        const toolBlock = result2.blocks.find((entry) => entry.type === 'tool');
+
+        expect(toolBlock).toBeDefined();
+        if (toolBlock && toolBlock.type === 'tool') {
+            expect(toolBlock.action).toBe('list');
+            expect(toolBlock.status).toBe('pending');
+        }
+    });
 });

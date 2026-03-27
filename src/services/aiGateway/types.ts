@@ -72,7 +72,7 @@ export interface AISessionSnapshot {
     context_updated_at?: number;
     protocol_state?: AIRequestProtocolState;
     block_handler_state?: {
-        status: 'idle' | 'running';
+        status: 'idle' | 'running' | 'parsing' | 'failed';
         block_type?: string;
         action?: string;
         event_name?: string;

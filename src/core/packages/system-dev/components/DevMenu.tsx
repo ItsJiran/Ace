@@ -173,6 +173,18 @@ export default function DevMenu() {
         });
     };
 
+    const spawnParserBlockPlayground = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'parser-block-playground-window',
+            title: 'Parser Block Playground',
+            width: 860,
+            height: 560,
+            x: 320,
+            y: 110,
+        });
+    };
+
     const spawnAISessionMonitor = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system-dev',
@@ -362,6 +374,11 @@ export default function DevMenu() {
             <button onClick={spawnParserBlockRegistry} className={buttonClass}>
                 <ListTree size={14} className="text-violet-300" />
                 Parser Block Registry
+            </button>
+
+            <button onClick={spawnParserBlockPlayground} className={buttonClass}>
+                <ListTree size={14} className="text-cyan-300" />
+                Parser Block Playground
             </button>
 
             <button onClick={pushNotificationSample} className={buttonClass}>

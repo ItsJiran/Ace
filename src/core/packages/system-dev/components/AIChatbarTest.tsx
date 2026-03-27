@@ -91,7 +91,14 @@ export default function AIChatbarTest() {
         const items = responseMemory?.parser_handler_results || [];
         return items.filter((item) => {
             if (!item.event_name) return false;
-            return item.event_name === 'tool_action_dispatch' || item.event_name === 'tool_action_started' || item.event_name === 'tool_action_result' || item.event_name === 'tool_action_error';
+            return item.event_name === 'parser_handler_dispatch'
+                || item.event_name === 'parser_handler_started'
+                || item.event_name === 'parser_handler_result'
+                || item.event_name === 'parser_handler_error'
+                || item.event_name === 'tool_action_dispatch'
+                || item.event_name === 'tool_action_started'
+                || item.event_name === 'tool_action_result'
+                || item.event_name === 'tool_action_error';
         });
     }, [responseMemory?.parser_handler_results]);
 
@@ -106,7 +113,12 @@ export default function AIChatbarTest() {
     const handlerRunningLabel = useMemo(() => {
         const latest = runtimeEvents.length > 0 ? runtimeEvents[runtimeEvents.length - 1] : undefined;
         if (!latest?.event_name) return 'idle';
-        if (latest.event_name === 'tool_action_dispatch' || latest.event_name === 'tool_action_started') {
+        if (
+            latest.event_name === 'parser_handler_dispatch'
+            || latest.event_name === 'parser_handler_started'
+            || latest.event_name === 'tool_action_dispatch'
+            || latest.event_name === 'tool_action_started'
+        ) {
             const action = typeof latest.payload?.action === 'string' ? latest.payload.action : 'unknown';
             return `running (${action})`;
         }
