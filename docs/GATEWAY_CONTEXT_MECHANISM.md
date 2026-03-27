@@ -96,6 +96,76 @@ Guideline:
 - If response is long, model should proactively emit summary update block.
 - Keep summary concise and reusable for next turns.
 
+## Presentation Block Contract
+
+Use fenced block tag `presentation` for component-driven rendering. Enables AI to render structured output via registered UI components without forcing raw JSON into response.
+
+Example presentation block:
+
+```xml
+<presentation>
+{
+  "component_slug": "ai_output_list",
+  "package_ref": "itsjiran/ace-system",
+  "memory_key": "system:session:turn:1:tool_results",
+  "format": "list"
+}
+</presentation>
+```
+
+**Schema:**
+- `component_slug` (required, string): Registered component identifier in registry
+- `package_ref` (optional, string): Package namespace; defaults to `itsjiran/ace-system`
+- `memory_key` (optional, string): Context memory key to bind data to component
+- `props` (optional, object): Inline prop overrides passed to component
+- `format` (optional, string): Rendering hint: `list | table | card | markdown`
+
+**Execution Flow:**
+1. Parser extracts presentation block from stream.
+2. Validates JSON payload and normalizes fields.
+3. Emits `presentation_block_resolved` event to EventBus.
+4. UI layer (`PresentationRenderer`) resolves component from registry.
+5. If `memory_key` provided, UI fetches context memory data.
+6. Component renders with merged props: `{...memoryData, ...inlineProps}`.
+7. Stream continues (non-blocking).
+
+**Usage Pattern:**
+
+When AI needs to render tool output or structured data:
+
+```
+Here are the files in the directory:
+
+<presentation>
+{
+  "component_slug": "ai_output_list",
+  "memory_key": "system:session:turn:1:fs_list_result",
+  "format": "list"
+}
+</presentation>
+
+As you can see, there are three Python files...
+```
+
+Alternative with inline props:
+
+```
+<presentation>
+{
+  "component_slug": "ai_data_table",
+  "memory_key": "system:session:query_results",
+  "props": {"title": "Query Results", "sort_by": "created_at"},
+  "format": "table"
+}
+</presentation>
+```
+
+**Why Presentation Blocks:**
+- Keep response payload lean (reference via memory key instead of embedding full JSON).
+- Enable rich UI rendering beyond plain prose (tables, lists, cards).
+- Preserve AI intent (model decides how to present information).
+- Support future UI customization without protocol changes (just register new component slug).
+
 ## Default Prompt Bridge Context
 
 The context engine now injects two default sections into composed prompt:

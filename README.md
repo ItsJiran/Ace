@@ -345,7 +345,7 @@ Implementation Tasks:
 - [ ] Add `context:store_heavy_result` internal route for tool/system handlers.
 - [x] Add standardized memory envelope — `ContextMemoryItem` / `ContextMemorySnapshot` in `src/schemas/contextMemory.ts`.
 - [ ] Add parser block `context_retrieve` for explicit memory fetch by key/address + optional lifespan override.
-- [ ] Add parser block `presentation` to render referenced memory into UI-safe output slices.
+- [x] Add parser block `presentation` to render referenced memory into UI-safe output slices — **Done**: Parser fully implemented in `src/core/packages/system/parsers/PresentationBlock.ts`, UI rendering layer added to `AIChatbarTest.tsx`.
 - [ ] Add gateway auto-injection for `available_context_memories` + compact summaries each turn.
 - [ ] Add retention worker for lifespan tick, eviction, and summarize-before-drop policy.
 - [ ] Add feedback-loop continuation rule: tool result -> memory pointer -> AI decide retrieve/present/continue.
@@ -414,17 +414,31 @@ Inclusion in `buildContext` is purely status-driven — set `status: 'in'` to in
    - Parser extracts and calls `context:retrieve_by_key` route
    - Returns memory item to next turn context
 
-2. **`presentation` block:** Render memory-backed output
-   ```json
+2. **`presentation` block:** Render memory-backed or component-driven output — **IMPLEMENTED**
+   ```xml
+   <presentation>
    {
-     "block_type": "presentation",
-     "memory_key": "rag:memory:tool_output:fs_list:result_1",
+     "component_slug": "ai_output_list",
+     "package_ref": "itsjiran/ace-system",
+     "memory_key": "system:session:abc:tool_results",
      "format": "list",
-     "user_visible": true
+     "props": {"title": "Results"}
    }
+   </presentation>
    ```
-   - References memory without full payload in response
-   - UI fetches and renders separately
+   - **Parser:** Fully implemented in `src/core/packages/system/parsers/PresentationBlock.ts`
+     - Validates JSON payload and normalizes fields
+     - Emits `presentation_block_resolved` event with component reference
+     - Non-interrupting; stream continues while UI resolves component
+   
+   - **UI Rendering:** Implemented in `src/core/packages/system-dev/components/AIChatbarTest.tsx`
+     - `PresentationRenderer` component resolves registered component via registry
+     - Loads optional context memory data if `memory_key` provided
+     - Merges memory data with inline `props` for component consumption
+     - Renders with error fallbacks and styled container
+   
+   - **Registry Resolution:** Component resolved as `${package_ref}:components:${component_slug}`
+   - **Testable:** Unit tests in `__tests__/unit/aiParser.test.ts` (presentation block parsing), integration tests in `__tests__/feature/aiGateway.test.ts`
 
 3. **Location:** Parser extraction logic in `src/services/parserEngine.ts`
 4. **Testable:** Block extraction unit tests, integration tests with memory store
@@ -554,7 +568,7 @@ Sprint 1 - ParserEngine Refactor + Core Contract
 
 Sprint 2 - Context Retrieval + Presentation Flow
 - [ ] Implement parser block `context_retrieve` and validate address/key retrieval path.
-- [ ] Implement parser block `presentation` for rendering memory-backed slices to user response.
+- [x] Implement parser block `presentation` for rendering memory-backed slices to user response — **Done**: Parser + UI rendering layer complete.
 - [ ] Inject `available_context_memories` + compact summaries in each gateway continuation turn.
 - [ ] Add retrieval guardrails (size cap, loop cap, malformed reference fallback).
 - [ ] Add integration tests for list-folder example with pointer-only feedback payload.

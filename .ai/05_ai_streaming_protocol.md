@@ -16,6 +16,7 @@ The AI stream supports structured tag blocks (not markdown fence payload contrac
 - `<context>...</context>`
 - `<tool>...</tool>`
 - `<storage>...</storage>`
+- `<presentation>...</presentation>`
 - `<history_summary_ai_prompt>...</history_summary_ai_prompt>`
 - `<history_summary_ai_response>...</history_summary_ai_response>`
 
@@ -49,6 +50,56 @@ This block becomes an `Interaction` event and is emitted to `EventBus`.
 
 - `<context>` updates session context memory through `AIContextEngine.ingestContextBlock(...)`
 - `<history_summary_ai_prompt>` and `<history_summary_ai_response>` are validated against protocol state and ingested via `AIContextEngine.ingestHistorySummaryBlock(...)`
+
+### Presentation Block
+
+`<presentation>` block enables AI-driven component rendering with optional memory binding. Non-interrupting.
+
+**Payload format:**
+```json
+{
+  "component_slug": "ai_output_list",
+  "package_ref": "itsjiran/ace-system",
+  "memory_key": "system:session:abc:results",
+  "format": "list",
+  "props": { "title": "Results" }
+}
+```
+
+**Fields:**
+- `component_slug` (required, string): Registered component identifier
+- `package_ref` (optional, string): Package namespace; defaults to `itsjiran/ace-system`
+- `memory_key` (optional, string): Context memory key to load data from
+- `props` (optional, object): Inline prop overrides for component
+- `format` (optional, string): Hint for rendering: `list`, `table`, `card`, `markdown`
+
+**Resolution & Rendering:**
+1. Parser extracts block → validates JSON → emits `presentation_block_resolved` event
+2. UI resolves component via registry: `${package_ref}:components:${component_slug}`
+3. If `memory_key` provided, client loads context memory data
+4. Component rendered with merged props: `{ ...memoryData, ...props }`
+5. Stream continues while component renders (non-blocking)
+
+**Example Usage:**
+```xml
+Here are the results:
+
+<presentation>
+{
+  "component_slug": "ai_output_list",
+  "memory_key": "system:session:turn:1:tool_results"
+}
+</presentation>
+
+Analysis complete.
+```
+
+**Implementation:**
+- Parser: `src/core/packages/system/parsers/PresentationBlock.ts`
+- Validator: Normalizes and validates all fields
+- Handler: Emits event for stream consumer observability
+- UI Rendering: `AIChatbarTest.tsx` — `PresentationRenderer` component resolves and renders
+- Tests: `__tests__/unit/aiParser.test.ts` (parsing), `__tests__/feature/aiGateway.test.ts` (integration)
 
 ## Runtime Dispatch Model
 
