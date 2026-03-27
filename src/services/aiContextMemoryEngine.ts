@@ -1,4 +1,5 @@
 import { StorageEngine } from './storageEngine';
+import { RegistryEngine } from './registryEngine';
 import type {
     ContextBuildOptions,
     ContextBuildResult,
@@ -27,6 +28,11 @@ interface ContextMemoryPayloadSource {
 interface ContextMemoryPayloadEnvelope {
     payload: unknown;
     source: ContextMemoryPayloadSource;
+    schema_ref?: string;
+    schema_version?: string;
+    schema_kind?: 'json_schema' | 'zod_like' | 'custom';
+    validation_status?: 'validated' | 'skipped' | 'failed';
+    validated_at?: number;
     session_id: string;
     memory_uid: string;
 }
@@ -83,6 +89,7 @@ class AIContextMemoryEngineSingleton {
     private readonly memoryKeyToUid = new Map<string, string>();
 
     private readonly indexMemoryUid = 'system:ai_context_memory:index';
+    private readonly validationMetricsMemoryUid = 'system:ai_context_memory:validation_metrics';
     private readonly classificationTags = ['system:core', 'system:ai_context_memory'];
     private readonly itemMemoryPrefix = 'system:ai_context_memory:item:';
     private readonly textEncoder = new TextEncoder();
@@ -100,9 +107,18 @@ class AIContextMemoryEngineSingleton {
                 ?? this.extractMemoryKey(input.metadata)
                 ?? this.extractMemoryKey(existing?.metadata),
         );
-        const metadata = {
+        const baseMetadata = {
             ...(existing?.metadata ?? {}),
             ...(input.metadata ?? {}),
+        };
+        const schemaValidationMeta = this.resolveSchemaValidationMetadata({
+            metadata: baseMetadata,
+            payload: input.payload ?? existing?.payload ?? null,
+            at: now,
+        });
+        const metadata = {
+            ...baseMetadata,
+            ...schemaValidationMeta,
             ...(memory_key ? { memory_key } : {}),
         };
         const payload = this.normalizePayloadEnvelope({
@@ -200,7 +216,7 @@ class AIContextMemoryEngineSingleton {
         return true;
     }
 
-    getMemory(identifier: string, options: { touch?: boolean } = {}): ContextMemoryItem | null {
+    getMemory(identifier: string, options: { touch?: boolean; strictSchemaValidation?: boolean } = {}): ContextMemoryItem | null {
         const uid = this.resolveUid(identifier);
         if (!uid) {
             return null;
@@ -209,6 +225,13 @@ class AIContextMemoryEngineSingleton {
         const item = this.items.get(uid) ?? null;
         if (!item) {
             return null;
+        }
+
+        if (options.strictSchemaValidation) {
+            const validationStatus = this.extractEnvelopeValidationStatus(item.payload);
+            if (validationStatus !== 'validated') {
+                return null;
+            }
         }
 
         if (!options.touch) {
@@ -432,9 +455,17 @@ class AIContextMemoryEngineSingleton {
             payload: snapshots,
             classifications: this.classificationTags,
         });
+
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: this.validationMetricsMemoryUid,
+            payload: this.buildValidationMetrics(snapshots),
+            classifications: this.classificationTags,
+        });
     }
 
     private toSnapshot(item: ContextMemoryItem): ContextMemorySnapshot {
+        const schemaMeta = this.extractEnvelopeSchemaMeta(item.payload);
         return {
             uid: item.uid,
             type: item.type,
@@ -447,6 +478,62 @@ class AIContextMemoryEngineSingleton {
             expires_at: item.expires_at,
             accessed_at: item.accessed_at,
             tags: item.tags,
+            schema_ref: schemaMeta.schema_ref,
+            schema_version: schemaMeta.schema_version,
+            validation_status: schemaMeta.validation_status,
+        };
+    }
+
+    private extractEnvelopeSchemaMeta(payload: unknown) {
+        if (!payload || typeof payload !== 'object') {
+            return {
+                schema_ref: undefined,
+                schema_version: undefined,
+                validation_status: undefined,
+            };
+        }
+
+        const source = payload as Record<string, unknown>;
+        const validation_status = source.validation_status === 'validated' || source.validation_status === 'skipped' || source.validation_status === 'failed'
+            ? source.validation_status
+            : undefined;
+
+        return {
+            schema_ref: this.readString(source.schema_ref),
+            schema_version: this.readString(source.schema_version),
+            validation_status,
+        };
+    }
+
+    private buildValidationMetrics(snapshots: ContextMemorySnapshot[]) {
+        const counts = {
+            total: snapshots.length,
+            validated: 0,
+            skipped: 0,
+            failed: 0,
+            unknown: 0,
+        };
+
+        snapshots.forEach((snapshot) => {
+            switch (snapshot.validation_status) {
+                case 'validated':
+                    counts.validated += 1;
+                    break;
+                case 'skipped':
+                    counts.skipped += 1;
+                    break;
+                case 'failed':
+                    counts.failed += 1;
+                    break;
+                default:
+                    counts.unknown += 1;
+                    break;
+            }
+        });
+
+        return {
+            at: Date.now(),
+            ...counts,
         };
     }
 
@@ -509,6 +596,7 @@ class AIContextMemoryEngineSingleton {
 
         if (this.isPayloadEnvelope(payload)) {
             const envelopeSource = payload.source ?? { at, source };
+            const schemaMeta = this.normalizeSchemaReferenceMeta(metadata, payload, at);
             return {
                 ...payload,
                 source: {
@@ -521,10 +609,17 @@ class AIContextMemoryEngineSingleton {
                     memory_uid: uid,
                     session_id: sessionId,
                 },
+                schema_ref: schemaMeta.schema_ref,
+                schema_version: schemaMeta.schema_version,
+                schema_kind: schemaMeta.schema_kind,
+                validation_status: schemaMeta.validation_status,
+                validated_at: schemaMeta.validated_at,
                 session_id: sessionId,
                 memory_uid: uid,
             };
         }
+
+        const schemaMeta = this.normalizeSchemaReferenceMeta(metadata, undefined, at);
 
         return {
             payload,
@@ -537,9 +632,192 @@ class AIContextMemoryEngineSingleton {
                 memory_uid: uid,
                 session_id: sessionId,
             },
+            schema_ref: schemaMeta.schema_ref,
+            schema_version: schemaMeta.schema_version,
+            schema_kind: schemaMeta.schema_kind,
+            validation_status: schemaMeta.validation_status,
+            validated_at: schemaMeta.validated_at,
             session_id: sessionId,
             memory_uid: uid,
         };
+    }
+
+    private normalizeSchemaReferenceMeta(
+        metadata: Record<string, unknown>,
+        payloadEnvelope: ContextMemoryPayloadEnvelope | undefined,
+        at: number,
+    ) {
+        const schema_ref = this.readString(metadata.schema_ref) ?? this.readString(payloadEnvelope?.schema_ref);
+        const schema_version = this.readString(metadata.schema_version) ?? this.readString(payloadEnvelope?.schema_version);
+
+        const schemaKindCandidate = this.readString(metadata.schema_kind) ?? this.readString(payloadEnvelope?.schema_kind);
+        const schema_kind: 'json_schema' | 'zod_like' | 'custom' =
+            schemaKindCandidate === 'zod_like' || schemaKindCandidate === 'custom'
+                ? schemaKindCandidate
+                : 'json_schema';
+
+        const validationStatusCandidate = this.readString(metadata.validation_status)
+            ?? this.readString(payloadEnvelope?.validation_status);
+        const validation_status: 'validated' | 'skipped' | 'failed' =
+            validationStatusCandidate === 'skipped' || validationStatusCandidate === 'failed'
+                ? validationStatusCandidate
+                : 'validated';
+
+        const validated_at = typeof metadata.validated_at === 'number'
+            ? metadata.validated_at
+            : typeof payloadEnvelope?.validated_at === 'number'
+                ? payloadEnvelope.validated_at
+                : at;
+
+        return {
+            schema_ref,
+            schema_version,
+            schema_kind,
+            validation_status,
+            validated_at,
+        };
+    }
+
+    private resolveSchemaValidationMetadata(input: {
+        metadata: Record<string, unknown>;
+        payload: unknown;
+        at: number;
+    }) {
+        const schema_ref = this.readSchemaField(input.metadata, 'schema_ref');
+        const schema_version = this.readSchemaField(input.metadata, 'schema_version');
+        const schemaKindCandidate = this.readSchemaField(input.metadata, 'schema_kind');
+        const schema_kind: 'json_schema' | 'zod_like' | 'custom' =
+            schemaKindCandidate === 'zod_like' || schemaKindCandidate === 'custom'
+                ? schemaKindCandidate
+                : 'json_schema';
+
+        if (!schema_ref && !schema_version) {
+            return {};
+        }
+
+        if (!schema_ref || !schema_version) {
+            return {
+                schema_ref,
+                schema_version,
+                schema_kind,
+                validation_status: 'failed',
+                validated_at: input.at,
+            };
+        }
+
+        const resolved = RegistryEngine.getSchemaByRef(schema_ref);
+        if (!resolved) {
+            return {
+                schema_ref,
+                schema_version,
+                schema_kind,
+                validation_status: 'failed',
+                validated_at: input.at,
+            };
+        }
+
+        if (resolved.schema_version !== schema_version) {
+            return {
+                schema_ref,
+                schema_version,
+                schema_kind,
+                validation_status: 'failed',
+                validated_at: input.at,
+            };
+        }
+
+        const validationStatus = this.validatePayloadWithRuntimeSchema(resolved.payload_schema, input.payload)
+            ? 'validated'
+            : resolved.payload_schema
+                ? 'failed'
+                : 'skipped';
+
+        return {
+            schema_ref,
+            schema_version,
+            schema_kind: resolved.schema_kind,
+            validation_status: validationStatus,
+            validated_at: input.at,
+        };
+    }
+
+    private readSchemaField(metadata: Record<string, unknown>, field: 'schema_ref' | 'schema_version' | 'schema_kind') {
+        const direct = this.readString(metadata[field]);
+        if (direct) return direct;
+
+        const nested = metadata.schema;
+        if (!nested || typeof nested !== 'object') return undefined;
+        return this.readString((nested as Record<string, unknown>)[field]);
+    }
+
+    private validatePayloadWithRuntimeSchema(schema: unknown, payload: unknown): boolean {
+        if (!schema) return true;
+
+        if (schema && typeof schema === 'object') {
+            const maybeSafeParse = (schema as { safeParse?: (value: unknown) => { success: boolean } }).safeParse;
+            if (typeof maybeSafeParse === 'function') {
+                return maybeSafeParse(payload).success;
+            }
+
+            const maybeParse = (schema as { parse?: (value: unknown) => unknown }).parse;
+            if (typeof maybeParse === 'function') {
+                try {
+                    maybeParse(payload);
+                    return true;
+                } catch {
+                    return false;
+                }
+            }
+
+            const jsonSchema = schema as Record<string, unknown>;
+            const type = this.readString(jsonSchema.type);
+            if (!type) return true;
+
+            if (type === 'object') {
+                if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+
+                const obj = payload as Record<string, unknown>;
+                if (Array.isArray(jsonSchema.required)) {
+                    const requiredKeys = jsonSchema.required.filter((k): k is string => typeof k === 'string');
+                    if (requiredKeys.some((key) => !(key in obj))) return false;
+                }
+
+                const properties = jsonSchema.properties;
+                if (properties && typeof properties === 'object') {
+                    for (const [key, propSchema] of Object.entries(properties as Record<string, unknown>)) {
+                        if (!(key in obj) || !propSchema || typeof propSchema !== 'object') continue;
+                        const propType = this.readString((propSchema as Record<string, unknown>).type);
+                        if (!propType) continue;
+                        if (!this.matchesPrimitiveType(obj[key], propType)) return false;
+                    }
+                }
+                return true;
+            }
+
+            return this.matchesPrimitiveType(payload, type);
+        }
+
+        return true;
+    }
+
+    private matchesPrimitiveType(value: unknown, type: string): boolean {
+        switch (type) {
+            case 'string':
+                return typeof value === 'string';
+            case 'number':
+            case 'integer':
+                return typeof value === 'number' && Number.isFinite(value);
+            case 'boolean':
+                return typeof value === 'boolean';
+            case 'array':
+                return Array.isArray(value);
+            case 'object':
+                return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+            case 'null':
+                return value === null;
+            default:
+                return true;
+        }
     }
 
     private isPayloadEnvelope(value: unknown): value is ContextMemoryPayloadEnvelope {
@@ -558,6 +836,15 @@ class AIContextMemoryEngineSingleton {
 
         const source = candidate.source as Record<string, unknown>;
         return typeof source.at === 'number' || typeof source.source === 'string';
+    }
+
+    private extractEnvelopeValidationStatus(payload: unknown): 'validated' | 'skipped' | 'failed' | undefined {
+        if (!payload || typeof payload !== 'object') return undefined;
+        const status = (payload as Record<string, unknown>).validation_status;
+        if (status === 'validated' || status === 'skipped' || status === 'failed') {
+            return status;
+        }
+        return undefined;
     }
 
     private readString(value: unknown): string | undefined {

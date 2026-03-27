@@ -2,6 +2,7 @@ import { FSEngine } from './fsEngine';
 import { StorageEngine } from './storageEngine';
 import {
     RegistryPackageSchema,
+    RegistryRuntimeSchemaMetadataSchema,
     type RegistryPackage,
     type RegistryDomainEntry,
 } from '../schemas/registry';
@@ -19,18 +20,6 @@ import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime, Parse
 // ============================================================================
 
 const INDEXED_DOMAINS = ['widgets', 'components', 'windows', 'tools', 'parsers', 'features', 'processes', 'pipelines', 'registries'] as const;
-
-const DOMAIN_NAME_KEYS: Record<string, string[]> = {
-    widgets: ['name', 'widget_name', 'entry_id', 'id'],
-    components: ['name', 'component', 'id'],
-    windows: ['name', 'window_name', 'id'],
-    tools: ['name', 'tool_name', 'id'],
-    parsers: ['name', 'parser_name', 'tag_name', 'id'],
-    features: ['name', 'feature_name', 'id'],
-    processes: ['name', 'process_type', 'id'],
-    pipelines: ['name', 'pipeline_name', 'id'],
-    registries: ['name', 'registry_name', 'id'],
-};
 
 // ============================================================================
 // REGISTRY ENGINE SINGLETON
@@ -57,6 +46,17 @@ class RegistryEngineSingleton {
     // 2) tag namespace key: <tag_name> + aliases
     private parserBlockByNamespace = new Map<string, ParserBlockRuntime>();
     private parserBlockByTag = new Map<string, ParserBlockRuntime>();
+    private schemaByRef = new Map<string, {
+        package_ref: string;
+        domain: string;
+        slug: string;
+        schema_ref: string;
+        schema_version: string;
+        schema_kind: 'json_schema' | 'zod_like' | 'custom';
+        payload_schema?: unknown;
+        input_schema?: unknown;
+        output_schema?: unknown;
+    }>();
 
     private isCoreComponentEntryPath(path: string): boolean {
         const splitToken = '/components/';
@@ -205,6 +205,12 @@ class RegistryEngineSingleton {
             .sort((a, b) => `${a.package_name}:${a.slug}`.localeCompare(`${b.package_name}:${b.slug}`));
     }
 
+    getSchemaByRef(schemaRef: string) {
+        if (!schemaRef || typeof schemaRef !== 'string') return null;
+        this.ensureSchemaIndexes();
+        return this.schemaByRef.get(schemaRef) ?? null;
+    }
+
     buildParserBlockProtocolLines(): string {
         this.ensureParserBlockIndexes();
         const schemas: BlockProtocolSchema[] = this.listParserBlocks().map((item) => item.schema);
@@ -242,6 +248,11 @@ class RegistryEngineSingleton {
         this.rebuildParserBlockIndexes();
     }
 
+    private ensureSchemaIndexes() {
+        if (this.schemaByRef.size > 0) return;
+        this.rebuildSchemaIndexes();
+    }
+
     private createRegistryPackage(pkg: RegistryPackage) {
         const runtimePkg = {
             metadata: pkg.manifest,
@@ -272,6 +283,38 @@ class RegistryEngineSingleton {
         });
 
         this.rebuildParserBlockIndexes();
+        this.rebuildSchemaIndexes();
+    }
+
+    private rebuildSchemaIndexes() {
+        this.schemaByRef.clear();
+
+        for (const runtimePkg of this.runtimeIndex.values()) {
+            const packageRef = runtimePkg.metadata.package_name;
+
+            for (const domain of INDEXED_DOMAINS) {
+                const entries = runtimePkg.package.domains[domain] || {};
+
+                for (const [slug, rawEntry] of Object.entries(entries)) {
+                    const entry = rawEntry as RegistryDomainEntry;
+                    const metadata = (entry.metadata ?? {}) as Record<string, unknown>;
+                    const normalized = this.normalizeRuntimeSchemaMetadata(metadata);
+                    if (!normalized) continue;
+
+                    this.schemaByRef.set(normalized.schema_ref, {
+                        package_ref: packageRef,
+                        domain,
+                        slug,
+                        schema_ref: normalized.schema_ref,
+                        schema_version: normalized.schema_version,
+                        schema_kind: normalized.schema_kind,
+                        payload_schema: normalized.payload_schema,
+                        input_schema: normalized.input_schema,
+                        output_schema: normalized.output_schema,
+                    });
+                }
+            }
+        }
     }
 
     private rebuildParserBlockIndexes() {
@@ -464,25 +507,32 @@ class RegistryEngineSingleton {
                 }
 
                 // 3. Determine Entry Name (ID)
-                // Priority: registry.slug -> registry.name -> filename
+                // Primary key is slug only (migration policy).
                 const filename = path.split('/').pop()?.replace(/\.(ts|tsx|js|jsx)$/, '') || 'unknown';
-                
-                // Try to find the specific ID field for this domain (e.g. widget_name, tool_name)
-                const idFields = DOMAIN_NAME_KEYS[domain] || ['name', 'id'];
-                const explicitName = idFields.map((field) => registryData[field]).find(Boolean);
 
-                // Use the mandatory slug if present, otherwise fall back to explicit name or filename
-                const entrySlug = String(registryData.slug || explicitName || filename);
-                
-                if (!registryData.slug) {
-                     console.warn(`[RegistryEngine] Property 'slug' missing in ${path}. Using fallback: ${entrySlug}`);
+                const rawSlug = typeof registryData.slug === 'string' ? registryData.slug.trim() : '';
+                if (!rawSlug) {
+                    console.warn(`[RegistryEngine] Property 'slug' is required in ${path}. Entry skipped.`);
+                    continue;
                 }
+                const entrySlug = rawSlug;
 
                 const normalizedMeta = {
                     ...registryData,
-                    name: String(registryData.name || explicitName || filename),
+                    name: String(registryData.name || entrySlug || filename),
                     slug: entrySlug,
                 };
+
+                const schemaMeta = this.normalizeRuntimeSchemaMetadata(normalizedMeta);
+                if (schemaMeta) {
+                    normalizedMeta.schema = schemaMeta;
+                    normalizedMeta.schema_ref = schemaMeta.schema_ref;
+                    normalizedMeta.schema_version = schemaMeta.schema_version;
+                    normalizedMeta.schema_kind = schemaMeta.schema_kind;
+                    if (schemaMeta.payload_schema !== undefined) normalizedMeta.payload_schema = schemaMeta.payload_schema;
+                    if (schemaMeta.input_schema !== undefined) normalizedMeta.input_schema = schemaMeta.input_schema;
+                    if (schemaMeta.output_schema !== undefined) normalizedMeta.output_schema = schemaMeta.output_schema;
+                }
                 
                 // 4. Construct Runtime Entry
                 const entry: RegistryDomainEntry = {
@@ -538,7 +588,6 @@ class RegistryEngineSingleton {
         const normalizedDomains: Record<string, Record<string, any>> = {};
 
         INDEXED_DOMAINS.forEach(domain => {
-            const keyFields = DOMAIN_NAME_KEYS[domain] || ['name', 'id'];
             // Check if domain exists in source (could be array or object)
             const rawDomain = domainsSrc[domain];
             
@@ -547,8 +596,12 @@ class RegistryEngineSingleton {
                 normalizedDomains[domain] = rawDomain.reduce((acc, item) => {
                     if (item && typeof item === 'object') {
                         const rawEntry = item as Record<string, unknown>;
-                        const resolvedName = keyFields.map((field) => rawEntry[field]).find(Boolean);
-                        const slug = String(rawEntry.slug ?? resolvedName ?? `${domain}_${Object.keys(acc).length}`);
+                        const slugCandidate = typeof rawEntry.slug === 'string' ? rawEntry.slug.trim() : '';
+                        if (!slugCandidate) {
+                            console.warn(`[RegistryEngine] Array entry in domain '${domain}' is missing required slug. Entry skipped.`);
+                            return acc;
+                        }
+                        const slug = String(slugCandidate);
                         acc[slug] = item;
                     }
                     return acc;
@@ -578,6 +631,43 @@ class RegistryEngineSingleton {
             },
             domains: normalizedDomains,
         };
+    }
+
+    private normalizeRuntimeSchemaMetadata(metadata: Record<string, unknown>) {
+        const nested = metadata.schema;
+        const candidate = nested && typeof nested === 'object'
+            ? {
+                ...(nested as Record<string, unknown>),
+                schema_ref: (nested as Record<string, unknown>).schema_ref ?? metadata.schema_ref,
+                schema_version: (nested as Record<string, unknown>).schema_version ?? metadata.schema_version,
+                schema_kind: (nested as Record<string, unknown>).schema_kind ?? metadata.schema_kind,
+                payload_schema: (nested as Record<string, unknown>).payload_schema ?? metadata.payload_schema,
+                input_schema: (nested as Record<string, unknown>).input_schema ?? metadata.input_schema,
+                output_schema: (nested as Record<string, unknown>).output_schema ?? metadata.output_schema,
+            }
+            : {
+                schema_ref: metadata.schema_ref,
+                schema_version: metadata.schema_version,
+                schema_kind: metadata.schema_kind,
+                payload_schema: metadata.payload_schema,
+                input_schema: metadata.input_schema,
+                output_schema: metadata.output_schema,
+            };
+
+        const hasRef = typeof candidate.schema_ref === 'string' && candidate.schema_ref.trim().length > 0;
+        const hasVersion = typeof candidate.schema_version === 'string' && candidate.schema_version.trim().length > 0;
+
+        if (!hasRef && !hasVersion) {
+            return undefined;
+        }
+
+        const parsed = RegistryRuntimeSchemaMetadataSchema.safeParse(candidate);
+        if (!parsed.success) {
+            console.warn(`[RegistryEngine] Invalid runtime schema metadata ignored: ${parsed.error.message}`);
+            return undefined;
+        }
+
+        return parsed.data;
     }
 
     /** Load packages from AppConfig packages directory */

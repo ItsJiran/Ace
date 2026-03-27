@@ -225,3 +225,24 @@ Status sync for current architecture and runtime progress:
 - Presentation block validation hardened: component_slug is required and memory_uid is preferred (memory_key remains temporary legacy fallback).
 - Context memory envelope normalization is centralized in AIContextMemoryEngine to avoid tool-only coupling.
 - Gateway continuation contract uses memory pointers for rendering instead of injecting raw tool payloads into prose.
+
+## Schema Boundary V1 (Protocol Integration)
+
+For all structured blocks, payload contracts are runtime-schema-first.
+
+Protocol rules (V1):
+
+1. Parser block communication remains `BaseBlock` + `payload_raw` + `payload_json`.
+2. Payload interpretation across package boundaries must use schema references, not compile-time type imports.
+3. When a block writes memory pointers, its corresponding memory envelope should carry `schema_ref` metadata.
+
+Continuation rules (V1):
+
+1. Gateway continuation should pass pointers (for example `memory_uid`) rather than embedding heavy raw payload.
+2. Renderer-facing blocks (for example `presentation`) reference memory payloads whose schema is resolved through RegistryEngine.
+3. Consumers should use package-owned typed readers after schema resolution.
+
+Validation hooks (V1):
+
+1. Write-time validation is mandatory in host runtime.
+2. Read-time strict revalidation is optional per consumer path.

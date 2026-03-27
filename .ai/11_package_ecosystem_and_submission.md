@@ -258,6 +258,30 @@ RegistryEngine.boot() → registerPackage (register core)
 - External bundles run in the same React context as core code.
 - All domains are schema-validated before activation.
 - **Widgets are the only domain with auto-execution behavior** — other domains are lazy.
+
+## External Bundle Schema Contract V1
+
+To minimize cross-package import coupling, external bundles must export runtime schema objects for boundary communication.
+
+Required boundary strategy:
+
+1. Cross-package communication cannot rely on TypeScript-only interfaces.
+2. Bundle must expose runtime schema metadata resolvable through RegistryEngine.
+3. Host runtime owns final validation before activation and before memory persistence.
+
+Recommended export shape per domain entry:
+
+1. `schema_ref`
+2. `schema_version`
+3. `schema_kind` (preferred `json_schema`)
+4. `payload_schema`
+5. `input_schema` and `output_schema` for callable entries
+
+External package authoring notes:
+
+1. Internal authoring may use any validator (for example Zod), but boundary contract should publish JSON Schema-compatible runtime objects.
+2. Bundle entry should avoid relying on global validator objects such as `window.zod` as a hard dependency.
+3. Runtime consumers resolve schema by `schema_ref` through RegistryEngine, then read payload via package-owned typed readers.
 - Dependency validation happens **before any widget execution**.
 
 ---

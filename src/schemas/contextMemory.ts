@@ -32,6 +32,17 @@ export type ContextMemoryStatus =
 
 export type ContextMemoryPriority = 'critical' | 'high' | 'normal' | 'low';
 
+export type ContextMemorySchemaKind = 'json_schema' | 'zod_like' | 'custom';
+export type ContextMemoryValidationStatus = 'validated' | 'skipped' | 'failed';
+
+export interface ContextMemorySchemaReference {
+  schema_ref: string;
+  schema_version: string;
+  schema_kind: ContextMemorySchemaKind;
+  validation_status: ContextMemoryValidationStatus;
+  validated_at: number;
+}
+
 /**
  * Full memory item stored in memory engine.
  *
@@ -100,6 +111,9 @@ export interface ContextMemorySnapshot {
   expires_at: number;
   accessed_at?: number;
   tags: string[];
+  schema_ref?: string;
+  schema_version?: string;
+  validation_status?: ContextMemoryValidationStatus;
 }
 
 /**

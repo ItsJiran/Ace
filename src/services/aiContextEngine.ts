@@ -56,6 +56,7 @@ interface ContextActionPayload {
     payload?: unknown;
     type?: string;
     tags?: string[];
+    strict_schema_validation?: boolean;
     [k: string]: unknown;
 }
 
@@ -65,6 +66,10 @@ class AIContextEngineSingleton {
     private readonly maxTurns = 20;
     private readonly maxContextBlocks = 8;
     private readonly maxHistorySummaries = 16;
+    private readonly legacyNonStrictPrefixes = [
+        'system:ai_context_rag:payload:',
+        'system:session:',
+    ];
 
     private readonly indexMemoryUid = 'system:ai_context_engine:sessions';
     private isEventRoutesBound = false;
@@ -222,6 +227,7 @@ class AIContextEngineSingleton {
                         : typeof preallocated_memory?.result_memory_uid === 'string'
                             ? (preallocated_memory.result_memory_uid as string)
                             : undefined;
+                const strictSchemaValidation = this.resolveStrictSchemaValidation(raw.strict_schema_validation, memoryKey);
 
                 if (!memoryKey) {
                     this.publishContextResult({
@@ -235,7 +241,10 @@ class AIContextEngineSingleton {
                     return;
                 }
 
-                const item = AIContextMemoryEngine.getMemory(memoryKey, { touch: true });
+                const item = AIContextMemoryEngine.getMemory(memoryKey, {
+                    touch: true,
+                    strictSchemaValidation,
+                });
 
                 if (!item) {
                     const errorResult = {
@@ -262,6 +271,7 @@ class AIContextEngineSingleton {
                             action: 'retrieve',
                             memory_key: memoryKey,
                             result_memory_uid: resultKey,
+                            strict_schema_validation: strictSchemaValidation,
                             error_message: errorResult.error_message,
                         },
                     });
@@ -299,6 +309,7 @@ class AIContextEngineSingleton {
                     payload: {
                         action: 'retrieve',
                         memory_key: memoryKey,
+                        strict_schema_validation: strictSchemaValidation,
                         uid: item.uid,
                         result_memory_uid: resultKey,
                         title: item.title,
@@ -417,6 +428,18 @@ class AIContextEngineSingleton {
                 ...payload,
             },
         });
+    }
+
+    private resolveStrictSchemaValidation(rawValue: unknown, memoryKey?: string) {
+        if (typeof rawValue === 'boolean') {
+            return rawValue;
+        }
+
+        if (memoryKey && this.legacyNonStrictPrefixes.some((prefix) => memoryKey.startsWith(prefix))) {
+            return false;
+        }
+
+        return true;
     }
 
     private syncSessionMemory(state: SessionContextState) {

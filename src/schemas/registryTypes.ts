@@ -17,10 +17,30 @@ import type { WindowConfig } from './window';
  */
 
 export namespace AceRegistryType {
+    export type RuntimeSchemaKind = 'json_schema' | 'zod_like' | 'custom';
+
+    export interface RuntimeSchemaMetadata {
+        schema_ref: string;
+        schema_version: string;
+        schema_kind?: RuntimeSchemaKind;
+        payload_schema?: unknown;
+        input_schema?: unknown;
+        output_schema?: unknown;
+    }
+
     export interface BaseIdentity {
         name: string;
         slug: string;
         description?: string;
+        /** Optional runtime schema metadata used for cross-package boundary validation. */
+        schema?: RuntimeSchemaMetadata;
+        /** Compatibility fields for flattened metadata form. */
+        schema_ref?: string;
+        schema_version?: string;
+        schema_kind?: RuntimeSchemaKind;
+        payload_schema?: unknown;
+        input_schema?: unknown;
+        output_schema?: unknown;
     }
 
     export interface ToolParameters {

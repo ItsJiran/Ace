@@ -39,6 +39,19 @@ export const RegistryCodeLocatorSchema = z.object({
 });
 export type RegistryCodeLocator = z.infer<typeof RegistryCodeLocatorSchema>;
 
+export const RuntimeSchemaKindSchema = z.enum(['json_schema', 'zod_like', 'custom']);
+export type RuntimeSchemaKind = z.infer<typeof RuntimeSchemaKindSchema>;
+
+export const RegistryRuntimeSchemaMetadataSchema = z.object({
+    schema_ref: z.string().min(1),
+    schema_version: z.string().min(1),
+    schema_kind: RuntimeSchemaKindSchema.default('json_schema'),
+    payload_schema: z.unknown().optional(),
+    input_schema: z.unknown().optional(),
+    output_schema: z.unknown().optional(),
+});
+export type RegistryRuntimeSchemaMetadata = z.infer<typeof RegistryRuntimeSchemaMetadataSchema>;
+
 /**
  * Universal Domain Entry Schema
  * Represents any item in a package domain.

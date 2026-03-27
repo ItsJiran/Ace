@@ -26,6 +26,8 @@ Architecture pillars:
 11. `.ai/11_package_ecosystem_and_submission.md`
 12. `.ai/13_core_ui_design_language.md`
 13. `.ai/14_host_guest_architecture.md`
+14. `.ai/15_sdk_gateway_server.md`
+15. `.ai/16_schema_type_flow.md`
 
 Notes:
 - This README now tracks active and pending work only.
@@ -41,6 +43,49 @@ Notes:
 - Presentation contract hardened: complete block requires `component_slug` + memory target (`memory_uid` preferred; `memory_key` kept as legacy fallback).
 - AI context memory envelope normalization moved to `AIContextMemoryEngine` so all context writers store consistent source-aware payload envelopes.
 - Gateway continuation guidance now points AI to render via `<presentation>` using memory pointer (`memory_uid = result_memory_uid`).
+
+## Cross-Package Schema Boundary V1
+
+Direction locked for core and external packages:
+
+1. Runtime communication across package boundaries must use schema objects, not TypeScript-only types.
+2. RegistryEngine is the source of truth for domain schema metadata.
+3. Memory payload envelope stores schema reference metadata so consumers can resolve schema from RegistryEngine.
+4. Validation is host-controlled at write-time (mandatory) and optionally strict at read-time.
+
+### Registry Domain Schema Metadata (V1)
+
+Each domain entry should expose schema metadata at runtime:
+
+- `schema_ref`: stable identifier, example `itsjiran/ace-system:parsers:presentation:payload`.
+- `schema_version`: semantic version string, example `1.0.0`.
+- `schema_kind`: runtime schema family, preferred `json_schema`.
+- `payload_schema`: runtime schema object used by host validation.
+- `input_schema` / `output_schema`: optional for callable domains (`tools`, `processes`, `pipelines`).
+
+### Memory Envelope Schema Reference (V1)
+
+In addition to `payload` and `source`, memory envelope should include:
+
+- `schema_ref`
+- `schema_version`
+- `schema_kind`
+- `validation_status` (`validated` | `skipped` | `failed`)
+- `validated_at`
+
+### Validation Lifecycle (V1)
+
+1. Producer writes payload with `schema_ref`.
+2. Host resolves schema in RegistryEngine.
+3. Host validates payload before persistence.
+4. Host records validation metadata into envelope.
+5. Consumer reads payload, resolves schema by reference, and can perform optional strict revalidation.
+
+### Compatibility Policy (V1)
+
+1. `memory_uid` remains preferred pointer field; `memory_key` is temporary legacy fallback.
+2. New schema versions must be backward-compatible within major version.
+3. Cross-package boundary prefers JSON Schema-compatible objects to avoid runtime validator lock-in.
 
 ## Current Focus
 

@@ -90,3 +90,34 @@ Status sync for current architecture and runtime progress:
 - Presentation block validation hardened: component_slug is required and memory_uid is preferred (memory_key remains temporary legacy fallback).
 - Context memory envelope normalization is centralized in AIContextMemoryEngine to avoid tool-only coupling.
 - Gateway continuation contract uses memory pointers for rendering instead of injecting raw tool payloads into prose.
+
+## Schema-Aware Memory Envelope V1
+
+Cross-package memory exchange now follows schema-reference metadata rules.
+
+Envelope metadata fields (V1):
+
+1. `schema_ref`
+2. `schema_version`
+3. `schema_kind`
+4. `validation_status` (`validated` | `skipped` | `failed`)
+5. `validated_at`
+
+Write-time validation flow:
+
+1. Producer writes `payload` and `schema_ref`.
+2. Host resolves schema through RegistryEngine.
+3. Host validates payload and stores result metadata in envelope.
+4. Only validated or explicitly skipped payloads are persisted to active memory.
+
+Read-time usage flow:
+
+1. Consumer reads envelope and resolves `schema_ref` from RegistryEngine.
+2. Consumer may revalidate in strict-mode contexts.
+3. UI/business logic consumes payload through parser/package-owned typed readers.
+
+Compatibility notes:
+
+1. `memory_uid` is the preferred pointer field.
+2. `memory_key` is treated as temporary legacy fallback.
+3. Runtime schema boundary prefers JSON Schema-compatible objects to avoid validator lock-in.

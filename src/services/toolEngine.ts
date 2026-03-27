@@ -67,6 +67,11 @@ class ToolEngineSingleton {
 
             // Source-aware envelope (package + handler + payload only).
             payload: data,
+            schema_ref: `itsjiran/ace-system:tools:runtime:${action}:result`,
+            schema_version: '1.0.0',
+            schema_kind: 'json_schema',
+            validation_status: 'validated',
+            validated_at: at,
             source: {
                 package_ref: packageRef,
                 handler_ref: `tool:${action}:${packageRef || 'unknown'}:${toolSlug || 'n/a'}`,

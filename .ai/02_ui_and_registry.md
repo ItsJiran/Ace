@@ -87,3 +87,27 @@ Status sync for current architecture and runtime progress:
 - Presentation block validation hardened: component_slug is required and memory_uid is preferred (memory_key remains temporary legacy fallback).
 - Context memory envelope normalization is centralized in AIContextMemoryEngine to avoid tool-only coupling.
 - Gateway continuation contract uses memory pointers for rendering instead of injecting raw tool payloads into prose.
+
+## Schema Boundary V1 (Registry-Centric)
+
+RegistryEngine is now the canonical resolver for cross-package runtime schemas.
+
+Required runtime metadata per domain entry (V1):
+
+1. `schema_ref` — stable globally unique schema identifier.
+2. `schema_version` — semantic version used for compatibility checks.
+3. `schema_kind` — preferred value: `json_schema`.
+4. `payload_schema` — runtime schema object for host-side payload validation.
+5. `input_schema` and `output_schema` — optional but recommended for callable domains.
+
+Registration policy:
+
+1. Package authors export runtime schema objects, not TypeScript-only interfaces, for boundary contracts.
+2. Host validates metadata shape at registration time.
+3. Registry lookup by `schema_ref` is the only supported schema resolution path for runtime consumers.
+
+Rationale:
+
+1. Reduces compile-time import coupling across package boundaries.
+2. Allows external bundles to integrate without TypeScript type sharing.
+3. Enables host-governed validation and compatibility enforcement.
