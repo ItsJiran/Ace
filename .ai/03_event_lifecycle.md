@@ -105,3 +105,24 @@ All engine EventBus routes are registered in a single boot phase (Phase 7: Init 
 2. **The Flow:** The background audio engine (Tauri Rust) emits high-frequency IPC events containing byte arrays.
 3. **Direct Canvas Listen:** The `<AudioVisualizer />` component uses the `useAceListener` hook to intercept these specific high-frequency events.
 4. **DOM Bypass Render:** Inside the hook's callback, instead of setting React state, the code directly manipulates an HTML5 `<canvas>` `ref` (e.g., `canvasContext.fillRect(...)`). This bypasses the React Virtual DOM entirely, ensuring perfectly smooth 60 FPS rendering.
+
+---
+
+## Sync Update (2026-03-27)
+
+Latest runtime synchronization applied:
+
+- AI parser now handles split-tag boundaries with a sliding-window carryover approach (e.g. lone `<` and `</` are buffered, not emitted as prose).
+- Parser token tracing now captures raw HTTP chunk input, incoming carryover, output text preview, and carryover output.
+- Stream/runtime memory now persists parser token traces per chunk for monitor consumption (`parser_token_traces`, `parser_token_trace_count`).
+- AI Session Monitor now supports nested response debugging:
+  - grouped by prompt turn
+  - grouped by response attempt inside each prompt turn
+  - token trace export buttons for full JSON and output-only payload
+- Tool execution contract now supports nested payload for discriminated schemas:
+  - `{"action":"execute", ..., "payload": { "action": "list_directory", "path": "~/" } }`
+  - prevents `No matching discriminator for field action` collisions between block action and tool schema action.
+
+Documentation note:
+- Response debugging should be analyzed per prompt turn and per attempt, not as one flat stream.
+- Auto-loop continuations belong to the same prompt turn unless a new user prompt starts a new turn.

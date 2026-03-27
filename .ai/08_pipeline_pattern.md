@@ -53,3 +53,24 @@ Used by the owning domain engine (e.g., `fsEngine`, `shellEngine`). Ensures secu
 - **No Side-Emits**: Steps should avoid emitting to the Event Bus *during* their logic unless escalating a new intent.
 - **Atomic Steps**: Each step should be a pure function/method as much as possible to facilitate TDD (Vitest).
 - **Context Injection**: Use the `PipelineContext` to pass shared properties (like the `process_uid`) through the chain.
+
+---
+
+## Sync Update (2026-03-27)
+
+Latest runtime synchronization applied:
+
+- AI parser now handles split-tag boundaries with a sliding-window carryover approach (e.g. lone `<` and `</` are buffered, not emitted as prose).
+- Parser token tracing now captures raw HTTP chunk input, incoming carryover, output text preview, and carryover output.
+- Stream/runtime memory now persists parser token traces per chunk for monitor consumption (`parser_token_traces`, `parser_token_trace_count`).
+- AI Session Monitor now supports nested response debugging:
+  - grouped by prompt turn
+  - grouped by response attempt inside each prompt turn
+  - token trace export buttons for full JSON and output-only payload
+- Tool execution contract now supports nested payload for discriminated schemas:
+  - `{"action":"execute", ..., "payload": { "action": "list_directory", "path": "~/" } }`
+  - prevents `No matching discriminator for field action` collisions between block action and tool schema action.
+
+Documentation note:
+- Response debugging should be analyzed per prompt turn and per attempt, not as one flat stream.
+- Auto-loop continuations belong to the same prompt turn unless a new user prompt starts a new turn.
