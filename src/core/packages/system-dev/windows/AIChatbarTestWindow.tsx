@@ -1,6 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AceWindow } from '#/components/layout/AceWindow';
-import AIChatbarTest from '../components/AIChatbarTest';
+import AIChatbarTest from '../components/aiChatbarTest';
 
 export const registry: AceRegistryType.Window = {
     name: 'ai_chatbar_test_window',

@@ -58,6 +58,22 @@ class RegistryEngineSingleton {
     private parserBlockByNamespace = new Map<string, ParserBlockRuntime>();
     private parserBlockByTag = new Map<string, ParserBlockRuntime>();
 
+    private isCoreComponentEntryPath(path: string): boolean {
+        const splitToken = '/components/';
+        const idx = path.indexOf(splitToken);
+        if (idx < 0) return false;
+
+        const relativePath = path.slice(idx + splitToken.length);
+
+        // Allow simple components directly under components root.
+        if (/^[^/]+\.(ts|tsx)$/.test(relativePath)) return true;
+
+        // Allow complex components as folder entries via index file only.
+        if (/^[^/]+\/index\.(ts|tsx)$/.test(relativePath)) return true;
+
+        return false;
+    }
+
     /** Initialize the registry system. */
     async boot() {
         if (this.isBooted) return;
@@ -383,7 +399,9 @@ class RegistryEngineSingleton {
                     loadedPackageModules[modulePath] = await (moduleLoader as () => Promise<unknown>)();
                 }
 
-                this.registerPackageModules(manifest.package_name, loadedPackageModules);
+                this.registerPackageModules(manifest.package_name, loadedPackageModules, {
+                    coreComponentEntryMode: true,
+                });
                 console.log(`   - Loaded: ${manifest.package_name}`);
             }
         }
@@ -396,7 +414,11 @@ class RegistryEngineSingleton {
      * Register domain entries from an eager import map (import.meta.glob)
      * Scans each file for 'default' (implementation) and 'registry' (metadata) exports.
      */
-    registerPackageModules(packageName: string, modules: Record<string, unknown>) {
+    registerPackageModules(
+        packageName: string,
+        modules: Record<string, unknown>,
+        options?: { coreComponentEntryMode?: boolean },
+    ) {
         const runtimePkg = this.runtimeIndex.get(packageName);
         if (!runtimePkg) {  
             console.warn(`[RegistryEngine] Cannot register domains for unknown package: ${packageName}`);
@@ -416,6 +438,10 @@ class RegistryEngineSingleton {
 
         for (const [path, moduleNamespace] of Object.entries(modules)) {
             const domain = inferDomainFromPath(path);
+
+            if (options?.coreComponentEntryMode && domain === 'components' && !this.isCoreComponentEntryPath(path)) {
+                continue;
+            }
             
             // We expect a Module Namespace Object with exports
             if (domain && moduleNamespace && typeof moduleNamespace === 'object') {
