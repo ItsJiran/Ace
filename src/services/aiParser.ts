@@ -1,4 +1,4 @@
-import { ParserEngine } from './parserEngine';
+import { ParserEngine } from '#/services/parserEngine';
 import type {
     AIParseResult,
 } from '#/schemas/parser';

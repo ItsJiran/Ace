@@ -31,39 +31,17 @@ Notes:
 - This README now tracks active and pending work only.
 - Completed details and long examples are maintained in `.ai/` documentation.
 
----
+## Priority Architecture Notice
 
-## Completed (Mar 2026)
-
-### Engine Architecture Refactors
-- [x] **AIGatewayEngine Facade Split**: Extracted heavy logic into sub-modules under `services/aiGateway/` — `protocolLifecycle.ts`, `sendGatewayRoute.ts`, `requestPreparation.ts`, `responseFinalization.ts`. Engine is now a thin orchestrator.
-- [x] **AIContextEngine Facade Split**: Extracted context logic into sub-services under `services/aiContent/` — `types.ts`, `protocolTextService.ts`, `contextBlockService.ts`, `historySummaryService.ts`, `contextBuilderService.ts`, `syncService.ts`. Engine is now a facade delegator.
-
-### Storage & RAM
-- [x] **RAM Parent-Child Hierarchy**: Added `parent_memory_uid` field to `RAMInteractivitySchema`. StorageEngine tracks hierarchy via `parent_children` and `child_parent` Maps with full reparent/orphan lifecycle.
-- [x] **RAM Monitor Hierarchy Panel**: `RamMonitorWindow` extended with hierarchy tree visualization, parent/children columns, and sort support.
-
-### Boot & Routing
-- [x] **Centralized Route Gate**: All engine EventBus routes (`send_gateway`, `open_window`, `keybind`, `execute_tool`) registered in boot Phase 7 via `registerEventRoutes()` pattern.
-
-### Parser & Contract Refactors
-- [x] **Parser Block Unification**: Replaced legacy `<execute_tool>` / `<execute_storage>` with unified `<tool>` and `<storage>` blocks using action-first payload contracts.
-- [x] **ParserEngine + EventBus Stop Signal**: Added `ParserEngine` session-targeted emits and stop control via EventBus (`parser_result:session`, `parser_control:session_stop`) with parser interrupt propagation into gateway stream handling.
-- [x] **Parser Domain Decoupling in RegistryEngine**: Removed hard parser imports from `RegistryEngine`; parser lookup now resolved from registered `parsers` domain entries.
-- [x] **Schema Boundary Split**: Moved generic parser contracts to `src/schemas/parser.ts`; block-attached types (`context`, `history_summary_*`) now live inside their parser files.
-
-### Tool Execution Runtime (Mar 2026)
-- [x] **Tool Action Routes in ToolEngine**: Added `tool:list`, `tool:view_schema`, `tool:execute` EventBus routes; each route writes structured result to RAM and emits `parser_result:session` back to the originating session.
-- [x] **Parsed Tool Block Dispatch in StreamHandler**: Complete `<tool>` blocks from parser are turned into typed EventBus interactions (`action: tool`, `sub_action: list|view_schema|execute`) and dispatched at end of each stream chunk.
-- [x] **Parser Interrupt Hard-Cut**: After `interrupt_requested` is set inside `parseAIStreamChunk`, the parse loop exits immediately — content after the interrupted tag is discarded within the same chunk.
-- [x] **Late-Chunk Discard Post-Interrupt**: `httpClient` sets an `ignoreLateChunks` flag once interrupt is detected; subsequent streaming chunks are counted but not forwarded to the parser, preventing stale model output from entering the session.
-- [x] **Tool/Storage Payload Parser Hardening**: `parseJsonLoose` in `ToolBlock.ts` and `StorageBlock.ts` now tries multiple sanitization candidates (strip outer tag, strip fenced JSON, extract `{...}` object) before giving up, eliminating `payload_parse_error` when the model accidentally wraps the JSON body.
-- [x] **Tool Lifecycle Events in ToolEngine**: Added `publishToolActionStarted` helper; routes `tool:list`, `tool:view_schema`, `tool:execute` now emit `tool_action_started` immediately on entry, giving the monitor a distinct `dispatch → started → result/error` timeline.
-- [x] **Block Handler State in Session Snapshot**: `AIGatewayEngine.listSessions()` derives `block_handler_state` from active response RAM by reading the latest tool lifecycle event; status is `running` during dispatch/started and `idle` after result/error.
-- [x] **AISessionMonitor Handler Badge**: Session row now shows `Handler: running/idle` badge with current action name, updating live with 1-second auto-refresh.
-- [x] **AIChatbarTest Block Activity Panel**: Added real-time `Block Handler State` panel above chat transcript — shows handler label, list of pending/running action blocks, and a rolling timeline of tool runtime events (dispatch/started/result/error).
-
----
+- Current `parserEngine` is getting bloated after multiple feature updates.
+- Refactor priority: split parser runtime responsibilities into focused subservices under a dedicated folder (`src/services/parserEngine/`), instead of continuing to grow logic inside a single parser file path (including `aiParser`).
+- Target shape:
+  - `src/services/parserEngine.ts` (main facade/orchestrator)
+  - `src/services/parserEngine/sessionStateService.ts`
+  - `src/services/parserEngine/blockDispatchService.ts`
+  - `src/services/parserEngine/tokenTraceService.ts`
+  - `src/services/parserEngine/controlSignalService.ts`
+- Rule moving forward: parser orchestration stays in facade, heavy logic belongs to subservices.
 
 ## Current Focus
 
@@ -80,10 +58,6 @@ Notes:
 
 #### AI Parser
 - [~] Token stream reader: handled in gateway stream handler path (dedicated session stream key pending)
-- [x] Tool block execution: parsed `<tool>` blocks dispatched as EventBus interactions to `ToolEngine` action routes
-- [x] Parser interrupt hard-cut: parsing loop exits immediately when `interrupt_requested` is flagged within a chunk
-- [x] Late-chunk discard: stream chunks arriving after interrupt signal are discarded without parsing
-- [x] Payload parse hardening: `<tool>` and `<storage>` body parser tolerates accidental tag/fence wrappers
 - [ ] Thought/Thinking context block parser: parse context blocks (thoughts / thinking) into dedicated structured payloads
 - [ ] Thought printer channel: add dedicated printer flow to render thoughts / thinking output separately from normal assistant reply
 - [ ] Planning context block parser: parse context blocks for planning into structured plan payloads
@@ -313,27 +287,106 @@ Audit Checklist:
 - [ ] Scrollable message history with timestamps
 
 #### Tooling Mechanism
-- [x] Tool result write-back to RAM: `tool:list`, `tool:view_schema`, `tool:execute` routes write structured results to RAM and emit parser result events back to session
-- [x] Tool lifecycle observability: `tool_action_dispatch` → `tool_action_started` → `tool_action_result/error` events tracked per session in response RAM
-- [x] Resume session context after tool result: AI continuation loop now waits for terminal tool event (`tool_action_result/error`), injects tool feedback payload as continuation prompt, and re-runs the same session up to guardrail turn cap
 - [ ] Align ToolEngine to Pre-Allocation Protocol for all tool results
 
-#### AI Context Engine (NEW)
-- [ ] ContextSchema: define context block schema (`summary`, `intent`, `constraints`, `decisions`, `next_actions`, `confidence`)
-- [ ] ContextPlanningSchema: define planning block schema (grand_plan, current_conversation_plan, plan_status, plan_steps, plan_refs)
+#### AI Context Engine (Priority)
+- [ ] ContextSchema V1: lock canonical context block schema (`summary`, `intent`, `constraints`, `decisions`, `next_actions`, `confidence`, `source_refs`)
+- [ ] ContextPlanningSchema V1: finalize planning schema (`grand_plan`, `current_conversation_plan`, `plan_status`, `plan_steps`, `plan_refs`, `decision_reason`)
+- [ ] ContextFeedbackSchema V1: define feedback contract (`last_action`, `result_status`, `error_code`, `feedback_loop_status`, `decision_source`)
+- [ ] ContextEngine Orchestrator: unify parse -> normalize -> score -> merge -> persist flow for all context sources
+- [ ] Context Snapshot API: expose per-turn context snapshot for monitor, replay, and deterministic debugging
 
-#### Context Layers (Design Tasks)
-- [ ] ContextLayerTooling: maintain tool catalog summary + on-demand deep docs retrieval flow
-- [~] ContextLayerApplication: default bridge context + parser protocol injected, deeper app map pending
+#### Context Layer Implementation Focus
+- [ ] ContextLayerSystem: inject runtime state (session status, guardrail flags, loop counters, active tool action)
+- [ ] ContextLayerTooling: maintain tool catalog summary + on-demand deep docs retrieval + schema hints
+- [ ] ContextLayerApplication: expand app map beyond default bridge context and parser protocol
+- [ ] ContextLayerConversation: summarize recent turns into compact intent/decision memory blocks
+- [ ] Layer Priority Rules: define conflict resolution and source precedence across layers
 
-#### RAG-style Storage Tasks
-- [~] ContextRAGRead: engine read path exists; AI tooling retrieval flow still pending
+#### Context RAG Focus
+- [ ] ContextRAGRead V2: hybrid retrieval (structured keys + semantic snippets) with rank score output
+- [ ] ContextRAGWrite: write useful conversation artifacts to retrievable context references
 - [ ] ContextRAGRetention: trim/archive old references without breaking active session keys
+- [ ] ContextRAGFreshness: stale-reference detection and auto-refresh policy
+- [ ] ContextRAGObservability: persist retrieval traces (`why_selected`, `score`, `source`) per request
 
-#### Context Build Pipeline Tasks
-- [ ] ContextBudget: token budget manager with priority-based trimming
-- [~] ContextDiagnostics: included context references are exposed in request memory
-- [ ] ContextTests: add tests for merge, budget trimming, and reference retrieval correctness
+#### Context Build Pipeline Focus
+- [ ] ContextBuildPlanner: choose context candidates by intent and active task mode
+- [ ] ContextBudget: token budget manager with priority-based trimming and reserved budget per layer
+- [ ] ContextMergePolicy: dedupe/squash overlapping blocks while preserving critical constraints
+- [ ] ContextAssembler: deterministic final prompt-context assembly with stable section ordering
+- [ ] ContextDiagnostics: expose included/excluded references and drop reasons in request memory
+- [ ] ContextTests: add tests for merge, budget trimming, ranking, and reference retrieval correctness
+
+#### Hardening Context + Feedback Context
+- [ ] Schema hardening: strict validation + safe fallback for malformed context blocks
+- [ ] Feedback loop hardening: enforce terminal reasons and stop-code mapping on every interrupted loop
+- [ ] Context safety rails: prevent contradictory context injection and stale plan overrides
+- [ ] Resilience paths: degraded-mode context build when retrieval or parser fails mid-stream
+- [ ] Quality metrics: track context precision/recall proxy, retry rate, and loop stability per session
+- [ ] Regression suite: end-to-end tests for context build + feedback loop continuation after tool/system results
+
+#### Agentic Context-RAG Execution Flow (New)
+
+Goal:
+- Keep AI loop lightweight by moving heavy tool outputs (file content, large JSON, code blobs) into Context RAG memory and referencing them by memory address.
+
+Flow Contract (Proposed):
+1. User asks for an operation (example: list folder).
+2. AI emits tooling block (`tool:execute` -> `fs-tool`).
+3. Tool handler executes and stores heavy result in Context RAG memory, not in direct conversational response payload.
+4. Feedback payload returns compact metadata only:
+  - memory address/key
+  - short summary
+  - size/type info
+  - recommended lifespan
+5. Gateway loop injects available Context RAG index on every continuation turn:
+  - memory key
+  - short summary of each memory
+  - source/tool origin
+  - lifespan status
+6. If AI needs details, AI emits context retrieval block to pull selected memory by address/key.
+7. Parser presentation block renders human-facing output from selected memory reference (example: show list file from memory key), without forcing full raw payload into base response.
+
+Lifespan Policy (Draft):
+- Default Context RAG lifespan for heavy tool outputs: 3-5 chat turns.
+- Lifespan can be extended/shortened by AI policy and runtime guardrails.
+- Expired memory must be summarized before eviction when still referenced by active plan.
+
+Implementation Tasks:
+- [ ] Add `context:store_heavy_result` internal route for tool/system handlers.
+- [ ] Add standardized memory envelope (`memory_key`, `summary`, `payload_type`, `size`, `created_at`, `expires_at`, `source`).
+- [ ] Add parser block `context_retrieve` for explicit memory fetch by key/address + optional lifespan override.
+- [ ] Add parser block `presentation` to render referenced memory into UI-safe output slices.
+- [ ] Add gateway auto-injection for `available_context_memories` + compact summaries each turn.
+- [ ] Add retention worker for lifespan tick, eviction, and summarize-before-drop policy.
+- [ ] Add feedback-loop continuation rule: tool result -> memory pointer -> AI decide retrieve/present/continue.
+- [ ] Add safeguards for oversized retrieval and repeated large-memory fetch loops.
+- [ ] Add monitor panel fields: memory address usage, retrieval counts, expiry state, and hit/miss metrics.
+- [ ] Add integration tests for pointer-only flow (no full payload leakage into main response unless requested).
+
+Sprint Breakdown (Implementation):
+
+Sprint 1 - ParserEngine Refactor + Core Contract
+- [x] Create `parserEngine` subservice folder and move parser session state/token trace/control logic out of bloated runtime file.
+- [x] Keep backward-compatible facade API so gateway flow remains stable.
+- [ ] Finalize context memory envelope contract and typed schemas.
+- [ ] Add `context:store_heavy_result` route and wire tool handlers to store heavy outputs by pointer.
+- [ ] Add baseline tests for parserEngine split and pointer storage contract.
+
+Sprint 2 - Context Retrieval + Presentation Flow
+- [ ] Implement parser block `context_retrieve` and validate address/key retrieval path.
+- [ ] Implement parser block `presentation` for rendering memory-backed slices to user response.
+- [ ] Inject `available_context_memories` + compact summaries in each gateway continuation turn.
+- [ ] Add retrieval guardrails (size cap, loop cap, malformed reference fallback).
+- [ ] Add integration tests for list-folder example with pointer-only feedback payload.
+
+Sprint 3 - Lifespan + Hardening + Observability
+- [ ] Implement retention worker with default TTL 3-5 turns and configurable override policy.
+- [ ] Add summarize-before-eviction for referenced memories.
+- [ ] Add metrics and monitor fields (retrieval hits/miss, expiry status, pointer usage frequency).
+- [ ] Add feedback-loop hardening for memory retrieval failures and deterministic stop reasons.
+- [ ] Add full E2E regression suite for continuous loop with heavy payload offloading to Context RAG.
 
 ## Development Roadmap
 
@@ -390,9 +443,12 @@ Core widgets:
 - [ ] ToolEngine Pre-Allocation alignment
 
 #### Step 6 - AI Context Engine (New)
-- [~] ContextStep6State: session context state machine active, advanced layers still expanding
-- [ ] ContextStep6Retrieve: context retrieval tooling path (`list_tooling`, `describe_tooling`, `fetch_reference`, `describe_eventbus`)
-- [~] ContextStep6Observe: monitor + used_contexts tracing available, deeper diagnostics pending
+- [ ] ContextStep6State: finalize stable session context state machine and failure transitions
+- [ ] ContextStep6Retrieve: complete retrieval tooling path (`list_tooling`, `describe_tooling`, `fetch_reference`, `describe_eventbus`)
+- [ ] ContextStep6Build: enforce deterministic build pipeline (planner -> budget -> merge -> assemble)
+- [ ] ContextStep6Harden: strict schema checks + fallback + stale-context guards
+- [ ] ContextStep6Feedback: close loop with structured feedback context on each tool/system result
+- [ ] ContextStep6Observe: complete monitor, trace, and diagnostics for context selection decisions
 
 ### Phase 7 - Host-Guest Package Ecosystem
 - [ ] Implement SafeComponentSlot with ErrorBoundary
