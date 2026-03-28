@@ -1,5 +1,5 @@
 import { RegistryEngine } from './registryEngine';
-import { ProcessEngine } from './processEngine';
+import { KernelEngine } from './kernelEngine';
 import { EventBus } from './eventEngine';
 import { StorageEngine } from './storageEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
@@ -40,7 +40,7 @@ class ToolEngineSingleton {
         run: (processUid: string) => Promise<T>;
     }): Promise<T> {
         const { routeType, sourceProcessUid, metadata, payload, run } = input;
-        return ProcessEngine.track(
+        return KernelEngine.trackAsync(
             routeType,
             {
                 ...(metadata || {}),
@@ -69,7 +69,7 @@ class ToolEngineSingleton {
         if (!resultMemoryUid) return;
 
         if (processUid) {
-            const created = ProcessEngine.createRuntimeMemory({
+            const created = KernelEngine.createRuntimeMemory({
                 owner_process_uid: processUid,
                 memory_uid: resultMemoryUid,
                 payload,
@@ -79,7 +79,7 @@ class ToolEngineSingleton {
             });
 
             if (!created) {
-                ProcessEngine.updateRuntimeMemory({
+                KernelEngine.updateRuntimeMemory({
                     owner_process_uid: processUid,
                     memory_uid: resultMemoryUid,
                     payload,
@@ -122,7 +122,7 @@ class ToolEngineSingleton {
             : PARSER_RUNTIME_EVENT.HANDLER_RESULT;
 
         return {
-            // Backward-compatible top-level fields.
+            // Keep critical fields mirrored at top-level for route consumers.
             status,
             action,
             package_ref: packageRef,
@@ -282,7 +282,7 @@ class ToolEngineSingleton {
 
         const toolDef = result.entry.implementation as ToolDefinition<any>;
 
-        return ProcessEngine.track(
+        return KernelEngine.trackAsync(
             `tool:${packageRef}:${toolSlug}`,
             { packageRef, toolSlug, payload },
             async (process_uid) => {
@@ -358,7 +358,7 @@ class ToolEngineSingleton {
                         },
                     });
 
-                    ProcessEngine.updatePayload(process_uid, {
+                    KernelEngine.updateProcessPayload(process_uid, {
                         status: 'done',
                         action: 'list',
                         total: tools.length,
@@ -412,7 +412,7 @@ class ToolEngineSingleton {
                                 error_message: 'Missing package_ref or tool_slug.',
                             },
                         });
-                        ProcessEngine.updatePayload(process_uid, {
+                        KernelEngine.updateProcessPayload(process_uid, {
                             status: 'failed',
                             error_message: 'Missing package_ref or tool_slug.',
                             updated_at: Date.now(),
@@ -459,7 +459,7 @@ class ToolEngineSingleton {
                         },
                     });
 
-                    ProcessEngine.updatePayload(process_uid, {
+                    KernelEngine.updateProcessPayload(process_uid, {
                         status: result?.entry ? 'done' : 'failed',
                         action: 'view_schema',
                         updated_at: Date.now(),
@@ -523,7 +523,7 @@ class ToolEngineSingleton {
                                 error_message: 'Missing package_ref or tool_slug.',
                             },
                         });
-                        ProcessEngine.updatePayload(routeProcessUid, {
+                        KernelEngine.updateProcessPayload(routeProcessUid, {
                             status: 'failed',
                             error_message: 'Missing package_ref or tool_slug.',
                             updated_at: Date.now(),
@@ -565,7 +565,7 @@ class ToolEngineSingleton {
                             },
                         });
 
-                        ProcessEngine.updatePayload(routeProcessUid, {
+                        KernelEngine.updateProcessPayload(routeProcessUid, {
                             status: 'done',
                             action: 'execute',
                             updated_at: Date.now(),
@@ -602,7 +602,7 @@ class ToolEngineSingleton {
                             },
                         });
 
-                        ProcessEngine.updatePayload(routeProcessUid, {
+                        KernelEngine.updateProcessPayload(routeProcessUid, {
                             status: 'failed',
                             action: 'execute',
                             error_message,

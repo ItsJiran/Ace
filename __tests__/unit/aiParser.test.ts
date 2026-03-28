@@ -47,8 +47,8 @@ end_event
         expect(event.headers.event_type).toBe('interaction');
         expect(event.headers.action).toBe('open');
         expect(event.headers.sub_action).toBe('open_tab');
-        expect(result!.blocks.some((b) => b.type === 'event')).toBe(true);
-        expect(result!.blocks.some((b) => b.type === 'paragraph')).toBe(true);
+        expect(result!.blocks.some((b) => b.block_slug === 'event')).toBe(true);
+        expect(result!.blocks.some((b) => b.block_slug === 'paragraph')).toBe(true);
 
         // Assert the payload buffer was captured
         const payload = JSON.parse(event.raw_payload_buffer);
@@ -93,7 +93,7 @@ end_event
         // It should reject the invalid headers, and return the raw text to print to the screen
         expect(result?.events.length).toBe(0);
         expect(result?.textToPrint).toContain('interaction, bad format');
-        expect(result?.blocks.some((b) => b.type === 'paragraph')).toBe(true);
+        expect(result?.blocks.some((b) => b.block_slug === 'paragraph')).toBe(true);
     });
 
     it('should gracefully handle hallucinated json string tag instead of event tag', () => {
@@ -110,7 +110,7 @@ end_event
         expect(result?.events.length).toBe(1);
         expect(result!.events[0].headers.action).toBe('close');
         expect(result!.events[0].is_complete).toBe(true);
-        expect(result!.blocks.some((b) => b.type === 'event')).toBe(true);
+        expect(result!.blocks.some((b) => b.block_slug === 'event')).toBe(true);
     });
 
     it('should parse tool block with action, tool_slug, status and memory fields', () => {
@@ -130,10 +130,10 @@ Setelah eksekusi tool.
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const execBlock = result.blocks.find((b) => b.type === 'tool');
+        const execBlock = result.blocks.find((b) => b.block_slug === 'tool');
 
         expect(execBlock).toBeDefined();
-        if (execBlock && execBlock.type === 'tool') {
+        if (execBlock && execBlock.block_slug === 'tool') {
             expect(execBlock.action).toBe('execute');
             expect(execBlock.tool_slug).toBe('calendar.create');
             expect(execBlock.package_ref).toBe('itsjiran/ace-system');
@@ -153,10 +153,10 @@ Saya bantu membuatkan todo.
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const block = result.blocks.find((entry) => entry.type === 'history_summary_ai_prompt');
+        const block = result.blocks.find((entry) => entry.block_slug === 'history_summary_ai_prompt');
 
         expect(block).toBeDefined();
-        if (block && block.type === 'history_summary_ai_prompt') {
+        if (block && block.block_slug === 'history_summary_ai_prompt') {
             expect(block.is_complete).toBe(true);
             expect(block.payload_json?.summary).toBe('User ingin dibuatkan ringkasan todo.');
             expect(block.payload_json?.memory_key).toBe('system:ai_context_rag:payload:ctxref-prompt');
@@ -175,10 +175,10 @@ Saya bantu membuatkan todo.
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const block = result.blocks.find((entry) => entry.type === 'history_summary_ai_response');
+        const block = result.blocks.find((entry) => entry.block_slug === 'history_summary_ai_response');
 
         expect(block).toBeDefined();
-        if (block && block.type === 'history_summary_ai_response') {
+        if (block && block.block_slug === 'history_summary_ai_response') {
             expect(block.payload_json?.summary).toBe('Saya mengingat nama user adalah Gilang.');
             expect(block.payload_json?.memory_key).toBe('system:ai_context_rag:payload:ctxref-response');
             expect(block.payload_json?.ref_uid).toBe('ctxref-response');
@@ -196,10 +196,10 @@ Saya bantu membuatkan todo.
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const block = result.blocks.find((b) => b.type === 'storage');
+        const block = result.blocks.find((b) => b.block_slug === 'storage');
 
         expect(block).toBeDefined();
-        if (block && block.type === 'storage') {
+        if (block && block.block_slug === 'storage') {
             expect(block.action).toBe('write');
             expect(block.memory_uid).toBe('system:loop:storage:999');
             expect(block.status).toBe('completed');
@@ -214,10 +214,10 @@ Saya bantu membuatkan todo.
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const block = result.blocks.find((b) => b.type === 'tool');
+        const block = result.blocks.find((b) => b.block_slug === 'tool');
 
         expect(block).toBeDefined();
-        if (block && block.type === 'tool') {
+        if (block && block.block_slug === 'tool') {
             expect(block.action).toBe('list');
             expect(block.status).toBe('pending');
             expect(block.payload_parse_error).toBeUndefined();
@@ -236,10 +236,10 @@ Saya bantu membuatkan todo.
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const block = result.blocks.find((b) => b.type === 'storage');
+        const block = result.blocks.find((b) => b.block_slug === 'storage');
 
         expect(block).toBeDefined();
-        if (block && block.type === 'storage') {
+        if (block && block.block_slug === 'storage') {
             expect(block.action).toBe('read');
             expect(block.memory_uid).toBe('system:memory:abc');
             expect(block.payload_parse_error).toBeUndefined();
@@ -254,10 +254,10 @@ Saya bantu?
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const contextBlock = result.blocks.find((b) => b.type === 'context');
+        const contextBlock = result.blocks.find((b) => b.block_slug === 'context');
 
         expect(contextBlock).toBeDefined();
-        if (contextBlock && contextBlock.type === 'context') {
+        if (contextBlock && contextBlock.block_slug === 'context') {
             expect(contextBlock.is_complete).toBe(false);
         }
 
@@ -274,10 +274,10 @@ Saya bantu?
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const block = result.blocks.find((entry) => entry.type === 'history_summary_ai_response');
+        const block = result.blocks.find((entry) => entry.block_slug === 'history_summary_ai_response');
 
         expect(block).toBeDefined();
-        if (block && block.type === 'history_summary_ai_response') {
+        if (block && block.block_slug === 'history_summary_ai_response') {
             expect(block.is_complete).toBe(false);
             expect(block.payload_json?.memory_key).toBe('system:ai_context_rag:payload:ctxref-response');
         }
@@ -294,10 +294,10 @@ Saya bantu?
 
         const chunk2 = `${result1.carryoverBuffer}tool>\n{"action":"list","status":"pending"}\n</tool>`;
         const result2 = parseAIStreamChunk(chunk2);
-        const toolBlock = result2.blocks.find((entry) => entry.type === 'tool');
+        const toolBlock = result2.blocks.find((entry) => entry.block_slug === 'tool');
 
         expect(toolBlock).toBeDefined();
-        if (toolBlock && toolBlock.type === 'tool') {
+        if (toolBlock && toolBlock.block_slug === 'tool') {
             expect(toolBlock.action).toBe('list');
             expect(toolBlock.status).toBe('pending');
         }
@@ -311,10 +311,10 @@ Saya bantu?
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const contextBlock = result.blocks.find((b) => b.type === 'context');
+        const contextBlock = result.blocks.find((b) => b.block_slug === 'context');
 
         expect(contextBlock).toBeDefined();
-        if (contextBlock && contextBlock.type === 'context') {
+        if (contextBlock && contextBlock.block_slug === 'context') {
             expect(contextBlock.is_complete).toBe(true);
             expect(contextBlock.action).toBe('retrieve');
             expect(contextBlock.memory_key).toBe('system:ai_context_rag:payload:ctxref-123');
@@ -330,10 +330,10 @@ Saya bantu?
 `;
 
         const result = parseAIStreamChunk(streamChunk);
-        const presentationBlock = result.blocks.find((b) => b.type === 'presentation');
+        const presentationBlock = result.blocks.find((b) => b.block_slug === 'presentation');
 
         expect(presentationBlock).toBeDefined();
-        if (presentationBlock && presentationBlock.type === 'presentation') {
+        if (presentationBlock && presentationBlock.block_slug === 'presentation') {
             expect(presentationBlock.is_complete).toBe(true);
             expect(presentationBlock.package_ref).toBe('itsjiran/ace-system');
             expect(presentationBlock.component_slug).toBe('ai_output_list');

@@ -85,7 +85,7 @@ export function PresentationRenderer({ block }: { block: BaseBlock }) {
         || 'itsjiran/ace-system';
 
     try {
-        // Look up 'renderers' domain first, fall back to 'components' for backward compat.
+        // Look up 'renderers' domain first, then 'components' as secondary path.
         const rendererEntry = window.ACE.registry?.resolveEntry?.(`${packageRef}:renderers:${componentSlug}`);
         const componentEntry = !rendererEntry
             ? window.ACE.registry?.resolveEntry?.(`${packageRef}:components:${componentSlug}`)

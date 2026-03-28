@@ -1,5 +1,5 @@
 import { StorageEngine } from '#/services/storageEngine';
-import { ProcessEngine } from '#/services/processEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 
 export interface PipelineStep<TInput, TOutput> {
     name: string;
@@ -17,8 +17,11 @@ export interface PipelineContext {
 export class PipelineEngine<TInitial, TFinal> {
     private steps: PipelineStep<any, any>[] = [];
     private readonly maxPipelineLogs = 120;
+    public pipelineName: string;
 
-    constructor(public pipelineName: string) { }
+    constructor(pipelineName: string) {
+        this.pipelineName = pipelineName;
+    }
 
     // Menambahkan langkah ke dalam rantai
     addStep<TNext>(step: PipelineStep<any, TNext>) {
@@ -31,7 +34,7 @@ export class PipelineEngine<TInitial, TFinal> {
         // Optional: wrap entire pipeline as a tracked ProcessEngine record
         if (context.tracked) {
             const parentProcessUid = context.parent_process_uid ?? context.process_uid;
-            return ProcessEngine.track(
+            return KernelEngine.trackAsync(
                 `pipeline:${this.pipelineName}`,
                 {
                     pipeline_name: this.pipelineName,
@@ -88,7 +91,7 @@ export class PipelineEngine<TInitial, TFinal> {
 
             // 2. Laporkan progress ke RAM (agar UI bisa tahu)
             if (context.process_uid) {
-                ProcessEngine.updatePayload(context.process_uid, {
+                KernelEngine.updateProcessPayload(context.process_uid, {
                     status: 'running',
                     current_step: step.name,
                     updated_at: Date.now(),
@@ -108,7 +111,7 @@ export class PipelineEngine<TInitial, TFinal> {
 
             // 3. Eksekusi langkah ini dan jadikan input untuk langkah berikutnya
             try {
-                currentData = await ProcessEngine.withProcessContext(context.process_uid, async () => {
+                currentData = await KernelEngine.withProcessContext(context.process_uid, async () => {
                     return step.execute(currentData, context);
                 });
             } catch (error) {
@@ -138,7 +141,7 @@ export class PipelineEngine<TInitial, TFinal> {
         });
 
         if (context.process_uid) {
-            ProcessEngine.updatePayload(context.process_uid, {
+            KernelEngine.updateProcessPayload(context.process_uid, {
                 status: 'done',
                 current_step: 'completed',
                 updated_at: Date.now(),

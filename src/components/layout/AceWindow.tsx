@@ -15,7 +15,7 @@ type AceWindowProps = {
     children?: ReactNode | ((props: UseAceWindowResult) => ReactNode);
 };
 
-// Simplified: Now accepts either windowUid (preferred) or legacy config object
+// Accept either windowUid (preferred runtime path) or direct config object
 function AceWindowComponent({ windowUid, config, headless, className, style, children }: AceWindowProps) {
 
     // Determine source

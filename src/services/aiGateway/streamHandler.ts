@@ -455,7 +455,7 @@ export function handleSessionStreamChunk(
             return;
         }
 
-        // retrieve / store: dispatch to EventBus route handled by ContextMemoryBlockHandler
+        // retrieve / store: dispatch to EventBus route handled by AIContextEngine
         const fallbackResultKey =
             requestedResultUid ??
             `system:session:${session.sessionId}:ctx_result:${Date.now()}`;

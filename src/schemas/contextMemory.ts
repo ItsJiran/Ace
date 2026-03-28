@@ -124,7 +124,7 @@ export interface ContextMemorySnapshot {
  * set an item's status to 'in' to inject it, 'out' to suppress it. No type-based filtering
  * is applied here; callers manipulate lifecycle state instead.
  * Use case: gateway assembles context with a specific token budget, feeding it the already-built
- * legacy prompt so the memory engine can append its [CONTEXT_MEMORY] sections on top.
+ * prompt baseline so the memory engine can append its [CONTEXT_MEMORY] sections on top.
  */
 export interface ContextBuildOptions {
   sessionId: string;

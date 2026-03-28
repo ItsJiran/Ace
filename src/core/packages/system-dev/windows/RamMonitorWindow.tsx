@@ -139,7 +139,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     };
 
     // Build parent->children graph from explicit hierarchy links first,
-    // then backfill from row metadata for compatibility.
+    // then backfill from row metadata as a secondary source.
     const childrenByParent = new Map<string, Set<string>>();
     const parentByChild = new Map<string, string>();
 

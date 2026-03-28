@@ -15,6 +15,7 @@ import { AIGatewayEngine } from './services/aiGatewayEngine';
 import { ShellEngine } from '#/services/shellEngine';
 import { AIContextEngine } from '#/services/aiContextEngine';
 import { AIContextMemoryEngine } from '#/services/aiContextMemoryEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 
 import { ParserEngine } from '#/services/parserEngine';
 import type { PipelineContext } from '#/services/pipelineEngine';
@@ -41,6 +42,7 @@ export async function bootACE() {
                 widget: WidgetEngine,
                 tool: ToolEngine,
                 process: ProcessEngine,
+                kernel: KernelEngine,
                 window: WindowEngine,
                 event: EventBus,
                 storage: StorageEngine,
@@ -55,6 +57,10 @@ export async function bootACE() {
                 context: AIContextEngine,
                 context_memory: AIContextMemoryEngine,
                 parser: ParserEngine,
+                hooks: {
+                    // Module lazy-loaded to provide React hooks to packages
+                    // See src/services/bridgeHooks.ts
+                },
             };
             console.log('🔌 ACE Registry Bridge Initialized.');
         }

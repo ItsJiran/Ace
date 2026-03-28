@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
+import { useProcessContext } from '#/hooks/useProcessContext';
+import { initializeBridgeHooks, registerProcessContextHook } from '#/services/bridgeHooks';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useRenderCount } from '#/hooks/useRenderCount';
 import { MemoizedWindowItem } from '#/components/layout/MemoizedWindowItem';
@@ -7,6 +9,9 @@ import { MemoizedWindowItem } from '#/components/layout/MemoizedWindowItem';
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
   const renderCount = useRenderCount('GlobalOverlay');
+
+  // Get process context for bridge registration
+  useProcessContext();
 
   // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
   useEffect(() => {
@@ -18,6 +23,15 @@ function App() {
       });
     });
   }, []);
+
+  // [Phase E] Initialize bridge hooks after React mounts
+  // This allows external packages to access React hooks via window.ACE.hooks
+  useEffect(() => {
+    if (isBootReady) {
+      initializeBridgeHooks();
+      registerProcessContextHook(useProcessContext);
+    }
+  }, [isBootReady]);
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');

@@ -14,11 +14,8 @@ export default function ProcessMonitorDev() {
     const [endingProcessUid, setEndingProcessUid] = useState<string | null>(null);
 
     const isTerminalStatus = (status: ProcessRecord['status']) => {
-        return status === 'completed'
-            || status === 'done'
-            || status === 'error'
+        return status === 'done'
             || status === 'failed'
-            || status === 'killed'
             || status === 'terminated'
             || status === 'cancelled';
     };
@@ -114,9 +111,9 @@ export default function ProcessMonitorDev() {
     }, [filtered]);
 
     const statusClass = (status: ProcessRecord['status']) => {
-        if (status === 'completed' || status === 'done') return 'text-emerald-300';
-        if (status === 'error' || status === 'failed' || status === 'killed' || status === 'terminated' || status === 'cancelled') return 'text-rose-300';
-        if (status === 'running' || status === 'booting' || status === 'created' || status === 'waiting' || status === 'yielding') return 'text-amber-300';
+        if (status === 'done') return 'text-emerald-300';
+        if (status === 'failed' || status === 'terminated' || status === 'cancelled') return 'text-rose-300';
+        if (status === 'running' || status === 'created' || status === 'waiting') return 'text-amber-300';
         return 'text-zinc-300';
     };
 
@@ -135,7 +132,7 @@ export default function ProcessMonitorDev() {
                     className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-200 outline-none"
                 />
                 <div className="text-[10px] text-zinc-500 mt-1">
-                    Only active processes are shown. Completed/terminated tasks are hidden.
+                    Only active processes are shown. Done/terminated tasks are hidden.
                 </div>
             </div>
 

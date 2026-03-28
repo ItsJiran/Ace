@@ -212,7 +212,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     // Derived Runtime Flags
     // -------------------------------------------------------------------------
     
-    // For backward compatibility, derive isHovered from ref
+    // Derive isHovered from live ref state
     // In practice, this will always be false during renders (ref updates don't trigger renders)
     // Components should use CSS class "is-hovered" for styling instead
     const isHovered = isHoveredRef.current;

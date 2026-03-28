@@ -34,7 +34,7 @@ export namespace AceRegistryType {
         description?: string;
         /** Optional runtime schema metadata used for cross-package boundary validation. */
         schema?: RuntimeSchemaMetadata;
-        /** Compatibility fields for flattened metadata form. */
+        /** Flattened metadata mirror fields. */
         schema_ref?: string;
         schema_version?: string;
         schema_kind?: RuntimeSchemaKind;

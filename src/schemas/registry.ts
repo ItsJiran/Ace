@@ -110,17 +110,3 @@ export const RegistryPackageIndexEntrySchema = z.object({
 });
 export type RegistryPackageIndexEntry = z.infer<typeof RegistryPackageIndexEntrySchema>;
 
-// Compatibility alias for still-migrating modules.
-export type PackageManifest = {
-    id: string;
-    name: string;
-    version: string;
-    description?: string;
-    domain: RegistryDomain;
-    author?: string;
-    status?: 'active' | 'inactive';
-    releaseDate?: string;
-    repositoryUrl?: string;
-    permissions?: string[];
-    dependencies?: Array<{ id: string; domain?: RegistryDomain; version?: string }>;
-};

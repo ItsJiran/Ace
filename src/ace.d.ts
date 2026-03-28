@@ -15,6 +15,7 @@ import type { ShellEngine } from './services/shellEngine';
 import type { AIContextEngine } from './services/aiContextEngine';
 import type { AIContextMemoryEngine } from './services/aiContextMemoryEngine';
 import type { ParserEngine } from './services/parserEngine';
+import type { KernelEngine } from './services/kernelEngine';
 import type { Notification, NotificationCreateInput } from './schemas/notification';
 import type {
   AIGatewayConfig,
@@ -113,6 +114,7 @@ declare global {
       widget: WidgetEngine;
       tool: ToolEngine;
       process: ProcessEngine;
+      kernel: InstanceType<typeof KernelEngine>;
       window: WindowEngine;
       event: EventBus;
       storage: StorageEngine;
@@ -128,6 +130,11 @@ declare global {
       context_memory: AIContextMemoryEngine;
       parser: ParserEngine;
       notification?: ACENotificationAPI;
+      hooks: {
+        // React hooks for external packages
+        // Lazy-loaded via src/services/bridgeHooks.ts
+        useProcessContext?: () => { process_uid?: string; parent_process_uid?: string };
+      };
     };
   }
 }

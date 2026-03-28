@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { parseAIStreamChunk } from '#/services/aiParser';
 import { EventBus } from '#/services/eventEngine';
 import { StorageEngine } from '#/services/storageEngine';
+import { RegistryEngine } from '#/services/registryEngine';
 import type { Interaction } from '#/schemas/events';
 
 describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket Workflow', () => {
@@ -10,9 +11,35 @@ describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket
         (StorageEngine as any).global_ram.clear();
         (StorageEngine as any).classification_ram.clear();
         (StorageEngine as any).memory_sockets.clear();
+
+        RegistryEngine.registerPackage({
+            manifest: {
+                namespace: 'itsjiran/ace-system',
+                package_name: 'itsjiran/ace-system',
+                version: '1.0.0',
+                owner_scope: 'core',
+                source_scope: 'core',
+            },
+            domains: {
+                parsers: {},
+            },
+        });
     });
 
-    it('should route an AI Stream block to the EventBus, trigger a Mock Process, and verify the Storage sockets fire', () => {
+    it('should register parser modules used by this flow', async () => {
+        RegistryEngine.registerPackageModules('itsjiran/ace-system', {
+            '/src/core/packages/system/parsers/EventBlock.ts': await import('#/core/packages/system/parsers/EventBlock'),
+        });
+
+        const parsed = parseAIStreamChunk('<event>\ninteraction, null, process-1, null, send, chat_response\n{}\nend_event\n</event>');
+        expect(parsed.events.length).toBe(1);
+    });
+
+    it('should route an AI Stream block to the EventBus, trigger a Mock Process, and verify the Storage sockets fire', async () => {
+        RegistryEngine.registerPackageModules('itsjiran/ace-system', {
+            '/src/core/packages/system/parsers/EventBlock.ts': await import('#/core/packages/system/parsers/EventBlock'),
+        });
+
         // 1. Setup the "React Component" (The Observability Socket)
         const reactComponentRenderSpy = vi.fn();
         StorageEngine.subscribe('type:ai_response', reactComponentRenderSpy);
@@ -31,11 +58,11 @@ describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket
 
         // 3. The raw AI stream chunk arrives from the Gateway network socket
         const rawStreamFromGateway = `
-\`\`\`event
-interaction, null, process-456, null, send, chat_response
-{ "text": "This is a massive hallucinated JSON block that represents 10 pages of text." }
-end_event
-\n\`\`\``;
+    <event>
+    interaction, null, process-456, null, send, chat_response
+    { "text": "This is a massive hallucinated JSON block that represents 10 pages of text." }
+    end_event
+    </event>`;
 
         // 4. The Parser strictly decipher the block into an InteractionSchema
         const parsedResult = parseAIStreamChunk(rawStreamFromGateway);

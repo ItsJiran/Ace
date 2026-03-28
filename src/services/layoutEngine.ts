@@ -143,7 +143,7 @@ class LayoutEngineSingleton {
                     payload: {
                         package: pkg,
                         window: windowId,
-                        // Flatten bounds for WindowEngine compatibility
+                        // Flatten bounds for WindowEngine consumption
                         x: entry.bounds.x,
                         y: entry.bounds.y,
                         width: entry.bounds.width,

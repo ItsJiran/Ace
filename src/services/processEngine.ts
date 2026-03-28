@@ -1,5 +1,7 @@
 import { RegistryEngine } from './registryEngine';
 import { StorageEngine } from './storageEngine';
+import type { CancellationToken } from './cancellationToken';
+import { createCancellationToken } from './cancellationToken';
 import type {
     ProcessKind,
     ProcessLifecycleState,
@@ -25,6 +27,7 @@ class ProcessEngineSingleton {
 
     private readonly runtimeMemoryMeta = new Map<string, ProcessRuntimeMemoryMeta>();
     private readonly processOwnedMemory = new Map<string, Set<string>>();
+    private readonly cancellationTokens = new Map<string, CancellationToken>();
 
     private readonly terminalStateSet = new Set<ProcessLifecycleState>([
         'done',
@@ -35,6 +38,86 @@ class ProcessEngineSingleton {
 
     private readonly processContextStack: string[] = [];
     private readonly terminationHandlersByOwnerEngine = new Map<string, Set<ProcessTerminationHandler>>();
+
+    private getAncestorProcessUids(process_uid: string): string[] {
+        const ancestors: string[] = [];
+        const seen = new Set<string>([process_uid]);
+
+        let cursor = this.readProcess(process_uid)?.parent_process_uid;
+        while (cursor) {
+            if (seen.has(cursor)) break;
+            seen.add(cursor);
+            ancestors.push(cursor);
+            cursor = this.readProcess(cursor)?.parent_process_uid;
+        }
+
+        return ancestors;
+    }
+
+    private linkRuntimeMemoryToProcess(process_uid: string, memory_uid: string) {
+        const currentOwned = this.processOwnedMemory.get(process_uid) ?? new Set<string>();
+        currentOwned.add(memory_uid);
+        this.processOwnedMemory.set(process_uid, currentOwned);
+
+        const processRecord = this.readProcess(process_uid);
+        if (!processRecord) return;
+
+        const currentUids = Array.isArray(processRecord.runtime_memory_uids) ? processRecord.runtime_memory_uids : [];
+        if (currentUids.includes(memory_uid)) return;
+
+        this.writeProcess(process_uid, {
+            runtime_memory_uids: [...currentUids, memory_uid],
+            updated_at: Date.now(),
+        });
+    }
+
+    private unlinkRuntimeMemoryFromProcess(process_uid: string, memory_uid: string) {
+        const owned = this.processOwnedMemory.get(process_uid);
+        if (owned?.has(memory_uid)) {
+            owned.delete(memory_uid);
+            if (owned.size === 0) {
+                this.processOwnedMemory.delete(process_uid);
+            }
+        }
+
+        const processRecord = this.readProcess(process_uid);
+        if (!processRecord) return;
+        const currentUids = Array.isArray(processRecord.runtime_memory_uids) ? processRecord.runtime_memory_uids : [];
+        if (!currentUids.includes(memory_uid)) return;
+
+        this.writeProcess(process_uid, {
+            runtime_memory_uids: currentUids.filter((uid) => uid !== memory_uid),
+            updated_at: Date.now(),
+        });
+    }
+
+    private unlinkRuntimeMemoryEverywhere(memory_uid: string) {
+        [...this.processOwnedMemory.keys()].forEach((process_uid) => {
+            this.unlinkRuntimeMemoryFromProcess(process_uid, memory_uid);
+        });
+    }
+
+    /**
+     * [Phase D] Emit deprecation warning for direct ProcessEngine calls.
+     * Encourages gradual migration to KernelEngine facade.
+     * Used during Phase C->D transition; removed in future major version.
+     */
+    private warnDeprecation(method: string, alternative: string) {
+        const stack = new Error().stack || '';
+        const caller = stack.split('\n')[3]?.trim() || 'unknown';
+
+        // Ignore internal call chains so warnings only target external direct usage.
+        if (caller.includes('kernelEngine.ts') || caller.includes('processEngine.ts')) {
+            return;
+        }
+
+        console.warn(
+            `[ProcessEngine:DEPRECATED] Direct call to ProcessEngine.${method}() detected.` +
+                `\n  Use KernelEngine.${alternative}() instead for phase D compliance.` +
+                `\n  Caller: ${caller}` +
+                '\n  This will be removed in a future version.',
+        );
+    }
 
     /**
      * Retrieve a specific process definition from the registry.
@@ -47,22 +130,11 @@ class ProcessEngineSingleton {
     private canonicalStateFromStatus(status: ProcessStatus): ProcessLifecycleState {
         if (status === 'created' || status === 'running' || status === 'waiting') return status;
         if (status === 'done' || status === 'failed' || status === 'cancelled' || status === 'terminated') return status;
-        if (status === 'booting') return 'created';
-        if (status === 'yielding') return 'waiting';
-        if (status === 'completed') return 'done';
-        if (status === 'error') return 'failed';
-        if (status === 'killed') return 'terminated';
         return 'created';
     }
 
-    private legacyStatusFromCanonical(state: ProcessLifecycleState): ProcessStatus {
-        if (state === 'created') return 'booting';
-        if (state === 'waiting') return 'yielding';
-        if (state === 'done') return 'completed';
-        if (state === 'failed') return 'error';
-        if (state === 'terminated') return 'killed';
-        if (state === 'cancelled') return 'killed';
-        return 'running';
+    private statusFromLifecycleState(state: ProcessLifecycleState): ProcessStatus {
+        return state;
     }
 
     private isTerminalState(state: ProcessLifecycleState): boolean {
@@ -190,6 +262,7 @@ class ProcessEngineSingleton {
                     memory_uid,
                 });
                 this.runtimeMemoryMeta.delete(memory_uid);
+                this.unlinkRuntimeMemoryEverywhere(memory_uid);
                 continue;
             }
 
@@ -218,7 +291,7 @@ class ProcessEngineSingleton {
         const isTerminal = this.isTerminalState(nextState);
         const payload: Partial<ProcessRecord> = {
             lifecycle_state: nextState,
-            status: this.legacyStatusFromCanonical(nextState),
+            status: this.statusFromLifecycleState(nextState),
             updated_at: now,
             metadata: options?.metadata_patch
                 ? { ...(existing.metadata ?? {}), ...options.metadata_patch }
@@ -255,6 +328,12 @@ class ProcessEngineSingleton {
             payload?: Record<string, any>;
         }
     ): ProcessRecord {
+        // [Phase D] Deprecation: Use KernelEngine.spawnProcess() for new code
+        this.warnDeprecation(
+            'registerProcess',
+            options?.parent_process_uid ? 'spawnSubprocess' : 'spawnProcess',
+        );
+
         const process_uid = 'proc-' + crypto.randomUUID();
         const now = Date.now();
 
@@ -264,7 +343,7 @@ class ProcessEngineSingleton {
             parent_process_uid: options?.parent_process_uid,
             child_process_uids: [],
             type,
-            status: 'booting',
+            status: 'created',
             lifecycle_state: 'created',
             process_kind: options?.process_kind,
             owner_engine: options?.owner_engine,
@@ -317,6 +396,9 @@ class ProcessEngineSingleton {
         owner_engine?: string;
         payload?: Record<string, any>;
     }): ProcessRecord {
+        // [Phase D] Deprecation: Use KernelEngine.spawnSubprocess() for new code
+        this.warnDeprecation('spawnSubprocess', 'spawnSubprocess');
+
         return this.registerProcess(
             input.type,
             input.metadata,
@@ -338,6 +420,9 @@ class ProcessEngineSingleton {
      * Updates the status of an active process.
      */
     updateStatus(process_uid: string, status: ProcessStatus, metadata_patch?: Record<string, any>) {
+        // [Phase D] Deprecation: Use KernelEngine.updateProcessStatus() for new code
+        this.warnDeprecation('updateStatus', 'updateProcessStatus');
+
         return this.transitionState(process_uid, this.canonicalStateFromStatus(status), {
             metadata_patch,
         });
@@ -359,6 +444,9 @@ class ProcessEngineSingleton {
             | Record<string, any>
             | ((currentPayload: Record<string, any>) => Record<string, any>),
     ): boolean {
+        // [Phase D] Deprecation: Use KernelEngine.updateProcessPayload() for new code
+        this.warnDeprecation('updatePayload', 'updateProcessPayload');
+
         const existing = this.readProcess(process_uid);
         if (!existing) return false;
 
@@ -411,7 +499,7 @@ class ProcessEngineSingleton {
     }
 
     /**
-     * Kills a process. It keeps it in RAM for UI history but marks it as killed.
+     * Kills a process. It keeps it in RAM for UI history and marks it as terminated.
      */
     killProcess(process_uid: string) {
         return this.terminateProcess(process_uid, {
@@ -450,6 +538,13 @@ class ProcessEngineSingleton {
 
         if (mode === 'graceful') {
             this.requestCancel(process_uid, reason);
+
+            // Cancel the process's cancellation token to signal graceful shutdown
+            const token = this.cancellationTokens.get(process_uid);
+            if (token && !token.isCancelled) {
+                token.cancel(`graceful_shutdown:${reason}`);
+            }
+
             const timeout = options?.timeout_ms ?? 350;
             setTimeout(() => {
                 if (!this.isProcessActive(process_uid)) return;
@@ -472,6 +567,12 @@ class ProcessEngineSingleton {
                 if (!record) return;
                 const currentState = record.lifecycle_state ?? this.canonicalStateFromStatus(record.status);
                 if (this.isTerminalState(currentState)) return;
+
+                // Cancel the process's cancellation token during force termination
+                const token = this.cancellationTokens.get(uid);
+                if (token && !token.isCancelled) {
+                    token.cancel(`force_termination:${reason}`);
+                }
 
                 this.runTerminationHandlers({
                     record,
@@ -500,6 +601,30 @@ class ProcessEngineSingleton {
         });
     }
 
+    /**
+     * Get or create a cancellation token for a process.
+     * Token is automatically cancelled when process terminates.
+     *
+     * @param process_uid Process UID
+     * @returns Cancellation token for the process
+     */
+    getCancellationToken(process_uid: string): CancellationToken {
+        const existing = this.cancellationTokens.get(process_uid);
+        if (existing && !existing.isCancelled) {
+            return existing;
+        }
+
+        const token = createCancellationToken();
+
+        // Cancel token when process terminates
+        token.onCancelled(() => {
+            this.cancellationTokens.delete(process_uid);
+        });
+
+        this.cancellationTokens.set(process_uid, token);
+        return token;
+    }
+
     createRuntimeMemory(input: {
         owner_process_uid: string;
         memory_uid?: string;
@@ -510,6 +635,9 @@ class ProcessEngineSingleton {
         memory_scope?: RuntimeMemoryScope;
         retention_policy?: RuntimeMemoryRetentionPolicy;
     }): string | null {
+        // [Phase D] Deprecation: Use KernelEngine.createRuntimeMemory() for new code
+        this.warnDeprecation('createRuntimeMemory', 'createRuntimeMemory');
+
         const {
             owner_process_uid,
             memory_uid,
@@ -551,15 +679,8 @@ class ProcessEngineSingleton {
         };
         this.runtimeMemoryMeta.set(uid, meta);
 
-        const currentOwned = this.processOwnedMemory.get(owner_process_uid) ?? new Set<string>();
-        currentOwned.add(uid);
-        this.processOwnedMemory.set(owner_process_uid, currentOwned);
-
-        const currentUids = Array.isArray(owner.runtime_memory_uids) ? owner.runtime_memory_uids : [];
-        this.writeProcess(owner_process_uid, {
-            runtime_memory_uids: [...new Set([...currentUids, uid])],
-            updated_at: Date.now(),
-        });
+        const lineage = [owner_process_uid, ...this.getAncestorProcessUids(owner_process_uid)];
+        lineage.forEach((pid) => this.linkRuntimeMemoryToProcess(pid, uid));
 
         return uid;
     }
@@ -570,6 +691,9 @@ class ProcessEngineSingleton {
         payload: Record<string, any>;
         classifications?: string[];
     }): boolean {
+        // [Phase D] Deprecation: Use KernelEngine.updateRuntimeMemory() for new code
+        this.warnDeprecation('updateRuntimeMemory', 'updateRuntimeMemory');
+
         const { owner_process_uid, memory_uid, payload, classifications } = input;
 
         const owner = this.readProcess(owner_process_uid);
@@ -630,8 +754,8 @@ class ProcessEngineSingleton {
 
     /**
      * Wrap any async function as a tracked process.
-     * Creates a process record, runs fn, then marks completed/error.
-     * Returns the fn result. Throws on fn failure (after marking error).
+     * Creates a process record, runs fn, then marks done/failed.
+     * Returns the fn result. Throws on fn failure (after marking failed).
      */
     async track<T>(
         type: string,
@@ -644,6 +768,9 @@ class ProcessEngineSingleton {
             payload?: Record<string, any>;
         },
     ): Promise<T> {
+        // [Phase D] Deprecation: Use KernelEngine.trackAsync() for new code
+        this.warnDeprecation('track', 'trackAsync');
+
         const record = options?.parent_process_uid
             ? this.spawnSubprocess({
                 parent_process_uid: options.parent_process_uid,
@@ -678,6 +805,24 @@ class ProcessEngineSingleton {
         return uids
             .map(uid => StorageEngine.readMemory(uid) as ProcessRecord | undefined)
             .filter((v): v is ProcessRecord => v !== undefined);
+    }
+
+    /**
+     * Returns a snapshot of all runtime memory metadata.
+     * Used for diagnostics, sweeping, and governance queries.
+     *
+     * @returns Array of [memory_uid, metadata] tuples
+     */
+    getAllRuntimeMemory(): Array<[string, ProcessRuntimeMemoryMeta]> {
+        return Array.from(this.runtimeMemoryMeta.entries());
+    }
+
+    /**
+     * Get memory UIDs owned by a specific process.
+     * Used for diagnostics and traversal.
+     */
+    getMemoryOwnedByProcess(process_uid: string): string[] {
+        return Array.from(this.processOwnedMemory.get(process_uid) ?? new Set<string>());
     }
 }
 

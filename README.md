@@ -28,12 +28,56 @@ Architecture pillars:
 13. `.ai/14_host_guest_architecture.md`
 14. `.ai/15_sdk_gateway_server.md`
 15. `.ai/16_schema_type_flow.md`
+16. `.ai/17_process_engine_orchestration.md`
 
 Notes:
 - This README now tracks active and pending work only.
 - Completed details and long examples are maintained in `.ai/` documentation.
 
-## Recently Completed (2026-03-28)
+## Recently Completed (2026-03-29 Phase D Complete)
+
+- **KernelEngine Phase D**: Governance + Diagnostics complete:
+  - **Runtime Sweeper**: Orphan process/memory detection with linkage validation
+  - **Memory Ownership Enforcement**: Access control + write-guards with detailed rejection reasons
+  - **Process Tree Diagnostics**: Lineage, descendants, hierarchical tree building (for monitor/dashboard)
+  - **Memory Ownership Diagnostics**: Statistics, ownership queries, consistency validation
+  - **Deprecation Warnings**: Added to 6 key ProcessEngine methods encouraging KernelEngine migration
+  - 21 governance tests complete (all passing)
+  - 46 total tests passing (Phase A + Phase D + Features)
+  - Zero TypeScript errors
+  - Phase E (External Package Integration) complete with bridge + cancellation feature tests passing
+
+## Recently Completed (2026-03-29 Phase C Complete)
+
+- **KernelEngine Phase C**: Final engine migration complete:
+  - **toolEngine** fully migrated: 9 ProcessEngine call sites replaced (tracking, memory operations, event handlers)
+  - **pipelineEngine** fully migrated: 4 ProcessEngine call sites replaced (tracking, step progress, context preservation)
+  - **fsEngine** verified compatible: Late-binding pattern automatically uses KernelEngine via bridge
+  - **shellEngine** verified compatible: Late-binding pattern automatically uses KernelEngine via bridge
+  - 31 process-related tests passing (19 kernelEngine + 6 spawn per-engine + 2 parent propagation + 4 aiGateway)
+  - KernelEngine telemetry visible: `[KernelEngine] trackAsync:start/done` confirmed for toolEngine and pipelineEngine
+  - Zero regressions, zero TypeScript errors
+  - Total 6 engines migrated, 14 direct call sites updated, 100% control-plane coverage of domain engines
+
+## Recently Completed (2026-03-29 Continued)
+
+- **KernelEngine Phase A**: Control-plane facade created with full delegation and telemetry (400 lines, 19 unit tests).
+- **ProcessContext React Hooks**: Complete with provider, hook, and HOC for component tree context propagation.
+- **KernelEngine Phase B**: Engine migration complete:
+  - **windowEngine** fully migrated: 9 ProcessEngine call sites replaced with KernelEngine
+  - **aiGatewayEngine** fully migrated: 5 ProcessEngine call sites replaced with KernelEngine
+  - Long-lived entity semantics verified (window instances, AI sessions)
+  - Termination handlers working correctly
+  - 23 unit tests passing, 8 feature tests passing, 0 regressions
+
+## Recently Completed (2026-03-29)
+
+- `KernelEngine` Phase A: Control-plane facade created (`src/services/kernelEngine.ts`, 400 lines, full delegation with telemetry).
+- ProcessContext React hooks created (`src/hooks/useProcessContext.tsx`) with `ProcessContextProvider`, `useProcessContext()`, `withProcessContext()` HOC.
+- KernelEngine unit test suite complete: 19 passing tests validating facade delegation, termination handlers, memory ownership, cascade behavior.
+- API surface locked for Phase A: process spawn/terminate/lifecycle, memory create/update, termination handler registration, with logging at control plane.
+
+## Earlier Completions (2026-03-28)
 
 - Parser block contract simplified to `BaseBlock` + `payload_raw` + `payload_json` (app layer no longer depends on large block unions).
 - Built-in parser outputs (`paragraph`, `event`, `directive`) now follow the same base payload contract.
@@ -50,6 +94,22 @@ Notes:
 - `TOOL_ACTION_*` legacy event aliases removed from `parserEventNames.ts` and all consumers (gateway loop, dev monitor, tooling playground).
 - `DEFAULT_PRESENTATION_PACKAGE_REF` constant added for consistent `package_ref` defaulting in presentation block.
 - `listSessions` in `AIGatewayEngine` refactored with 6-group structure and inline variable commentary.
+- Process monitor now provides `End Task` action and runtime-focused active process view.
+- Nested process visibility improved in monitor with explicit tree/depth/children indicators.
+- Engine-aware termination hooks added so process termination can trigger domain cleanup behavior.
+- Window runtime process is now long-lived and closes only when the window instance is actually closed.
+- AI session runtime process is now long-lived and closes only when the session is explicitly closed.
+- AI stream termination now supports abort-aware cancellation via `AbortController` in session runtime.
+- Runtime memory lineage now propagates from child process to parent process chain to simplify cascade cleanup.
+
+## Process Runtime Direction (Locked)
+
+Architecture decision for external package integration and process orchestration:
+
+1. `ProcessEngine` is centralized for lifecycle orchestration (state machine, tree, termination cascade, runtime memory ownership).
+2. Domain engines remain the execution owners (`windowEngine`, `aiGatewayEngine`, `fsEngine`, `shellEngine`, `toolEngine`, `pipelineEngine`).
+3. External packages should use command/route facades, not direct coupling to many internal engines.
+4. Process monitor is a live runtime view; terminal processes are treated as history, not active runtime entities.
 
 ## Cross-Package Schema Boundary V1
 

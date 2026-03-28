@@ -2,7 +2,7 @@ import { StorageEngine } from './storageEngine';
 import { EventBus } from './eventEngine';
 import { RegistryEngine } from './registryEngine';
 import { GlobalStateManager } from './globalStateManager';
-import { ProcessEngine } from './processEngine';
+import { KernelEngine } from './kernelEngine';
 import { invoke } from '@tauri-apps/api/core';
 import type { WindowConfig, GlobalOverlayState } from '#/schemas/window';
 import type { GlobalState } from '#/schemas/globalState';
@@ -39,6 +39,7 @@ export interface SpawnWindowOptions {
 
     /** Internal flag to avoid nested duplicate tracking when already wrapped by route-level ProcessEngine.track. */
     __skip_process_tracking?: boolean;
+    __process_uid?: string;
 }
 
 /**
@@ -172,7 +173,8 @@ class WindowEngineSingleton {
                     this.pendingSpawnRequests.delete(id);
                     const spawnProcessUid = this.pendingSpawnProcesses.get(id);
                     if (spawnProcessUid) {
-                        ProcessEngine.updateLifecycleState(spawnProcessUid, 'running', {
+                        spawnOptions.__process_uid = spawnProcessUid;
+                        KernelEngine.updateProcessStatus(spawnProcessUid, 'running', {
                             queue_state: 'spawning',
                             window_uid: id,
                         });
@@ -180,12 +182,12 @@ class WindowEngineSingleton {
                     const spawnedUid = this.spawnWindowImmediate(spawnOptions);
                     if (spawnProcessUid) {
                         if (!spawnedUid) {
-                            ProcessEngine.updateLifecycleState(spawnProcessUid, 'failed', {
+                            KernelEngine.updateProcessStatus(spawnProcessUid, 'failed', {
                                 queue_state: 'failed',
                                 window_uid: id,
                             });
                         } else {
-                            ProcessEngine.updatePayload(spawnProcessUid, {
+                            KernelEngine.updateProcessPayload(spawnProcessUid, {
                                 status: 'running',
                                 queue_state: 'spawned',
                                 window_uid: spawnedUid,
@@ -272,7 +274,7 @@ class WindowEngineSingleton {
     private registerTerminationHooks() {
         if (this.isTerminationHookBound) return;
 
-        ProcessEngine.registerTerminationHandler('windowEngine', ({ record }) => {
+        KernelEngine.registerTerminationHandler('windowEngine', ({ record }) => {
             if (record.type !== 'window:instance') return;
 
             const payload = (record.payload && typeof record.payload === 'object')
@@ -302,7 +304,7 @@ class WindowEngineSingleton {
             const { action, payload, source } = interaction;
             const sourceProcessUid = typeof source?.process_uid === 'string' ? source.process_uid : undefined;
 
-            await ProcessEngine.track(
+            await KernelEngine.trackAsync(
                 `window:${action}`,
                 {
                     action,
@@ -540,7 +542,7 @@ class WindowEngineSingleton {
         const spawnOptions = { ...options, _reserved_uid: window_uid } as any;
 
         if (!options.__skip_process_tracking) {
-            const parentProcessUid = options.parent_process_uid ?? ProcessEngine.getCurrentProcessUid();
+            const parentProcessUid = options.parent_process_uid ?? KernelEngine.getCurrentProcessContext();
             const metadata = {
                 source_process_uid: parentProcessUid,
                 package: options.package,
@@ -550,9 +552,7 @@ class WindowEngineSingleton {
             };
 
             const processRecord = parentProcessUid
-                ? ProcessEngine.spawnSubprocess({
-                    parent_process_uid: parentProcessUid,
-                    type: 'window:instance',
+                ? KernelEngine.spawnSubprocess(parentProcessUid, 'window:instance', {
                     metadata,
                     process_kind: 'custom',
                     owner_engine: 'windowEngine',
@@ -564,28 +564,19 @@ class WindowEngineSingleton {
                         live_state: 'queued',
                     },
                 })
-                : ProcessEngine.registerProcess(
-                    'window:instance',
-                    metadata,
-                    {},
-                    [],
-                    undefined,
-                    undefined,
-                    undefined,
-                    {
-                        process_kind: 'custom',
-                        owner_engine: 'windowEngine',
-                        payload: {
-                            status: 'running',
-                            action: 'window_instance',
-                            queue_state: 'queued',
-                            window_uid,
-                            live_state: 'queued',
-                        },
+                : KernelEngine.spawnProcess('window:instance', metadata, {
+                    process_kind: 'custom',
+                    owner_engine: 'windowEngine',
+                    payload: {
+                        status: 'running',
+                        action: 'window_instance',
+                        queue_state: 'queued',
+                        window_uid,
+                        live_state: 'queued',
                     },
-                );
+                });
 
-            ProcessEngine.updateLifecycleState(processRecord.process_uid, 'waiting', {
+            KernelEngine.updateProcessStatus(processRecord.process_uid, 'waiting', {
                 queue_state: 'queued',
                 window_uid,
             });
@@ -668,13 +659,8 @@ class WindowEngineSingleton {
         
         if (options.package && options.window) {
             entryRef = `${options.package}:windows:${options.window}`;
-        } else if (options.component_name) {
-            // Legacy/Fallback behavior
-            console.warn(`[WindowEngine] spawnWindow called with legacy 'component_name': ${options.component_name}. Please migrate to package/window inputs.`);
-            // Attempt to guess or just use raw component name (which might work if registered locally)
-            entryRef = options.component_name;
         } else {
-            console.error('[WindowEngine] spawnWindow failed: Missing package/window or component_name identifiers.', options);
+            console.error('[WindowEngine] spawnWindow failed: Missing required package/window identifiers.', options);
             return null;
         }
 
@@ -706,6 +692,19 @@ class WindowEngineSingleton {
 
         // Defer heavy storage writes to run one-by-one with timeout pacing
         this.enqueueDeferredWrite(() => {
+            const ownerProcessUid = options.__process_uid;
+            if (ownerProcessUid) {
+                const created = KernelEngine.createRuntimeMemory({
+                    owner_process_uid: ownerProcessUid,
+                    memory_uid: `system:window:${window_uid}`,
+                    parent_memory_uid: ownerProcessUid,
+                    payload: freshWindow,
+                    classifications: ['system:windows'],
+                });
+
+                if (created) return;
+            }
+
             StorageEngine.dispatchRAMAction({
                 action: 'create_memory',
                 memory_uid: `system:window:${window_uid}`,
@@ -745,13 +744,13 @@ class WindowEngineSingleton {
     closeWindow(window_uid: string, options?: { skipProcessLifecycle?: boolean }) {
         const windowProcessUid = this.activeWindowProcesses.get(window_uid);
         if (windowProcessUid && !options?.skipProcessLifecycle) {
-            ProcessEngine.updatePayload(windowProcessUid, {
+            KernelEngine.updateProcessPayload(windowProcessUid, {
                 status: 'done',
                 live_state: 'closed',
                 ended_window_uid: window_uid,
                 ended_at: Date.now(),
             });
-            ProcessEngine.updateLifecycleState(windowProcessUid, 'done');
+            KernelEngine.updateProcessStatus(windowProcessUid, 'done');
             this.activeWindowProcesses.delete(window_uid);
         } else if (windowProcessUid && options?.skipProcessLifecycle) {
             this.activeWindowProcesses.delete(window_uid);

@@ -25,14 +25,6 @@ export const ProcessLifecycleStateSchema = z.enum([
     'terminated',
 ]);
 
-export const ProcessLegacyStatusSchema = z.enum([
-    'booting',
-    'yielding',
-    'completed',
-    'error',
-    'killed',
-]);
-
 export const ProcessStatusSchema = z.enum([
     'created',
     'running',
@@ -41,11 +33,6 @@ export const ProcessStatusSchema = z.enum([
     'failed',
     'cancelled',
     'terminated',
-    'booting',
-    'yielding',
-    'completed',
-    'error',
-    'killed',
 ]);
 
 export const RuntimeMemoryScopeSchema = z.enum(['process', 'session', 'durable']);
@@ -108,7 +95,6 @@ export const ProcessRecordSchema = z.object({
 export type ProcessType = z.infer<typeof ProcessTypeSchema>;
 export type ProcessKind = z.infer<typeof ProcessKindSchema>;
 export type ProcessLifecycleState = z.infer<typeof ProcessLifecycleStateSchema>;
-export type ProcessLegacyStatus = z.infer<typeof ProcessLegacyStatusSchema>;
 export type ProcessStatus = z.infer<typeof ProcessStatusSchema>;
 export type RuntimeMemoryScope = z.infer<typeof RuntimeMemoryScopeSchema>;
 export type RuntimeMemoryRetentionPolicy = z.infer<typeof RuntimeMemoryRetentionPolicySchema>;

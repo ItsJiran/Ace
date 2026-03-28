@@ -40,7 +40,7 @@ import { finalizeRequestProtocolState } from './aiGateway/protocolLifecycle';
 import { AIContextEngine } from './aiContextEngine';
 import { AIContextMemoryEngine } from './aiContextMemoryEngine';
 import { StorageEngine } from './storageEngine';
-import { ProcessEngine } from './processEngine';
+import { KernelEngine } from './kernelEngine';
 import type {
     AIGatewayFetchModelsResult,
     AIGatewayResponseResult,
@@ -133,7 +133,7 @@ class AIGatewayEngineSingleton {
     private registerTerminationHooks() {
         if (this.isTerminationHookBound) return;
 
-        ProcessEngine.registerTerminationHandler('aiGatewayEngine', ({ record }) => {
+        KernelEngine.registerTerminationHandler('aiGatewayEngine', ({ record }) => {
             const metadata = (record.metadata && typeof record.metadata === 'object')
                 ? (record.metadata as Record<string, unknown>)
                 : undefined;
@@ -202,9 +202,7 @@ class AIGatewayEngineSingleton {
         const sessionId = await AISessionManager.create(sdk, model);
 
         const processRecord = parentProcessUid
-            ? ProcessEngine.spawnSubprocess({
-                parent_process_uid: parentProcessUid,
-                type: 'ai_gateway:session',
+            ? KernelEngine.spawnSubprocess(parentProcessUid, 'ai_gateway:session', {
                 metadata: {
                     session_id: sessionId,
                     sdk,
@@ -220,32 +218,23 @@ class AIGatewayEngineSingleton {
                     model,
                 },
             })
-            : ProcessEngine.registerProcess(
-                'ai_gateway:session',
-                {
+            : KernelEngine.spawnProcess('ai_gateway:session', {
+                session_id: sessionId,
+                sdk,
+                model,
+            }, {
+                process_kind: 'custom',
+                owner_engine: 'aiGatewayEngine',
+                payload: {
+                    status: 'running',
+                    live_state: 'connected',
                     session_id: sessionId,
                     sdk,
                     model,
                 },
-                {},
-                [],
-                undefined,
-                undefined,
-                undefined,
-                {
-                    process_kind: 'custom',
-                    owner_engine: 'aiGatewayEngine',
-                    payload: {
-                        status: 'running',
-                        live_state: 'connected',
-                        session_id: sessionId,
-                        sdk,
-                        model,
-                    },
-                },
-            );
+            });
 
-        ProcessEngine.updateLifecycleState(processRecord.process_uid, 'running');
+        KernelEngine.updateProcessStatus(processRecord.process_uid, 'running');
         this.sessionProcessBySessionId.set(sessionId, processRecord.process_uid);
 
         AIContextEngine.attachSession(sessionId);
@@ -257,13 +246,13 @@ class AIGatewayEngineSingleton {
     closeSession(sessionId: string, options?: { skipProcessLifecycle?: boolean }): void {
         const sessionProcessUid = this.sessionProcessBySessionId.get(sessionId);
         if (sessionProcessUid && !options?.skipProcessLifecycle) {
-            ProcessEngine.updatePayload(sessionProcessUid, {
+            KernelEngine.updateProcessPayload(sessionProcessUid, {
                 status: 'done',
                 live_state: 'closed',
                 session_id: sessionId,
                 ended_at: Date.now(),
             });
-            ProcessEngine.updateLifecycleState(sessionProcessUid, 'done');
+            KernelEngine.updateProcessStatus(sessionProcessUid, 'done');
             this.sessionProcessBySessionId.delete(sessionId);
         } else if (sessionProcessUid && options?.skipProcessLifecycle) {
             this.sessionProcessBySessionId.delete(sessionId);

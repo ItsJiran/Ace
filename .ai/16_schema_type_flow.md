@@ -166,3 +166,20 @@ Pending hardening:
 1. Shared strict JSON Schema validator for all boundary paths.
 2. Version migration adapter layer.
 3. Full integration tests for schema_ref miss/version mismatch paths.
+
+## Sync Update 2026-03-28 (Process Runtime Orchestration)
+
+Current architecture direction is now locked:
+
+1. ProcessEngine is the centralized lifecycle orchestrator (state transitions, process tree, termination cascade, runtime memory ownership), not a domain API replacement.
+2. Domain engines remain execution owners (window, ai gateway, fs, shell, tool, pipeline) and must keep business behavior in their own modules.
+3. External package flows should go through command/event facade routes; packages should avoid directly coupling to many engines.
+4. Long-lived runtime entities (for example window instances and AI sessions) stay active in monitor until they are explicitly closed/terminated.
+5. End Task in process monitor triggers engine-aware cleanup through ProcessEngine termination handlers.
+6. Runtime memory ownership now propagates through parent process lineage to simplify cascade cleanup and avoid orphan references.
+
+Implementation status:
+
+- In progress sync is active across core docs and runtime code.
+- Process monitor currently focuses on active/running processes and nested tree visibility.
+- Termination semantics are being standardized per engine to guarantee deterministic cleanup.

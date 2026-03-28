@@ -14,7 +14,6 @@ export default function activate() {
         window: 'system-settings-window',
         title: 'System Settings',
         width: 1000,
-        height: 700,
-        component_name: 'system-settings-window' // Legacy fallback
+        height: 700
     });
 }

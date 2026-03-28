@@ -21,11 +21,11 @@ interface ProcessTreeRendererProps {
 
 function statusClass(status: string | undefined) {
     if (!status) return 'text-zinc-300';
-    if (status === 'completed' || status === 'done') return 'text-emerald-300';
-    if (status === 'error' || status === 'failed' || status === 'killed' || status === 'terminated' || status === 'cancelled') {
+    if (status === 'done') return 'text-emerald-300';
+    if (status === 'failed' || status === 'terminated' || status === 'cancelled') {
         return 'text-rose-300';
     }
-    if (status === 'running' || status === 'booting' || status === 'created' || status === 'waiting' || status === 'yielding') {
+    if (status === 'running' || status === 'created' || status === 'waiting') {
         return 'text-amber-300';
     }
     return 'text-zinc-300';

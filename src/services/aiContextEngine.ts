@@ -5,7 +5,7 @@
  * Core responsibilities stay the same, while heavy logic is delegated to
  * focused sub-services for composition, ingestion, and synchronization.
  *
- * Sub-service: ContextMemoryBlockHandler (integrated here, not standalone).
+ * Context memory block handling is integrated directly in this service.
  * Registers EventBus routes for 'context:retrieve' and 'context:store' actions.
  */
 import { EventBus } from './eventEngine';
@@ -66,10 +66,6 @@ class AIContextEngineSingleton {
     private readonly maxTurns = 20;
     private readonly maxContextBlocks = 8;
     private readonly maxHistorySummaries = 16;
-    private readonly legacyNonStrictPrefixes = [
-        'system:ai_context_rag:payload:',
-        'system:session:',
-    ];
 
     private readonly indexMemoryUid = 'system:ai_context_engine:sessions';
     private isEventRoutesBound = false;
@@ -203,7 +199,7 @@ class AIContextEngineSingleton {
 
     /**
      * Register EventBus routes for context memory actions.
-     * This sub-service (formerly ContextMemoryBlockHandler) handles:
+    * This integrated handler handles:
      * - 'context:retrieve' — fetch memory by key
      * - 'context:store' — create new memory item
      */
@@ -227,7 +223,7 @@ class AIContextEngineSingleton {
                         : typeof preallocated_memory?.result_memory_uid === 'string'
                             ? (preallocated_memory.result_memory_uid as string)
                             : undefined;
-                const strictSchemaValidation = this.resolveStrictSchemaValidation(raw.strict_schema_validation, memoryKey);
+                const strictSchemaValidation = this.resolveStrictSchemaValidation(raw.strict_schema_validation);
 
                 if (!memoryKey) {
                     this.publishContextResult({
@@ -430,13 +426,9 @@ class AIContextEngineSingleton {
         });
     }
 
-    private resolveStrictSchemaValidation(rawValue: unknown, memoryKey?: string) {
+    private resolveStrictSchemaValidation(rawValue: unknown) {
         if (typeof rawValue === 'boolean') {
             return rawValue;
-        }
-
-        if (memoryKey && this.legacyNonStrictPrefixes.some((prefix) => memoryKey.startsWith(prefix))) {
-            return false;
         }
 
         return true;
