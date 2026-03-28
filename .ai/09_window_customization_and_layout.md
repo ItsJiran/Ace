@@ -25,6 +25,7 @@ This means the system already supports both framed windows and borderless experi
 - RAM stores shared durable window metadata, spawn/bootstrap config, and persisted layout state.
 - Local window runtime owns hover, drag frames, spring motion, and other high-frequency interaction state.
 - Commits back to RAM happen when durable state changes, not on every pointer frame.
+- **Performance Critical**: High-frequency motion (drag, spring) must use RAF Decoupling pattern (see `01_project_overview.md` Performance section) to avoid cascading re-renders across unrelated windows.
 
 ## Window Shell Modes
 
