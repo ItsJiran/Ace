@@ -40,6 +40,8 @@ export interface AISession {
     lastProtocolState?: AIRequestProtocolState;
 
     status: 'idle' | 'connected' | 'streaming' | 'error';
+    termination_requested?: boolean;
+    activeAbortController?: AbortController;
 }
 
 /** Read-only session shape for UI monitoring/debug panels. */

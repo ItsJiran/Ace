@@ -108,7 +108,9 @@ export class PipelineEngine<TInitial, TFinal> {
 
             // 3. Eksekusi langkah ini dan jadikan input untuk langkah berikutnya
             try {
-                currentData = await step.execute(currentData, context);
+                currentData = await ProcessEngine.withProcessContext(context.process_uid, async () => {
+                    return step.execute(currentData, context);
+                });
             } catch (error) {
                 this.upsertPipelineRecord({
                     run_id: runId,

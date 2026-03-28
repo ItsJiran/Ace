@@ -39,6 +39,7 @@ export async function sendToSession(
     },
 ): Promise<SendSessionStreamResult> {
     console.log(`[AIGatewayEngine] [${session.sessionId}] Sending: "${prompt}"`);
+    session.termination_requested = false;
     session.status = 'streaming';
     session.activeOutputRamKey = replyToRamKey;
 
@@ -135,6 +136,9 @@ export async function sendToSession(
     }
 
     try {
+        const abortController = new AbortController();
+        session.activeAbortController = abortController;
+
         const response = await fetch(`${baseUrl}/chat/${session.sdk}`, {
             method: 'POST',
             headers: {
@@ -142,6 +146,7 @@ export async function sendToSession(
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ model: session.model, prompt }),
+            signal: abortController.signal,
         });
 
         if (!response.ok || !response.body) {
@@ -197,6 +202,14 @@ export async function sendToSession(
         let ignoredByteCount = 0;
 
         while (true) {
+            if (session.termination_requested) {
+                interrupted = true;
+                interruptReason = 'terminated_by_process';
+                ignoreLateChunks = true;
+                await reader.cancel();
+                continue;
+            }
+
             const { done, value } = await reader.read();
             if (done) break;
             if (!value) continue;
@@ -234,6 +247,8 @@ export async function sendToSession(
         if (interrupted) {
             closeParserProcess('done');
             session.status = 'connected';
+            session.activeAbortController = undefined;
+            session.termination_requested = false;
             updateResponseMemory({
                 status: 'interrupted',
                 parser_interrupt_reason: interruptReason ?? 'parser_interrupt_requested',
@@ -249,6 +264,24 @@ export async function sendToSession(
 
         closeParserProcess('done');
     } catch (error) {
+        const maybeAbortError =
+            (error instanceof DOMException && error.name === 'AbortError')
+            || String(error).toLowerCase().includes('abort');
+        if (session.termination_requested || maybeAbortError) {
+            session.status = 'connected';
+            session.activeAbortController = undefined;
+            session.termination_requested = false;
+            updateResponseMemory({
+                status: 'interrupted',
+                parser_interrupt_reason: 'terminated_by_process',
+                finished_at: Date.now(),
+            });
+            return {
+                interrupted: true,
+                interruptReason: 'terminated_by_process',
+            };
+        }
+
         if (ownerProcessUid) {
             // parser process may not exist for pre-fetch failures; this is safe no-op if missing.
             const parserCandidates = ProcessEngine.getAll()
@@ -271,6 +304,8 @@ export async function sendToSession(
             finished_at: Date.now(),
         });
         session.status = 'connected';
+        session.activeAbortController = undefined;
+        session.termination_requested = false;
         return {
             interrupted: false,
         };
@@ -278,6 +313,8 @@ export async function sendToSession(
 
     // ── FINALIZE ─────────────────────────────────────────────────────────────
     session.status = 'connected';
+    session.activeAbortController = undefined;
+    session.termination_requested = false;
     updateResponseMemory({ status: 'completed', finished_at: Date.now() });
 
     return {

@@ -35,6 +35,10 @@ export interface SpawnWindowOptions {
     hide_ring?: boolean;
     z_index?: number;
     animation_sequence?: AnimationSequence;
+    parent_process_uid?: string;
+
+    /** Internal flag to avoid nested duplicate tracking when already wrapped by route-level ProcessEngine.track. */
+    __skip_process_tracking?: boolean;
 }
 
 /**
@@ -58,6 +62,9 @@ class WindowEngineSingleton {
      * Map of pending spawn requests by UID (for tracking/cancellation)
      */
     private pendingSpawnRequests = new Map<string, SpawnWindowOptions>();
+    private pendingSpawnProcesses = new Map<string, string>();
+    private activeWindowProcesses = new Map<string, string>();
+    private isTerminationHookBound = false;
 
     /**
      * ARCHITECTURE: Debounce focus updates to prevent cascading subscriptions
@@ -163,12 +170,38 @@ class WindowEngineSingleton {
                 const spawnOptions = this.pendingSpawnRequests.get(id);
                 if (spawnOptions) {
                     this.pendingSpawnRequests.delete(id);
-                    this.spawnWindowImmediate(spawnOptions);
+                    const spawnProcessUid = this.pendingSpawnProcesses.get(id);
+                    if (spawnProcessUid) {
+                        ProcessEngine.updateLifecycleState(spawnProcessUid, 'running', {
+                            queue_state: 'spawning',
+                            window_uid: id,
+                        });
+                    }
+                    const spawnedUid = this.spawnWindowImmediate(spawnOptions);
+                    if (spawnProcessUid) {
+                        if (!spawnedUid) {
+                            ProcessEngine.updateLifecycleState(spawnProcessUid, 'failed', {
+                                queue_state: 'failed',
+                                window_uid: id,
+                            });
+                        } else {
+                            ProcessEngine.updatePayload(spawnProcessUid, {
+                                status: 'running',
+                                queue_state: 'spawned',
+                                window_uid: spawnedUid,
+                                live_state: 'open',
+                            });
+                            this.activeWindowProcesses.set(spawnedUid, spawnProcessUid);
+                        }
+                        this.pendingSpawnProcesses.delete(id);
+                    }
                 }
             }
         };
 
         this.startAdaptivePacingLoop();
+
+        this.registerTerminationHooks();
 
         this.initializeState();
         
@@ -236,6 +269,32 @@ class WindowEngineSingleton {
             .catch(() => {});
     }
 
+    private registerTerminationHooks() {
+        if (this.isTerminationHookBound) return;
+
+        ProcessEngine.registerTerminationHandler('windowEngine', ({ record }) => {
+            if (record.type !== 'window:instance') return;
+
+            const payload = (record.payload && typeof record.payload === 'object')
+                ? (record.payload as Record<string, unknown>)
+                : undefined;
+            const metadata = (record.metadata && typeof record.metadata === 'object')
+                ? (record.metadata as Record<string, unknown>)
+                : undefined;
+
+            const windowUid = typeof payload?.window_uid === 'string'
+                ? payload.window_uid
+                : typeof metadata?.window_uid === 'string'
+                    ? metadata.window_uid
+                    : undefined;
+
+            if (!windowUid) return;
+            this.closeWindow(windowUid, { skipProcessLifecycle: true });
+        });
+
+        this.isTerminationHookBound = true;
+    }
+
     registerEventRoutes() {
         if (this.isRouteBound) return;
 
@@ -251,7 +310,10 @@ class WindowEngineSingleton {
                 },
                 async () => {
                     if (action === 'open_window') {
-                        this.spawnWindow(payload);
+                        this.spawnWindow({
+                            ...(payload ?? {}),
+                            parent_process_uid: sourceProcessUid,
+                        });
                     }
                     if (action === 'set_overlay_mode') {
                         const mode = payload.mode as 'ambient' | 'interactive';
@@ -476,6 +538,59 @@ class WindowEngineSingleton {
         // Allocate the UID immediately so callers can track it if needed
         const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
         const spawnOptions = { ...options, _reserved_uid: window_uid } as any;
+
+        if (!options.__skip_process_tracking) {
+            const parentProcessUid = options.parent_process_uid ?? ProcessEngine.getCurrentProcessUid();
+            const metadata = {
+                source_process_uid: parentProcessUid,
+                package: options.package,
+                window: options.window,
+                component_name: options.component_name,
+                window_uid,
+            };
+
+            const processRecord = parentProcessUid
+                ? ProcessEngine.spawnSubprocess({
+                    parent_process_uid: parentProcessUid,
+                    type: 'window:instance',
+                    metadata,
+                    process_kind: 'custom',
+                    owner_engine: 'windowEngine',
+                    payload: {
+                        status: 'running',
+                        action: 'window_instance',
+                        queue_state: 'queued',
+                        window_uid,
+                        live_state: 'queued',
+                    },
+                })
+                : ProcessEngine.registerProcess(
+                    'window:instance',
+                    metadata,
+                    {},
+                    [],
+                    undefined,
+                    undefined,
+                    undefined,
+                    {
+                        process_kind: 'custom',
+                        owner_engine: 'windowEngine',
+                        payload: {
+                            status: 'running',
+                            action: 'window_instance',
+                            queue_state: 'queued',
+                            window_uid,
+                            live_state: 'queued',
+                        },
+                    },
+                );
+
+            ProcessEngine.updateLifecycleState(processRecord.process_uid, 'waiting', {
+                queue_state: 'queued',
+                window_uid,
+            });
+            this.pendingSpawnProcesses.set(window_uid, processRecord.process_uid);
+        }
         
         // Store the request for when worker tells us to spawn
         this.pendingSpawnRequests.set(window_uid, spawnOptions);
@@ -627,7 +742,21 @@ class WindowEngineSingleton {
         return window_uid;
     }
 
-    closeWindow(window_uid: string) {
+    closeWindow(window_uid: string, options?: { skipProcessLifecycle?: boolean }) {
+        const windowProcessUid = this.activeWindowProcesses.get(window_uid);
+        if (windowProcessUid && !options?.skipProcessLifecycle) {
+            ProcessEngine.updatePayload(windowProcessUid, {
+                status: 'done',
+                live_state: 'closed',
+                ended_window_uid: window_uid,
+                ended_at: Date.now(),
+            });
+            ProcessEngine.updateLifecycleState(windowProcessUid, 'done');
+            this.activeWindowProcesses.delete(window_uid);
+        } else if (windowProcessUid && options?.skipProcessLifecycle) {
+            this.activeWindowProcesses.delete(window_uid);
+        }
+
         // Stop any running animations
         this.animationController.cancelAnimation(window_uid);
         this.pendingAnimations.delete(window_uid);

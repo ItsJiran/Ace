@@ -102,6 +102,26 @@ describe('Process spawn pattern across engines', () => {
         });
     });
 
+    it('executes pipeline steps inside process context when process_uid is provided', async () => {
+        const withProcessContextSpy = vi
+            .spyOn(ProcessEngine, 'withProcessContext')
+            .mockImplementation(async (_processUid, fn) => await fn());
+
+        const pipeline = new PipelineEngine<any, any>('context-pipeline');
+        pipeline.addStep({
+            name: 'context-step',
+            execute: async (input) => ({ ...input, ok: true }),
+        });
+
+        const result = await pipeline.run({ input: true }, { process_uid: 'proc-pipeline-ctx' });
+
+        expect(result).toMatchObject({ input: true, ok: true });
+        expect(withProcessContextSpy).toHaveBeenCalledWith(
+            'proc-pipeline-ctx',
+            expect.any(Function),
+        );
+    });
+
     it('spawns tracked process for FSEngine tracked operations', async () => {
         const trackMock = vi.fn(async () => ({ ok: true }));
         (globalThis as any).window.ACE = {

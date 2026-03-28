@@ -11,6 +11,13 @@ import type {
     RuntimeMemoryState,
 } from '#/schemas/process';
 
+type ProcessTerminationHandler = (input: {
+    record: ProcessRecord;
+    root_process_uid: string;
+    reason: string;
+    cascade: boolean;
+}) => void;
+
 class ProcessEngineSingleton {
     private readonly processRegistryTag = 'system:process_registry';
     private readonly processGroupTag = 'system:process_group';
@@ -25,6 +32,9 @@ class ProcessEngineSingleton {
         'cancelled',
         'terminated',
     ]);
+
+    private readonly processContextStack: string[] = [];
+    private readonly terminationHandlersByOwnerEngine = new Map<string, Set<ProcessTerminationHandler>>();
 
     /**
      * Retrieve a specific process definition from the registry.
@@ -124,6 +134,30 @@ class ProcessEngineSingleton {
         // Descendants only, not including root.
         seen.delete(process_uid);
         return [...seen];
+    }
+
+    private runTerminationHandlers(input: {
+        record: ProcessRecord;
+        root_process_uid: string;
+        reason: string;
+        cascade: boolean;
+    }) {
+        const ownerEngine = input.record.owner_engine;
+        if (!ownerEngine) return;
+
+        const handlers = this.terminationHandlersByOwnerEngine.get(ownerEngine);
+        if (!handlers || handlers.size === 0) return;
+
+        handlers.forEach((handler) => {
+            try {
+                handler(input);
+            } catch (error) {
+                console.warn(
+                    `[ProcessEngine] Termination handler failed for owner_engine="${ownerEngine}" process_uid="${input.record.process_uid}":`,
+                    error,
+                );
+            }
+        });
     }
 
     private cleanupRuntimeMemoryForProcess(process_uid: string, state: ProcessLifecycleState) {
@@ -361,6 +395,21 @@ class ProcessEngineSingleton {
         });
     }
 
+    registerTerminationHandler(owner_engine: string, handler: ProcessTerminationHandler): () => void {
+        const current = this.terminationHandlersByOwnerEngine.get(owner_engine) ?? new Set<ProcessTerminationHandler>();
+        current.add(handler);
+        this.terminationHandlersByOwnerEngine.set(owner_engine, current);
+
+        return () => {
+            const latest = this.terminationHandlersByOwnerEngine.get(owner_engine);
+            if (!latest) return;
+            latest.delete(handler);
+            if (latest.size === 0) {
+                this.terminationHandlersByOwnerEngine.delete(owner_engine);
+            }
+        };
+    }
+
     /**
      * Kills a process. It keeps it in RAM for UI history but marks it as killed.
      */
@@ -423,6 +472,14 @@ class ProcessEngineSingleton {
                 if (!record) return;
                 const currentState = record.lifecycle_state ?? this.canonicalStateFromStatus(record.status);
                 if (this.isTerminalState(currentState)) return;
+
+                this.runTerminationHandlers({
+                    record,
+                    root_process_uid: process_uid,
+                    reason,
+                    cascade,
+                });
+
                 this.transitionState(uid, 'terminated', {
                     reason,
                     force: true,
@@ -544,6 +601,31 @@ class ProcessEngineSingleton {
 
     getRuntimeMemoryMeta(memory_uid: string): ProcessRuntimeMemoryMeta | undefined {
         return this.runtimeMemoryMeta.get(memory_uid);
+    }
+
+    getCurrentProcessUid(): string | undefined {
+        return this.processContextStack.length > 0
+            ? this.processContextStack[this.processContextStack.length - 1]
+            : undefined;
+    }
+
+    async withProcessContext<T>(process_uid: string | undefined, fn: () => Promise<T> | T): Promise<T> {
+        if (!process_uid) {
+            return await fn();
+        }
+
+        this.processContextStack.push(process_uid);
+        try {
+            return await fn();
+        } finally {
+            const popped = this.processContextStack.pop();
+            if (popped !== process_uid) {
+                const idx = this.processContextStack.lastIndexOf(process_uid);
+                if (idx >= 0) {
+                    this.processContextStack.splice(idx, 1);
+                }
+            }
+        }
     }
 
     /**
