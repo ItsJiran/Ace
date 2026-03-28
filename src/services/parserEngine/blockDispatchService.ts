@@ -27,11 +27,11 @@ export class ParserBlockDispatchService {
         this.deps.emitSessionResult({
             sessionId,
             processUid,
-            tag,
+            parsedTag: tag,
             payload: {
                 event_name: PARSER_RUNTIME_EVENT.BLOCK_DETECTED,
                 block_id: blockId,
-                block_tag: tag,
+                parsed_tag: tag,
                 is_complete: isComplete,
                 body_bytes: body.length,
                 body_preview: body.slice(0, 300),
@@ -43,11 +43,11 @@ export class ParserBlockDispatchService {
             this.deps.emitSessionResult({
                 sessionId,
                 processUid,
-                tag,
+                parsedTag: tag,
                 payload: {
                     event_name: PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_MISSING,
                     block_id: blockId,
-                    block_tag: tag,
+                    parsed_tag: tag,
                     status: 'unhandled',
                 },
             });
@@ -57,11 +57,11 @@ export class ParserBlockDispatchService {
         this.deps.emitSessionResult({
             sessionId,
             processUid,
-            tag,
+            parsedTag: tag,
             payload: {
                 event_name: PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_FOUND,
                 block_id: blockId,
-                block_tag: tag,
+                parsed_tag: tag,
                 status: 'registered',
                 parser_ref: `${definition.package_name}:parsers:${definition.slug}`,
                 schema_name: definition.schema.name,
@@ -85,10 +85,10 @@ export class ParserBlockDispatchService {
                 this.deps.emitSessionResult({
                     sessionId,
                     processUid,
-                    tag,
+                    parsedTag: tag,
                     payload: {
                         block_id: blockId,
-                        block_tag: tag,
+                        parsed_tag: tag,
                         ...payload,
                     },
                 });
@@ -114,7 +114,7 @@ export class ParserBlockDispatchService {
                     process_uid: processUid,
                     payload: {
                         session_id: sessionId,
-                        tag,
+                        parsed_tag: tag,
                         block_id: blockId,
                         reason: stopReason,
                         interrupt_mode: interruptMode,
@@ -127,11 +127,11 @@ export class ParserBlockDispatchService {
         this.deps.emitSessionResult({
             sessionId,
             processUid,
-            tag,
+            parsedTag: tag,
             payload: {
                 event_name: PARSER_RUNTIME_EVENT.BLOCK_HANDLER_STARTED,
                 block_id: blockId,
-                block_tag: tag,
+                parsed_tag: tag,
                 status: 'running',
             },
         });
@@ -155,11 +155,11 @@ export class ParserBlockDispatchService {
             this.deps.emitSessionResult({
                 sessionId,
                 processUid,
-                tag,
+                parsedTag: tag,
                 payload: {
                     event_name: PARSER_RUNTIME_EVENT.BLOCK_VALIDATOR_FAILED,
                     block_id: blockId,
-                    block_tag: tag,
+                    parsed_tag: tag,
                     status: 'failed',
                     error_message: errorMessage,
                 },
@@ -183,11 +183,11 @@ export class ParserBlockDispatchService {
             this.deps.emitSessionResult({
                 sessionId,
                 processUid,
-                tag,
+                parsedTag: tag,
                 payload: {
                     event_name: PARSER_RUNTIME_EVENT.BLOCK_HANDLER_FAILED,
                     block_id: blockId,
-                    block_tag: tag,
+                    parsed_tag: tag,
                     status: 'failed',
                     error_message: errorMessage,
                 },
@@ -223,11 +223,11 @@ export class ParserBlockDispatchService {
         this.deps.emitSessionResult({
             sessionId,
             processUid,
-            tag,
+            parsedTag: tag,
             payload: {
                 event_name: PARSER_RUNTIME_EVENT.BLOCK_HANDLER_COMPLETED,
                 block_id: blockId,
-                block_tag: tag,
+                parsed_tag: tag,
                 status: result.interrupt_requested ? 'interrupted' : 'completed',
                 interrupt_requested: Boolean(result.interrupt_requested),
                 interrupt_reason: result.interrupt_reason,

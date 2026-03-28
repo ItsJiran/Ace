@@ -54,7 +54,6 @@ export const validator: ParserBlockValidator = ({ isComplete, payload_json, payl
 export const registry: AceRegistryType.Parser = {
     name: 'context',
     slug: 'context',
-    tag_name: 'context',
     description: 'Session context management block — update summary, retrieve a stored memory, or store new information.',
     block_schema: {
         purpose: 'Manage persistent session context memory. Update the session summary, retrieve a stored memory by key, or store new information for future retrieval.',
@@ -101,7 +100,7 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
         emit_result?.({
             event_name: 'context_retrieve_requested',
             interrupt_hint: true,
-            block_type: 'context',
+            block_slug: 'context',
             action: 'retrieve',
             memory_key: memoryKey,
             result_memory_uid: resultMemoryUid,
@@ -114,7 +113,7 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
         emit_result?.({
             event_name: 'context_store_requested',
             interrupt_hint: true,
-            block_type: 'context',
+            block_slug: 'context',
             action: 'store',
             title,
             summary,

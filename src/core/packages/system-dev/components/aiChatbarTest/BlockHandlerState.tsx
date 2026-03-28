@@ -16,7 +16,7 @@ interface BlockHandlerStateProps {
 interface ActiveHandlerEntry {
     blockId: number;
     parserRef: string;
-    blockTag: string;
+    parsedTag: string;
     status: 'running' | 'completed' | 'failed';
     action?: string;
     at: number;
@@ -66,13 +66,13 @@ export function BlockHandlerState({ responseMemory }: BlockHandlerStateProps) {
 
             if (eventName === PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_FOUND && blockId !== undefined) {
                 const parserRef = toStringValue((payload as Record<string, unknown>).parser_ref) || 'unknown:parsers:unknown';
-                const blockTag = toStringValue((payload as Record<string, unknown>).block_tag) || 'unknown';
+                const parsedTag = toStringValue((payload as Record<string, unknown>).parsed_tag) || 'unknown';
                 const action = toStringValue((payload as Record<string, unknown>).action);
 
                 byBlockId.set(blockId, {
                     blockId,
                     parserRef,
-                    blockTag,
+                    parsedTag,
                     status: 'completed',
                     action,
                     at: record.at,
@@ -127,7 +127,7 @@ export function BlockHandlerState({ responseMemory }: BlockHandlerStateProps) {
                 <div className="mt-2 space-y-1">
                     {activeHandlers.map((entry) => (
                         <div key={entry.blockId} className="text-[10px] text-zinc-400 border border-zinc-800 rounded px-2 py-1 bg-black/20 font-mono">
-                            {toParserNamespace(entry.parserRef)} / {entry.blockTag} | action: {entry.action || '-'} | status: {entry.status}
+                            {toParserNamespace(entry.parserRef)} / {entry.parsedTag} | action: {entry.action || '-'} | status: {entry.status}
                         </div>
                     ))}
                 </div>

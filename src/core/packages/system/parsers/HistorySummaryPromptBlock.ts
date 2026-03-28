@@ -51,7 +51,6 @@ function normalizeHistorySummaryPayload(
 export const registry: AceRegistryType.Parser = {
     name: 'history_summary_ai_prompt',
     slug: 'history_summary_ai_prompt',
-    tag_name: 'history_summary_ai_prompt',
     description: 'Compact summary of the current user prompt.',
     block_schema: {
         purpose: 'Compact summary of the current user message. Emit BEFORE your prose response.',

@@ -132,18 +132,15 @@ function getLatestActionTerminalEvent(records: ParserSessionEmitRecord[]): Parse
         const payload = record.payload && typeof record.payload === 'object'
             ? (record.payload as Record<string, unknown>)
             : undefined;
-        const blockType = typeof payload?.block_type === 'string'
-            ? payload.block_type
-            : typeof record.tag === 'string'
-                ? record.tag
+        const blockType = typeof payload?.block_slug === 'string'
+            ? payload.block_slug
+            : typeof record.parsed_tag === 'string'
+                ? record.parsed_tag
                 : undefined;
         const isActionableBlock = blockType === 'tool' || blockType === 'context';
         const isTerminalEvent =
             eventName === PARSER_RUNTIME_EVENT.HANDLER_RESULT ||
-            eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR ||
-            // Keep compatibility for older sessions still emitting legacy names.
-            eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_RESULT ||
-            eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR;
+            eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR;
         if (isActionableBlock && isTerminalEvent) {
             return record;
         }
@@ -177,13 +174,12 @@ function buildActionContinuationPrompt(input: {
     if (!payload) return null;
 
     const action = typeof payload.action === 'string' ? payload.action : 'unknown';
-    const blockType = typeof payload.block_type === 'string' ? payload.block_type : (typeof terminalEvent.tag === 'string' ? terminalEvent.tag : 'tool');
-    const rawEventName = typeof terminalEvent.event_name === 'string'
+    const blockType = typeof payload.block_slug === 'string'
+        ? payload.block_slug
+        : (typeof terminalEvent.parsed_tag === 'string' ? terminalEvent.parsed_tag : 'tool');
+    const eventName = typeof terminalEvent.event_name === 'string'
         ? terminalEvent.event_name
         : PARSER_RUNTIME_EVENT.HANDLER_RESULT;
-    const eventName = rawEventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR
-        ? PARSER_RUNTIME_EVENT.HANDLER_ERROR
-        : rawEventName;
     const resultMemoryUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
     const packageRef = typeof payload.package_ref === 'string' ? payload.package_ref : undefined;
     const toolSlug = typeof payload.tool_slug === 'string' ? payload.tool_slug : undefined;
@@ -202,7 +198,7 @@ function buildActionContinuationPrompt(input: {
 
     const feedbackPacket = {
         source: 'system_action_runtime',
-        block_type: blockType,
+        block_slug: blockType,
         event_name: eventName,
         action,
         package_ref: packageRef,
@@ -284,7 +280,7 @@ function upsertActionFeedbackContextMemory(input: {
         summary: `Action ${blockType}:${action} finished with ${eventName}. Use result memory pointer for rendering.`,
         payload: {
             payload: {
-                block_type: blockType,
+                block_slug: blockType,
                 event_name: eventName,
                 action,
                 package_ref: packageRef,
@@ -295,7 +291,7 @@ function upsertActionFeedbackContextMemory(input: {
             source: {
                 package_ref: packageRef,
                 handler_ref: `parser:${blockType}:${action}:${packageRef || 'unknown'}:${toolSlug || 'n/a'}`,
-                block_tag: blockType,
+                parsed_tag: blockType,
                 action,
                 event_name: eventName,
                 session_id: sessionId,
@@ -305,7 +301,7 @@ function upsertActionFeedbackContextMemory(input: {
         metadata: {
             memory_key: feedbackMemoryKey,
             result_memory_uid: resultMemoryUid,
-            block_type: blockType,
+            block_slug: blockType,
             action,
             event_name: eventName,
             schema_ref: 'itsjiran/ace-system:context:feedback:action_result',

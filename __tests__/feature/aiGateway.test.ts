@@ -82,8 +82,8 @@ describe('AI Gateway history summary protocol', () => {
 		expect(protocol?.response_summary_valid).toBe(true);
 		expect(protocol?.fallback_response_summary_used).toBe(false);
 		expect(protocol?.violations).toContain('Duplicate history_summary_ai_response block ignored after first valid block.');
-		expect(context?.history_summaries.filter((item) => item.block_type === 'history_summary_ai_response')).toHaveLength(1);
-		expect(context?.history_summaries.find((item) => item.block_type === 'history_summary_ai_response')?.summary).toBe('Jawaban final singkat.');
+		expect(context?.history_summaries.filter((item) => item.block_slug === 'history_summary_ai_response')).toHaveLength(1);
+		expect(context?.history_summaries.find((item) => item.block_slug === 'history_summary_ai_response')?.summary).toBe('Jawaban final singkat.');
 
 		AIContextEngine.evictContext(sessionId);
 	});
@@ -154,8 +154,8 @@ describe('AI Gateway history summary protocol', () => {
 		expect(protocol?.prompt_summary_valid).toBe(true);
 		expect(protocol?.fallback_prompt_summary_used).toBe(false);
 		expect(protocol?.violations).toContain('Duplicate history_summary_ai_prompt block ignored after first valid block.');
-		expect(context?.history_summaries.filter((item) => item.block_type === 'history_summary_ai_prompt')).toHaveLength(1);
-		expect(context?.history_summaries.find((item) => item.block_type === 'history_summary_ai_prompt')?.summary).toBe('User meminta daftar history summary yang dikenal.');
+		expect(context?.history_summaries.filter((item) => item.block_slug === 'history_summary_ai_prompt')).toHaveLength(1);
+		expect(context?.history_summaries.find((item) => item.block_slug === 'history_summary_ai_prompt')?.summary).toBe('User meminta daftar history summary yang dikenal.');
 
 		AIContextEngine.evictContext(sessionId);
 	});
@@ -213,8 +213,8 @@ describe('AI Gateway history summary protocol', () => {
 		expect(protocol.violations).not.toContain('Missing required history_summary_ai_response block.');
 
 		const context = AIContextEngine.getSessionContext(sessionId);
-		expect(context?.history_summaries.filter((item) => item.block_type === 'history_summary_ai_prompt')).toHaveLength(1);
-		expect(context?.history_summaries.filter((item) => item.block_type === 'history_summary_ai_response')).toHaveLength(1);
+		expect(context?.history_summaries.filter((item) => item.block_slug === 'history_summary_ai_prompt')).toHaveLength(1);
+		expect(context?.history_summaries.filter((item) => item.block_slug === 'history_summary_ai_response')).toHaveLength(1);
 
 		AIContextEngine.evictContext(sessionId);
 	});
@@ -274,8 +274,8 @@ describe('AI Gateway history summary protocol', () => {
 		expect(protocol.fallback_response_summary_used).toBe(false);
 
 		const context = AIContextEngine.getSessionContext(sessionId);
-		expect(context?.history_summaries.find((item) => item.block_type === 'history_summary_ai_prompt')?.summary).toBe('Prompt valid awal.');
-		expect(context?.history_summaries.find((item) => item.block_type === 'history_summary_ai_response')?.summary).toBe('Response valid awal.');
+		expect(context?.history_summaries.find((item) => item.block_slug === 'history_summary_ai_prompt')?.summary).toBe('Prompt valid awal.');
+		expect(context?.history_summaries.find((item) => item.block_slug === 'history_summary_ai_response')?.summary).toBe('Response valid awal.');
 
 		AIContextEngine.evictContext(sessionId);
 	});

@@ -15,7 +15,7 @@ type ContextMemorySource = ContextMemoryItem['source'];
 interface ContextMemoryPayloadSource {
     package_ref?: string;
     handler_ref?: string;
-    block_tag?: string;
+    parsed_tag?: string;
     action?: string;
     event_name?: string;
     session_id?: string;

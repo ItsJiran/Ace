@@ -29,7 +29,7 @@ function extractHistoryRefUid(payload: Record<string, unknown>): string | undefi
     return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : undefined;
 }
 
-function buildRuntimeFallbackSummary(text: string, blockType: SessionHistorySummary['block_type']): string {
+function buildRuntimeFallbackSummary(text: string, blockType: SessionHistorySummary['block_slug']): string {
     const trimmed = text.trim().replace(/\s+/g, ' ');
     if (!trimmed) {
         return blockType === 'history_summary_ai_prompt'
@@ -46,7 +46,7 @@ function buildRuntimeFallbackSummary(text: string, blockType: SessionHistorySumm
 
 export function ingestHistorySummaryToState(input: {
     state: SessionContextState;
-    blockType: SessionHistorySummary['block_type'];
+    blockType: SessionHistorySummary['block_slug'];
     payload: Record<string, unknown>;
     maxHistorySummaries: number;
 }): SessionContextState {
@@ -62,7 +62,7 @@ export function ingestHistorySummaryToState(input: {
 
     const nextEntry: SessionHistorySummary = {
         at: now,
-        block_type: blockType,
+        block_slug: blockType,
         source,
         summary: summaryText,
         memory_key: memoryKey,
@@ -71,7 +71,7 @@ export function ingestHistorySummaryToState(input: {
     };
 
     const existingIndex = state.history_summaries.findIndex((item) => {
-        if (item.block_type !== blockType) return false;
+        if (item.block_slug !== blockType) return false;
         if (memoryKey && item.memory_key === memoryKey) return true;
         if (refUid && item.ref_uid === refUid) return true;
         return false;
@@ -108,9 +108,9 @@ export function ingestHistorySummaryToState(input: {
 }
 
 export function buildFallbackHistorySummaryPayload(input: RuntimeHistorySummaryFallbackInput): Record<string, unknown> {
-    const summary = buildRuntimeFallbackSummary(input.summary_source_text, input.block_type);
+    const summary = buildRuntimeFallbackSummary(input.summary_source_text, input.block_slug);
     return {
-        type: input.block_type,
+        type: input.block_slug,
         summary,
         memory_key: input.memory_key,
         ref_uid: input.ref_uid,
@@ -120,15 +120,15 @@ export function buildFallbackHistorySummaryPayload(input: RuntimeHistorySummaryF
 }
 
 export function buildRawHistorySummaryPayload(input: {
-    block_type: SessionHistorySummary['block_type'];
+    block_slug: SessionHistorySummary['block_slug'];
     memory_key: string;
     ref_uid?: string;
     text: string;
 }): Record<string, unknown> {
     const truncated = input.text.trim().replace(/\s+/g, ' ').slice(0, 300);
-    const summary = truncated || (input.block_type === 'history_summary_ai_prompt' ? '[empty prompt]' : '[empty response]');
+    const summary = truncated || (input.block_slug === 'history_summary_ai_prompt' ? '[empty prompt]' : '[empty response]');
     return {
-        type: input.block_type,
+        type: input.block_slug,
         summary,
         memory_key: input.memory_key,
         ref_uid: input.ref_uid,

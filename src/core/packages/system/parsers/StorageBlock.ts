@@ -88,7 +88,6 @@ export const validator: ParserBlockValidator = ({ isComplete, payload_json, payl
 export const registry: AceRegistryType.Parser = {
     name: 'storage',
     slug: 'storage',
-    tag_name: 'storage',
     description: 'Interact with the runtime storage/memory — read, list, view db, write, or delete memory keys.',
     runtime_behavior: {
         interrupt_mode: 'pause_stream',
@@ -129,7 +128,7 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
 
     emit_result?.({
         event_name: 'storage_block_parsed',
-        block_type: 'storage',
+        block_slug: 'storage',
         action: block.action,
         status: block.status,
         memory_uid: block.memory_uid,
@@ -140,7 +139,7 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
     emit_result?.({
         event_name: 'storage_interrupt_requested',
         interrupt_hint: true,
-        block_type: 'storage',
+        block_slug: 'storage',
         action: block.action,
         memory_uid: block.memory_uid,
     });

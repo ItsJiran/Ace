@@ -75,7 +75,7 @@ class ToolEngineSingleton {
             source: {
                 package_ref: packageRef,
                 handler_ref: `tool:${action}:${packageRef || 'unknown'}:${toolSlug || 'n/a'}`,
-                block_tag: 'tool',
+                parsed_tag: 'tool',
                 action,
                 event_name: eventName,
                 result_memory_uid: resultMemoryUid,
@@ -109,8 +109,8 @@ class ToolEngineSingleton {
             sub_action: 'session',
             payload: {
                 session_id: sessionId,
-                tag: 'tool',
-                block_type: 'tool',
+                parsed_tag: 'tool',
+                block_slug: 'tool',
                 at: Date.now(),
                 event_name: eventName,
                 ...payload,

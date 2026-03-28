@@ -43,6 +43,8 @@ export interface ParseAIStreamOptions {
     incomingCarryover?: string;
 }
 
+const STRUCTURED_TAG_NAME_PATTERN = '[a-z_][a-z0-9_-]*(?::[a-z_][a-z0-9_-]*)?';
+
 function parseStructuredPayload(raw: string): {
     json: Record<string, unknown> | null;
     error?: string;
@@ -158,7 +160,9 @@ function findPartialStructuredTagTail(chunk: string, cursor: number): number {
     if (lastLt < cursor) return -1;
 
     const suffix = chunk.slice(lastLt);
-    const isPartial = /^<\s*$/i.test(suffix) || /^<\s*[a-z_][a-z0-9_]*\s*$/i.test(suffix);
+    const isPartial = /^<\s*$/i.test(suffix)
+        || /^<\s*[a-z_][a-z0-9_-]*:\s*$/i.test(suffix)
+        || new RegExp(`^<\\s*${STRUCTURED_TAG_NAME_PATTERN}\\s*$`, 'i').test(suffix);
 
     return isPartial ? lastLt : -1;
 }
@@ -168,7 +172,9 @@ function findPartialStructuredCloseTail(chunk: string, cursor: number): number {
     if (lastLt < cursor) return -1;
 
     const suffix = chunk.slice(lastLt);
-    const isPartialClose = /^<\s*\/\s*$/i.test(suffix) || /^<\s*\/\s*[a-z_][a-z0-9_]*\s*$/i.test(suffix);
+    const isPartialClose = /^<\s*\/\s*$/i.test(suffix)
+        || /^<\s*\/\s*[a-z_][a-z0-9_-]*:\s*$/i.test(suffix)
+        || new RegExp(`^<\\s*\\/\\s*${STRUCTURED_TAG_NAME_PATTERN}\\s*$`, 'i').test(suffix);
 
     return isPartialClose ? lastLt : -1;
 }
@@ -183,7 +189,7 @@ function findPartialFenceTail(chunk: string, cursor: number): number {
 }
 
 function readStructuredTagAt(chunk: string, index: number): { tag: string; openEnd: number } | null {
-    const matched = /^<\s*([a-z_][a-z0-9_]*)\s*>/i.exec(chunk.slice(index));
+    const matched = new RegExp(`^<\\s*(${STRUCTURED_TAG_NAME_PATTERN})\\s*>`, 'i').exec(chunk.slice(index));
     if (!matched) {
         return null;
     }

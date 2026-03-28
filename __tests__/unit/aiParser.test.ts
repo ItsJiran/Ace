@@ -325,7 +325,7 @@ Saya bantu?
     it('should parse presentation block with component reference', () => {
         const streamChunk = `
 <presentation>
-{"package_ref":"itsjiran/ace-system","component_slug":"ai_output_list","memory_key":"system:session:test:tool_result:1","format":"list","props":{"title":"Results"}}
+{"package_ref":"itsjiran/ace-system","component_slug":"ai_output_list","memory_uid":"system:session:test:tool_result:1","format":"list","props":{"title":"Results"}}
 </presentation>
 `;
 
@@ -337,7 +337,7 @@ Saya bantu?
             expect(presentationBlock.is_complete).toBe(true);
             expect(presentationBlock.package_ref).toBe('itsjiran/ace-system');
             expect(presentationBlock.component_slug).toBe('ai_output_list');
-            expect(presentationBlock.memory_key).toBe('system:session:test:tool_result:1');
+            expect(presentationBlock.memory_uid).toBe('system:session:test:tool_result:1');
             expect(presentationBlock.format).toBe('list');
             expect((presentationBlock.props as Record<string, unknown>)?.title).toBe('Results');
         }

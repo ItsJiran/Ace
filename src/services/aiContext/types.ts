@@ -14,7 +14,7 @@ export interface SessionTurn {
 
 export interface SessionHistorySummary {
     at: number;
-    block_type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+    block_slug: 'history_summary_ai_prompt' | 'history_summary_ai_response';
     source: 'ai_parsed' | 'raw' | 'fallback';
     summary: string;
     memory_key?: string;
@@ -49,7 +49,7 @@ export interface BuildContextOptions {
 }
 
 export interface RuntimeHistorySummaryFallbackInput {
-    block_type: SessionHistorySummary['block_type'];
+    block_slug: SessionHistorySummary['block_slug'];
     memory_key: string;
     ref_uid?: string;
     summary_source_text: string;

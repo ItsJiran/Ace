@@ -42,7 +42,6 @@ function parseEventBlock(body: string): {
 export const registry: AceRegistryType.Parser = {
     name: 'event',
     slug: 'event',
-    tag_name: 'event',
     description: 'Fire UI or system event blocks.',
     aliases: ['json'],
     block_schema: {

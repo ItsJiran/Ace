@@ -35,11 +35,11 @@ export interface DispatchBlockInput {
 export interface EmitSessionResultInput {
     sessionId?: string;
     processUid?: string;
-    tag: string;
+    parsedTag: string;
     payload: Record<string, unknown>;
 }
 
 export interface DispatchContextEmitInput extends ParserEmitPayload {
     block_id?: number;
-    block_tag?: string;
+    parsed_tag?: string;
 }

@@ -39,7 +39,7 @@ interface AIGatewaySessionSnapshot {
   turns?: Array<{ at: number; role: 'user' | 'assistant' | 'system'; text: string }>;
   history_summaries?: Array<{
     at: number;
-    block_type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+    block_slug: 'history_summary_ai_prompt' | 'history_summary_ai_response';
     source: 'ai_parsed' | 'raw' | 'fallback';
     summary: string;
     memory_key?: string;

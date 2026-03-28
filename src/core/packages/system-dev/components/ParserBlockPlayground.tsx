@@ -37,9 +37,7 @@ function buildContinuationPromptPreview(inputPrompt: string, handlerResults: Par
     const latestTerminalEvent = [...handlerResults].reverse().find((record) => {
         const eventName = typeof record.event_name === 'string' ? record.event_name : '';
         return eventName === PARSER_RUNTIME_EVENT.HANDLER_RESULT
-            || eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR
-            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_RESULT
-            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR;
+            || eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR;
     }) ?? null;
 
     if (!latestTerminalEvent) {
@@ -200,13 +198,13 @@ export default function ParserBlockPlayground() {
 
         const simulatedEvent: ParserSessionEmitRecord = {
             session_id: sessionRef.current,
-            tag: 'tool',
+            parsed_tag: 'tool',
             at: now,
             event_name: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
             payload: {
                 session_id: sessionRef.current,
-                tag: 'tool',
-                block_type: 'tool',
+                parsed_tag: 'tool',
+                block_slug: 'tool',
                 at: now,
                 event_name: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
                 action: 'list',
@@ -248,9 +246,7 @@ export default function ParserBlockPlayground() {
     const latestStop = result.stopSignals.length > 0 ? result.stopSignals[result.stopSignals.length - 1] : null;
     const isToolListPendingInPlayground =
         !result.handlerResults.some((item) => item.event_name === PARSER_RUNTIME_EVENT.HANDLER_RESULT
-            || item.event_name === PARSER_RUNTIME_EVENT.HANDLER_ERROR
-            || item.event_name === PARSER_RUNTIME_EVENT.TOOL_ACTION_RESULT
-            || item.event_name === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR) &&
+            || item.event_name === PARSER_RUNTIME_EVENT.HANDLER_ERROR) &&
         latestStop?.reason === 'tool_list_requested';
 
     const continuationDisplayText = isToolListPendingInPlayground

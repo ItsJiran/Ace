@@ -87,6 +87,60 @@ In addition to `payload` and `source`, memory envelope should include:
 2. New schema versions must be backward-compatible within major version.
 3. Cross-package boundary prefers JSON Schema-compatible objects to avoid runtime validator lock-in.
 
+## Parser Identity Contract
+
+Parser blocks are now slug-based.
+
+Rules:
+1. `slug` is the canonical parser runtime identity.
+2. Canonical block tag is derived directly from parser `slug`.
+3. Namespaced block form is `<namespace:block_slug>`.
+4. Unqualified block form is `<block_slug>` and resolves through RegistryEngine priority.
+5. `name` is display metadata only.
+6. `tag_name` is removed and should not be declared by parser packages.
+
+Examples:
+1. Parser slug `tool` -> block tag `<tool>`
+2. Parser slug `history_summary_ai_prompt` -> block tag `<history_summary_ai_prompt>`
+3. Namespaced block example -> `<system_dev:tool>`
+
+## Parser Handler API
+
+Parser validator receives:
+
+1. `tag`: exact parsed tag from stream
+2. `body`: raw block body
+3. `payload_json`: parsed JSON object or `null`
+4. `payload_parse_error`: parse failure message when JSON parsing fails
+5. `isComplete`: whether closing tag already arrived
+6. `session_id`: optional session scope
+7. `block_id`: optional runtime block sequence id
+
+Parser handler receives all validator fields plus:
+
+1. `result`: mutable `AIParseResult` accumulator
+2. `emit_result(payload)`: publish parser runtime lifecycle/result payload
+3. `request_interrupt(reason?)`: request gateway loop interrupt behavior
+
+Handler expectations:
+1. Append normalized blocks/events into `result`
+2. Avoid app-layer unions; use `payload_json` as transport contract
+3. Treat `tag` as runtime input and `slug` as canonical parser identity
+4. Use `emit_result` only for observability/runtime coordination, not user-facing output
+
+## Parser Observability Vocabulary
+
+For runtime traces and monitor payloads, use this naming consistently:
+
+1. `parsed_tag`: raw block token read from stream parser input.
+2. `block_slug`: canonical runtime block identity used for action/status classification.
+3. `slug`: canonical registry identity of a parser domain entry.
+
+Policy:
+1. Parser lifecycle events and stop signals should expose `parsed_tag`.
+2. Runtime action payloads and session status summaries should expose `block_slug`.
+3. New code should not introduce legacy fields (`tag`, `block_tag`, `tag_name`) in observability payload contracts.
+
 ## Current Focus
 
 ### In Progress - UI Shell
@@ -162,7 +216,7 @@ Planning Context Block Contract (Draft):
 
 ```json
 {
-  "block_type": "planning",
+  "block_slug": "planning",
   "plan_type": "grand_plan | current_plan",
   "plan_status": "draft | active | blocked | done | dropped",
   "decision_reason": "ai reasoning summary",
@@ -461,7 +515,7 @@ Inclusion in `buildContext` is purely status-driven — set `status: 'in'` to in
 1. **`context_retrieve` block:** AI-driven retrieval by key
    ```json
    {
-     "block_type": "context",
+    "block_slug": "context",
      "context_action": "retrieve_by_key",
      "memory_key": "rag:memory:file:/path/to/file",
      "reason": "need full file content to understand logic"

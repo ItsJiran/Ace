@@ -51,7 +51,6 @@ function normalizeHistorySummaryPayload(
 export const registry: AceRegistryType.Parser = {
     name: 'history_summary_ai_response',
     slug: 'history_summary_ai_response',
-    tag_name: 'history_summary_ai_response',
     description: 'Compact summary of the current assistant response.',
     block_schema: {
         purpose: 'Compact summary of your current response. Emit AFTER your prose response is fully written.',

@@ -40,8 +40,8 @@ class ContextMemoryBlockHandlerSingleton {
             sub_action: 'session',
             payload: {
                 session_id: sessionId,
-                tag: 'context',
-                block_type: 'context',
+                parsed_tag: 'context',
+                block_slug: 'context',
                 at: Date.now(),
                 event_name: eventName,
                 ...payload,

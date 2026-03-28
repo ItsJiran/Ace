@@ -28,7 +28,7 @@ interface SessionSnapshot {
     turns?: Array<{ at: number; role: 'user' | 'assistant' | 'system'; text: string }>;
     history_summaries?: Array<{
         at: number;
-        block_type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+        block_slug: 'history_summary_ai_prompt' | 'history_summary_ai_response';
         source: 'ai_parsed' | 'raw' | 'fallback';
         summary: string;
         memory_key?: string;
@@ -58,7 +58,7 @@ interface SessionSnapshot {
     };
     block_handler_state?: {
         status: 'idle' | 'running' | 'parsing' | 'failed';
-        block_type?: string;
+        block_slug?: string;
         action?: string;
         event_name?: string;
         result_memory_uid?: string;
@@ -78,7 +78,7 @@ interface ResponseMemorySnapshot {
     events_total?: number;
     parser_handler_results?: Array<{
         session_id: string;
-        tag: string;
+        parsed_tag: string;
         at: number;
         event_name?: string;
         interrupt_hint?: boolean;
@@ -88,7 +88,7 @@ interface ResponseMemorySnapshot {
     parser_handler_last_result_at?: number;
     parser_stop_signals?: Array<{
         session_id: string;
-        tag: string;
+        parsed_tag: string;
         at: number;
         block_id?: number;
         reason: string;
@@ -228,9 +228,9 @@ function CopyTextButton({ label, value }: { label: string; value?: string }) {
 function HistorySummaryCard({ item }: { item: NonNullable<SessionSnapshot['history_summaries']>[number] }) {
     const [expanded, setExpanded] = useState(false);
     const storageMemory = useAceMemory<HistoryMemorySnapshot>(item.memory_key || 'system:dev:ai_session_monitor:history_idle');
-    const title = item.block_type === 'history_summary_ai_prompt' ? 'Prompt Summary' : 'Response Summary';
+    const title = item.block_slug === 'history_summary_ai_prompt' ? 'Prompt Summary' : 'Response Summary';
     // For the raw payload panel: show clean text (not raw_response which includes block XML).
-    const rawBody = item.block_type === 'history_summary_ai_prompt'
+    const rawBody = item.block_slug === 'history_summary_ai_prompt'
         ? storageMemory?.original_prompt || '-'
         : storageMemory?.text || storageMemory?.raw_response || '-';
 
@@ -364,7 +364,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
     const toolRuntimeEvents = parserResults.filter((result) => {
         const eventName = typeof result.event_name === 'string' ? result.event_name : '';
         const payload = result.payload && typeof result.payload === 'object' ? result.payload : undefined;
-        const blockType = typeof payload?.block_type === 'string' ? payload.block_type : undefined;
+        const blockType = typeof payload?.block_slug === 'string' ? payload.block_slug : undefined;
 
         if (blockType === 'tool') return true;
 
@@ -372,10 +372,6 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
             || eventName === PARSER_RUNTIME_EVENT.HANDLER_STARTED
             || eventName === PARSER_RUNTIME_EVENT.HANDLER_RESULT
             || eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR
-            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_DISPATCH
-            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_STARTED
-            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_RESULT
-            || eventName === PARSER_RUNTIME_EVENT.TOOL_ACTION_ERROR
             || eventName === PARSER_RUNTIME_EVENT.TOOL_BLOCK_PARSED;
     });
 
@@ -456,7 +452,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
 
         type BlockTimelineItem = {
             block_id: number;
-            tag: string;
+            parsed_tag: string;
             type: string;
             status: string;
             last_at: number;
@@ -478,17 +474,17 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
             const payloadBlockId = typeof payload.block_id === 'number' ? payload.block_id : undefined;
             const blockId = payloadBlockId ?? syntheticId++;
 
-            const blockTag = typeof payload.block_tag === 'string'
-                ? payload.block_tag
-                : typeof payload.block_type === 'string'
-                    ? payload.block_type
-                    : record.tag;
-            const blockType = typeof payload.block_type === 'string' ? payload.block_type : blockTag;
+            const parsedTag = typeof payload.parsed_tag === 'string'
+                ? payload.parsed_tag
+                : typeof payload.block_slug === 'string'
+                    ? payload.block_slug
+                    : record.parsed_tag;
+            const blockType = typeof payload.block_slug === 'string' ? payload.block_slug : parsedTag;
             const stepStatus = typeof payload.status === 'string' ? payload.status : undefined;
 
             const existing = byBlockId.get(blockId) ?? {
                 block_id: blockId,
-                tag: blockTag,
+                parsed_tag: parsedTag,
                 type: blockType,
                 status: 'detected',
                 last_at: record.at,
@@ -510,7 +506,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                         ? 'registry_found'
                                         : existing.status;
 
-            existing.tag = blockTag || existing.tag;
+            existing.parsed_tag = parsedTag || existing.parsed_tag;
             existing.type = blockType || existing.type;
             existing.status = nextStatus;
             existing.last_at = Math.max(existing.last_at, record.at);
@@ -571,7 +567,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                 {session.history_summaries?.map((item, i) => (
                                     <div key={i} className="text-[11px] border border-zinc-800 rounded px-3 py-2 bg-zinc-900/40 flex flex-col gap-1">
                                         <div className="flex justify-between gap-3">
-                                            <span className="text-zinc-300 font-semibold">{item.block_type}</span>
+                                            <span className="text-zinc-300 font-semibold">{item.block_slug}</span>
                                             <span className="text-[9px] text-zinc-500">{new Date(item.at).toLocaleTimeString()}</span>
                                         </div>
                                         <div className="text-zinc-400 whitespace-pre-wrap">{item.summary}</div>
@@ -617,7 +613,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                         {[...(session.history_summaries || [])]
                             .sort((a, b) => b.at - a.at)
                             .map((item, i) => (
-                                <HistorySummaryCard key={`${item.at}-${item.block_type}-${i}`} item={item} />
+                                <HistorySummaryCard key={`${item.at}-${item.block_slug}-${i}`} item={item} />
                             ))}
                         {(!session.history_summaries || session.history_summaries.length === 0) && (
                             <div className="text-zinc-600 italic text-xs text-center py-8">No summarized history yet.</div>
@@ -661,7 +657,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                         <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
                                             <div className="flex items-center gap-2">
                                                 <span className="font-semibold text-zinc-300">#{item.block_id}</span>
-                                                <span className="text-zinc-500">{item.tag}</span>
+                                                <span className="text-zinc-500">{item.parsed_tag}</span>
                                                 <span className="text-zinc-500">type: {item.type}</span>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -793,7 +789,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                 {parserResults.map((result, index) => (
                                     <div key={`${result.at}-${index}`} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
                                         <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
-                                            <span className="font-semibold text-zinc-300">{result.tag}</span>
+                                            <span className="font-semibold text-zinc-300">{result.parsed_tag}</span>
                                             <div className="flex items-center gap-2">
                                                 {result.event_name ? <span>{result.event_name}</span> : null}
                                                 <span className="font-mono opacity-50">{new Date(result.at).toLocaleTimeString()}</span>
@@ -816,7 +812,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                 {parserStops.map((signal, index) => (
                                     <div key={`${signal.at}-${index}`} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
                                         <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
-                                            <span className="font-semibold text-zinc-300">{signal.tag}</span>
+                                            <span className="font-semibold text-zinc-300">{signal.parsed_tag}</span>
                                             <div className="flex items-center gap-2">
                                                 <span>{signal.interrupt_mode}</span>
                                                 <span className="font-mono opacity-50">{new Date(signal.at).toLocaleTimeString()}</span>

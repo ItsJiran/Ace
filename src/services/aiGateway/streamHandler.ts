@@ -269,7 +269,7 @@ function emitParserSessionResult(input: {
         process_uid: processUid,
         payload: {
             session_id: sessionId,
-            tag: 'parser',
+            parsed_tag: 'parser',
             at: Date.now(),
             event_name: eventName,
             ...(payload || {}),
@@ -443,10 +443,10 @@ export function handleSessionStreamChunk(
             process_uid: processUid,
             payload: {
                 session_id: session.sessionId,
-                tag: 'context',
+                parsed_tag: 'context',
                 at: Date.now(),
                 event_name: 'parser_handler_dispatch',
-                block_type: 'context',
+                block_slug: 'context',
                 action,
                 memory_key: memoryKey,
                 result_memory_uid: fallbackResultKey,
@@ -689,6 +689,11 @@ export function handleSessionStreamChunk(
         const componentSlug = typeof payload.component_slug === 'string' ? payload.component_slug.trim() : '';
         if (!componentSlug) return;
 
+        const memoryUid = typeof payload.memory_uid === 'string'
+            ? payload.memory_uid
+            : typeof payload.memory_key === 'string'
+                ? payload.memory_key
+                : undefined;
         const memoryKey = typeof payload.memory_key === 'string' ? payload.memory_key : undefined;
         const format = typeof payload.format === 'string' ? payload.format : undefined;
         const props = payload.props && typeof payload.props === 'object' && !Array.isArray(payload.props)
@@ -708,10 +713,10 @@ export function handleSessionStreamChunk(
             process_uid: processUid,
             payload: {
                 session_id: session.sessionId,
-                tag: 'presentation',
+                parsed_tag: 'presentation',
                 at: Date.now(),
                 event_name: 'parser_handler_result',
-                block_type: 'presentation',
+                block_slug: 'presentation',
                 package_ref: packageRef,
                 component_ref: componentRef,
                 component_slug: componentSlug,
@@ -748,10 +753,10 @@ export function handleSessionStreamChunk(
             process_uid: processUid,
             payload: {
                 session_id: session.sessionId,
-                tag: 'tool',
+                parsed_tag: 'tool',
                 at: Date.now(),
                 event_name: 'parser_handler_dispatch',
-                block_type: 'tool',
+                block_slug: 'tool',
                 action: interaction.sub_action,
                 result_memory_uid: (interaction.payload as Record<string, unknown>).result_memory_uid,
                 payload: interaction.payload,

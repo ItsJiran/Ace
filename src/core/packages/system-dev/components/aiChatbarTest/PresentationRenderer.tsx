@@ -49,7 +49,7 @@ export function PresentationRenderer({ block }: { block: BaseBlock }) {
     const componentSlug = (payload?.component_slug || '').trim();
     const memoryTarget = typeof payload?.memory_uid === 'string' && payload.memory_uid.trim().length > 0
         ? payload.memory_uid.trim()
-        : payload?.memory_key;
+        : undefined;
     const inlineProps = payload?.props || {};
     let memoryData: unknown;
 

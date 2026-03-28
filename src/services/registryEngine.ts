@@ -43,9 +43,11 @@ class RegistryEngineSingleton {
 
     // Parser block runtime index (dynamic):
     // 1) package namespace key: {package}:parsers:{slug}
-    // 2) tag namespace key: <tag_name> + aliases
+    // 2) namespaced tag key: <namespace>:<block_slug>
+    // 3) unqualified tag key: <block_slug> with deterministic priority fallback
     private parserBlockByNamespace = new Map<string, ParserBlockRuntime>();
-    private parserBlockByTag = new Map<string, ParserBlockRuntime>();
+    private parserBlockByTag = new Map<string, ParserBlockRuntime[]>();
+    private parserBlockByNamespacedTag = new Map<string, ParserBlockRuntime>();
     private schemaByRef = new Map<string, {
         package_ref: string;
         domain: string;
@@ -191,7 +193,13 @@ class RegistryEngineSingleton {
 
     getParserBlock(tagName: string): ParserBlockRuntime | null {
         this.ensureParserBlockIndexes();
-        return this.parserBlockByTag.get(tagName) ?? null;
+        if (tagName.includes(':')) {
+            return this.parserBlockByNamespacedTag.get(tagName) ?? null;
+        }
+
+        const candidates = this.parserBlockByTag.get(tagName);
+        if (!candidates || candidates.length === 0) return null;
+        return candidates[0] ?? null;
     }
 
     getParserBlockByNamespace(namespaceRef: string): ParserBlockRuntime | null {
@@ -217,8 +225,9 @@ class RegistryEngineSingleton {
         const lines: string[] = [
             '=== ACE RUNTIME BLOCK CATALOG ===',
             '',
-            'Block mechanism: <block_name>payload</block_name>',
-            '  - block_name must be lowercase letters, digits, or underscores: [a-z_][a-z0-9_]*',
+            'Block mechanism: <block_slug>payload</block_slug> or <namespace:block_slug>payload</namespace:block_slug>',
+            '  - block_slug and namespace must match: [a-z_][a-z0-9_-]*',
+            '  - Unqualified <block_slug> falls back to highest-priority registered parser (core > default > user).',
             '  - Opening and closing tags must be on their own line.',
             '  - All JSON payloads must be a valid JSON object (not array, not string).',
             '  - Blocks are invisible to the user — only prose outside blocks is user-facing.',
@@ -320,9 +329,36 @@ class RegistryEngineSingleton {
     private rebuildParserBlockIndexes() {
         this.parserBlockByNamespace.clear();
         this.parserBlockByTag.clear();
+        this.parserBlockByNamespacedTag.clear();
+
+        const scopePriority = (ownerScope?: string) => {
+            if (ownerScope === 'core') return 1;
+            if (ownerScope === 'default') return 2;
+            if (ownerScope === 'user') return 3;
+            return 4;
+        };
+
+        const normalizeNamespace = (packageName: string) => {
+            const tail = packageName.split('/').pop() ?? packageName;
+            const lowered = tail.trim().toLowerCase();
+            return lowered.replace(/[^a-z0-9_-]/g, '_');
+        };
+
+        const putCandidate = (key: string, runtimeBlock: ParserBlockRuntime) => {
+            const next = [...(this.parserBlockByTag.get(key) ?? []), runtimeBlock];
+            next.sort((a, b) => {
+                const aPkg = this.runtimeIndex.get(a.package_name);
+                const bPkg = this.runtimeIndex.get(b.package_name);
+                const score = scopePriority(aPkg?.metadata.owner_scope) - scopePriority(bPkg?.metadata.owner_scope);
+                if (score !== 0) return score;
+                return `${a.package_name}:${a.slug}`.localeCompare(`${b.package_name}:${b.slug}`);
+            });
+            this.parserBlockByTag.set(key, next);
+        };
 
         for (const runtimePkg of this.runtimeIndex.values()) {
             const packageName = runtimePkg.metadata.package_name;
+            const namespace = normalizeNamespace(packageName);
             const parserEntries = runtimePkg.package.domains.parsers ?? {};
 
             for (const [slug, rawEntry] of Object.entries(parserEntries)) {
@@ -333,10 +369,7 @@ class RegistryEngineSingleton {
 
                 if (typeof handler !== 'function') continue;
 
-                const tagNameCandidate = metadata.tag_name ?? metadata.name ?? metadata.slug ?? slug;
-                const tagName = typeof tagNameCandidate === 'string' && tagNameCandidate.trim().length > 0
-                    ? tagNameCandidate.trim()
-                    : slug;
+                const tagName = slug;
 
                 const aliases = Array.isArray(metadata.aliases)
                     ? metadata.aliases.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim())
@@ -361,7 +394,6 @@ class RegistryEngineSingleton {
                 const runtimeBlock: ParserBlockRuntime = {
                     package_name: packageName,
                     slug,
-                    tag_name: tagName,
                     aliases,
                     schema,
                     runtime_behavior: (metadata.runtime_behavior && typeof metadata.runtime_behavior === 'object')
@@ -382,9 +414,12 @@ class RegistryEngineSingleton {
 
                 const namespaceRef = `${packageName}:parsers:${slug}`;
                 this.parserBlockByNamespace.set(namespaceRef, runtimeBlock);
-                this.parserBlockByTag.set(tagName, runtimeBlock);
+                const namespacedTag = `${namespace}:${tagName}`;
+                this.parserBlockByNamespacedTag.set(namespacedTag, runtimeBlock);
+                putCandidate(tagName, runtimeBlock);
                 for (const alias of aliases) {
-                    this.parserBlockByTag.set(alias, runtimeBlock);
+                    this.parserBlockByNamespacedTag.set(`${namespace}:${alias}`, runtimeBlock);
+                    putCandidate(alias, runtimeBlock);
                 }
             }
         }

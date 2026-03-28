@@ -27,7 +27,7 @@ export class ParserEventRouteService {
 
             this.deps.onSessionResult({
                 session_id: sessionId,
-                tag: typeof payload.tag === 'string' ? payload.tag : 'unknown',
+                parsed_tag: typeof payload.parsed_tag === 'string' ? payload.parsed_tag : 'unknown',
                 at: typeof payload.at === 'number' ? payload.at : Date.now(),
                 event_name: typeof payload.event_name === 'string' ? payload.event_name : undefined,
                 interrupt_hint: typeof payload.interrupt_hint === 'boolean' ? payload.interrupt_hint : undefined,
@@ -41,7 +41,7 @@ export class ParserEventRouteService {
 
             this.deps.onSessionStopSignal({
                 session_id: sessionId,
-                tag: typeof payload.tag === 'string' ? payload.tag : 'unknown',
+                parsed_tag: typeof payload.parsed_tag === 'string' ? payload.parsed_tag : 'unknown',
                 at: typeof payload.at === 'number' ? payload.at : Date.now(),
                 reason:
                     typeof payload.reason === 'string' && payload.reason.trim().length > 0

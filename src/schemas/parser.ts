@@ -72,7 +72,8 @@ export interface ParserEmitPayload {
 
 export interface ParserSessionEmitRecord {
     session_id: string;
-    tag: string;
+    /** Exact tag token parsed from the stream, before canonical block_slug resolution. */
+    parsed_tag: string;
     at: number;
     event_name?: string;
     interrupt_hint?: boolean;
@@ -81,13 +82,15 @@ export interface ParserSessionEmitRecord {
 
 export interface ParserSessionStopSignal {
     session_id: string;
-    tag: string;
+    /** Exact tag token parsed from the stream that requested the stop signal. */
+    parsed_tag: string;
     at: number;
     reason: string;
     interrupt_mode: ParserInterruptMode;
 }
 
 export interface BlockProtocolSchema {
+    /** Canonical runtime block tag. This must match the parser slug. */
     name: string;
     purpose: string;
     requiredFields?: string;
@@ -96,6 +99,25 @@ export interface BlockProtocolSchema {
     exampleLines: string[];
 }
 
+/**
+ * Runtime arguments passed into a parser block handler.
+ *
+ * Contract notes:
+ * 1. `tag` is the exact parsed block tag from the stream. For canonical system
+ *    blocks this should match the parser slug; namespaced tags preserve the
+ *    original namespaced form.
+ * 2. `body` is the raw block body between opening and closing tags.
+ * 3. `payload_json` is the parsed JSON object when available, or null when the
+ *    body is empty / invalid / non-JSON.
+ * 4. `payload_parse_error` carries JSON parse failure text without aborting the stream.
+ * 5. `isComplete` indicates whether the closing tag has been fully received.
+ * 6. `result` is the mutable parse accumulator; handlers append blocks/events here.
+ * 7. `session_id` and `block_id` are runtime observability fields when parsing
+ *    occurs in a tracked session.
+ * 8. `emit_result()` publishes handler lifecycle/result payloads into parser runtime
+ *    observability channels.
+ * 9. `request_interrupt()` asks the gateway loop to pause/stop after this block.
+ */
 export interface ParserBlockHandlerContext {
     tag: string;
     body: string;
@@ -109,6 +131,14 @@ export interface ParserBlockHandlerContext {
     request_interrupt?: (reason?: string) => void;
 }
 
+/**
+ * Runtime arguments passed into a parser validator before handler execution.
+ *
+ * Validators may:
+ * 1. throw to reject malformed complete payloads,
+ * 2. return a normalized payload object to replace `payload_json`, or
+ * 3. return void/null to keep the original parsed payload.
+ */
 export interface ParserBlockValidatorContext {
     tag: string;
     body: string;
@@ -127,8 +157,8 @@ export type ParserBlockHandler = (context: ParserBlockHandlerContext) => void;
 
 export interface ParserBlockRuntime {
     package_name: string;
+    /** Canonical runtime identity for parser resolution and block tags. */
     slug: string;
-    tag_name: string;
     aliases: string[];
     schema: BlockProtocolSchema;
     runtime_behavior?: ParserRuntimeBehavior;

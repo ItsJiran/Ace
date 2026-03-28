@@ -30,7 +30,7 @@ class ParserEngineSingleton {
     });
 
     private emitSessionResult(input: EmitSessionResultInput): void {
-        const { sessionId, processUid, tag, payload } = input;
+        const { sessionId, processUid, parsedTag, payload } = input;
         if (!sessionId) return;
 
         EventBus.emit({
@@ -40,7 +40,7 @@ class ParserEngineSingleton {
             process_uid: processUid,
             payload: {
                 session_id: sessionId,
-                tag,
+                parsed_tag: parsedTag,
                 at: Date.now(),
                 ...payload,
             },

@@ -21,7 +21,7 @@ export interface ParserBatchMemory {
     blocks?: BaseBlock[];
     parser_handler_results?: Array<{
         session_id: string;
-        tag: string;
+        parsed_tag: string;
         at: number;
         event_name?: string;
         interrupt_hint?: boolean;

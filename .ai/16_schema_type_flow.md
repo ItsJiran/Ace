@@ -90,6 +90,20 @@ Use:
 2. getBlockPayloadAs<T>() for typed payload extraction.
 3. parser/domain-owned helpers (for example getPresentationPayload()) as local adapters.
 
+## Parser Runtime Naming (V1)
+
+To reduce ambiguity between stream token input and canonical runtime identity:
+
+1. `parsed_tag` = exact token parsed from stream block tags.
+2. `block_slug` = canonical runtime identity for action/status classification.
+3. `slug` = canonical parser registry identity.
+
+Contract guidance:
+
+1. Parser lifecycle + interrupt observability channels should emit `parsed_tag`.
+2. Session summaries and handler status fields should emit `block_slug`.
+3. New boundary payloads should avoid legacy naming (`tag`, `block_tag`, `tag_name`).
+
 ## External Bundle Guidance
 
 1. External bundles may author schemas with any internal tool.
@@ -103,6 +117,37 @@ Use:
 2. Add migration adapters when major schema changes are introduced.
 3. Mark failed validation explicitly in envelope metadata.
 4. Do not silently coerce unknown boundary payloads in strict paths.
+
+## Why We Implement This
+
+This architecture is intentionally chosen for long-term package ecosystem stability.
+
+1. Runtime safety over compile-time illusion
+	- TypeScript type sharing across package boundaries is not a runtime guarantee.
+	- Runtime schema metadata gives real validation at the boundary where failures actually happen.
+
+2. Lower cross-package coupling
+	- Consumers resolve schema through RegistryEngine using schema_ref.
+	- Packages do not need deep cross-imports for every payload contract.
+	- This keeps core and external packages independently evolvable.
+
+3. Better failure handling and debuggability
+	- Validation status is persisted (`validated`, `skipped`, `failed`) with timestamps.
+	- Retrieval strict mode can block unsafe payloads before they affect UI or loop logic.
+	- Metrics key (`system:ai_context_memory:validation_metrics`) provides quick health visibility.
+
+4. Safer external package onboarding
+	- External bundles only need to expose runtime schema objects.
+	- Host runtime remains the final validator and policy gate.
+	- This reduces risk from malformed or drifting payload contracts.
+
+5. Controlled migration path
+	- `memory_uid` is now preferred while legacy `memory_key` is still tolerated temporarily.
+	- Strict-by-default retrieval with legacy fallback allows gradual rollout without hard break.
+
+6. Future versioning readiness
+	- schema_ref + schema_version allows explicit compatibility checks.
+	- Version adapters can be introduced without redesigning transport contracts.
 
 ## Current Implementation Status
 

@@ -98,8 +98,6 @@ export namespace AceRegistryType {
     }
 
     export interface Parser extends BaseIdentity {
-        /** Canonical parser tag name (used in <tag_name>...</tag_name>) */
-        tag_name?: string;
         aliases?: string[];
         runtime_behavior?: {
             interrupt_mode?: 'none' | 'pause_stream' | 'hard_stop';

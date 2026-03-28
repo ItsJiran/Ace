@@ -167,26 +167,30 @@ class AIGatewayEngineSingleton {
      */
     listSessions(): AISessionSnapshot[] {
         return AISessionManager.list().map((snapshot) => {
+            // Group 1: base context and response memory used by monitor panels.
             const contextState = AIContextEngine.getSessionContext(snapshot.sessionId);
             const responseMemory = snapshot.activeOutputRamKey
                 ? (StorageEngine.readMemory(snapshot.activeOutputRamKey) as Record<string, unknown> | undefined)
                 : undefined;
 
+            // Group 2: lifecycle timeline extracted from parser runtime records.
             const parserResults = Array.isArray(responseMemory?.parser_handler_results)
                 ? (responseMemory?.parser_handler_results as Array<Record<string, unknown>>)
                 : [];
-
             const lifecycleEvents = parserResults
                 .filter((record) => {
+                    // event_name marks parser lifecycle stages (dispatch/started/result/error/failed).
                     const eventName = typeof record.event_name === 'string' ? record.event_name : '';
                     return isLifecycleEventName(eventName);
                 })
                 .sort((a, b) => {
+                    // Keep chronological order so "latest" truly means newest signal.
                     const atA = typeof a.at === 'number' ? a.at : 0;
                     const atB = typeof b.at === 'number' ? b.at : 0;
                     return atA - atB;
                 });
 
+            // Group 3: latest lifecycle signal + normalized metadata for status derivation.
             const latestLifecycle = lifecycleEvents.length > 0 ? lifecycleEvents[lifecycleEvents.length - 1] : undefined;
             const latestEventName = typeof latestLifecycle?.event_name === 'string' ? latestLifecycle.event_name : undefined;
             const latestPayload = latestLifecycle && typeof latestLifecycle.payload === 'object'
@@ -194,42 +198,47 @@ class AIGatewayEngineSingleton {
                 : undefined;
             const latestAction = typeof latestPayload?.action === 'string' ? latestPayload.action : undefined;
             const latestResultMemoryUid = typeof latestPayload?.result_memory_uid === 'string' ? latestPayload.result_memory_uid : undefined;
-            const latestAt = typeof latestLifecycle?.at === 'number' ? latestLifecycle.at : undefined;
+            const latestUpdatedAt = typeof latestLifecycle?.at === 'number' ? latestLifecycle.at : undefined;
             const latestPhase = getLifecyclePhase(latestEventName);
-            const latestBlockType = typeof latestPayload?.block_type === 'string'
-                ? latestPayload.block_type
-                : typeof latestLifecycle?.tag === 'string'
-                    ? latestLifecycle.tag
+            const latestBlockSlug = typeof latestPayload?.block_slug === 'string'
+                ? latestPayload.block_slug
+                : typeof latestLifecycle?.parsed_tag === 'string'
+                    ? latestLifecycle.parsed_tag
                     : undefined;
-            const handlerRunning = latestPhase === 'dispatch' || latestPhase === 'started';
-            const parserRuntimeStatus = typeof responseMemory?.parser_runtime_status === 'string' ? responseMemory.parser_runtime_status : undefined;
-            const parserFailed =
-                latestPhase === 'failed' ||
-                (latestBlockType === 'parser' && latestPhase === 'error') ||
-                parserRuntimeStatus === 'failed';
-            const parserParsing =
-                snapshot.status === 'streaming' &&
-                !parserFailed &&
-                ((latestBlockType === 'parser' && handlerRunning) || (!latestBlockType && !handlerRunning));
 
+            // Group 4: boolean flags that explain why a status becomes running/parsing/failed.
+            const isHandlerRunning = latestPhase === 'dispatch' || latestPhase === 'started';
+            const parserRuntimeStatus = typeof responseMemory?.parser_runtime_status === 'string' ? responseMemory.parser_runtime_status : undefined;
+            const isParserFailed =
+                latestPhase === 'failed' ||
+                (latestBlockSlug === 'parser' && latestPhase === 'error') ||
+                parserRuntimeStatus === 'failed';
+            const isParserParsing =
+                snapshot.status === 'streaming' &&
+                !isParserFailed &&
+                ((latestBlockSlug === 'parser' && isHandlerRunning) || (!latestBlockSlug && !isHandlerRunning));
+
+            // Group 5: final derived state used by UI monitors.
             const derivedStatus: 'idle' | 'running' | 'parsing' | 'failed' =
-                parserFailed
+                isParserFailed
                     ? 'failed'
-                    : handlerRunning
-                        ? (latestBlockType === 'parser' ? 'parsing' : 'running')
-                        : parserParsing
+                    : isHandlerRunning
+                        ? (latestBlockSlug === 'parser' ? 'parsing' : 'running')
+                        : isParserParsing
                             ? 'parsing'
                             : 'idle';
 
-            const derivedBlockType =
-                latestBlockType
-                    ? latestBlockType
+            // block_slug represents the active runtime focus shown in block_handler_state.
+            const derivedBlockSlug =
+                latestBlockSlug
+                    ? latestBlockSlug
                     : latestEventName
                         ? 'handler'
-                    : parserFailed
+                    : isParserFailed
                             ? 'parser'
                             : undefined;
 
+            // Group 6: merge static session snapshot with derived monitor diagnostics.
             return {
                 ...snapshot,
                 used_contexts: contextState?.used_contexts ?? [],
@@ -241,11 +250,11 @@ class AIGatewayEngineSingleton {
                 protocol_state: snapshot.protocol_state,
                 block_handler_state: {
                     status: derivedStatus,
-                    block_type: derivedBlockType,
+                    block_slug: derivedBlockSlug,
                     action: latestAction,
                     event_name: latestEventName,
                     result_memory_uid: latestResultMemoryUid,
-                    updated_at: latestAt,
+                    updated_at: latestUpdatedAt,
                 },
             };
         });

@@ -55,7 +55,7 @@ export interface AISessionSnapshot {
     turns?: Array<{ at: number; role: 'user' | 'assistant' | 'system'; text: string }>;
     history_summaries?: Array<{
         at: number;
-        block_type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+        block_slug: 'history_summary_ai_prompt' | 'history_summary_ai_response';
         summary: string;
         memory_key?: string;
         ref_uid?: string;
@@ -73,7 +73,7 @@ export interface AISessionSnapshot {
     protocol_state?: AIRequestProtocolState;
     block_handler_state?: {
         status: 'idle' | 'running' | 'parsing' | 'failed';
-        block_type?: string;
+        block_slug?: string;
         action?: string;
         event_name?: string;
         result_memory_uid?: string;

@@ -143,7 +143,7 @@ class AIContextEngineSingleton {
 
     ingestHistorySummaryBlock(
         sessionId: string,
-        blockType: SessionHistorySummary['block_type'],
+        blockType: SessionHistorySummary['block_slug'],
         payload: Record<string, unknown>,
     ): SessionContextState {
         const state = this.attachSession(sessionId);
@@ -166,18 +166,18 @@ class AIContextEngineSingleton {
     ): SessionContextState {
         return this.ingestHistorySummaryBlock(
             sessionId,
-            input.block_type,
+            input.block_slug,
             buildFallbackHistorySummaryPayload(input),
         );
     }
 
     ingestRawHistorySummary(
         sessionId: string,
-        input: { block_type: SessionHistorySummary['block_type']; memory_key: string; ref_uid?: string; text: string },
+        input: { block_slug: SessionHistorySummary['block_slug']; memory_key: string; ref_uid?: string; text: string },
     ): SessionContextState {
         return this.ingestHistorySummaryBlock(
             sessionId,
-            input.block_type,
+            input.block_slug,
             buildRawHistorySummaryPayload(input),
         );
     }
@@ -421,8 +421,8 @@ class AIContextEngineSingleton {
             sub_action: 'session',
             payload: {
                 session_id: sessionId,
-                tag: 'context',
-                block_type: 'context',
+                parsed_tag: 'context',
+                block_slug: 'context',
                 at: Date.now(),
                 event_name: eventName,
                 ...payload,

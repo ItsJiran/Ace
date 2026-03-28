@@ -60,7 +60,7 @@ This block becomes an `Interaction` event and is emitted to `EventBus`.
 {
   "component_slug": "ai_output_list",
   "package_ref": "itsjiran/ace-system",
-  "memory_key": "system:session:abc:results",
+  "memory_uid": "system:session:abc:results",
   "format": "list",
   "props": { "title": "Results" }
 }
@@ -69,14 +69,15 @@ This block becomes an `Interaction` event and is emitted to `EventBus`.
 **Fields:**
 - `component_slug` (required, string): Registered component identifier
 - `package_ref` (optional, string): Package namespace; defaults to `itsjiran/ace-system`
-- `memory_key` (optional, string): Context memory key to load data from
+- `memory_uid` (preferred, optional, string): Context memory pointer to load data from
+- `memory_key` (legacy fallback, optional, string): temporary compatibility pointer
 - `props` (optional, object): Inline prop overrides for component
 - `format` (optional, string): Hint for rendering: `list`, `table`, `card`, `markdown`
 
 **Resolution & Rendering:**
 1. Parser extracts block → validates JSON → emits `presentation_block_resolved` event
 2. UI resolves component via registry: `${package_ref}:components:${component_slug}`
-3. If `memory_key` provided, client loads context memory data
+3. If `memory_uid` provided (or legacy `memory_key`), client loads context memory data
 4. Component rendered with merged props: `{ ...memoryData, ...props }`
 5. Stream continues while component renders (non-blocking)
 
@@ -87,7 +88,7 @@ Here are the results:
 <presentation>
 {
   "component_slug": "ai_output_list",
-  "memory_key": "system:session:turn:1:tool_results"
+  "memory_uid": "system:session:turn:1:tool_results"
 }
 </presentation>
 
@@ -134,7 +135,7 @@ Inside parser handler:
 - `ParserEngine` emits EventBus interaction:
   - `action: parser_control`
   - `sub_action: session_stop`
-  - payload: `{ session_id, tag, reason, interrupt_mode, at }`
+  - payload: `{ session_id, parsed_tag, reason, interrupt_mode, at }`
 
 ### 2) ParserEngine Captures Stop Signal
 
@@ -176,6 +177,19 @@ Current streamed RAM payload tracks parser diagnostics:
 - `parser_stop_signals`
 - `parser_stop_signal_count`
 - `parser_last_stop_at`
+
+## Observability Vocabulary
+
+Canonical runtime naming:
+
+1. `parsed_tag`: raw token parsed from stream block tags.
+2. `block_slug`: canonical runtime identity for block/action classification.
+3. `slug`: canonical registry identity for parser domain entries.
+
+Guideline:
+
+1. Use `parsed_tag` in parser lifecycle and interrupt observability payloads.
+2. Use `block_slug` in runtime action payloads and UI status summaries.
 
 ## Protocol Lifecycle (History Summary)
 

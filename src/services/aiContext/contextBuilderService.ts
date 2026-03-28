@@ -122,7 +122,7 @@ export function buildContextForSession(state: SessionContextState, prompt: strin
             .map((item) => {
                 const sourceLabel = item.source === 'raw' ? ' [RAW]' : item.source === 'fallback' ? ' [FALLBACK]' : '';
                 const parts = [
-                    `${item.block_type.toUpperCase()}${sourceLabel}`,
+                    `${item.block_slug.toUpperCase()}${sourceLabel}`,
                     item.summary,
                     item.memory_key ? `memory_key=${item.memory_key}` : '',
                     item.ref_uid ? `ref_uid=${item.ref_uid}` : '',

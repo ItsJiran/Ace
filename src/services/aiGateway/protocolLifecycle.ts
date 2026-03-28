@@ -91,7 +91,7 @@ export function finalizeRequestProtocolState(input: {
     if (!protocol.prompt_summary_valid) {
         if (protocol.require_prompt_summary) {
             AIContextEngine.ingestRuntimeHistorySummaryFallback(session.sessionId, {
-                block_type: 'history_summary_ai_prompt',
+                block_slug: 'history_summary_ai_prompt',
                 memory_key: protocol.prompt_memory_key,
                 ref_uid: protocol.prompt_ref_uid,
                 summary_source_text: prompt,
@@ -103,7 +103,7 @@ export function finalizeRequestProtocolState(input: {
             }
         } else {
             AIContextEngine.ingestRawHistorySummary(session.sessionId, {
-                block_type: 'history_summary_ai_prompt',
+                block_slug: 'history_summary_ai_prompt',
                 memory_key: protocol.prompt_memory_key,
                 ref_uid: protocol.prompt_ref_uid,
                 text: prompt,
@@ -114,7 +114,7 @@ export function finalizeRequestProtocolState(input: {
     if (!protocol.response_summary_valid && responseText.trim().length > 0) {
         if (protocol.require_response_summary) {
             AIContextEngine.ingestRuntimeHistorySummaryFallback(session.sessionId, {
-                block_type: 'history_summary_ai_response',
+                block_slug: 'history_summary_ai_response',
                 memory_key: protocol.response_memory_key,
                 ref_uid: protocol.response_ref_uid,
                 summary_source_text: responseText,
@@ -126,7 +126,7 @@ export function finalizeRequestProtocolState(input: {
             }
         } else {
             AIContextEngine.ingestRawHistorySummary(session.sessionId, {
-                block_type: 'history_summary_ai_response',
+                block_slug: 'history_summary_ai_response',
                 memory_key: protocol.response_memory_key,
                 ref_uid: protocol.response_ref_uid,
                 text: responseText,

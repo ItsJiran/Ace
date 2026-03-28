@@ -62,7 +62,6 @@ export const validator: ParserBlockValidator = ({ isComplete, payload_json, payl
 export const registry: AceRegistryType.Parser = {
     name: 'tool',
     slug: 'tool',
-    tag_name: 'tool',
     description: 'Interact with registered tools — list available tools, view a tool schema, or execute a tool.',
     runtime_behavior: {
         interrupt_mode: 'pause_stream',
@@ -115,7 +114,7 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
 
     emit_result?.({
         event_name: 'tool_block_parsed',
-        block_type: 'tool',
+        block_slug: 'tool',
         action: block.action,
         status: block.status,
         tool_slug: block.tool_slug,
@@ -129,7 +128,7 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
         emit_result?.({
             event_name: 'tool_interrupt_requested',
             interrupt_hint: true,
-            block_type: 'tool',
+            block_slug: 'tool',
             action: block.action,
             tool_slug: block.tool_slug,
             package_ref: block.package_ref,

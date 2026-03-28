@@ -29,7 +29,7 @@ export default function ParserBlockRegistryList() {
                     <div key={`${item.package_name}:${item.slug}`} className="rounded border border-zinc-800 bg-zinc-900/70 p-2">
                         <div className="flex items-center justify-between gap-2">
                             <div className="text-xs text-zinc-400">{item.package_name}:parsers:{item.slug}</div>
-                            <div className="text-[10px] rounded bg-zinc-800 px-2 py-0.5 text-zinc-300">&lt;{item.tag_name}&gt;</div>
+                            <div className="text-[10px] rounded bg-zinc-800 px-2 py-0.5 text-zinc-300">&lt;{item.slug}&gt;</div>
                         </div>
                         <div className="mt-1 text-sm font-medium text-zinc-100">{item.schema.purpose}</div>
                         {item.aliases.length > 0 && (
