@@ -284,28 +284,65 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                     />
                 </div>
 
-                {/* ─── Table ────────────────────────────────────── */}
+                {/* ─── Hierarchy View ─────────────────────────── */}
                 <div className="px-3 py-2 border-b border-zinc-800/40 bg-zinc-950/20">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Hierarchy</div>
-                    <div className="max-h-28 overflow-auto rounded border border-zinc-800/50 bg-zinc-950/40 p-2 text-[10px] font-mono">
+                    <div className="max-h-32 overflow-auto rounded border border-zinc-800/50 bg-zinc-950/40 space-y-1 p-2 text-[10px]">
                         {visibleHierarchyLines.length > 0 ? visibleHierarchyLines.map((line) => {
-                            const isRoot = line.depth === 0;
+                            const row = rowByUid.get(line.uid);
+                            const children = Array.from(childrenByParent.get(line.uid) || new Set())
+                                .map(childUid => rowByUid.get(childUid))
+                                .filter((child): child is RAMEntry => Boolean(child));
                             const isExpanded = !collapsedHierarchyNodes[line.uid];
+                            const contentPreview = detailsCache[line.uid] ? (
+                                detailsCache[line.uid].split('\n').slice(0, 2).join('\n')
+                            ) : null;
+
                             return (
-                                <button
-                                    type="button"
-                                    key={`tree:${line.uid}`}
-                                    onClick={() => line.hasChildren && toggleHierarchyNode(line.uid)}
-                                    className="w-full flex items-center text-left text-zinc-300 hover:bg-zinc-800/40 rounded px-1 py-0.5"
-                                >
-                                    <span className="text-zinc-600" style={{ paddingLeft: `${line.depth * 12}px` }}>
-                                        {line.hasChildren ? (isExpanded ? '▾' : '▸') : '•'}
-                                    </span>
-                                    <span className={`ml-1 ${isRoot ? 'text-cyan-300' : 'text-zinc-400'}`}>{line.uid}</span>
-                                </button>
+                                <div key={`tree:${line.uid}`} className="border border-zinc-800/50 rounded bg-zinc-900/20 overflow-hidden">
+                                    <button
+                                        type="button"
+                                        onClick={() => line.hasChildren && toggleHierarchyNode(line.uid)}
+                                        className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left hover:bg-zinc-800/40 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-zinc-600 flex-shrink-0">
+                                                {line.hasChildren ? (isExpanded ? '▾' : '▸') : '•'}
+                                            </span>
+                                            <span className={`truncate font-mono ${line.depth === 0 ? 'text-cyan-300' : 'text-zinc-300'}`}>
+                                                {line.uid}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[9px] text-zinc-500 flex-shrink-0">
+                                            <span>{row ? formatBytes(row.approx_bytes) : '-'}</span>
+                                            {children.length > 0 && <span className="text-zinc-600">({children.length})</span>}
+                                        </div>
+                                    </button>
+                                    
+                                    {isExpanded && line.hasChildren && (
+                                        <div className="border-t border-zinc-800/30 bg-black/30 p-2 space-y-1">
+                                            <div className="text-[9px] text-zinc-600 mb-1">
+                                                {contentPreview ? (
+                                                    <div className="mb-1 p-1 bg-zinc-900/50 rounded border border-zinc-800/30 max-h-[40px] overflow-hidden">
+                                                        <pre className="text-[8px] whitespace-pre-wrap break-words text-zinc-400">{contentPreview}</pre>
+                                                    </div>
+                                                ) : null}
+                                                <div className="font-semibold text-zinc-500">Children:</div>
+                                            </div>
+                                            <div className="space-y-0.5">
+                                                {children.map((child) => (
+                                                    <div key={child?.memory_uid} className="flex items-center justify-between px-2 py-0.5 bg-zinc-950/50 rounded border border-zinc-800/40 text-[9px]">
+                                                        <span className="text-zinc-400 font-mono truncate">{child?.memory_uid}</span>
+                                                        <span className="text-zinc-500 flex-shrink-0">{child ? formatBytes(child.approx_bytes) : '-'}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             );
                         }) : (
-                            <div className="text-zinc-600">No parent-child references yet.</div>
+                            <div className="text-zinc-600 text-center py-2">No parent-child references yet.</div>
                         )}
                     </div>
                 </div>

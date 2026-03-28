@@ -4,6 +4,7 @@ import type { BaseBlock } from '#/schemas/parser';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit, Copy, Check } from 'lucide-react';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
+import { StorageEngine } from '#/services/storageEngine';
 
 type SessionStatus = 'idle' | 'connected' | 'streaming' | 'error';
 type SDKProvider = 'openai' | 'google' | 'anthropic';
@@ -300,7 +301,16 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
     const [selectedResponseTokenIndex, setSelectedResponseTokenIndex] = useState<number | null>(null);
     const [selectedResponseTurnId, setSelectedResponseTurnId] = useState<string | null>(null);
     const [selectedResponseAttemptIndex, setSelectedResponseAttemptIndex] = useState<number | null>(null);
-    const responseMemory = useAceMemory<ResponseMemorySnapshot>(session.activeOutputRamKey || 'system:dev:ai_session_monitor:idle');
+    // Cache the last valid output key to persist data even after stream ends
+    const [cachedOutputKey, setCachedOutputKey] = useState<string | null>(null);
+    
+    useEffect(() => {
+        if (session.activeOutputRamKey) {
+            setCachedOutputKey(session.activeOutputRamKey);
+        }
+    }, [session.activeOutputRamKey]);
+    
+    const responseMemory = useAceMemory<ResponseMemorySnapshot>(cachedOutputKey || 'system:dev:ai_session_monitor:idle');
     const parsedBlocks = responseMemory?.blocks || [];
     const parserResults = responseMemory?.parser_handler_results || [];
     const parserStops = responseMemory?.parser_stop_signals || [];
@@ -387,20 +397,41 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
 
     const activeResponseTurn = useMemo(() => {
         if (responseTurns.length === 0) return undefined;
-        const preferredTurnId = selectedResponseTurnId ?? responseMemory?.active_response_turn_id;
-        const preferred = preferredTurnId
-            ? responseTurns.find((turn) => turn.turn_id === preferredTurnId)
-            : undefined;
-        return preferred ?? responseTurns[responseTurns.length - 1];
+        
+        // Priority 1: Use user-selected turn ID (sticky until explicitly changed)
+        if (selectedResponseTurnId) {
+            const selected = responseTurns.find((turn) => turn.turn_id === selectedResponseTurnId);
+            if (selected) return selected;
+            // If selected turn no longer exists, clear the selection to allow auto-update
+        }
+        
+        // Priority 2: Use active turn from response memory if available
+        if (responseMemory?.active_response_turn_id) {
+            const active = responseTurns.find((turn) => turn.turn_id === responseMemory.active_response_turn_id);
+            if (active) return active;
+        }
+        
+        // Priority 3: Default to the last turn
+        return responseTurns[responseTurns.length - 1];
     }, [responseTurns, selectedResponseTurnId, responseMemory?.active_response_turn_id]);
 
     const activeResponseAttempt = useMemo(() => {
         if (!activeResponseTurn || activeResponseTurn.attempts.length === 0) return undefined;
-        const preferredAttempt = selectedResponseAttemptIndex ?? responseMemory?.active_response_attempt_index;
-        const matched = typeof preferredAttempt === 'number'
-            ? activeResponseTurn.attempts.find((attempt) => attempt.attempt_index === preferredAttempt)
-            : undefined;
-        return matched ?? activeResponseTurn.attempts[activeResponseTurn.attempts.length - 1];
+        
+        // Priority 1: Use user-selected attempt index (sticky within this turn)
+        if (typeof selectedResponseAttemptIndex === 'number') {
+            const selected = activeResponseTurn.attempts.find((attempt) => attempt.attempt_index === selectedResponseAttemptIndex);
+            if (selected) return selected;
+        }
+        
+        // Priority 2: Use active attempt from response memory if available
+        if (typeof responseMemory?.active_response_attempt_index === 'number') {
+            const active = activeResponseTurn.attempts.find((attempt) => attempt.attempt_index === responseMemory.active_response_attempt_index);
+            if (active) return active;
+        }
+        
+        // Priority 3: Default to the last attempt
+        return activeResponseTurn.attempts[activeResponseTurn.attempts.length - 1];
     }, [activeResponseTurn, selectedResponseAttemptIndex, responseMemory?.active_response_attempt_index]);
 
     const responseView = activeResponseAttempt ?? responseMemory;
@@ -526,7 +557,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
     return (
         <div className="mt-3 border-t border-zinc-800 pt-3">
             <div className="flex gap-2 mb-3 overflow-x-auto pb-1 no-scrollbar">
-                {[
+                {useMemo(() => [
                      { id: 'context', icon: BrainCircuit, label: 'Context' },
                      { id: 'history', icon: History, label: 'History' },
                      { id: 'blocks', icon: Blocks, label: 'Blocks' },
@@ -545,7 +576,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                         <tab.icon size={12} />
                         {tab.label}
                     </button>
-                ))}
+                )), [activeTab])}
             </div>
 
             <div className="bg-black/20 rounded border border-zinc-800/50 p-3 max-h-[320px] overflow-auto custom-scrollbar">
@@ -1065,15 +1096,42 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
     );
 }
 
-export default function AISessionMonitor() {
+export default function AISessionMonitor({ windowUid }: { windowUid?: string } = {}) {
     const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    const [lastRAMUpdateTime, setLastRAMUpdateTime] = useState(0);
 
     const refresh = () => {
         // @ts-ignore - The types are updated in ace.d.ts but TS might complain depending on project setup
         const snapshot = window.ACE.ai_gateway.listSessions() as SessionSnapshot[];
         setSessions(snapshot);
+        
+        // Track RAM usage to parent window if windowUid provided
+        // Throttle: only update RAM stats every 3 seconds to reduce StorageEngine pressure
+        const now = Date.now();
+        if (windowUid && snapshot.length > 0 && (now - lastRAMUpdateTime) > 3000) {
+            setLastRAMUpdateTime(now);
+            const parentRamKey = `system:window:${windowUid}:ai_session_ram_stats`;
+            const ramStats = {
+                session_count: snapshot.length,
+                sessions: snapshot.map(s => ({
+                    sessionId: s.sessionId,
+                    sdk: s.sdk,
+                    model: s.model,
+                    status: s.status,
+                    output_ram_key: s.activeOutputRamKey,
+                })),
+                tracked_at: now,
+            };
+            
+            StorageEngine.dispatchRAMAction({
+                action: 'create_memory',
+                memory_uid: parentRamKey,
+                payload: ramStats,
+                classifications: ['system:dev', 'system:ai_session_monitor'],
+            });
+        }
     };
 
     useEffect(() => {
@@ -1082,9 +1140,11 @@ export default function AISessionMonitor() {
 
     useEffect(() => {
         if (!autoRefresh) return;
-        const id = setInterval(refresh, 1000);
+        // Increase interval from 1000ms to 2000ms for better performance
+        // This reduces re-render frequency and StorageEngine writes
+        const id = setInterval(refresh, 2000);
         return () => clearInterval(id);
-    }, [autoRefresh]);
+    }, [autoRefresh, lastRAMUpdateTime]);
 
     const sorted = useMemo(
         () => [...sessions].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),

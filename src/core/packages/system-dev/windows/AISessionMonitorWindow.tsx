@@ -21,7 +21,7 @@ export const registry: AceRegistryType.Window = {
 export default function AISessionMonitorWindow({ windowUid }: { windowUid: string }) {
     return (
         <AceWindow windowUid={windowUid}>
-            <AISessionMonitor />
+            <AISessionMonitor windowUid={windowUid} />
         </AceWindow>
     );
 }

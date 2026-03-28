@@ -27,7 +27,9 @@ export default function ProcessMonitorDev() {
 
     useEffect(() => {
         refresh();
-        const id = setInterval(refresh, 600);
+        // Increase interval from 600ms to 2000ms for better performance
+        // Refresh rate 600ms was causing significant FPS drop with multiple windows
+        const id = setInterval(refresh, 2000);
         return () => clearInterval(id);
     }, []);
 
