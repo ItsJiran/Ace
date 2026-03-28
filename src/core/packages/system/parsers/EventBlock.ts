@@ -46,6 +46,20 @@ export const registry: AceRegistryType.Parser = {
     aliases: ['json'],
     block_schema: {
         purpose: 'Fire a UI or system event to interact with ACE windows, widgets, or processes.',
+        triggerConditions: [
+            'AI wants to interact with the UI by opening/closing windows or switching tabs',
+            'AI needs to send data to a specific window or widget component',
+            'AI intends to trigger an action in the ACE system (e.g., execute tool, query storage)',
+            'AI responds to user actions that require UI state changes',
+        ],
+        promptExamples: [
+            'Open a new note-taking window for me',
+            'Switch to the terminal view tab',
+            'Send the search results to the main display',
+            'Execute the backup tool through the system',
+            'I want to open the settings panel',
+            'Show me the file browser window',
+        ],
         payloadNote: [
             'Payload format (inside the tag):',
             '  Line 1 — comma-separated header: event_type, window_uid, process_uid, widget_uid, action, sub_action',
@@ -74,7 +88,7 @@ export const handler: ParserBlockHandler = ({ body, result }) => {
     if (parsed.event) {
         result.events.push(parsed.event);
         result.blocks.push({
-            type: 'event',
+            block_slug: 'event',
             payload_raw: body,
             payload_json: {
                 headers: parsed.event.headers,
@@ -85,7 +99,7 @@ export const handler: ParserBlockHandler = ({ body, result }) => {
         });
     } else if (parsed.fallbackText) {
         result.blocks.push({
-            type: 'paragraph',
+            block_slug: 'paragraph',
             payload_raw: parsed.fallbackText,
             payload_json: { content: parsed.fallbackText },
             is_complete: true,

@@ -9,7 +9,7 @@ import type {
     AIGatewayRadarScanResult,
 } from '#/schemas/ai_gateway';
 import { memo, useState, useEffect, useRef } from 'react';
-import { Package, Keyboard, Wrench, Settings2, ChevronDown, ChevronRight, Box, Cpu, Layers, GitBranch, Activity } from 'lucide-react';
+import { Package, Keyboard, Wrench, Settings2, ChevronDown, ChevronRight, Box, Cpu, Layers, GitBranch, Activity, Monitor, LayoutTemplate, Puzzle } from 'lucide-react';
 import { StorageEngine } from '#/services/storageEngine';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -38,11 +38,14 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 // ─── Domain icon map ──────────────────────────────────────────────────────────
 
 const DOMAIN_META: Record<string, { icon: React.ReactNode; color: string }> = {
-    window:    { icon: <Box size={11} />,        color: 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 border-blue-100 dark:border-blue-900/40' },
-    tool:      { icon: <Wrench size={11} />,     color: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-300 border-amber-100 dark:border-amber-900/40' },
-    component: { icon: <Layers size={11} />,     color: 'bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-300 border-violet-100 dark:border-violet-900/40' },
-    pipeline:  { icon: <GitBranch size={11} />,  color: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 border-emerald-100 dark:border-emerald-900/40' },
-    process:   { icon: <Cpu size={11} />,        color: 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 border-rose-100 dark:border-rose-900/40' },
+    window:    { icon: <Box size={11} />,            color: 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 border-blue-100 dark:border-blue-900/40' },
+    tool:      { icon: <Wrench size={11} />,         color: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-300 border-amber-100 dark:border-amber-900/40' },
+    component: { icon: <Layers size={11} />,         color: 'bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-300 border-violet-100 dark:border-violet-900/40' },
+    pipeline:  { icon: <GitBranch size={11} />,      color: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 border-emerald-100 dark:border-emerald-900/40' },
+    process:   { icon: <Cpu size={11} />,            color: 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 border-rose-100 dark:border-rose-900/40' },
+    renderer:  { icon: <Monitor size={11} />,        color: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-300 border-cyan-100 dark:border-cyan-900/40' },
+    parser:    { icon: <LayoutTemplate size={11} />, color: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 border-indigo-100 dark:border-indigo-900/40' },
+    widget:    { icon: <Puzzle size={11} />,         color: 'bg-fuchsia-50 dark:bg-fuchsia-950/40 text-fuchsia-600 dark:text-fuchsia-300 border-fuchsia-100 dark:border-fuchsia-900/40' },
 };
 
 function domainMeta(domain: string) {

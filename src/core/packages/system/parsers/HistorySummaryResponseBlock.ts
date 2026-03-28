@@ -4,7 +4,7 @@ import type { BaseBlock, ParserBlockHandler, ParserBlockValidator } from '#/sche
 type HistorySummaryResponseType = 'history_summary_ai_response';
 
 export interface HistorySummaryResponseParserBlock extends BaseBlock {
-    type: HistorySummaryResponseType;
+    block_slug: HistorySummaryResponseType;
 }
 
 export const validator: ParserBlockValidator = ({ isComplete, payload_json, payload_parse_error }) => {
@@ -55,6 +55,18 @@ export const registry: AceRegistryType.Parser = {
     block_schema: {
         purpose: 'Compact summary of your current response. Emit AFTER your prose response is fully written.',
         requiredFields: '"summary" (string), "memory_key" (exact value from TURN_HISTORY_PROTOCOL section), "ref_uid" (exact value from TURN_HISTORY_PROTOCOL section).',
+        triggerConditions: [
+            'After completing the main AI response, summarize what was communicated in this turn',
+            'Captures what the AI accomplished or explained in the response for history tracking',
+            'Always emitted at the end of AI response to maintain complete conversation history',
+            'Used to build conversational context showing both user requests and AI responses',
+        ],
+        promptExamples: [
+            'Summarize what I just explained to the user in one sentence',
+            'Create a brief summary of my response for the turn history',
+            'Document what I accomplished in this turn for future context',
+            'Capture the key points of my response in the conversation history',
+        ],
         exampleLines: [
             '  <history_summary_ai_response>',
             '  {"summary":"Saya membuat file catatan todo.txt dan menjelaskan langkah selanjutnya.","memory_key":"system:ai_context_rag:payload:ctxref-response","ref_uid":"ref-def456"}',
@@ -66,7 +78,7 @@ export const registry: AceRegistryType.Parser = {
 export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result }) => {
     const blockType: HistorySummaryResponseType = 'history_summary_ai_response';
     result.blocks.push({
-        type: blockType,
+        block_slug: blockType,
         payload_raw: body,
         payload_json,
         payload_parse_error,

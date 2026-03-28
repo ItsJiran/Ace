@@ -5,7 +5,7 @@ type ToolBlockAction = 'list' | 'view_schema' | 'execute';
 type ToolBlockStatus = 'pending' | 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | 'unknown';
 
 interface ToolBlock extends BaseBlock {
-    type: 'tool';
+    block_slug: 'tool';
     memory_uid?: string;
     result_memory_uid?: string;
     action?: ToolBlockAction;
@@ -77,6 +77,20 @@ export const registry: AceRegistryType.Parser = {
             '"result_memory_uid", ' +
             '"status" (pending | running | completed | error), ' +
             '"payload" or "input" for tool-specific arguments when execute is used.',
+        triggerConditions: [
+            'User requests to see available tools or asks about tool capabilities',
+            'User requests to view a specific tool\'s parameters or schema',
+            'AI decides to execute a tool to complete a user task',
+            'AI needs to gather information about what tools are available before executing one',
+        ],
+        promptExamples: [
+            'List all available tools in the system',
+            'What tools do I have access to?',
+            'Show me the parameters for the file-search tool',
+            'I need to execute the notification tool to send a message',
+            'Can you search for files matching the pattern "*.txt"?',
+            'Use the available tools to help me with this task',
+        ],
         exampleLines: [
             '  <tool>',
             '  {"action":"list","status":"pending"}',
@@ -96,7 +110,7 @@ export const registry: AceRegistryType.Parser = {
 
 export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt }) => {
     const block: ToolBlock = {
-        type: 'tool',
+        block_slug: 'tool',
         action: normalizeAction(payload_json?.action),
         status: normalizeStatus(payload_json?.status ?? payload_json?.state, isComplete),
         tool_slug: typeof payload_json?.tool_slug === 'string' ? payload_json.tool_slug : undefined,
@@ -123,15 +137,12 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
         result_memory_uid: block.result_memory_uid,
     });
 
-    if (block.action === 'list' || block.action === 'view_schema' || block.action === 'execute') {
-        request_interrupt?.(`tool_${block.action}_requested`);
-        emit_result?.({
-            event_name: 'tool_interrupt_requested',
-            interrupt_hint: true,
-            block_slug: 'tool',
-            action: block.action,
-            tool_slug: block.tool_slug,
-            package_ref: block.package_ref,
-        });
-    }
+    // Request stream interrupt after tool block is complete.
+    // This stops the stream parser and triggers feedback-based loop in gateway.
+    // The interaction loop will then:
+    // 1. Wait for tool action completion (list/execute result)
+    // 2. Stamp action feedback into context memory
+    // 3. Inject feedback prompt + memory pointers back to AI
+    // 4. Resume with new continuation prompt containing tool results
+    request_interrupt?.('tool_block_action_requires_feedback');
 };

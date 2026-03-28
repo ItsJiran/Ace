@@ -19,7 +19,7 @@ import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime, Parse
 // TYPE DEFINITIONS
 // ============================================================================
 
-const INDEXED_DOMAINS = ['widgets', 'components', 'windows', 'tools', 'parsers', 'features', 'processes', 'pipelines', 'registries'] as const;
+const INDEXED_DOMAINS = ['widgets', 'components', 'windows', 'tools', 'parsers', 'features', 'processes', 'pipelines', 'registries', 'renderers'] as const;
 
 // ============================================================================
 // REGISTRY ENGINE SINGLETON
@@ -213,6 +213,35 @@ class RegistryEngineSingleton {
             .sort((a, b) => `${a.package_name}:${a.slug}`.localeCompare(`${b.package_name}:${b.slug}`));
     }
 
+    /**
+     * List all registered renderer entries across all packages.
+     * Renderers are React components registered in the 'renderers' domain,
+     * intended to be resolved by presentation blocks.
+     */
+    listRenderers(): Array<{ package_name: string; slug: string; name: string; description?: string; metadata: Record<string, unknown> }> {
+        const results: Array<{ package_name: string; slug: string; name: string; description?: string; metadata: Record<string, unknown> }> = [];
+
+        for (const runtimePkg of this.runtimeIndex.values()) {
+            const domainMap = runtimePkg.domains['renderers'];
+            if (!domainMap) continue;
+
+            for (const [slug, entry] of domainMap.entries()) {
+                const meta = (entry as any)?.metadata ?? {};
+                results.push({
+                    package_name: runtimePkg.metadata.package_name,
+                    slug,
+                    name: String(meta.name || slug),
+                    description: typeof meta.description === 'string' ? meta.description : undefined,
+                    metadata: meta,
+                });
+            }
+        }
+
+        return results.sort((a, b) =>
+            `${a.package_name}:${a.slug}`.localeCompare(`${b.package_name}:${b.slug}`)
+        );
+    }
+
     getSchemaByRef(schemaRef: string) {
         if (!schemaRef || typeof schemaRef !== 'string') return null;
         this.ensureSchemaIndexes();
@@ -239,6 +268,22 @@ class RegistryEngineSingleton {
             lines.push(`Purpose: ${schema.purpose}`);
             if (schema.requiredFields) lines.push(`Required payload fields: ${schema.requiredFields}`);
             if (schema.optionalFields) lines.push(`Optional: ${schema.optionalFields}`);
+            
+            // Include trigger conditions and prompt examples for context awareness
+            if (schema.triggerConditions && schema.triggerConditions.length > 0) {
+                lines.push('When to use (Trigger Conditions):');
+                schema.triggerConditions.forEach((condition) => {
+                    lines.push(`  • ${condition}`);
+                });
+            }
+            
+            if (schema.promptExamples && schema.promptExamples.length > 0) {
+                lines.push('Prompt Examples (what triggers this block):');
+                schema.promptExamples.forEach((example) => {
+                    lines.push(`  • "${example}"`);
+                });
+            }
+            
             if (schema.payloadNote) lines.push(...schema.payloadNote);
             lines.push('Example:');
             lines.push(...schema.exampleLines);

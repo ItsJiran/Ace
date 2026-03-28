@@ -4,7 +4,7 @@ import type { BaseBlock, ParserBlockHandler, ParserBlockValidator } from '#/sche
 type HistorySummaryPromptType = 'history_summary_ai_prompt';
 
 export interface HistorySummaryPromptParserBlock extends BaseBlock {
-    type: HistorySummaryPromptType;
+    block_slug: HistorySummaryPromptType;
 }
 
 export const validator: ParserBlockValidator = ({ isComplete, payload_json, payload_parse_error }) => {
@@ -55,6 +55,18 @@ export const registry: AceRegistryType.Parser = {
     block_schema: {
         purpose: 'Compact summary of the current user message. Emit BEFORE your prose response.',
         requiredFields: '"summary" (string), "memory_key" (exact value from TURN_HISTORY_PROTOCOL section), "ref_uid" (exact value from TURN_HISTORY_PROTOCOL section).',
+        triggerConditions: [
+            'Before producing the main AI response, summarize the current user turn',
+            'Captures the essence of what the user asked in this turn for history tracking',
+            'Always emitted at the start of AI response to maintain conversation history',
+            'Used to build conversational context for future turns in the session',
+        ],
+        promptExamples: [
+            'Summarize what the user just asked me in one sentence',
+            'Capture the key intent of the user message for the turn history',
+            'Create a brief summary of the current user request before responding',
+            'Document the user\'s request in the conversation turn history',
+        ],
         exampleLines: [
             '  <history_summary_ai_prompt>',
             '  {"summary":"User meminta pembuatan file catatan baru bernama todo.txt.","memory_key":"system:ai_context_rag:payload:ctxref-prompt","ref_uid":"ref-abc123"}',
@@ -66,7 +78,7 @@ export const registry: AceRegistryType.Parser = {
 export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result }) => {
     const blockType: HistorySummaryPromptType = 'history_summary_ai_prompt';
     result.blocks.push({
-        type: blockType,
+        block_slug: blockType,
         payload_raw: body,
         payload_json,
         payload_parse_error,

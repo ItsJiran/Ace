@@ -280,22 +280,75 @@ class FSEngineSingleton {
      * Wrapped variants: run a file operation as a tracked ProcessEngine record.
      * Useful when callers want process-level observability.
      */
-    async trackedRead(filename: string): Promise<ReturnType<FSEngineSingleton['readFile']>> {
+    async trackedRead(
+        filename: string,
+        options?: { parent_process_uid?: string },
+    ): Promise<ReturnType<FSEngineSingleton['readFile']>> {
         const pe = getProcessEngine();
         if (!pe) return this.readFile(filename);
-        return pe.track('fs:read_file', { filename }, () => this.readFile(filename));
+        return pe.track(
+            'fs:read_file',
+            { filename },
+            () => this.readFile(filename),
+            {
+                parent_process_uid: options?.parent_process_uid,
+                process_kind: 'fs_task',
+                owner_engine: 'fsEngine',
+                payload: {
+                    status: 'running',
+                    operation: 'read_file',
+                    filename,
+                },
+            },
+        );
     }
 
-    async trackedWrite(filename: string, content: string): Promise<boolean> {
+    async trackedWrite(
+        filename: string,
+        content: string,
+        options?: { parent_process_uid?: string },
+    ): Promise<boolean> {
         const pe = getProcessEngine();
         if (!pe) return this.writeFile(filename, content);
-        return pe.track('fs:write_file', { filename }, () => this.writeFile(filename, content));
+        return pe.track(
+            'fs:write_file',
+            { filename },
+            () => this.writeFile(filename, content),
+            {
+                parent_process_uid: options?.parent_process_uid,
+                process_kind: 'fs_task',
+                owner_engine: 'fsEngine',
+                payload: {
+                    status: 'running',
+                    operation: 'write_file',
+                    filename,
+                },
+            },
+        );
     }
 
-    async trackedSave(filename: string, data: unknown): Promise<boolean> {
+    async trackedSave(
+        filename: string,
+        data: unknown,
+        options?: { parent_process_uid?: string },
+    ): Promise<boolean> {
         const pe = getProcessEngine();
         if (!pe) return this.saveFile(filename, data);
-        return pe.track('fs:save_file', { filename }, () => this.saveFile(filename, data));
+        return pe.track(
+            'fs:save_file',
+            { filename },
+            () => this.saveFile(filename, data),
+            {
+                parent_process_uid: options?.parent_process_uid,
+                process_kind: 'fs_task',
+                owner_engine: 'fsEngine',
+                payload: {
+                    status: 'running',
+                    operation: 'save_file',
+                    filename,
+                },
+            },
+        );
     }
 
     private showPermissionDeniedPopup(filename: string, error: unknown) {

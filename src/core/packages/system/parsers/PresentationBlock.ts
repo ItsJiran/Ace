@@ -15,7 +15,7 @@ export interface PresentationPayload {
 
 /** Internal block shape used by this parser implementation. */
 export interface PresentationBlock extends BaseBlock {
-    type: 'presentation';
+    block_slug: 'presentation';
     package_ref?: string;
     component_slug: string;
     memory_uid?: string;
@@ -65,6 +65,21 @@ export const registry: AceRegistryType.Parser = {
         purpose: 'Embed a reference to a registered UI component. The client resolves the component slug via RegistryEngine and renders it, optionally bound to a context memory payload.',
         requiredFields: '"component_slug" — the registered component slug (e.g. "ai_output_list"), "memory_uid" — target memory uid containing the render payload envelope.',
         optionalFields: '"package_ref" (package namespace for lookup, default: "itsjiran/ace-system"), "props" (inline prop overrides), "format" (hint: "list" | "table" | "card" | "markdown")',
+        triggerConditions: [
+            'AI wants to display tool results, data lists, or structured information to the user',
+            'AI needs to show search results, file lists, or database records in a formatted view',
+            'AI intends to render a complex UI component that requires client-side interactivity',
+            'Tool execution returns data that should be visualized in a specific format',
+            'AI wants to present information using a table, card grid, or other specialized layout',
+        ],
+        promptExamples: [
+            'Show the search results in a list format',
+            'Display the file browser results in a table',
+            'I want to see the configuration options in a card layout',
+            'Present the query results to the user in a readable format',
+            'Render the tool output as a markdown document',
+            'Show the data in a sortable table view',
+        ],
         payloadNote: [
             'The component reference is resolved via RegistryEngine.resolveEntry("{pkg}:components:{slug}").',
             'The client loads memory by memory_uid and passes envelope payload to the target component.',
@@ -106,7 +121,7 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
     }
 
     const block: PresentationBlock = {
-        type: 'presentation',
+        block_slug: 'presentation',
         package_ref: packageRef,
         component_slug: componentSlug,
         memory_uid: memoryUid,

@@ -54,6 +54,7 @@ export function PresentationRenderer({ block }: { block: BaseBlock }) {
     let memoryData: unknown;
 
     if (!componentSlug) {
+        console.warn('[PresentationRenderer] Invalid block — missing component_slug', { block });
         return (
             <div className="text-xs text-red-400 border border-red-700 rounded p-2 bg-black/30">
                 ✕ Invalid presentation block: missing component_slug
@@ -61,9 +62,15 @@ export function PresentationRenderer({ block }: { block: BaseBlock }) {
         );
     }
 
+    console.log(`[PresentationRenderer] Resolving "${componentSlug}"`, {
+        memory_uid: memoryTarget,
+        inlineProps,
+    });
+
     if (memoryTarget) {
         try {
             memoryData = window.ACE.memory?.read?.(memoryTarget);
+            console.log(`[PresentationRenderer] Memory read "${memoryTarget}":`, memoryData ?? '(empty)');
         } catch (err) {
             console.warn(`Failed to load memory ${memoryTarget}:`, err);
         }
@@ -78,7 +85,18 @@ export function PresentationRenderer({ block }: { block: BaseBlock }) {
         || 'itsjiran/ace-system';
 
     try {
-        const registryEntry = window.ACE.registry?.resolveEntry?.(`${packageRef}:components:${componentSlug}`);
+        // Look up 'renderers' domain first, fall back to 'components' for backward compat.
+        const rendererEntry = window.ACE.registry?.resolveEntry?.(`${packageRef}:renderers:${componentSlug}`);
+        const componentEntry = !rendererEntry
+            ? window.ACE.registry?.resolveEntry?.(`${packageRef}:components:${componentSlug}`)
+            : undefined;
+        const registryEntry = rendererEntry ?? componentEntry;
+
+        console.log(
+            `[PresentationRenderer] Registry lookup for "${componentSlug}" in "${packageRef}":`,
+            rendererEntry ? 'found in renderers' : componentEntry ? 'found in components' : 'NOT FOUND',
+        );
+
         if (!registryEntry) {
             return (
                 <div className="text-xs text-zinc-500 border border-zinc-800 rounded p-2 bg-black/30">
@@ -87,8 +105,10 @@ export function PresentationRenderer({ block }: { block: BaseBlock }) {
             );
         }
 
-        const Component = registryEntry.component;
+        // resolveEntry returns the implementation (default export) directly.
+        const Component = typeof registryEntry === 'function' ? registryEntry : null;
         if (!Component) {
+            console.warn(`[PresentationRenderer] "${componentSlug}" has no render function`, { registryEntry });
             return (
                 <div className="text-xs text-zinc-500 border border-zinc-800 rounded p-2 bg-black/30">
                     ⚠ Component {componentSlug} has no render function
@@ -105,6 +125,8 @@ export function PresentationRenderer({ block }: { block: BaseBlock }) {
                 ...inlineProps,
                 __memory_target: memoryTarget,
             };
+
+        console.log(`[PresentationRenderer] Rendering "${componentSlug}" with data:`, componentData);
 
         return (
             <div className="my-2 rounded border border-zinc-700 bg-zinc-900/40 p-3 overflow-auto max-h-96">

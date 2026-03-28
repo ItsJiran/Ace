@@ -4,6 +4,7 @@ import { EventBus } from './eventEngine';
 import { StorageEngine } from './storageEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
+import type { CoreEngineHandlerArgs } from '#/schemas/events';
 
 export interface ToolManifestEntry {
     slug: string;
@@ -30,6 +31,71 @@ type HandlerLifecycleEventName =
 
 class ToolEngineSingleton {
     private isRouteBound = false;
+
+    private async runRouteProcess<T>(input: {
+        routeType: string;
+        sourceProcessUid?: string;
+        metadata?: Record<string, unknown>;
+        payload?: Record<string, unknown>;
+        run: (processUid: string) => Promise<T>;
+    }): Promise<T> {
+        const { routeType, sourceProcessUid, metadata, payload, run } = input;
+        return ProcessEngine.track(
+            routeType,
+            {
+                ...(metadata || {}),
+                source_process_uid: sourceProcessUid,
+            },
+            async (process_uid) => run(process_uid),
+            {
+                parent_process_uid: sourceProcessUid,
+                process_kind: 'tool_run',
+                owner_engine: 'toolEngine',
+                payload: {
+                    status: 'running',
+                    route_type: routeType,
+                    ...(payload || {}),
+                },
+            },
+        );
+    }
+
+    private writeToolResultMemory(input: {
+        processUid?: string;
+        resultMemoryUid?: string;
+        payload: Record<string, unknown>;
+    }) {
+        const { processUid, resultMemoryUid, payload } = input;
+        if (!resultMemoryUid) return;
+
+        if (processUid) {
+            const created = ProcessEngine.createRuntimeMemory({
+                owner_process_uid: processUid,
+                memory_uid: resultMemoryUid,
+                payload,
+                classifications: ['system:dev', 'system:tool_runner'],
+                memory_scope: 'session',
+                retention_policy: 'keep_on_done',
+            });
+
+            if (!created) {
+                ProcessEngine.updateRuntimeMemory({
+                    owner_process_uid: processUid,
+                    memory_uid: resultMemoryUid,
+                    payload,
+                    classifications: ['system:dev', 'system:tool_runner'],
+                });
+            }
+            return;
+        }
+
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: resultMemoryUid,
+            payload,
+            classifications: ['system:dev', 'system:tool_runner'],
+        });
+    }
 
     private buildToolMemoryEnvelope(input: {
         status: 'ok' | 'error';
@@ -207,7 +273,7 @@ class ToolEngineSingleton {
         packageRef: string,
         toolSlug: string,
         payload: unknown,
-        _options?: { origin_window_uid?: string; origin_widget_uid?: string }
+        options?: { origin_window_uid?: string; origin_widget_uid?: string; parent_process_uid?: string }
     ): Promise<unknown> {
         const validatedArgs = this.validate(packageRef, toolSlug, payload);
 
@@ -222,141 +288,193 @@ class ToolEngineSingleton {
             async (process_uid) => {
                 return toolDef.handler(validatedArgs, process_uid);
             },
+            {
+                parent_process_uid: options?.parent_process_uid,
+                process_kind: 'tool_run',
+                owner_engine: 'toolEngine',
+                payload: {
+                    status: 'running',
+                    package_ref: packageRef,
+                    tool_slug: toolSlug,
+                },
+            },
         );
     }
 
     registerEventRoutes() {
         if (this.isRouteBound) return;
 
-        EventBus.registerProcessRoute('tool:list', ({ payload, preallocated_memory }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown> }) => {
+        EventBus.registerProcessRoute('tool:list', async ({ payload, preallocated_memory, source }: CoreEngineHandlerArgs<Record<string, unknown>>) => {
             const raw = (payload ?? {}) as ToolActionPayload;
             const resultKey = this.resolveResultKey(raw, preallocated_memory);
             const sessionId = typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined;
-            this.publishToolActionStarted({
-                sessionId,
-                action: 'list',
-                payload: {
+            const sourceProcessUid = typeof source?.process_uid === 'string' ? source.process_uid : undefined;
+
+            await this.runRouteProcess({
+                routeType: 'tool_route:list',
+                sourceProcessUid,
+                metadata: {
+                    session_id: sessionId,
                     result_memory_uid: resultKey,
                 },
-            });
-            const tools = this.getAll();
-
-            if (resultKey) {
-                StorageEngine.dispatchRAMAction({
-                    action: 'create_memory',
-                    memory_uid: resultKey,
-                    payload: this.buildToolMemoryEnvelope({
-                        status: 'ok',
-                        action: 'list',
-                        resultMemoryUid: resultKey,
-                        sessionId,
-                        data: {
-                            tools,
-                            total: tools.length,
-                        },
-                    }),
-                    classifications: ['system:dev', 'system:tool_runner'],
-                });
-            }
-
-            this.publishToolActionResult({
-                sessionId,
-                eventName: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
                 payload: {
                     action: 'list',
-                    result_memory_uid: resultKey,
-                    total: tools.length,
-                    tools,
+                },
+                run: async (process_uid) => {
+                    this.publishToolActionStarted({
+                        sessionId,
+                        action: 'list',
+                        payload: {
+                            result_memory_uid: resultKey,
+                        },
+                    });
+
+                    const tools = this.getAll();
+                    if (resultKey) {
+                        this.writeToolResultMemory({
+                            processUid: process_uid,
+                            resultMemoryUid: resultKey,
+                            payload: this.buildToolMemoryEnvelope({
+                                status: 'ok',
+                                action: 'list',
+                                resultMemoryUid: resultKey,
+                                sessionId,
+                                data: {
+                                    tools,
+                                    total: tools.length,
+                                },
+                            }),
+                        });
+                    }
+
+                    this.publishToolActionResult({
+                        sessionId,
+                        eventName: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
+                        payload: {
+                            action: 'list',
+                            result_memory_uid: resultKey,
+                            total: tools.length,
+                            tools,
+                        },
+                    });
+
+                    ProcessEngine.updatePayload(process_uid, {
+                        status: 'done',
+                        action: 'list',
+                        total: tools.length,
+                        updated_at: Date.now(),
+                    });
                 },
             });
         });
 
-        EventBus.registerProcessRoute('tool:view_schema', ({ payload, preallocated_memory }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown> }) => {
+        EventBus.registerProcessRoute('tool:view_schema', async ({ payload, preallocated_memory, source }: CoreEngineHandlerArgs<Record<string, unknown>>) => {
             const raw = (payload ?? {}) as ToolActionPayload;
             const package_ref = typeof raw.package_ref === 'string' ? raw.package_ref : '';
             const tool_slug = typeof raw.tool_slug === 'string' ? raw.tool_slug : '';
             const sessionId = typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined;
             const resultKey = this.resolveResultKey(raw, preallocated_memory);
-            this.publishToolActionStarted({
-                sessionId,
-                action: 'view_schema',
-                payload: {
+            const sourceProcessUid = typeof source?.process_uid === 'string' ? source.process_uid : undefined;
+
+            await this.runRouteProcess({
+                routeType: 'tool_route:view_schema',
+                sourceProcessUid,
+                metadata: {
+                    session_id: sessionId,
                     package_ref,
                     tool_slug,
                     result_memory_uid: resultKey,
                 },
-            });
-
-            if (!package_ref || !tool_slug) {
-                this.publishToolActionResult({
-                    sessionId,
-                    eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
-                    payload: {
-                        action: 'view_schema',
-                        package_ref,
-                        tool_slug,
-                        error_message: 'Missing package_ref or tool_slug.',
-                    },
-                });
-                return;
-            }
-
-            const result = this.getRegistry({ packageRef: package_ref, slug: tool_slug });
-            const entry = result?.entry as any;
-            const toolSchema = entry?.metadata?.parameters ?? undefined;
-            const description = entry?.implementation?.description ?? entry?.metadata?.description ?? '';
-
-            if (resultKey) {
-                StorageEngine.dispatchRAMAction({
-                    action: 'create_memory',
-                    memory_uid: resultKey,
-                    payload: this.buildToolMemoryEnvelope({
-                        status: result?.entry ? 'ok' : 'error',
-                        action: 'view_schema',
-                        packageRef: package_ref,
-                        toolSlug: tool_slug,
-                        resultMemoryUid: resultKey,
-                        sessionId,
-                        data: {
-                            schema: toolSchema,
-                            description,
-                            error_message: result?.entry ? undefined : `Tool ${package_ref}/${tool_slug} not found.`,
-                        },
-                    }),
-                    classifications: ['system:dev', 'system:tool_runner'],
-                });
-            }
-
-            this.publishToolActionResult({
-                sessionId,
-                eventName: result?.entry ? PARSER_RUNTIME_EVENT.HANDLER_RESULT : PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                 payload: {
                     action: 'view_schema',
                     package_ref,
                     tool_slug,
-                    result_memory_uid: resultKey,
-                    schema: toolSchema,
-                    description,
-                    error_message: result?.entry ? undefined : `Tool ${package_ref}/${tool_slug} not found.`,
+                },
+                run: async (process_uid) => {
+                    this.publishToolActionStarted({
+                        sessionId,
+                        action: 'view_schema',
+                        payload: {
+                            package_ref,
+                            tool_slug,
+                            result_memory_uid: resultKey,
+                        },
+                    });
+
+                    if (!package_ref || !tool_slug) {
+                        this.publishToolActionResult({
+                            sessionId,
+                            eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
+                            payload: {
+                                action: 'view_schema',
+                                package_ref,
+                                tool_slug,
+                                error_message: 'Missing package_ref or tool_slug.',
+                            },
+                        });
+                        ProcessEngine.updatePayload(process_uid, {
+                            status: 'failed',
+                            error_message: 'Missing package_ref or tool_slug.',
+                            updated_at: Date.now(),
+                        });
+                        return;
+                    }
+
+                    const result = this.getRegistry({ packageRef: package_ref, slug: tool_slug });
+                    const entry = result?.entry as any;
+                    const toolSchema = entry?.metadata?.parameters ?? undefined;
+                    const description = entry?.implementation?.description ?? entry?.metadata?.description ?? '';
+
+                    if (resultKey) {
+                        this.writeToolResultMemory({
+                            processUid: process_uid,
+                            resultMemoryUid: resultKey,
+                            payload: this.buildToolMemoryEnvelope({
+                                status: result?.entry ? 'ok' : 'error',
+                                action: 'view_schema',
+                                packageRef: package_ref,
+                                toolSlug: tool_slug,
+                                resultMemoryUid: resultKey,
+                                sessionId,
+                                data: {
+                                    schema: toolSchema,
+                                    description,
+                                    error_message: result?.entry ? undefined : `Tool ${package_ref}/${tool_slug} not found.`,
+                                },
+                            }),
+                        });
+                    }
+
+                    this.publishToolActionResult({
+                        sessionId,
+                        eventName: result?.entry ? PARSER_RUNTIME_EVENT.HANDLER_RESULT : PARSER_RUNTIME_EVENT.HANDLER_ERROR,
+                        payload: {
+                            action: 'view_schema',
+                            package_ref,
+                            tool_slug,
+                            result_memory_uid: resultKey,
+                            schema: toolSchema,
+                            description,
+                            error_message: result?.entry ? undefined : `Tool ${package_ref}/${tool_slug} not found.`,
+                        },
+                    });
+
+                    ProcessEngine.updatePayload(process_uid, {
+                        status: result?.entry ? 'done' : 'failed',
+                        action: 'view_schema',
+                        updated_at: Date.now(),
+                    });
                 },
             });
         });
 
-        EventBus.registerProcessRoute('tool:execute', async ({ payload, preallocated_memory }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown> }) => {
+        EventBus.registerProcessRoute('tool:execute', async ({ payload, preallocated_memory, source }: CoreEngineHandlerArgs<Record<string, unknown>>) => {
             const raw = (payload ?? {}) as ToolActionPayload;
             const package_ref = typeof raw.package_ref === 'string' ? raw.package_ref : '';
             const tool_slug = typeof raw.tool_slug === 'string' ? raw.tool_slug : '';
             const sessionId = typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined;
             const resultKey = this.resolveResultKey(raw, preallocated_memory);
-            this.publishToolActionStarted({
-                sessionId,
-                action: 'execute',
-                payload: {
-                    package_ref,
-                    tool_slug,
-                    result_memory_uid: resultKey,
-                },
-            });
+            const sourceProcessUid = typeof source?.process_uid === 'string' ? source.process_uid : undefined;
 
             const nestedPayload =
                 raw.payload && typeof raw.payload === 'object'
@@ -369,88 +487,133 @@ class ToolEngineSingleton {
                 Object.entries(raw).filter(([k]) => !['package_ref', 'tool_slug', 'result_memory_uid', 'memory_uid', 'session_id', 'status', 'action', 'payload', 'input'].includes(k)),
             );
 
-            if (!package_ref || !tool_slug) {
-                this.publishToolActionResult({
-                    sessionId,
-                    eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
-                    payload: {
+            await this.runRouteProcess({
+                routeType: 'tool_route:execute',
+                sourceProcessUid,
+                metadata: {
+                    session_id: sessionId,
+                    package_ref,
+                    tool_slug,
+                    result_memory_uid: resultKey,
+                },
+                payload: {
+                    action: 'execute',
+                    package_ref,
+                    tool_slug,
+                },
+                run: async (routeProcessUid) => {
+                    this.publishToolActionStarted({
+                        sessionId,
                         action: 'execute',
-                        package_ref,
-                        tool_slug,
-                        error_message: 'Missing package_ref or tool_slug.',
-                    },
-                });
-                return;
-            }
+                        payload: {
+                            package_ref,
+                            tool_slug,
+                            result_memory_uid: resultKey,
+                        },
+                    });
 
-            try {
-                const result = await this.execute(package_ref, tool_slug, toolPayload);
-                if (resultKey) {
-                    StorageEngine.dispatchRAMAction({
-                        action: 'create_memory',
-                        memory_uid: resultKey,
-                        payload: this.buildToolMemoryEnvelope({
-                            status: 'ok',
-                            action: 'execute',
-                            packageRef: package_ref,
-                            toolSlug: tool_slug,
-                            resultMemoryUid: resultKey,
+                    if (!package_ref || !tool_slug) {
+                        this.publishToolActionResult({
                             sessionId,
-                            data: {
+                            eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
+                            payload: {
+                                action: 'execute',
+                                package_ref,
+                                tool_slug,
+                                error_message: 'Missing package_ref or tool_slug.',
+                            },
+                        });
+                        ProcessEngine.updatePayload(routeProcessUid, {
+                            status: 'failed',
+                            error_message: 'Missing package_ref or tool_slug.',
+                            updated_at: Date.now(),
+                        });
+                        return;
+                    }
+
+                    try {
+                        const result = await this.execute(package_ref, tool_slug, toolPayload, {
+                            parent_process_uid: routeProcessUid,
+                        });
+                        if (resultKey) {
+                            this.writeToolResultMemory({
+                                processUid: routeProcessUid,
+                                resultMemoryUid: resultKey,
+                                payload: this.buildToolMemoryEnvelope({
+                                    status: 'ok',
+                                    action: 'execute',
+                                    packageRef: package_ref,
+                                    toolSlug: tool_slug,
+                                    resultMemoryUid: resultKey,
+                                    sessionId,
+                                    data: {
+                                        result,
+                                    },
+                                }),
+                            });
+                        }
+
+                        this.publishToolActionResult({
+                            sessionId,
+                            eventName: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
+                            payload: {
+                                action: 'execute',
+                                package_ref,
+                                tool_slug,
+                                result_memory_uid: resultKey,
                                 result,
                             },
-                        }),
-                        classifications: ['system:dev', 'system:tool_runner'],
-                    });
-                }
+                        });
 
-                this.publishToolActionResult({
-                    sessionId,
-                    eventName: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
-                    payload: {
-                        action: 'execute',
-                        package_ref,
-                        tool_slug,
-                        result_memory_uid: resultKey,
-                        result,
-                    },
-                });
-            } catch (error) {
-                const error_message = error instanceof Error ? error.message : String(error);
-                if (resultKey) {
-                    StorageEngine.dispatchRAMAction({
-                        action: 'create_memory',
-                        memory_uid: resultKey,
-                        payload: this.buildToolMemoryEnvelope({
-                            status: 'error',
+                        ProcessEngine.updatePayload(routeProcessUid, {
+                            status: 'done',
                             action: 'execute',
-                            packageRef: package_ref,
-                            toolSlug: tool_slug,
-                            resultMemoryUid: resultKey,
+                            updated_at: Date.now(),
+                        });
+                    } catch (error) {
+                        const error_message = error instanceof Error ? error.message : String(error);
+                        if (resultKey) {
+                            this.writeToolResultMemory({
+                                processUid: routeProcessUid,
+                                resultMemoryUid: resultKey,
+                                payload: this.buildToolMemoryEnvelope({
+                                    status: 'error',
+                                    action: 'execute',
+                                    packageRef: package_ref,
+                                    toolSlug: tool_slug,
+                                    resultMemoryUid: resultKey,
+                                    sessionId,
+                                    data: {
+                                        error_message,
+                                    },
+                                }),
+                            });
+                        }
+
+                        this.publishToolActionResult({
                             sessionId,
-                            data: {
+                            eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
+                            payload: {
+                                action: 'execute',
+                                package_ref,
+                                tool_slug,
+                                result_memory_uid: resultKey,
                                 error_message,
                             },
-                        }),
-                        classifications: ['system:dev', 'system:tool_runner'],
-                    });
-                }
+                        });
 
-                this.publishToolActionResult({
-                    sessionId,
-                    eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
-                    payload: {
-                        action: 'execute',
-                        package_ref,
-                        tool_slug,
-                        result_memory_uid: resultKey,
-                        error_message,
-                    },
-                });
-            }
+                        ProcessEngine.updatePayload(routeProcessUid, {
+                            status: 'failed',
+                            action: 'execute',
+                            error_message,
+                            updated_at: Date.now(),
+                        });
+                    }
+                },
+            });
         });
 
-        EventBus.registerProcessRoute('execute_tool', async ({ payload, preallocated_memory }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown> }) => {
+        EventBus.registerProcessRoute('execute_tool', async ({ payload, preallocated_memory, source }: CoreEngineHandlerArgs<Record<string, unknown>>) => {
             const raw = (payload ?? {}) as {
                 package_ref?: string;
                 tool_slug?: string;
@@ -473,52 +636,68 @@ class ToolEngineSingleton {
                 return;
             }
 
+            const sourceProcessUid = typeof source?.process_uid === 'string' ? source.process_uid : undefined;
+
             const resultKey =
                 typeof preallocated_memory?.reply_to_ram_key === 'string'
                     ? preallocated_memory.reply_to_ram_key
                     : undefined;
 
-            try {
-                const result = await this.execute(package_ref, tool_slug, toolPayload);
-                if (resultKey) {
-                    StorageEngine.dispatchRAMAction({
-                        action: 'create_memory',
-                        memory_uid: resultKey,
-                        payload: this.buildToolMemoryEnvelope({
-                            status: 'ok',
-                            action: 'execute',
-                            packageRef: package_ref,
-                            toolSlug: tool_slug,
-                            resultMemoryUid: resultKey,
-                            sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
-                            data: {
-                                result,
-                            },
-                        }),
-                        classifications: ['system:dev', 'system:tool_runner'],
-                    });
-                }
-            } catch (error) {
-                if (resultKey) {
-                    StorageEngine.dispatchRAMAction({
-                        action: 'create_memory',
-                        memory_uid: resultKey,
-                        payload: this.buildToolMemoryEnvelope({
-                            status: 'error',
-                            action: 'execute',
-                            packageRef: package_ref,
-                            toolSlug: tool_slug,
-                            resultMemoryUid: resultKey,
-                            sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
-                            data: {
-                                error_message: error instanceof Error ? error.message : String(error),
-                            },
-                        }),
-                        classifications: ['system:dev', 'system:tool_runner'],
-                    });
-                }
-                throw error;
-            }
+            await this.runRouteProcess({
+                routeType: 'tool_route:execute_tool',
+                sourceProcessUid,
+                metadata: {
+                    package_ref,
+                    tool_slug,
+                    result_memory_uid: resultKey,
+                },
+                payload: {
+                    action: 'execute_tool',
+                },
+                run: async (routeProcessUid) => {
+                    try {
+                        const result = await this.execute(package_ref, tool_slug, toolPayload, {
+                            parent_process_uid: routeProcessUid,
+                        });
+                        if (resultKey) {
+                            this.writeToolResultMemory({
+                                processUid: routeProcessUid,
+                                resultMemoryUid: resultKey,
+                                payload: this.buildToolMemoryEnvelope({
+                                    status: 'ok',
+                                    action: 'execute',
+                                    packageRef: package_ref,
+                                    toolSlug: tool_slug,
+                                    resultMemoryUid: resultKey,
+                                    sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
+                                    data: {
+                                        result,
+                                    },
+                                }),
+                            });
+                        }
+                    } catch (error) {
+                        if (resultKey) {
+                            this.writeToolResultMemory({
+                                processUid: routeProcessUid,
+                                resultMemoryUid: resultKey,
+                                payload: this.buildToolMemoryEnvelope({
+                                    status: 'error',
+                                    action: 'execute',
+                                    packageRef: package_ref,
+                                    toolSlug: tool_slug,
+                                    resultMemoryUid: resultKey,
+                                    sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
+                                    data: {
+                                        error_message: error instanceof Error ? error.message : String(error),
+                                    },
+                                }),
+                            });
+                        }
+                        throw error;
+                    }
+                },
+            });
         });
 
         this.isRouteBound = true;

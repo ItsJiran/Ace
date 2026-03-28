@@ -2,6 +2,7 @@ import { StorageEngine } from './storageEngine';
 import { EventBus } from './eventEngine';
 import { RegistryEngine } from './registryEngine';
 import { GlobalStateManager } from './globalStateManager';
+import { ProcessEngine } from './processEngine';
 import { invoke } from '@tauri-apps/api/core';
 import type { WindowConfig, GlobalOverlayState } from '#/schemas/window';
 import type { GlobalState } from '#/schemas/globalState';
@@ -239,24 +240,43 @@ class WindowEngineSingleton {
         if (this.isRouteBound) return;
 
         const coreHandler = async (interaction: any) => {
-            const { action, payload } = interaction;
+            const { action, payload, source } = interaction;
+            const sourceProcessUid = typeof source?.process_uid === 'string' ? source.process_uid : undefined;
 
-             if (action === 'open_window') {
-                this.spawnWindow(payload);
-            }
-             if (action === 'set_overlay_mode') {
-                const mode = payload.mode as 'ambient' | 'interactive';
-                if (mode) this.setOverlayMode(mode);
-            }
-            if (action === 'debug_action') {
-                 this.handleDebugAction(payload);
-            }
-            if (action === 'close_window') {
-                const targetUid = payload?.window_uid || interaction.source?.window_uid || interaction.window_uid;
-                if (targetUid) {
-                    this.closeWindow(targetUid);
-                }
-            }
+            await ProcessEngine.track(
+                `window:${action}`,
+                {
+                    action,
+                    source_process_uid: sourceProcessUid,
+                },
+                async () => {
+                    if (action === 'open_window') {
+                        this.spawnWindow(payload);
+                    }
+                    if (action === 'set_overlay_mode') {
+                        const mode = payload.mode as 'ambient' | 'interactive';
+                        if (mode) this.setOverlayMode(mode);
+                    }
+                    if (action === 'debug_action') {
+                        await this.handleDebugAction(payload);
+                    }
+                    if (action === 'close_window') {
+                        const targetUid = payload?.window_uid || source?.window_uid;
+                        if (targetUid) {
+                            this.closeWindow(targetUid);
+                        }
+                    }
+                },
+                {
+                    parent_process_uid: sourceProcessUid,
+                    process_kind: 'window_task',
+                    owner_engine: 'windowEngine',
+                    payload: {
+                        status: 'running',
+                        action,
+                    },
+                },
+            );
         };
 
         EventBus.registerProcessRoute('open_window', coreHandler);

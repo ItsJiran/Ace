@@ -132,7 +132,7 @@ function appendBuiltInStructuredBlock(
 
     const parsed = parseStructuredPayload(body);
     result.blocks.push({
-        type: tag,
+        block_slug: tag,
         payload_raw: body,
         payload_json: normalizeHistorySummaryPayload(parsed.json, body, tag),
         payload_parse_error: parsed.error,
@@ -246,7 +246,7 @@ function extractStructuredBlock(
     }
 
     result.blocks.push({
-        type: 'directive',
+        block_slug: 'directive',
         payload_raw: body,
         payload_json: {
             directive_name: tag || 'unknown',
@@ -326,7 +326,7 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
                 const text = chunk.slice(cursor, partialStart);
                 if (text) {
                     result.blocks.push({
-                        type: 'paragraph',
+                        block_slug: 'paragraph',
                         payload_raw: text,
                         payload_json: { content: text },
                         is_complete: true,
@@ -340,7 +340,7 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
             const text = chunk.slice(cursor);
             if (text) {
                 result.blocks.push({
-                    type: 'paragraph',
+                    block_slug: 'paragraph',
                     payload_raw: text,
                     payload_json: { content: text },
                     is_complete: true,
@@ -353,7 +353,7 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
         if (structureStart > cursor) {
             const text = chunk.slice(cursor, structureStart);
             result.blocks.push({
-                type: 'paragraph',
+                block_slug: 'paragraph',
                 payload_raw: text,
                 payload_json: { content: text },
                 is_complete: true,
@@ -366,7 +366,7 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
             if (!openTag) {
                 const text = chunk.slice(structureStart, structureStart + 1);
                 result.blocks.push({
-                    type: 'paragraph',
+                    block_slug: 'paragraph',
                     payload_raw: text,
                     payload_json: { content: text },
                     is_complete: true,

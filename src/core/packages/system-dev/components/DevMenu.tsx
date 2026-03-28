@@ -185,6 +185,18 @@ export default function DevMenu() {
         });
     };
 
+    const spawnRendererRegistry = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'renderer-registry-list-window',
+            title: 'Renderer Registry',
+            width: 560,
+            height: 460,
+            x: 280,
+            y: 120,
+        });
+    };
+
     const spawnAISessionMonitor = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system-dev',
@@ -379,6 +391,11 @@ export default function DevMenu() {
             <button onClick={spawnParserBlockPlayground} className={buttonClass}>
                 <ListTree size={14} className="text-cyan-300" />
                 Parser Block Playground
+            </button>
+
+            <button onClick={spawnRendererRegistry} className={buttonClass}>
+                <ListTree size={14} className="text-emerald-400" />
+                Renderer Registry
             </button>
 
             <button onClick={pushNotificationSample} className={buttonClass}>

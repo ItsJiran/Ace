@@ -40,9 +40,16 @@ Notes:
 - Added generic typed payload helper: `getBlockPayloadAs<T>()` in parser schema.
 - Started parser-owned typed payload exports for cross-package use (`PresentationPayload`, `getPresentationPayload`).
 - `PresentationRenderer` now acts as strict executor: resolve target from presentation block, read memory target, pass envelope to component.
-- Presentation contract hardened: complete block requires `component_slug` + memory target (`memory_uid` preferred; `memory_key` kept as legacy fallback).
+- Presentation contract hardened: complete block requires `component_slug` + `memory_uid` — `memory_key` legacy fallback removed.
 - AI context memory envelope normalization moved to `AIContextMemoryEngine` so all context writers store consistent source-aware payload envelopes.
 - Gateway continuation guidance now points AI to render via `<presentation>` using memory pointer (`memory_uid = result_memory_uid`).
+- `block_type → block_slug` migration completed across all source files.
+- `tag_name` removed from all parser registry contracts and `ParserBlockRuntime` type.
+- Namespaced parser tag support added: `<namespace:block_slug>` resolves through RegistryEngine priority.
+- `parsed_tag` vs `block_slug` vocabulary enforced across runtime emitters, consumers, and monitor payloads.
+- `TOOL_ACTION_*` legacy event aliases removed from `parserEventNames.ts` and all consumers (gateway loop, dev monitor, tooling playground).
+- `DEFAULT_PRESENTATION_PACKAGE_REF` constant added for consistent `package_ref` defaulting in presentation block.
+- `listSessions` in `AIGatewayEngine` refactored with 6-group structure and inline variable commentary.
 
 ## Cross-Package Schema Boundary V1
 
@@ -83,7 +90,7 @@ In addition to `payload` and `source`, memory envelope should include:
 
 ### Compatibility Policy (V1)
 
-1. `memory_uid` remains preferred pointer field; `memory_key` is temporary legacy fallback.
+1. `memory_uid` is the required pointer field; `memory_key` legacy fallback has been removed.
 2. New schema versions must be backward-compatible within major version.
 3. Cross-package boundary prefers JSON Schema-compatible objects to avoid runtime validator lock-in.
 
@@ -678,7 +685,7 @@ Sprint 1 - ParserEngine Refactor + Core Contract
 
 Sprint 2 - Context Retrieval + Presentation Flow
 - [ ] Implement parser block `context_retrieve` and validate address/key retrieval path.
-- [x] Implement parser block `presentation` for rendering memory-backed slices to user response — **Done**: Parser + UI rendering layer complete.
+- [x] Implement parser block `presentation` for rendering memory-backed slices to user response — **Done**: Parser + UI rendering layer complete, `memory_uid`-only contract enforced.
 - [ ] Inject `available_context_memories` + compact summaries in each gateway continuation turn.
 - [ ] Add retrieval guardrails (size cap, loop cap, malformed reference fallback).
 - [ ] Add integration tests for list-folder example with pointer-only feedback payload.

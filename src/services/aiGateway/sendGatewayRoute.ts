@@ -4,11 +4,11 @@ import type { SDKProvider } from './types';
 
 export function registerSendGatewayRoute(input: {
     createSession: (sdk: SDKProvider, model: string) => Promise<string>;
-    sendToSession: (sessionId: string, prompt: string, replyToRamKey: string) => Promise<void>;
+    sendToSession: (sessionId: string, prompt: string, replyToRamKey: string, parentProcessUid?: string) => Promise<void>;
     getActiveSDK: () => SDKProvider | null;
     getActiveModel: () => string | null;
 }) {
-    EventBus.registerProcessRoute('send_gateway', async ({ payload, preallocated_memory }) => {
+    EventBus.registerProcessRoute('send_gateway', async ({ payload, preallocated_memory, source }) => {
         const prompt = typeof payload?.prompt === 'string' ? payload.prompt.trim() : '';
         const replyToRamKey =
             typeof preallocated_memory?.reply_to_ram_key === 'string'
@@ -50,6 +50,13 @@ export function registerSendGatewayRoute(input: {
                 ? preallocated_memory.session_id
                 : await input.createSession(preferredSdk, preferredModel);
 
-        await input.sendToSession(sessionId, prompt, replyToRamKey);
+        const parentProcessUid =
+            typeof preallocated_memory?.parent_process_uid === 'string'
+                ? preallocated_memory.parent_process_uid
+                : typeof source?.process_uid === 'string'
+                    ? source.process_uid
+                    : undefined;
+
+        await input.sendToSession(sessionId, prompt, replyToRamKey, parentProcessUid);
     });
 }

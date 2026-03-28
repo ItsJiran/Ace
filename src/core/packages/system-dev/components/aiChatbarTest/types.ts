@@ -32,6 +32,9 @@ export interface ParserBatchMemory {
     events_total?: number;
     status?: string;
     error_message?: string;
+    /** Current feedback loop iteration index. Increments each time a tool block triggers a continuation. */
+    feedback_loop_turn?: number;
+    feedback_loop_status?: string;
 }
 
 export interface ChatMessage {
@@ -42,4 +45,6 @@ export interface ChatMessage {
     status?: string;
     parserBatchCount?: number;
     eventsTotal?: number;
+    /** Snapshotted presentation blocks baked in when this message's iteration was superseded or completed. */
+    blocks?: BaseBlock[];
 }

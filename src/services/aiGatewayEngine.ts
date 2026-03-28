@@ -136,7 +136,7 @@ class AIGatewayEngineSingleton {
 
         registerSendGatewayRoute({
             createSession: (sdk, model) => this.createSession(sdk, model),
-            sendToSession: (sessionId, prompt, replyToRamKey) => this.sendToSession(sessionId, prompt, replyToRamKey),
+            sendToSession: (sessionId, prompt, replyToRamKey, parentProcessUid) => this.sendToSession(sessionId, prompt, replyToRamKey, parentProcessUid),
             getActiveSDK: () => AIConfigManager.getActiveSDK(),
             getActiveModel: () => AIConfigManager.getActiveModel(),
         });
@@ -266,7 +266,12 @@ class AIGatewayEngineSingleton {
      * Config is snapshotted at call time (AIConfigManager.get()) so any
      * in-flight config changes do not affect the current request.
      */
-    async sendToSession(sessionId: string, prompt: string, reply_to_ram_key: string): Promise<void> {
+    async sendToSession(
+        sessionId: string,
+        prompt: string,
+        reply_to_ram_key: string,
+        parent_process_uid?: string,
+    ): Promise<void> {
         const session = AISessionManager.get(sessionId);
         if (!session) throw new Error(`Session ${sessionId} not found.`);
 
@@ -275,6 +280,7 @@ class AIGatewayEngineSingleton {
             sessionId,
             prompt,
             replyToRamKey: reply_to_ram_key,
+            parentProcessUid: parent_process_uid,
         });
     }
 

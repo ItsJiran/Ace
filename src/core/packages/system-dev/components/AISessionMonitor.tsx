@@ -766,7 +766,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                 {parsedBlocks.map((block, index) => (
                                     <div key={index} className="border border-zinc-800 rounded bg-black/20 overflow-hidden">
                                         <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
-                                            <span className="font-semibold text-zinc-300">{block.type}</span>
+                                            <span className="font-semibold text-zinc-300">{typeof block.block_slug === 'string' ? block.block_slug : '-'}</span>
                                             <div className="flex items-center gap-2">
                                                 {'action' in block && block.action ? <span className="text-zinc-500">{block.action}</span> : null}
                                                 {'status' in block && block.status ? <span className="font-mono opacity-70">{block.status}</span> : null}
@@ -1016,7 +1016,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                     {responseView?.blocks?.map((block, index) => (
                                         <div key={index} className="border border-zinc-800 rounded bg-zinc-900/30 overflow-hidden">
                                             <div className="px-3 py-1.5 text-[10px] bg-zinc-900/80 border-b border-zinc-800 text-zinc-400 flex justify-between">
-                                                <span className="font-semibold text-zinc-300">{block.type}</span>
+                                                <span className="font-semibold text-zinc-300">{typeof block.block_slug === 'string' ? block.block_slug : '-'}</span>
                                                 {'status' in block && block.status ? <span>{block.status}</span> : null}
                                             </div>
                                             <pre className="p-3 text-[10px] text-zinc-400 overflow-auto max-h-[180px] whitespace-pre-wrap">{JSON.stringify(block, null, 2)}</pre>

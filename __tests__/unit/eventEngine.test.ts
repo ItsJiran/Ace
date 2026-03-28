@@ -26,10 +26,23 @@ describe('EventBus (Command Pattern Routing)', () => {
 
         // BOTH handlers should fire (specific and broad)
         expect(specificHandler).toHaveBeenCalledTimes(1);
-        expect(specificHandler).toHaveBeenCalledWith(interaction);
+        expect(specificHandler).toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: 'send',
+                sub_action: 'send_gateway',
+                payload: { text: 'Hello AI' },
+                preallocated_memory: {},
+                source: expect.objectContaining({ process_uid: undefined }),
+            }),
+        );
 
         expect(generalHandler).toHaveBeenCalledTimes(1);
-        expect(generalHandler).toHaveBeenCalledWith(interaction);
+        expect(generalHandler).toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: 'send',
+                sub_action: 'send_gateway',
+            }),
+        );
     });
 
     it('should fire and forget asynchronous handlers cleanly without crashing', async () => {
@@ -89,5 +102,61 @@ describe('EventBus (Command Pattern Routing)', () => {
         });
 
         expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('should automatically propagate parent_process_uid from process_uid', () => {
+        const handler = vi.fn();
+        EventBus.registerProcessRoute('send_gateway', handler);
+
+        EventBus.emit({
+            event_type: 'interaction',
+            action: 'send_gateway',
+            process_uid: 'proc-parent-evt',
+            payload: { prompt: 'hello' },
+        });
+
+        expect(handler).toHaveBeenCalledTimes(1);
+        expect(handler).toHaveBeenCalledWith(
+            expect.objectContaining({
+                preallocated_memory: expect.objectContaining({
+                    parent_process_uid: 'proc-parent-evt',
+                }),
+                source: expect.objectContaining({
+                    process_uid: 'proc-parent-evt',
+                }),
+            }),
+        );
+    });
+
+    it('emitWithParent should preserve explicit process_uid and fallback to parent when missing', () => {
+        const handler = vi.fn();
+        EventBus.registerProcessRoute('execute_tool', handler);
+
+        EventBus.emitWithParent('proc-parent-helper', {
+            event_type: 'interaction',
+            action: 'execute_tool',
+            payload: {},
+        });
+
+        expect(handler).toHaveBeenCalledWith(
+            expect.objectContaining({
+                source: expect.objectContaining({ process_uid: 'proc-parent-helper' }),
+                preallocated_memory: expect.objectContaining({ parent_process_uid: 'proc-parent-helper' }),
+            }),
+        );
+
+        EventBus.emitWithParent('proc-parent-helper', {
+            event_type: 'interaction',
+            action: 'execute_tool',
+            process_uid: 'proc-explicit-child',
+            payload: {},
+        });
+
+        expect(handler).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                source: expect.objectContaining({ process_uid: 'proc-explicit-child' }),
+                preallocated_memory: expect.objectContaining({ parent_process_uid: 'proc-parent-helper' }),
+            }),
+        );
     });
 });

@@ -1,6 +1,7 @@
 
 import { StorageEngine } from '../storageEngine';
 import { ParserEngine } from '../parserEngine';
+import { ProcessEngine } from '../processEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { AIConfigManager } from './configManager';
 import { HealthProbe } from './healthProbe';
@@ -324,8 +325,54 @@ export async function executeSessionInteractionLoop(input: {
     sessionId: string;
     prompt: string;
     replyToRamKey: string;
+    parentProcessUid?: string;
 }): Promise<void> {
-    const { session, sessionId, prompt, replyToRamKey } = input;
+    const { session, sessionId, prompt, replyToRamKey, parentProcessUid } = input;
+    const rootProcess = ProcessEngine.registerProcess(
+        'ai_gateway:response_turn',
+        {
+            session_id: sessionId,
+            reply_to_ram_key: replyToRamKey,
+            prompt_preview: prompt.slice(0, 200),
+            parent_process_uid: parentProcessUid,
+        },
+        {},
+        [],
+        parentProcessUid,
+        undefined,
+        undefined,
+        {
+            parent_process_uid: parentProcessUid,
+            process_kind: 'gateway_turn',
+            owner_engine: 'aiGatewayEngine',
+            payload: {
+                status: 'queued',
+                feedback_loop_turn: 0,
+            },
+        },
+    );
+    ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'running');
+
+    const updateResponseMemory = (payload: Record<string, unknown>) => {
+        const updated = ProcessEngine.updateRuntimeMemory({
+            owner_process_uid: rootProcess.process_uid,
+            memory_uid: replyToRamKey,
+            payload,
+            classifications: CLASSIFICATIONS,
+        });
+
+        if (!updated) {
+            // Fallback for memory created before process ownership metadata is attached.
+            StorageEngine.dispatchRAMAction({
+                action: 'update_memory',
+                process_uid: rootProcess.process_uid,
+                memory_uid: replyToRamKey,
+                payload,
+                classifications: CLASSIFICATIONS,
+            });
+        }
+    };
+
     const memoryBefore = (StorageEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
     const existingTurns = Array.isArray(memoryBefore.response_turns)
         ? (memoryBefore.response_turns as ResponseTurnSnapshot[])
@@ -356,6 +403,7 @@ export async function executeSessionInteractionLoop(input: {
             AIConfigManager.get(),
             () => HealthProbe.ensure(),
             {
+                process_uid: rootProcess.process_uid,
                 original_prompt: prompt,
                 used_contexts: prepared.used_contexts,
                 prompt_reference: prepared.prompt_reference,
@@ -385,61 +433,65 @@ export async function executeSessionInteractionLoop(input: {
 
         if (!streamOutcome.interrupted) {
             currentTurn.finished_at = Date.now();
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: replyToRamKey,
-                payload: {
-                    response_turns: [...existingTurns, currentTurn].slice(-20),
-                    active_response_turn_id: promptTurnId,
-                    active_response_attempt_index: continuationTurns + 1,
-                    feedback_loop_status: continuationTurns > 0 ? 'completed' : 'none',
-                    feedback_loop_reason: continuationTurns > 0 ? 'tool_feedback_completed' : undefined,
-                    feedback_loop_turn: continuationTurns,
-                    last_feedback_at: Date.now(),
-                },
-                classifications: CLASSIFICATIONS,
+            updateResponseMemory({
+                response_turns: [...existingTurns, currentTurn].slice(-20),
+                active_response_turn_id: promptTurnId,
+                active_response_attempt_index: continuationTurns + 1,
+                feedback_loop_status: continuationTurns > 0 ? 'completed' : 'none',
+                feedback_loop_reason: continuationTurns > 0 ? 'tool_feedback_completed' : undefined,
+                feedback_loop_turn: continuationTurns,
+                last_feedback_at: Date.now(),
             });
+
+            ProcessEngine.updatePayload(rootProcess.process_uid, {
+                status: 'done',
+                feedback_loop_turn: continuationTurns,
+                finished_at: Date.now(),
+            });
+            ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'done');
             return;
         }
 
         if (continuationTurns >= TOOL_FEEDBACK_LOOP_MAX_TURNS) {
             currentTurn.finished_at = Date.now();
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: replyToRamKey,
-                payload: {
-                    response_turns: [...existingTurns, currentTurn].slice(-20),
-                    active_response_turn_id: promptTurnId,
-                    active_response_attempt_index: continuationTurns + 1,
-                    feedback_loop_status: 'interrupted',
-                    feedback_loop_reason: 'tool_feedback_loop_turn_cap_reached',
-                    feedback_loop_turn: continuationTurns,
-                    last_feedback_at: Date.now(),
-                    parser_interrupt_reason: streamOutcome.interruptReason,
-                },
-                classifications: CLASSIFICATIONS,
+            updateResponseMemory({
+                response_turns: [...existingTurns, currentTurn].slice(-20),
+                active_response_turn_id: promptTurnId,
+                active_response_attempt_index: continuationTurns + 1,
+                feedback_loop_status: 'interrupted',
+                feedback_loop_reason: 'tool_feedback_loop_turn_cap_reached',
+                feedback_loop_turn: continuationTurns,
+                last_feedback_at: Date.now(),
+                parser_interrupt_reason: streamOutcome.interruptReason,
             });
+            ProcessEngine.updatePayload(rootProcess.process_uid, {
+                status: 'failed',
+                feedback_loop_turn: continuationTurns,
+                reason: 'tool_feedback_loop_turn_cap_reached',
+            });
+            ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'failed');
             return;
         }
 
         const terminalActionEvent = await waitForActionTerminalEvent(sessionId, replyToRamKey);
         if (!terminalActionEvent) {
             currentTurn.finished_at = Date.now();
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: replyToRamKey,
-                payload: {
-                    response_turns: [...existingTurns, currentTurn].slice(-20),
-                    active_response_turn_id: promptTurnId,
-                    active_response_attempt_index: continuationTurns + 1,
-                    feedback_loop_status: 'interrupted',
-                    feedback_loop_reason: 'tool_feedback_result_timeout',
-                    feedback_loop_turn: continuationTurns,
-                    last_feedback_at: Date.now(),
-                    parser_interrupt_reason: streamOutcome.interruptReason,
-                },
-                classifications: CLASSIFICATIONS,
+            updateResponseMemory({
+                response_turns: [...existingTurns, currentTurn].slice(-20),
+                active_response_turn_id: promptTurnId,
+                active_response_attempt_index: continuationTurns + 1,
+                feedback_loop_status: 'interrupted',
+                feedback_loop_reason: 'tool_feedback_result_timeout',
+                feedback_loop_turn: continuationTurns,
+                last_feedback_at: Date.now(),
+                parser_interrupt_reason: streamOutcome.interruptReason,
             });
+            ProcessEngine.updatePayload(rootProcess.process_uid, {
+                status: 'failed',
+                feedback_loop_turn: continuationTurns,
+                reason: 'tool_feedback_result_timeout',
+            });
+            ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'failed');
             return;
         }
 
@@ -450,39 +502,42 @@ export async function executeSessionInteractionLoop(input: {
         });
         if (!continuationPrompt) {
             currentTurn.finished_at = Date.now();
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: replyToRamKey,
-                payload: {
-                    response_turns: [...existingTurns, currentTurn].slice(-20),
-                    active_response_turn_id: promptTurnId,
-                    active_response_attempt_index: continuationTurns + 1,
-                    feedback_loop_status: 'interrupted',
-                    feedback_loop_reason: 'tool_feedback_payload_unavailable',
-                    feedback_loop_turn: continuationTurns,
-                    last_feedback_at: Date.now(),
-                },
-                classifications: CLASSIFICATIONS,
+            updateResponseMemory({
+                response_turns: [...existingTurns, currentTurn].slice(-20),
+                active_response_turn_id: promptTurnId,
+                active_response_attempt_index: continuationTurns + 1,
+                feedback_loop_status: 'interrupted',
+                feedback_loop_reason: 'tool_feedback_payload_unavailable',
+                feedback_loop_turn: continuationTurns,
+                last_feedback_at: Date.now(),
             });
+            ProcessEngine.updatePayload(rootProcess.process_uid, {
+                status: 'failed',
+                feedback_loop_turn: continuationTurns,
+                reason: 'tool_feedback_payload_unavailable',
+            });
+            ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'failed');
             return;
         }
 
         continuationTurns += 1;
         activePrompt = continuationPrompt;
 
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: replyToRamKey,
-            payload: {
-                response_turns: [...existingTurns, currentTurn].slice(-20),
-                active_response_turn_id: promptTurnId,
-                active_response_attempt_index: continuationTurns + 1,
-                feedback_loop_status: 'active',
-                feedback_loop_reason: 'tool_feedback_injected',
-                feedback_loop_turn: continuationTurns,
-                last_feedback_at: Date.now(),
-            },
-            classifications: CLASSIFICATIONS,
+        updateResponseMemory({
+            response_turns: [...existingTurns, currentTurn].slice(-20),
+            active_response_turn_id: promptTurnId,
+            active_response_attempt_index: continuationTurns + 1,
+            feedback_loop_status: 'active',
+            feedback_loop_reason: 'tool_feedback_injected',
+            feedback_loop_turn: continuationTurns,
+            last_feedback_at: Date.now(),
+        });
+
+        ProcessEngine.updatePayload(rootProcess.process_uid, {
+            status: 'running',
+            feedback_loop_turn: continuationTurns,
+            feedback_loop_reason: 'tool_feedback_injected',
+            updated_at: Date.now(),
         });
     }
 }

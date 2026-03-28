@@ -3,7 +3,7 @@ export interface BaseBlock {
      * Block identity produced by parser runtime.
      * Examples: paragraph, event, directive, tool, storage, presentation, context.
      */
-    type: string;
+    block_slug: string;
     /**
      * Raw body text as received by parser for this block.
      * For plain paragraph segments, this is the paragraph text itself.
@@ -26,7 +26,7 @@ export interface BaseBlock {
     is_complete: boolean;
     /**
      * Extra runtime metadata emitted by specific handlers.
-     * Avoid schema coupling in app layer; inspect payload_json by block type.
+     * Avoid schema coupling in app layer; inspect payload_json by block_slug.
      */
     [key: string]: unknown;
 }
@@ -43,7 +43,7 @@ export function isObjectRecord(value: unknown): value is Record<string, unknown>
  */
 export function getBlockPayloadAs<T>(block: BaseBlock | null | undefined, expectedType?: string): T | null {
     if (!block) return null;
-    if (expectedType && block.type !== expectedType) return null;
+    if (expectedType && block.block_slug !== expectedType) return null;
     if (!isObjectRecord(block.payload_json)) return null;
     return block.payload_json as T;
 }
@@ -97,6 +97,24 @@ export interface BlockProtocolSchema {
     optionalFields?: string;
     payloadNote?: string[];
     exampleLines: string[];
+    
+    /**
+     * Trigger conditions: describes WHEN and WHY this block parser is invoked.
+     * Used to inform AI context about appropriate block usage patterns.
+     * Examples:
+     *   - "Called when user requests tool listing or parameter inspection"
+     *   - "Triggered automatically after user confirmation for tool execution"
+     */
+    triggerConditions?: string[];
+    
+    /**
+     * Prompt context examples: sample user/system prompts that should trigger
+     * this block type. Helps AI understand natural language intent patterns.
+     * Examples:
+     *   - "List all available tools in the system"
+     *   - "Show me the parameters for the file-search tool"
+     */
+    promptExamples?: string[];
 }
 
 /**

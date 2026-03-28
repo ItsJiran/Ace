@@ -24,6 +24,7 @@ export const RegistryDomainSchema = z.enum([
     'pipeline',
     'window',
     'registry',
+    'renderer',
 ]);
 export type RegistryDomain = z.infer<typeof RegistryDomainSchema>;
 

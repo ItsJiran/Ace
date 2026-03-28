@@ -3,7 +3,17 @@ import { LoggerEngine } from './loggerEngine';
 
 // Late binding to avoid circular dep
 type ProcessTracker = {
-    track: <T>(type: string, meta: Record<string, any>, fn: (uid: string) => Promise<T>) => Promise<T>;
+    track: <T>(
+        type: string,
+        meta: Record<string, any>,
+        fn: (uid: string) => Promise<T>,
+        options?: {
+            parent_process_uid?: string;
+            process_kind?: string;
+            owner_engine?: string;
+            payload?: Record<string, any>;
+        },
+    ) => Promise<T>;
 };
 const getProcessEngine = (): ProcessTracker | null =>
     (typeof window !== 'undefined' ? (window as any).ACE?.process : null) ?? null;
@@ -17,6 +27,7 @@ export interface ShellRunOptions {
     cwd?: string;
     /** If true, prepends 'pkexec' (Linux graphical sudo). Requires polkit agent. */
     sudo?: boolean;
+    parent_process_uid?: string;
 }
 
 export interface ShellResult {
@@ -50,7 +61,7 @@ class ShellEngineSingleton {
      * logging, and optional ProcessEngine tracking.
      */
     async run(command: string, opts: ShellRunOptions = {}): Promise<ShellResult> {
-        const { args = [], cwd, sudo = false } = opts;
+        const { args = [], cwd, sudo = false, parent_process_uid } = opts;
 
         const resolvedCommand = sudo ? 'pkexec' : command;
         const resolvedArgs   = sudo ? [command, ...args] : args;
@@ -69,7 +80,21 @@ class ShellEngineSingleton {
             });
 
         if (pe) {
-            return pe.track(`shell:${resolvedCommand}`, meta, execute);
+            return pe.track(
+                `shell:${resolvedCommand}`,
+                meta,
+                execute,
+                {
+                    parent_process_uid,
+                    process_kind: 'shell_task',
+                    owner_engine: 'shellEngine',
+                    payload: {
+                        status: 'running',
+                        command: resolvedCommand,
+                        args: resolvedArgs,
+                    },
+                },
+            );
         }
         return execute();
     }

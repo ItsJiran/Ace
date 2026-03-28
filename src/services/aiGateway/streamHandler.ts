@@ -1,4 +1,5 @@
 import { StorageEngine } from '../storageEngine';
+import { ProcessEngine } from '../processEngine';
 import { EventBus } from '../eventEngine';
 import { RegistryEngine } from '../registryEngine';
 import { AIContextEngine } from '../aiContextEngine';
@@ -13,7 +14,7 @@ import type { BaseBlock, ParserInterruptMode, ParserSessionEmitRecord, ParserSes
 const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
 
 type RuntimeActionBlock = {
-    type: 'tool' | 'storage';
+    block_slug: 'tool' | 'storage';
     payload_raw: string;
     payload_json: Record<string, unknown> | null;
     payload_parse_error?: string;
@@ -25,11 +26,11 @@ type RuntimeActionBlock = {
 };
 
 type HistorySummaryBlock = BaseBlock & {
-    type: 'history_summary_ai_prompt' | 'history_summary_ai_response';
+    block_slug: 'history_summary_ai_prompt' | 'history_summary_ai_response';
 };
 
 function asRuntimeActionBlock(block: AIMessageBlock): RuntimeActionBlock | null {
-    if (block.type !== 'tool' && block.type !== 'storage') return null;
+    if (block.block_slug !== 'tool' && block.block_slug !== 'storage') return null;
     return block as unknown as RuntimeActionBlock;
 }
 
@@ -59,25 +60,25 @@ function validateHistorySummaryBlock(
     }
 
     const actualKey = readHistorySummaryMemoryKey(block.payload_json);
-    const expectedKey = block.type === 'history_summary_ai_prompt'
+    const expectedKey = block.block_slug === 'history_summary_ai_prompt'
         ? protocol.prompt_memory_key
         : protocol.response_memory_key;
-    const expectedRefUid = block.type === 'history_summary_ai_prompt'
+    const expectedRefUid = block.block_slug === 'history_summary_ai_prompt'
         ? protocol.prompt_ref_uid
         : protocol.response_ref_uid;
     const actualRefUid = readHistorySummaryRefUid(block.payload_json) ?? undefined;
-    const isRequired = block.type === 'history_summary_ai_prompt'
+    const isRequired = block.block_slug === 'history_summary_ai_prompt'
         ? protocol.require_prompt_summary
         : protocol.require_response_summary;
 
-    if (block.type === 'history_summary_ai_prompt' && protocol.prompt_summary_valid) {
+    if (block.block_slug === 'history_summary_ai_prompt' && protocol.prompt_summary_valid) {
         if (isRequired) {
             pushViolationOnce(protocol.violations, 'Duplicate history_summary_ai_prompt block ignored after first valid block.');
         }
         return false;
     }
 
-    if (block.type === 'history_summary_ai_response' && protocol.response_summary_valid) {
+    if (block.block_slug === 'history_summary_ai_response' && protocol.response_summary_valid) {
         if (isRequired) {
             pushViolationOnce(protocol.violations, 'Duplicate history_summary_ai_response block ignored after first valid block.');
         }
@@ -86,7 +87,7 @@ function validateHistorySummaryBlock(
 
     const isValid = actualKey === expectedKey && (!expectedRefUid || actualRefUid === expectedRefUid);
 
-    if (block.type === 'history_summary_ai_prompt') {
+    if (block.block_slug === 'history_summary_ai_prompt') {
         protocol.prompt_summary_received = true;
         protocol.prompt_summary_valid = isValid;
         if (isRequired && !isValid) {
@@ -110,10 +111,10 @@ function mergeBlocks(
     const merged = [...previous];
 
     incoming.forEach((block) => {
-        if (block.type === 'paragraph') {
+        if (block.block_slug === 'paragraph') {
             if (!block.content) return;
             const last = merged[merged.length - 1];
-            if (last?.type === 'paragraph') {
+            if (last?.block_slug === 'paragraph') {
                 last.content += block.content;
                 return;
             }
@@ -123,7 +124,7 @@ function mergeBlocks(
 
         // For execute blocks in looped responses, update the latest block sharing
         // the same memory identity instead of always appending duplicates.
-        if (block.type === 'tool' || block.type === 'storage') {
+        if (block.block_slug === 'tool' || block.block_slug === 'storage') {
             const actionBlock = asRuntimeActionBlock(block);
             if (!actionBlock) return;
             const identity = actionBlock.memory_uid || actionBlock.result_memory_uid;
@@ -133,7 +134,7 @@ function mergeBlocks(
                     const candidateActionBlock = asRuntimeActionBlock(candidate);
                     if (
                         candidateActionBlock &&
-                        candidate.type === block.type &&
+                        candidate.block_slug === block.block_slug &&
                         (candidateActionBlock.memory_uid === identity || candidateActionBlock.result_memory_uid === identity)
                     ) {
                         merged[i] = {
@@ -150,15 +151,15 @@ function mergeBlocks(
         }
 
         if (
-            block.type === 'context' ||
-            block.type === 'history_summary_ai_prompt' ||
-            block.type === 'history_summary_ai_response' ||
-            block.type === 'directive'
+            block.block_slug === 'context' ||
+            block.block_slug === 'history_summary_ai_prompt' ||
+            block.block_slug === 'history_summary_ai_response' ||
+            block.block_slug === 'directive'
         ) {
             const last = merged[merged.length - 1];
             if (
                 last &&
-                last.type === block.type &&
+                last.block_slug === block.block_slug &&
                 'is_complete' in last &&
                 !last.is_complete
             ) {
@@ -203,7 +204,7 @@ function buildNextBatches(
 }
 
 function buildToolInteractionFromBlock(input: {
-    block: RuntimeActionBlock & { type: 'tool' };
+    block: RuntimeActionBlock & { block_slug: 'tool' };
     session: AISession;
     processUid?: string;
     fallbackResultKey: string;
@@ -287,19 +288,42 @@ function writeParserFailureMemory(input: {
     const { session, ramKey, reason, processUid, details } = input;
     const parserErrorMemoryUid = `${ramKey}:parser_error`;
 
-    StorageEngine.dispatchRAMAction({
-        action: 'update_memory',
-        memory_uid: parserErrorMemoryUid,
-        payload: {
-            session_id: session.sessionId,
-            process_uid: processUid,
-            error_type: 'parser_failure',
-            reason,
-            details: details || {},
-            at: Date.now(),
-        },
-        classifications: CLASSIFICATIONS,
-    });
+    const payload = {
+        session_id: session.sessionId,
+        process_uid: processUid,
+        error_type: 'parser_failure',
+        reason,
+        details: details || {},
+        at: Date.now(),
+    };
+
+    if (processUid) {
+        const created = ProcessEngine.createRuntimeMemory({
+            owner_process_uid: processUid,
+            owner_session_id: session.sessionId,
+            memory_uid: parserErrorMemoryUid,
+            payload,
+            classifications: CLASSIFICATIONS,
+            memory_scope: 'process',
+            retention_policy: 'keep_on_done',
+        });
+
+        if (!created) {
+            ProcessEngine.updateRuntimeMemory({
+                owner_process_uid: processUid,
+                memory_uid: parserErrorMemoryUid,
+                payload,
+                classifications: CLASSIFICATIONS,
+            });
+        }
+    } else {
+        StorageEngine.dispatchRAMAction({
+            action: 'create_memory',
+            memory_uid: parserErrorMemoryUid,
+            payload,
+            classifications: CLASSIFICATIONS,
+        });
+    }
 
     return parserErrorMemoryUid;
 }
@@ -411,7 +435,7 @@ export function handleSessionStreamChunk(
     // Direct parser -> context bridge:
     // any complete `context` block from aiParser is immediately ingested.
     blocks.forEach((block) => {
-        if (block.type !== 'context' || !block.is_complete || !block.payload_json) return;
+        if (block.block_slug !== 'context' || !block.is_complete || !block.payload_json) return;
         const payload = block.payload_json as Record<string, unknown>;
         const requestedAction = typeof payload.action === 'string' ? payload.action.trim().toLowerCase() : '';
         const action =
@@ -474,7 +498,7 @@ export function handleSessionStreamChunk(
 
     blocks.forEach((block) => {
         if (
-            (block.type !== 'history_summary_ai_prompt' && block.type !== 'history_summary_ai_response') ||
+            (block.block_slug !== 'history_summary_ai_prompt' && block.block_slug !== 'history_summary_ai_response') ||
             !block.is_complete ||
             !block.payload_json
         ) {
@@ -485,7 +509,7 @@ export function handleSessionStreamChunk(
             return;
         }
 
-        AIContextEngine.ingestHistorySummaryBlock(session.sessionId, block.type, block.payload_json);
+        AIContextEngine.ingestHistorySummaryBlock(session.sessionId, block.block_slug, block.payload_json);
     });
 
     const memoryState = (StorageEngine.readMemory(ramKey) || {}) as {
@@ -572,7 +596,7 @@ export function handleSessionStreamChunk(
             processUid,
             details: {
                 malformed_blocks: malformedErrorBlocks.map((block) => ({
-                    type: block.type,
+                    block_slug: block.block_slug,
                     action: block.action,
                     status: block.status,
                     payload_parse_error: block.payload_parse_error,
@@ -593,39 +617,53 @@ export function handleSessionStreamChunk(
     }
 
     // ── PATHWAY A: write updated stream state to RAM ──────────────────────────
-    StorageEngine.dispatchRAMAction({
-        action: 'update_memory',
-        memory_uid: ramKey,
-        payload: {
-            text: currentText + textToPrint,
-            raw_response: currentRaw + chunk,
-            // Ordered message blocks for full accumulated response
-            blocks: nextBlocks,
-            parser_batches: nextBatches,
-            parser_batch_count: nextBatches.length,
-            events_total: nextBatches.reduce((acc, b) => acc + b.events.length, 0),
-            parser_handler_results: nextHandlerResults,
-            parser_handler_result_count: nextHandlerResults.length,
-            parser_handler_last_result_at:
-                nextHandlerResults.length > 0
-                    ? nextHandlerResults[nextHandlerResults.length - 1].at
-                    : undefined,
-            parser_stop_signals: nextStopSignals,
-            parser_stop_signal_count: nextStopSignals.length,
-            parser_last_stop_at:
-                nextStopSignals.length > 0
-                    ? nextStopSignals[nextStopSignals.length - 1].at
-                    : undefined,
-            parser_token_traces: nextTokenTraces,
-            parser_token_trace_count: nextTokenTraces.length,
-            parser_runtime_status: parserRuntimeStatus,
-            parser_last_error: parserLastError,
-            parser_error_memory_uid: parserErrorMemoryUid,
-            last_updated_at: Date.now(),
-            protocol_validation: session.currentProtocolState ?? memoryState.protocol_validation ?? null,
-        },
-        classifications: CLASSIFICATIONS,
-    });
+    const streamPayload = {
+        text: currentText + textToPrint,
+        raw_response: currentRaw + chunk,
+        // Ordered message blocks for full accumulated response
+        blocks: nextBlocks,
+        parser_batches: nextBatches,
+        parser_batch_count: nextBatches.length,
+        events_total: nextBatches.reduce((acc, b) => acc + b.events.length, 0),
+        parser_handler_results: nextHandlerResults,
+        parser_handler_result_count: nextHandlerResults.length,
+        parser_handler_last_result_at:
+            nextHandlerResults.length > 0
+                ? nextHandlerResults[nextHandlerResults.length - 1].at
+                : undefined,
+        parser_stop_signals: nextStopSignals,
+        parser_stop_signal_count: nextStopSignals.length,
+        parser_last_stop_at:
+            nextStopSignals.length > 0
+                ? nextStopSignals[nextStopSignals.length - 1].at
+                : undefined,
+        parser_token_traces: nextTokenTraces,
+        parser_token_trace_count: nextTokenTraces.length,
+        parser_runtime_status: parserRuntimeStatus,
+        parser_last_error: parserLastError,
+        parser_error_memory_uid: parserErrorMemoryUid,
+        last_updated_at: Date.now(),
+        protocol_validation: session.currentProtocolState ?? memoryState.protocol_validation ?? null,
+    };
+
+    const updatedByProcess = processUid
+        ? ProcessEngine.updateRuntimeMemory({
+            owner_process_uid: processUid,
+            memory_uid: ramKey,
+            payload: streamPayload,
+            classifications: CLASSIFICATIONS,
+        })
+        : false;
+
+    if (!updatedByProcess) {
+        StorageEngine.dispatchRAMAction({
+            action: 'update_memory',
+            process_uid: processUid,
+            memory_uid: ramKey,
+            payload: streamPayload,
+            classifications: CLASSIFICATIONS,
+        });
+    }
 
     if (memoryState.response_reference?.storage_key) {
         AIContextMemoryEngine.writeMemoryPayload(memoryState.response_reference.storage_key, {
@@ -683,7 +721,7 @@ export function handleSessionStreamChunk(
     });
 
     blocks.forEach((block) => {
-        if (block.type !== 'presentation' || !block.is_complete) return;
+        if (block.block_slug !== 'presentation' || !block.is_complete) return;
 
         const payload = (block.payload_json ?? {}) as Record<string, unknown>;
         const componentSlug = typeof payload.component_slug === 'string' ? payload.component_slug.trim() : '';
@@ -731,14 +769,14 @@ export function handleSessionStreamChunk(
     });
 
     blocks.forEach((block, index) => {
-        if (block.type !== 'tool' || !block.is_complete) return;
+        if (block.block_slug !== 'tool' || !block.is_complete) return;
 
         const fallbackResultKey =
             block.result_memory_uid ??
             `system:session:${session.sessionId}:tool_result:${Date.now()}:${index}`;
 
         const interaction = buildToolInteractionFromBlock({
-            block: block as unknown as RuntimeActionBlock & { type: 'tool' },
+            block: block as unknown as RuntimeActionBlock & { block_slug: 'tool' },
             session,
             processUid,
             fallbackResultKey,

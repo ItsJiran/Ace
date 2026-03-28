@@ -11,6 +11,7 @@ export interface PipelineContext {
     abortSignal?: AbortSignal; // Jika user menekan tombol "Cancel"
     /** When true, wraps the entire pipeline run in a ProcessEngine.track() record */
     tracked?: boolean;
+    parent_process_uid?: string;
 }
 
 export class PipelineEngine<TInitial, TFinal> {
@@ -28,12 +29,26 @@ export class PipelineEngine<TInitial, TFinal> {
     // Mengeksekusi seluruh rantai secara berurutan
     async run(input: TInitial, context: PipelineContext): Promise<TFinal> {
         // Optional: wrap entire pipeline as a tracked ProcessEngine record
-        if (context.tracked && !context.process_uid) {
+        if (context.tracked) {
+            const parentProcessUid = context.parent_process_uid ?? context.process_uid;
             return ProcessEngine.track(
                 `pipeline:${this.pipelineName}`,
-                { pipeline_name: this.pipelineName },
+                {
+                    pipeline_name: this.pipelineName,
+                    parent_process_uid: parentProcessUid,
+                },
                 async (process_uid) => {
                     return this._run(input, { ...context, process_uid, tracked: false });
+                },
+                {
+                    parent_process_uid: parentProcessUid,
+                    process_kind: 'pipeline_run',
+                    owner_engine: 'pipelineEngine',
+                    payload: {
+                        status: 'running',
+                        pipeline_name: this.pipelineName,
+                        current_step: 'boot',
+                    },
                 },
             );
         }
@@ -73,10 +88,10 @@ export class PipelineEngine<TInitial, TFinal> {
 
             // 2. Laporkan progress ke RAM (agar UI bisa tahu)
             if (context.process_uid) {
-                StorageEngine.dispatchRAMAction({
-                    action: 'update_memory',
-                    memory_uid: context.process_uid,
-                    payload: { current_step: step.name }
+                ProcessEngine.updatePayload(context.process_uid, {
+                    status: 'running',
+                    current_step: step.name,
+                    updated_at: Date.now(),
                 });
             }
 
@@ -119,6 +134,14 @@ export class PipelineEngine<TInitial, TFinal> {
             process_uid: context.process_uid ?? null,
             error: null,
         });
+
+        if (context.process_uid) {
+            ProcessEngine.updatePayload(context.process_uid, {
+                status: 'done',
+                current_step: 'completed',
+                updated_at: Date.now(),
+            });
+        }
 
         return currentData as TFinal;
     }

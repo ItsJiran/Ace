@@ -5,7 +5,7 @@ type StorageBlockAction = 'read' | 'list' | 'view_db' | 'write' | 'delete';
 type StorageBlockStatus = 'pending' | 'queued' | 'running' | 'completed' | 'error' | 'cancelled' | 'unknown';
 
 interface StorageBlock extends BaseBlock {
-    type: 'storage';
+    block_slug: 'storage';
     memory_uid?: string;
     result_memory_uid?: string;
     action?: StorageBlockAction;
@@ -52,7 +52,7 @@ function extractStorageBlock(
         undefined;
 
     return {
-        type: 'storage',
+        block_slug: 'storage',
         status,
         action,
         memory_uid: memoryUid,
@@ -103,6 +103,22 @@ export const registry: AceRegistryType.Parser = {
             '"scope" (for view_db — namespace filter), ' +
             '"payload" (for write — the data to store), ' +
             '"status" (pending | running | completed | error).',
+        triggerConditions: [
+            'AI needs to store conversational context or intermediate results in memory',
+            'AI wants to read previously stored information or session data',
+            'AI needs to list available memory keys or inspect the database structure',
+            'AI intends to update or delete stored data from memory',
+            'Tool execution results need to be persisted for later reference',
+        ],
+        promptExamples: [
+            'Remember that the user prefers dark mode',
+            'Save the search results for later reference',
+            'What information do I have stored about this user?',
+            'List all session variables I\'ve saved',
+            'Retrieve the previous conversation summary',
+            'Delete the temporary cache from memory',
+            'Store this configuration for future use',
+        ],
         exampleLines: [
             '  <storage>',
             '  {"action":"read","memory_uid":"system:session:abc:summary","result_memory_uid":"system:tool:result:456","status":"pending"}',

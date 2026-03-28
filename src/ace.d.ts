@@ -103,7 +103,7 @@ interface ACEAIGatewayAPI {
   createSession: (sdk: SDKProvider, model: string) => Promise<string>;
   closeSession: (sessionId: string) => void;
   listSessions: () => AIGatewaySessionSnapshot[];
-  sendToSession: (sessionId: string, prompt: string, reply_to_ram_key: string) => Promise<void>;
+  sendToSession: (sessionId: string, prompt: string, reply_to_ram_key: string, parent_process_uid?: string) => Promise<void>;
 }
 
 declare global {

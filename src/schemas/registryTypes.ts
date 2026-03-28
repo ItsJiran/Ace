@@ -110,6 +110,10 @@ export namespace AceRegistryType {
             optionalFields?: string;
             payloadNote?: string[];
             exampleLines: string[];
+            /** When/why this block parser is invoked */
+            triggerConditions?: string[];
+            /** Sample prompts that should trigger this block */
+            promptExamples?: string[];
         };
     }
 
@@ -141,5 +145,21 @@ export namespace AceRegistryType {
         /** Ordered names of each step in the pipeline */
         step_names?: string[];
         cancellable?: boolean;
+    }
+
+    // -----------------------------------------------------------------------
+    // Renderer — React component registered as a presentation block renderer
+    // Resolved by presentation parser blocks via RegistryEngine 'renderers' domain.
+    // Default export: React component function
+    // -----------------------------------------------------------------------
+    export interface Renderer extends BaseIdentity {
+        /** Semantic label for what this renderer displays */
+        react_behavior: string;
+        /** Data type(s) this renderer is designed to handle (e.g. 'tool_result', 'file_list') */
+        input_types?: string[];
+        /** Presentation format hints this renderer supports (e.g. 'list', 'table', 'card', 'markdown') */
+        supported_formats?: ('list' | 'table' | 'card' | 'markdown' | string)[];
+        /** Whether this renderer can render partial / streaming data */
+        supports_partial?: boolean;
     }
 }

@@ -40,47 +40,85 @@ class EventEngineSingleton {
         };
     }
 
+    private normalizeInteraction(interaction: Interaction): Interaction {
+        const parentProcessUidFromMemory =
+            typeof interaction.preallocated_memory?.parent_process_uid === 'string'
+                ? interaction.preallocated_memory.parent_process_uid
+                : undefined;
+        const effectiveProcessUid = interaction.process_uid ?? parentProcessUidFromMemory;
+
+        const normalizedPreallocatedMemory: Record<string, unknown> = {
+            ...(interaction.preallocated_memory || {}),
+        };
+        if (!normalizedPreallocatedMemory.parent_process_uid && effectiveProcessUid) {
+            normalizedPreallocatedMemory.parent_process_uid = effectiveProcessUid;
+        }
+
+        return {
+            ...interaction,
+            process_uid: effectiveProcessUid,
+            preallocated_memory: normalizedPreallocatedMemory,
+        };
+    }
+
+    emitWithParent(parentProcessUid: string | undefined, interaction: Interaction) {
+        const normalized: Interaction = {
+            ...interaction,
+            process_uid: interaction.process_uid ?? parentProcessUid,
+            preallocated_memory: {
+                ...(interaction.preallocated_memory || {}),
+                ...(interaction.preallocated_memory?.parent_process_uid
+                    ? {}
+                    : parentProcessUid
+                        ? { parent_process_uid: parentProcessUid }
+                        : {}),
+            },
+        };
+        this.emit(normalized);
+    }
+
     /**
      * A React Component (The Waiter) or Gateway "emits" an interaction.
      * This follows the Unified Lifecycle: Ingestion -> Validation -> Allocation.
      */
     emit(interaction: Interaction) {
-        this.logEvent(interaction, 'emitted');
+        const normalized = this.normalizeInteraction(interaction);
+        this.logEvent(normalized, 'emitted');
 
         // --- PHASE 2: INGESTION & VALIDATION ---
 
         // Standard routing logic for other actions
-        const specificRouteKey = interaction.sub_action 
-            ? `${interaction.action}:${interaction.sub_action}`
-            : interaction.action;
+        const specificRouteKey = normalized.sub_action
+            ? `${normalized.action}:${normalized.sub_action}`
+            : normalized.action;
             
         const specificHandlers = this.routes.get(specificRouteKey) || [];
         const broadHandlers = specificRouteKey !== interaction.action // Avoid duplicate if no sub_action
-            ? (this.routes.get(interaction.action) || []) 
+            ? (this.routes.get(normalized.action) || [])
             : [];
             
         const allHandlers = [...specificHandlers, ...broadHandlers];
 
         if (allHandlers.length === 0) {
-            console.warn(`[EventBus] No process is listening to action route: ${interaction.action} or ${specificRouteKey}`);
-            this.logEvent(interaction, 'dropped');
+            console.warn(`[EventBus] No process is listening to action route: ${normalized.action} or ${specificRouteKey}`);
+            this.logEvent(normalized, 'dropped');
             return;
         }
 
-        this.logEvent(interaction, 'routed');
+        this.logEvent(normalized, 'routed');
 
         // Construct the Unified Handler Argument
         const coreArgs: CoreEngineHandlerArgs<any> = {
-            payload: interaction.payload,
-            preallocated_memory: interaction.preallocated_memory || {},
+            payload: normalized.payload,
+            preallocated_memory: (normalized.preallocated_memory || {}) as Record<string, any>,
             source: {
-                window_uid: interaction.window_uid,
-                widget_uid: interaction.widget_uid,
-                process_uid: interaction.process_uid,
-                component_uid: interaction.component_uid
+                window_uid: normalized.window_uid,
+                widget_uid: normalized.widget_uid,
+                process_uid: normalized.process_uid,
+                component_uid: normalized.component_uid,
             },
-            action: interaction.action,
-            sub_action: interaction.sub_action
+            action: normalized.action,
+            sub_action: normalized.sub_action,
         };
 
         // Fire and forget! (Async execution)
@@ -89,10 +127,10 @@ class EventEngineSingleton {
                 // Pass the unified coreArgs instead of raw interaction
                 const result = handler(coreArgs);
                 Promise.resolve(result).catch((err: any) =>
-                    console.error(`[EventBus] Process handler crashed on route ${interaction.action}:`, err)
+                    console.error(`[EventBus] Process handler crashed on route ${normalized.action}:`, err)
                 );
             } catch (err) {
-                console.error(`[EventBus] Sync Process handler crashed on route ${interaction.action}:`, err);
+                console.error(`[EventBus] Sync Process handler crashed on route ${normalized.action}:`, err);
             }
         });
     }
