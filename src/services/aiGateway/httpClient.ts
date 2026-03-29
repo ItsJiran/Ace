@@ -228,6 +228,7 @@ export async function sendToSession(
                 chunk,
                 replyToRamKey,
                 parserProcessUid ?? ownerProcessUid,
+                metadata?.prompt_turn_id,
             );
             if (parseOutcome.interrupted) {
                 interrupted = true;

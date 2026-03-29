@@ -1,8 +1,10 @@
 import { EventBus } from '#/services/eventEngine';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
+import { TurnRendererEngine } from '#/services/turnRendererEngine';
 import type {
     ParserBlockHandlerContext,
     ParserBlockRuntime,
+    PushRendererInput,
 } from '#/schemas/parser';
 import type { DispatchBlockInput, EmitSessionResultInput } from './types';
 
@@ -20,7 +22,7 @@ export class ParserBlockDispatchService {
     }
 
     dispatchParsedBlock(input: DispatchBlockInput): boolean {
-        const { tag, body, payload_json, payload_parse_error, isComplete, result, sessionId, processUid } = input;
+        const { tag, body, payload_json, payload_parse_error, isComplete, result, sessionId, processUid, turnId } = input;
         const blockId = this.deps.nextBlockId(sessionId);
         let normalizedPayload = payload_json;
 
@@ -81,6 +83,7 @@ export class ParserBlockDispatchService {
             result,
             session_id: sessionId,
             block_id: blockId,
+            turn_id: turnId,
             emit_result: (payload) => {
                 this.deps.emitSessionResult({
                     sessionId,
@@ -93,6 +96,16 @@ export class ParserBlockDispatchService {
                     },
                 });
             },
+            push_renderer: turnId
+                ? (input: PushRendererInput) => {
+                    return TurnRendererEngine.pushRenderer(turnId, {
+                        renderer_slug: input.renderer_slug,
+                        package_ref: input.package_ref,
+                        props: input.props,
+                        status: input.status,
+                    });
+                }
+                : undefined,
             request_interrupt: (reason?: string) => {
                 result.interrupt_requested = true;
                 if (reason && reason.trim().length > 0) {

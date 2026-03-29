@@ -24,7 +24,6 @@ describe('AI Stream Parser (Fault-Tolerant)', () => {
             '/src/core/packages/system/parsers/StorageBlock.ts': await import('#/core/packages/system/parsers/StorageBlock'),
             '/src/core/packages/system/parsers/HistorySummaryPromptBlock.ts': await import('#/core/packages/system/parsers/HistorySummaryPromptBlock'),
             '/src/core/packages/system/parsers/HistorySummaryResponseBlock.ts': await import('#/core/packages/system/parsers/HistorySummaryResponseBlock'),
-            '/src/core/packages/system/parsers/PresentationBlock.ts': await import('#/core/packages/system/parsers/PresentationBlock'),
         });
     });
 
@@ -319,27 +318,6 @@ Saya bantu?
             expect(contextBlock.action).toBe('retrieve');
             expect(contextBlock.memory_key).toBe('system:ai_context_rag:payload:ctxref-123');
             expect(contextBlock.result_memory_uid).toBe('system:session:test:ctx_result:1');
-        }
-    });
-
-    it('should parse presentation block with component reference', () => {
-        const streamChunk = `
-<presentation>
-{"package_ref":"itsjiran/ace-system","component_slug":"ai_output_list","memory_uid":"system:session:test:tool_result:1","format":"list","props":{"title":"Results"}}
-</presentation>
-`;
-
-        const result = parseAIStreamChunk(streamChunk);
-        const presentationBlock = result.blocks.find((b) => b.block_slug === 'presentation');
-
-        expect(presentationBlock).toBeDefined();
-        if (presentationBlock && presentationBlock.block_slug === 'presentation') {
-            expect(presentationBlock.is_complete).toBe(true);
-            expect(presentationBlock.package_ref).toBe('itsjiran/ace-system');
-            expect(presentationBlock.component_slug).toBe('ai_output_list');
-            expect(presentationBlock.memory_uid).toBe('system:session:test:tool_result:1');
-            expect(presentationBlock.format).toBe('list');
-            expect((presentationBlock.props as Record<string, unknown>)?.title).toBe('Results');
         }
     });
 

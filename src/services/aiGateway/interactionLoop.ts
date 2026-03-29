@@ -3,6 +3,7 @@ import { StorageEngine } from '../storageEngine';
 import { ParserEngine } from '../parserEngine';
 import { ProcessEngine } from '../processEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
+import { TurnRendererEngine } from '../turnRendererEngine';
 import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
 import { AIConfigManager } from './configManager';
 import { HealthProbe } from './healthProbe';
@@ -186,7 +187,6 @@ function buildActionContinuationPrompt(input: {
     const resultMemoryUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
     const packageRef = typeof payload.package_ref === 'string' ? payload.package_ref : undefined;
     const toolSlug = typeof payload.tool_slug === 'string' ? payload.tool_slug : undefined;
-    const presentationComponentSlug = resolvePresentationComponentSlug(action, blockType);
 
     const feedbackMemoryKey = upsertActionFeedbackContextMemory({
         sessionId,
@@ -217,37 +217,16 @@ function buildActionContinuationPrompt(input: {
         '',
         'System feedback: the previous response requested a parser action block and the runtime has completed it.',
         'IMPORTANT: tool output is stored in memory pointers. Do not inline raw tool payload into prose.',
-        'Use presentation blocks to render memory-backed results.',
         '',
         'Action feedback envelope:',
         JSON.stringify(feedbackPacket, null, 2),
         '',
         'Instruction:',
         '- Continue the conversation based on action feedback + memory pointers.',
-        '- If user needs tool output, emit a <presentation> block with memory_uid = result_memory_uid.',
-        `- Recommended component_slug for this action: "${presentationComponentSlug}".`,
         '- Do not paste full tool result JSON/text directly into assistant prose.',
         '- If another action block is required, emit a valid <tool> or <context> block.',
         '- If the task is complete, answer the user directly without another action block.',
-        '',
-        'Presentation template:',
-        '<presentation>',
-        JSON.stringify({
-            package_ref: 'itsjiran/ace-system',
-            component_slug: presentationComponentSlug,
-            memory_uid: resultMemoryUid || '<result_memory_uid>',
-            format: action === 'view_schema' ? 'table' : 'list',
-        }),
-        '</presentation>',
     ].join('\n');
-}
-
-function resolvePresentationComponentSlug(action: string, blockType: string): string {
-    if (blockType === 'tool') {
-        if (action === 'view_schema') return 'ai_data_table';
-        if (action === 'list') return 'ai_output_list';
-    }
-    return 'ai_output_list';
 }
 
 function upsertActionFeedbackContextMemory(input: {
@@ -381,6 +360,7 @@ export async function executeSessionInteractionLoop(input: {
         : [];
 
     const promptTurnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    TurnRendererEngine.initTurn(promptTurnId, 'assistant');
     const currentTurn: ResponseTurnSnapshot = {
         turn_id: promptTurnId,
         original_prompt: prompt,
@@ -451,6 +431,7 @@ export async function executeSessionInteractionLoop(input: {
                 finished_at: Date.now(),
             });
             ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.DONE);
+            TurnRendererEngine.finalizeTurn(promptTurnId);
             return;
         }
 
@@ -472,6 +453,7 @@ export async function executeSessionInteractionLoop(input: {
                 reason: 'tool_feedback_loop_turn_cap_reached',
             });
             ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.FAILED);
+            TurnRendererEngine.finalizeTurn(promptTurnId);
             return;
         }
 
@@ -494,6 +476,7 @@ export async function executeSessionInteractionLoop(input: {
                 reason: 'tool_feedback_result_timeout',
             });
             ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.FAILED);
+            TurnRendererEngine.finalizeTurn(promptTurnId);
             return;
         }
 
@@ -519,6 +502,7 @@ export async function executeSessionInteractionLoop(input: {
                 reason: 'tool_feedback_payload_unavailable',
             });
             ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.FAILED);
+            TurnRendererEngine.finalizeTurn(promptTurnId);
             return;
         }
 

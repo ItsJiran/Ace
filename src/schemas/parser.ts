@@ -136,6 +136,13 @@ export interface BlockProtocolSchema {
  *    observability channels.
  * 9. `request_interrupt()` asks the gateway loop to pause/stop after this block.
  */
+export interface PushRendererInput {
+    renderer_slug: string;
+    package_ref?: string;
+    props?: Record<string, unknown>;
+    status?: 'streaming' | 'completed' | 'error';
+}
+
 export interface ParserBlockHandlerContext {
     tag: string;
     body: string;
@@ -145,8 +152,10 @@ export interface ParserBlockHandlerContext {
     result: AIParseResult;
     session_id?: string;
     block_id?: number;
+    turn_id?: string;
     emit_result?: (payload: ParserEmitPayload) => void;
     request_interrupt?: (reason?: string) => void;
+    push_renderer?: (input: PushRendererInput) => number;
 }
 
 /**

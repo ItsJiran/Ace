@@ -108,7 +108,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt }) => {
+export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt, push_renderer }) => {
     const block: ToolBlock = {
         block_slug: 'tool',
         action: normalizeAction(payload_json?.action),
@@ -135,6 +135,18 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
         package_ref: block.package_ref,
         memory_uid: block.memory_uid,
         result_memory_uid: block.result_memory_uid,
+    });
+
+    // Push tool status renderer directly into the turn renderer memory.
+    // This prevents token waste—handler determines visual directly via push_renderer.
+    push_renderer?.({
+        renderer_slug: 'tool-renderer',
+        props: {
+            tool_slug: block.tool_slug || 'unknown',
+            action: block.action || 'unknown',
+            status: block.status || 'pending',
+            package_ref: block.package_ref,
+        },
     });
 
     // Request stream interrupt after tool block is complete.

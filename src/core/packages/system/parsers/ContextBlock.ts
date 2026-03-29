@@ -90,7 +90,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt, session_id }) => {
+export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt, push_renderer, session_id }) => {
     const json = payload_json;
     const action = normalizeAction(json?.action);
     const memoryKey = typeof json?.memory_key === 'string' ? json.memory_key.trim() || undefined : undefined;
@@ -121,6 +121,17 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
             result_memory_uid: resultMemoryUid,
             session_id,
         });
+        
+        // Push context retrieve renderer directly into the turn renderer memory.
+        push_renderer?.({
+            renderer_slug: 'context-renderer',
+            props: {
+                action: 'retrieve',
+                status: 'running',
+                memory_key: memoryKey,
+            },
+        });
+        
         request_interrupt?.('context_retrieve_requested');
     } else if (action === 'store') {
         const title = typeof json?.title === 'string' ? json.title : undefined;
@@ -136,7 +147,26 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
             payload: json?.payload,
             session_id,
         });
+        
+        // Push context store renderer directly into the turn renderer memory.
+        push_renderer?.({
+            renderer_slug: 'context-renderer',
+            props: {
+                action: 'store',
+                status: 'running',
+            },
+        });
+        
         request_interrupt?.('context_store_requested');
+    } else {
+        // 'update' action: stream handler handles it directly via AIContextEngine.ingestContextBlock
+        // Still emit status indicator for visibility
+        push_renderer?.({
+            renderer_slug: 'context-renderer',
+            props: {
+                action: 'update',
+                status: 'completed',
+            },
+        });
     }
-    // 'update' action: stream handler handles it directly via AIContextEngine.ingestContextBlock
 };

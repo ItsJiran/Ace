@@ -30,6 +30,7 @@ export interface DispatchBlockInput {
     result: AIParseResult;
     sessionId?: string;
     processUid?: string;
+    turnId?: string;
 }
 
 export interface EmitSessionResultInput {

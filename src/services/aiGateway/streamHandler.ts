@@ -1,7 +1,6 @@
 import { StorageEngine } from '../storageEngine';
 import { ProcessEngine } from '../processEngine';
 import { EventBus } from '../eventEngine';
-import { RegistryEngine } from '../registryEngine';
 import { AIContextEngine } from '../aiContextEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { ParserEngine } from '../parserEngine';
@@ -342,6 +341,7 @@ export function handleSessionStreamChunk(
     chunk: string,
     ramKey: string,
     processUid?: string,
+    turnId?: string,
 ): { interrupted: boolean; reason?: string; mode?: ParserInterruptMode } {
     // Prepend any carryover from an unclosed fenced block in the previous chunk
     const incomingCarryover = session.activeEventBuffer;
@@ -369,6 +369,7 @@ export function handleSessionStreamChunk(
             processUid,
             rawChunk: chunk,
             incomingCarryover,
+            turnId,
         });
     } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -714,54 +715,6 @@ export function handleSessionStreamChunk(
             // `carryoverBuffer`, we only need to track session state flags.
             session.isInsideEventBlock = true;
         }
-    });
-
-    blocks.forEach((block) => {
-        if (block.block_slug !== 'presentation' || !block.is_complete) return;
-
-        const payload = (block.payload_json ?? {}) as Record<string, unknown>;
-        const componentSlug = typeof payload.component_slug === 'string' ? payload.component_slug.trim() : '';
-        if (!componentSlug) return;
-
-        const memoryUid = typeof payload.memory_uid === 'string'
-            ? payload.memory_uid
-            : typeof payload.memory_key === 'string'
-                ? payload.memory_key
-                : undefined;
-        const memoryKey = typeof payload.memory_key === 'string' ? payload.memory_key : undefined;
-        const format = typeof payload.format === 'string' ? payload.format : undefined;
-        const props = payload.props && typeof payload.props === 'object' && !Array.isArray(payload.props)
-            ? payload.props as Record<string, unknown>
-            : undefined;
-        const packageRef =
-            typeof payload.package_ref === 'string' && payload.package_ref.trim().length > 0
-                ? payload.package_ref.trim()
-                : 'itsjiran/ace-system';
-        const componentRef = `${packageRef}:components:${componentSlug}`;
-        const resolvedComponent = RegistryEngine.resolveEntry(componentRef);
-
-        EventBus.emit({
-            event_type: 'interaction',
-            action: AI_GATEWAY_ROUTE_ACTION.PARSER_RESULT,
-            sub_action: AI_GATEWAY_ROUTE_SUB_ACTION.SESSION,
-            process_uid: processUid,
-            payload: {
-                session_id: session.sessionId,
-                parsed_tag: 'presentation',
-                at: Date.now(),
-                event_name: 'parser_handler_result',
-                block_slug: 'presentation',
-                package_ref: packageRef,
-                component_ref: componentRef,
-                component_slug: componentSlug,
-                component_resolved: Boolean(resolvedComponent),
-                memory_uid: memoryUid,
-                memory_key: memoryKey,
-                format,
-                props,
-                payload,
-            },
-        });
     });
 
     blocks.forEach((block, index) => {

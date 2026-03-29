@@ -1,4 +1,5 @@
 import { ParserEngine } from '#/services/parserEngine';
+import { TurnRendererEngine } from '#/services/turnRendererEngine';
 import type {
     AIParseResult,
 } from '#/schemas/parser';
@@ -41,6 +42,7 @@ export interface ParseAIStreamOptions {
     processUid?: string;
     rawChunk?: string;
     incomingCarryover?: string;
+    turnId?: string;
 }
 
 const STRUCTURED_TAG_NAME_PATTERN = '[a-z_][a-z0-9_-]*(?::[a-z_][a-z0-9_-]*)?';
@@ -231,6 +233,7 @@ function extractStructuredBlock(
             result,
             sessionId: options?.sessionId,
             processUid: options?.processUid,
+            turnId: options?.turnId,
         });
         if (handled) {
             return;
@@ -289,6 +292,19 @@ function getNextTokenSequence(sessionId?: string): number {
     return next;
 }
 
+function pushParagraphBlock(result: AIParseResult, text: string, turnId?: string) {
+    result.blocks.push({
+        block_slug: 'paragraph',
+        payload_raw: text,
+        payload_json: { content: text },
+        is_complete: true,
+    });
+    result.textToPrint += text;
+    if (turnId) {
+        TurnRendererEngine.pushOrUpdateParagraph(turnId, text, 'streaming');
+    }
+}
+
 export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions): AIParseResult {
     const result: AIParseResult = {
         blocks: [],
@@ -325,13 +341,7 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
             if (partialStart !== -1) {
                 const text = chunk.slice(cursor, partialStart);
                 if (text) {
-                    result.blocks.push({
-                        block_slug: 'paragraph',
-                        payload_raw: text,
-                        payload_json: { content: text },
-                        is_complete: true,
-                    });
-                    result.textToPrint += text;
+                    pushParagraphBlock(result, text, options?.turnId);
                 }
                 result.carryoverBuffer = chunk.slice(partialStart);
                 break;
@@ -339,39 +349,21 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
 
             const text = chunk.slice(cursor);
             if (text) {
-                result.blocks.push({
-                    block_slug: 'paragraph',
-                    payload_raw: text,
-                    payload_json: { content: text },
-                    is_complete: true,
-                });
-                result.textToPrint += text;
+                pushParagraphBlock(result, text, options?.turnId);
             }
             break;
         }
 
         if (structureStart > cursor) {
             const text = chunk.slice(cursor, structureStart);
-            result.blocks.push({
-                block_slug: 'paragraph',
-                payload_raw: text,
-                payload_json: { content: text },
-                is_complete: true,
-            });
-            result.textToPrint += text;
+            pushParagraphBlock(result, text, options?.turnId);
         }
 
         if (tagStart !== -1 && tagStart === structureStart) {
             const openTag = readStructuredTagAt(chunk, tagStart);
             if (!openTag) {
                 const text = chunk.slice(structureStart, structureStart + 1);
-                result.blocks.push({
-                    block_slug: 'paragraph',
-                    payload_raw: text,
-                    payload_json: { content: text },
-                    is_complete: true,
-                });
-                result.textToPrint += text;
+                pushParagraphBlock(result, text, options?.turnId);
                 cursor = structureStart + 1;
                 continue;
             }

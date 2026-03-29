@@ -1,8 +1,5 @@
-import { useMemo } from 'react';
-import type { BaseBlock } from '#/schemas/parser';
 import type { ChatMessage, ParserBatchMemory } from './types';
-import { PresentationRenderer } from './PresentationRenderer';
-import { getPresentationPayload } from '#/core/packages/system/parsers/PresentationBlock';
+import { TurnRenderer } from './TurnRenderer';
 
 interface ChatMessagesProps {
     messages: ChatMessage[];
@@ -12,17 +9,6 @@ interface ChatMessagesProps {
 }
 
 export function ChatMessages({ messages, responseMemory, activeTurnId, bottomRef }: ChatMessagesProps) {
-    // Live presentation blocks from the currently streaming response memory.
-    // Only used for the active turn — past turns use per-message snapshotted blocks.
-    const livePresentationBlocks = useMemo(() => {
-        if (!activeTurnId) return [];
-        const blocks = responseMemory?.blocks || [];
-        return blocks.filter((block) => {
-            if (block.block_slug !== 'presentation' || !block.is_complete) return false;
-            const payload = getPresentationPayload(block as BaseBlock);
-            return Boolean(payload?.component_slug);
-        });
-    }, [responseMemory?.blocks, activeTurnId]);
 
     return (
         <>
@@ -33,16 +19,6 @@ export function ChatMessages({ messages, responseMemory, activeTurnId, bottomRef
             )}
 
             {messages.map((msg) => {
-                // Resolve which presentation blocks to display for this message:
-                // - msg.blocks: snapshotted blocks baked in when iteration completed/was superseded
-                // - livePresentationBlocks: live blocks from responseMemory for the active streaming turn
-                const presentationToRender: BaseBlock[] =
-                    msg.blocks && msg.blocks.length > 0
-                        ? msg.blocks
-                        : msg.turnId === activeTurnId
-                            ? livePresentationBlocks as BaseBlock[]
-                            : [];
-
                 return (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className="w-full">
@@ -57,12 +33,8 @@ export function ChatMessages({ messages, responseMemory, activeTurnId, bottomRef
                                     </div>
                                 )}
                             </div>
-                            {presentationToRender.length > 0 && (
-                                <div className="mt-2 space-y-2">
-                                    {presentationToRender.map((block, idx) => (
-                                        <PresentationRenderer key={`pblock-${msg.id}-${idx}`} block={block} />
-                                    ))}
-                                </div>
+                            {msg.turnId && (
+                                <TurnRenderer turnId={msg.turnId} />
                             )}
                         </div>
                     </div>

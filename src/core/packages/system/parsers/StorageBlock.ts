@@ -136,7 +136,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt }) => {
+export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt, push_renderer }) => {
     const block = extractStorageBlock(body, payload_json, payload_parse_error, isComplete);
     result.blocks.push(block);
 
@@ -149,6 +149,17 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
         status: block.status,
         memory_uid: block.memory_uid,
         result_memory_uid: block.result_memory_uid,
+    });
+
+    // Push storage status renderer directly into the turn renderer memory.
+    // This prevents token waste—handler determines visual directly via push_renderer.
+    push_renderer?.({
+        renderer_slug: 'storage-renderer',
+        props: {
+            action: block.action || 'unknown',
+            status: block.status || 'pending',
+            memory_path: block.memory_uid,
+        },
     });
 
     request_interrupt?.('storage_action_requested');

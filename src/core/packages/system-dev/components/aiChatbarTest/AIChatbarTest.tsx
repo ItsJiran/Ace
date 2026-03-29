@@ -64,16 +64,11 @@ export default function AIChatbarTest() {
         if (currentFeedbackTurn > feedbackLoopTurnRef.current) {
             feedbackLoopTurnRef.current = currentFeedbackTurn;
 
-            // Snapshot any completed presentation blocks into the current message.
-            const snapBlocks = (responseMemory.blocks || []).filter(
-                (b) => b.block_slug === 'presentation' && b.is_complete,
-            );
             setMessages((prev) =>
                 prev.map((msg) => {
                     if (msg.turnId !== activeTurnId || msg.role !== 'assistant') return msg;
                     return {
                         ...msg,
-                        ...(snapBlocks.length > 0 ? { blocks: snapBlocks } : {}),
                         status: 'tool_pending',
                     };
                 }),
@@ -108,18 +103,6 @@ export default function AIChatbarTest() {
         }));
 
         if (responseMemory.status === 'completed' || responseMemory.status === 'error') {
-            // Snapshot final presentation blocks into the closing message.
-            const finalBlocks = (responseMemory.blocks || []).filter(
-                (b) => b.block_slug === 'presentation' && b.is_complete,
-            );
-            if (finalBlocks.length > 0) {
-                setMessages((prev) =>
-                    prev.map((msg) => {
-                        if (msg.turnId !== activeTurnId || msg.role !== 'assistant') return msg;
-                        return { ...msg, blocks: finalBlocks };
-                    }),
-                );
-            }
             feedbackLoopTurnRef.current = 0;
             setActiveTurnId(null);
             setActiveMemoryUid(IDLE_MEMORY_KEY);

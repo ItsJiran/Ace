@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { BaseBlock } from '#/schemas/parser';
 import { useAceMemory } from '#/hooks/useAceMemory';
-import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit, Copy, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit, Copy, Check, Layers } from 'lucide-react';
+import { TurnRendererEngine } from '#/services/turnRendererEngine';
+import type { TurnRendererEntry } from '#/services/turnRendererEngine';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 import { StorageEngine } from '#/services/storageEngine';
 import { AI_BLOCK_HANDLER_STATUS, AI_SESSION_STATUS } from '#/services/aiGateway/types';
@@ -296,7 +298,7 @@ const statusColor: Record<AISessionStatus, string> = {
 };
 
 function SessionDetailView({ session }: { session: SessionSnapshot }) {
-    const [activeTab, setActiveTab] = useState<'context' | 'history' | 'blocks' | 'response' | 'storage'>('context');
+    const [activeTab, setActiveTab] = useState<'context' | 'history' | 'blocks' | 'response' | 'storage' | 'renderers'>('context');
     const [selectedResponseTokenIndex, setSelectedResponseTokenIndex] = useState<number | null>(null);
     const [selectedResponseTurnId, setSelectedResponseTurnId] = useState<string | null>(null);
     const [selectedResponseAttemptIndex, setSelectedResponseAttemptIndex] = useState<number | null>(null);
@@ -562,6 +564,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                      { id: 'blocks', icon: Blocks, label: 'Blocks' },
                      { id: 'response', icon: FileText, label: 'Response' },
                      { id: 'storage', icon: Database, label: 'Storage' },
+                     { id: 'renderers', icon: Layers, label: 'Renderers' },
                 ].map((tab) => (
                     <button
                         key={tab.id}
@@ -1089,6 +1092,64 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                             </div>
                         </div>
                      </div>
+                )}
+
+                {activeTab === 'renderers' && (
+                    <div className="space-y-4 text-xs">
+                        {responseTurns.length === 0 && (
+                            <div className="text-zinc-600 italic">No response turns available.</div>
+                        )}
+                        {responseTurns.map((turn) => {
+                            const turnRenderers = TurnRendererEngine.getRenderers(turn.turn_id);
+                            const entries: TurnRendererEntry[] = turnRenderers?.renderers ?? [];
+                            const isActive = responseMemory?.active_response_turn_id === turn.turn_id;
+
+                            return (
+                                <div key={turn.turn_id} className="border border-zinc-800 rounded bg-zinc-900/20 p-3">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className={`text-[10px] uppercase font-bold ${isActive ? 'text-amber-400' : 'text-zinc-500'}`}>
+                                            Turn {isActive && '(active)'}
+                                        </span>
+                                        <span className="font-mono text-[10px] text-zinc-400 select-all truncate flex-1">{turn.turn_id}</span>
+                                        {turnRenderers && (
+                                            <span className="text-[10px] text-zinc-500">
+                                                {entries.length} renderer{entries.length !== 1 ? 's' : ''}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {!turnRenderers && (
+                                        <div className="text-zinc-600 italic text-[10px] px-1">No renderer memory initialized for this turn.</div>
+                                    )}
+
+                                    {entries.length > 0 && (
+                                        <div className="space-y-1.5 mt-1">
+                                            {entries.map((entry) => {
+                                                const statusColor =
+                                                    entry.status === 'completed' ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30' :
+                                                    entry.status === 'streaming' ? 'text-amber-400 bg-amber-950/20 border-amber-900/30' :
+                                                    'text-red-400 bg-red-950/20 border-red-900/30';
+
+                                                return (
+                                                    <div key={entry.index} className={`flex items-center gap-2 font-mono text-[10px] px-2 py-1.5 rounded border ${statusColor}`}>
+                                                        <Layers size={10} />
+                                                        <span className="font-bold">{entry.renderer_slug}</span>
+                                                        <span className="text-zinc-500">#{entry.index}</span>
+                                                        <span className={`ml-auto text-[9px] uppercase font-bold ${statusColor.split(' ')[0]}`}>{entry.status}</span>
+                                                        <span className="text-zinc-600 text-[9px]">{new Date(entry.pushed_at).toLocaleTimeString()}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {entries.length === 0 && turnRenderers && (
+                                        <div className="text-zinc-600 italic text-[10px] px-1">Turn initialized but no renderers pushed yet.</div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
                 )}
             </div>
         </div>
