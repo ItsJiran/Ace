@@ -5,15 +5,14 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit, Copy, Check } from 'lucide-react';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 import { StorageEngine } from '#/services/storageEngine';
-
-type SessionStatus = 'idle' | 'connected' | 'streaming' | 'error';
-type SDKProvider = 'openai' | 'google' | 'anthropic';
+import { AI_BLOCK_HANDLER_STATUS, AI_SESSION_STATUS } from '#/services/aiGateway/types';
+import type { AIBlockHandlerStatus, AISessionStatus, SDKProvider } from '#/services/aiGateway/types';
 
 interface SessionSnapshot {
     sessionId: string;
     sdk: SDKProvider;
     model: string;
-    status: SessionStatus;
+    status: AISessionStatus;
     activeOutputRamKey?: string;
     isInsideEventBlock: boolean;
     activeEventBufferLength: number;
@@ -58,7 +57,7 @@ interface SessionSnapshot {
         violations: string[];
     };
     block_handler_state?: {
-        status: 'idle' | 'running' | 'parsing' | 'failed';
+        status: AIBlockHandlerStatus;
         block_slug?: string;
         action?: string;
         event_name?: string;
@@ -289,11 +288,11 @@ export const registry: AceRegistryType.Component = {
     react_behavior: 'ai_session_monitor',
 };
 
-const statusColor: Record<SessionStatus, string> = {
-    idle: 'text-zinc-600',
-    connected: 'text-emerald-400 bg-emerald-950/30 border-emerald-500/20',
-    streaming: 'text-cyan-400 bg-cyan-950/30 border-cyan-500/20 animate-pulse',
-    error: 'text-red-400 bg-red-950/30 border-red-500/20',
+const statusColor: Record<AISessionStatus, string> = {
+    [AI_SESSION_STATUS.IDLE]: 'text-zinc-600',
+    [AI_SESSION_STATUS.CONNECTED]: 'text-emerald-400 bg-emerald-950/30 border-emerald-500/20',
+    [AI_SESSION_STATUS.STREAMING]: 'text-cyan-400 bg-cyan-950/30 border-cyan-500/20 animate-pulse',
+    [AI_SESSION_STATUS.ERROR]: 'text-red-400 bg-red-950/30 border-red-500/20',
 };
 
 function SessionDetailView({ session }: { session: SessionSnapshot }) {
@@ -311,10 +310,56 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
     }, [session.activeOutputRamKey]);
     
     const responseMemory = useAceMemory<ResponseMemorySnapshot>(cachedOutputKey || 'system:dev:ai_session_monitor:idle');
-    const parsedBlocks = responseMemory?.blocks || [];
-    const parserResults = responseMemory?.parser_handler_results || [];
-    const parserStops = responseMemory?.parser_stop_signals || [];
-    const tokenTraces = responseMemory?.parser_token_traces || [];
+
+    const responseTurns = useMemo(
+        () => Array.isArray(responseMemory?.response_turns) ? responseMemory.response_turns : [],
+        [responseMemory?.response_turns],
+    );
+
+    const activeResponseTurn = useMemo(() => {
+        if (responseTurns.length === 0) return undefined;
+        
+        // Priority 1: Use user-selected turn ID (sticky until explicitly changed)
+        if (selectedResponseTurnId) {
+            const selected = responseTurns.find((turn) => turn.turn_id === selectedResponseTurnId);
+            if (selected) return selected;
+        }
+        
+        // Priority 2: Use active turn from response memory if available
+        if (responseMemory?.active_response_turn_id) {
+            const active = responseTurns.find((turn) => turn.turn_id === responseMemory.active_response_turn_id);
+            if (active) return active;
+        }
+        
+        // Priority 3: Default to the last turn
+        return responseTurns[responseTurns.length - 1];
+    }, [responseTurns, selectedResponseTurnId, responseMemory?.active_response_turn_id]);
+
+    const activeResponseAttempt = useMemo(() => {
+        if (!activeResponseTurn || activeResponseTurn.attempts.length === 0) return undefined;
+        
+        // Priority 1: Use user-selected attempt index (sticky within this turn)
+        if (typeof selectedResponseAttemptIndex === 'number') {
+            const selected = activeResponseTurn.attempts.find((attempt) => attempt.attempt_index === selectedResponseAttemptIndex);
+            if (selected) return selected;
+        }
+        
+        // Priority 2: Use active attempt from response memory if available
+        if (typeof responseMemory?.active_response_attempt_index === 'number') {
+            const active = activeResponseTurn.attempts.find((attempt) => attempt.attempt_index === responseMemory.active_response_attempt_index);
+            if (active) return active;
+        }
+        
+        // Priority 3: Default to the last attempt
+        return activeResponseTurn.attempts[activeResponseTurn.attempts.length - 1];
+    }, [activeResponseTurn, selectedResponseAttemptIndex, responseMemory?.active_response_attempt_index]);
+
+    const responseView = activeResponseAttempt ?? responseMemory;
+
+    const parsedBlocks = responseView?.blocks || [];
+    const parserResults = responseView?.parser_handler_results || [];
+    const parserStops = responseView?.parser_stop_signals || [];
+    const tokenTraces = responseView?.parser_token_traces || [];
     const effectiveTokenTraces = useMemo(() => {
         if (tokenTraces.length > 0) return tokenTraces;
 
@@ -390,52 +435,6 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
         [effectiveTokenTraces],
     );
 
-    const responseTurns = useMemo(
-        () => Array.isArray(responseMemory?.response_turns) ? responseMemory.response_turns : [],
-        [responseMemory?.response_turns],
-    );
-
-    const activeResponseTurn = useMemo(() => {
-        if (responseTurns.length === 0) return undefined;
-        
-        // Priority 1: Use user-selected turn ID (sticky until explicitly changed)
-        if (selectedResponseTurnId) {
-            const selected = responseTurns.find((turn) => turn.turn_id === selectedResponseTurnId);
-            if (selected) return selected;
-            // If selected turn no longer exists, clear the selection to allow auto-update
-        }
-        
-        // Priority 2: Use active turn from response memory if available
-        if (responseMemory?.active_response_turn_id) {
-            const active = responseTurns.find((turn) => turn.turn_id === responseMemory.active_response_turn_id);
-            if (active) return active;
-        }
-        
-        // Priority 3: Default to the last turn
-        return responseTurns[responseTurns.length - 1];
-    }, [responseTurns, selectedResponseTurnId, responseMemory?.active_response_turn_id]);
-
-    const activeResponseAttempt = useMemo(() => {
-        if (!activeResponseTurn || activeResponseTurn.attempts.length === 0) return undefined;
-        
-        // Priority 1: Use user-selected attempt index (sticky within this turn)
-        if (typeof selectedResponseAttemptIndex === 'number') {
-            const selected = activeResponseTurn.attempts.find((attempt) => attempt.attempt_index === selectedResponseAttemptIndex);
-            if (selected) return selected;
-        }
-        
-        // Priority 2: Use active attempt from response memory if available
-        if (typeof responseMemory?.active_response_attempt_index === 'number') {
-            const active = activeResponseTurn.attempts.find((attempt) => attempt.attempt_index === responseMemory.active_response_attempt_index);
-            if (active) return active;
-        }
-        
-        // Priority 3: Default to the last attempt
-        return activeResponseTurn.attempts[activeResponseTurn.attempts.length - 1];
-    }, [activeResponseTurn, selectedResponseAttemptIndex, responseMemory?.active_response_attempt_index]);
-
-    const responseView = activeResponseAttempt ?? responseMemory;
-
     const responseViewTokenTraces = useMemo(() => {
         const traces = responseView?.parser_token_traces;
         return Array.isArray(traces)
@@ -463,7 +462,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
     }, [responseViewTokenTraces]);
 
     const blockLifecycleTimeline = useMemo(() => {
-        const lifecycleEventNames = new Set([
+        const lifecycleEventNames = new Set<string>([
             PARSER_RUNTIME_EVENT.BLOCK_DETECTED,
             PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_FOUND,
             PARSER_RUNTIME_EVENT.BLOCK_REGISTRY_MISSING,
@@ -799,8 +798,8 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                         <div className="bg-zinc-900/80 px-3 py-1.5 text-[10px] text-zinc-400 border-b border-zinc-800 flex justify-between items-center gap-2">
                                             <span className="font-semibold text-zinc-300">{typeof block.block_slug === 'string' ? block.block_slug : '-'}</span>
                                             <div className="flex items-center gap-2">
-                                                {'action' in block && block.action ? <span className="text-zinc-500">{block.action}</span> : null}
-                                                {'status' in block && block.status ? <span className="font-mono opacity-70">{block.status}</span> : null}
+                                                {'action' in block && typeof block.action === 'string' ? <span className="text-zinc-500">{block.action}</span> : null}
+                                                {'status' in block && typeof block.status === 'string' ? <span className="font-mono opacity-70">{block.status}</span> : null}
                                             </div>
                                         </div>
                                         <pre className="p-3 text-[10px] text-zinc-400 font-mono overflow-auto max-h-[200px] leading-relaxed whitespace-pre-wrap">
@@ -1048,7 +1047,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                                         <div key={index} className="border border-zinc-800 rounded bg-zinc-900/30 overflow-hidden">
                                             <div className="px-3 py-1.5 text-[10px] bg-zinc-900/80 border-b border-zinc-800 text-zinc-400 flex justify-between">
                                                 <span className="font-semibold text-zinc-300">{typeof block.block_slug === 'string' ? block.block_slug : '-'}</span>
-                                                {'status' in block && block.status ? <span>{block.status}</span> : null}
+                                                {'status' in block && typeof block.status === 'string' ? <span>{block.status}</span> : null}
                                             </div>
                                             <pre className="p-3 text-[10px] text-zinc-400 overflow-auto max-h-[180px] whitespace-pre-wrap">{JSON.stringify(block, null, 2)}</pre>
                                         </div>
@@ -1248,11 +1247,11 @@ export default function AISessionMonitor({ windowUid }: { windowUid?: string } =
                                 <div className="flex gap-1.5 items-center">
                                     <span className="opacity-50">Handler</span>
                                     <span className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold ${
-                                        session.block_handler_state?.status === 'running'
+                                        session.block_handler_state?.status === AI_BLOCK_HANDLER_STATUS.RUNNING
                                             ? 'text-amber-300 bg-amber-950/30 border-amber-700/60'
-                                            : session.block_handler_state?.status === 'parsing'
+                                            : session.block_handler_state?.status === AI_BLOCK_HANDLER_STATUS.PARSING
                                                 ? 'text-cyan-300 bg-cyan-950/30 border-cyan-700/60'
-                                                : session.block_handler_state?.status === 'failed'
+                                                : session.block_handler_state?.status === AI_BLOCK_HANDLER_STATUS.FAILED
                                                     ? 'text-rose-300 bg-rose-950/30 border-rose-700/60'
                                                     : 'text-zinc-400 bg-zinc-900/50 border-zinc-700/50'
                                     }`}>

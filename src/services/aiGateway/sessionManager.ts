@@ -1,3 +1,4 @@
+import { AI_SESSION_STATUS } from './types';
 import type { AISession, AISessionSnapshot, SDKProvider } from './types';
 
 class AISessionManagerSingleton {
@@ -12,7 +13,7 @@ class AISessionManagerSingleton {
             model,
             activeEventBuffer: '',
             isInsideEventBlock: false,
-            status: 'connected',
+            status: AI_SESSION_STATUS.CONNECTED,
         };
 
         this.sessions.set(sessionId, session);

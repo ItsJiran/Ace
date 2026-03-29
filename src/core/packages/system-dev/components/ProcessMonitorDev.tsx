@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ProcessRecord } from '#/schemas/process';
+import { PROCESS_STATUS } from '#/schemas/process';
 
 export const registry: AceRegistryType.Component = {
     name: 'process_monitor_dev',
@@ -14,10 +15,10 @@ export default function ProcessMonitorDev() {
     const [endingProcessUid, setEndingProcessUid] = useState<string | null>(null);
 
     const isTerminalStatus = (status: ProcessRecord['status']) => {
-        return status === 'done'
-            || status === 'failed'
-            || status === 'terminated'
-            || status === 'cancelled';
+        return status === PROCESS_STATUS.DONE
+            || status === PROCESS_STATUS.FAILED
+            || status === PROCESS_STATUS.TERMINATED
+            || status === PROCESS_STATUS.CANCELLED;
     };
 
     const refresh = () => {
@@ -113,9 +114,9 @@ export default function ProcessMonitorDev() {
     }, [filtered]);
 
     const statusClass = (status: ProcessRecord['status']) => {
-        if (status === 'done') return 'text-emerald-300';
-        if (status === 'failed' || status === 'terminated' || status === 'cancelled') return 'text-rose-300';
-        if (status === 'running' || status === 'created' || status === 'waiting') return 'text-amber-300';
+        if (status === PROCESS_STATUS.DONE) return 'text-emerald-300';
+        if (status === PROCESS_STATUS.FAILED || status === PROCESS_STATUS.TERMINATED || status === PROCESS_STATUS.CANCELLED) return 'text-rose-300';
+        if (status === PROCESS_STATUS.RUNNING || status === PROCESS_STATUS.CREATED || status === PROCESS_STATUS.WAITING) return 'text-amber-300';
         return 'text-zinc-300';
     };
 

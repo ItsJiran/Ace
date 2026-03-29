@@ -1,5 +1,61 @@
 export type SDKProvider = 'openai' | 'google' | 'anthropic';
 
+export const AI_SESSION_STATUS = {
+    IDLE: 'idle',
+    CONNECTED: 'connected',
+    STREAMING: 'streaming',
+    ERROR: 'error',
+} as const;
+
+export type AISessionStatus = typeof AI_SESSION_STATUS[keyof typeof AI_SESSION_STATUS];
+
+export const AI_BLOCK_HANDLER_STATUS = {
+    IDLE: 'idle',
+    RUNNING: 'running',
+    PARSING: 'parsing',
+    FAILED: 'failed',
+} as const;
+
+export type AIBlockHandlerStatus = typeof AI_BLOCK_HANDLER_STATUS[keyof typeof AI_BLOCK_HANDLER_STATUS];
+
+export const AI_RESPONSE_STATUS = {
+    STREAMING: 'streaming',
+    RUNNING: 'running',
+    COMPLETED: 'completed',
+    INTERRUPTED: 'interrupted',
+    ERROR: 'error',
+    FAILED: 'failed',
+} as const;
+
+export type AIResponseStatus = typeof AI_RESPONSE_STATUS[keyof typeof AI_RESPONSE_STATUS];
+
+export const AI_GATEWAY_PROCESS_TYPE = {
+    SESSION: 'ai_gateway:session',
+    RESPONSE_TURN: 'ai_gateway:response_turn',
+    PARSER_STREAM: 'ai_gateway:parser_stream',
+} as const;
+
+export type AIGatewayProcessType = typeof AI_GATEWAY_PROCESS_TYPE[keyof typeof AI_GATEWAY_PROCESS_TYPE];
+
+export const AI_GATEWAY_ROUTE_ACTION = {
+    SEND_GATEWAY: 'send_gateway',
+    PARSER_RESULT: 'parser_result',
+    TOOL: 'tool',
+} as const;
+
+export const AI_GATEWAY_ROUTE_SUB_ACTION = {
+    SESSION: 'session',
+} as const;
+
+export const AI_FEEDBACK_LOOP_STATUS = {
+    NONE: 'none',
+    ACTIVE: 'active',
+    COMPLETED: 'completed',
+    INTERRUPTED: 'interrupted',
+} as const;
+
+export type AIFeedbackLoopStatus = typeof AI_FEEDBACK_LOOP_STATUS[keyof typeof AI_FEEDBACK_LOOP_STATUS];
+
 export interface AIRequestProtocolState {
     request_started_at: number;
     finished_at?: number;
@@ -39,7 +95,7 @@ export interface AISession {
     currentProtocolState?: AIRequestProtocolState;
     lastProtocolState?: AIRequestProtocolState;
 
-    status: 'idle' | 'connected' | 'streaming' | 'error';
+    status: AISessionStatus;
     termination_requested?: boolean;
     activeAbortController?: AbortController;
 }
@@ -74,7 +130,7 @@ export interface AISessionSnapshot {
     context_updated_at?: number;
     protocol_state?: AIRequestProtocolState;
     block_handler_state?: {
-        status: 'idle' | 'running' | 'parsing' | 'failed';
+        status: AIBlockHandlerStatus;
         block_slug?: string;
         action?: string;
         event_name?: string;

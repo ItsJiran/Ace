@@ -6,6 +6,7 @@ import { AIContextEngine } from '../aiContextEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { ParserEngine } from '../parserEngine';
 import { parseAIStreamChunk } from '#/services/aiParser';
+import { AI_GATEWAY_ROUTE_ACTION, AI_GATEWAY_ROUTE_SUB_ACTION } from './types';
 import type { AIMessageBlock } from '#/services/aiParser';
 import type { AISession, ParsedBatchEvent, ParserBatchRecord } from './types';
 import type { Interaction } from '../../schemas/events';
@@ -114,7 +115,7 @@ function mergeBlocks(
         if (block.block_slug === 'paragraph') {
             if (!block.content) return;
             const last = merged[merged.length - 1];
-            if (last?.block_slug === 'paragraph') {
+            if (last?.block_slug === 'paragraph' && typeof last.content === 'string' && typeof block.content === 'string') {
                 last.content += block.content;
                 return;
             }
@@ -237,7 +238,7 @@ function buildToolInteractionFromBlock(input: {
     return {
         event_type: 'interaction',
         process_uid: processUid,
-        action: 'tool',
+        action: AI_GATEWAY_ROUTE_ACTION.TOOL,
         sub_action: action,
         payload: {
             ...payloadJson,
@@ -265,8 +266,8 @@ function emitParserSessionResult(input: {
     const { sessionId, processUid, eventName, payload } = input;
     EventBus.emit({
         event_type: 'interaction',
-        action: 'parser_result',
-        sub_action: 'session',
+        action: AI_GATEWAY_ROUTE_ACTION.PARSER_RESULT,
+        sub_action: AI_GATEWAY_ROUTE_SUB_ACTION.SESSION,
         process_uid: processUid,
         payload: {
             session_id: sessionId,
@@ -442,11 +443,6 @@ export function handleSessionStreamChunk(
             requestedAction === 'retrieve' || requestedAction === 'store' || requestedAction === 'update'
                 ? requestedAction
                 : 'update';
-        const memoryUid = typeof payload.memory_uid === 'string'
-            ? payload.memory_uid
-            : typeof payload.memory_key === 'string'
-                ? payload.memory_key
-                : undefined;
         const memoryKey = typeof payload.memory_key === 'string' ? payload.memory_key : undefined;
         const requestedResultUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
 
@@ -462,8 +458,8 @@ export function handleSessionStreamChunk(
 
         EventBus.emit({
             event_type: 'interaction',
-            action: 'parser_result',
-            sub_action: 'session',
+            action: AI_GATEWAY_ROUTE_ACTION.PARSER_RESULT,
+            sub_action: AI_GATEWAY_ROUTE_SUB_ACTION.SESSION,
             process_uid: processUid,
             payload: {
                 session_id: session.sessionId,
@@ -505,7 +501,7 @@ export function handleSessionStreamChunk(
             return;
         }
 
-        if (!validateHistorySummaryBlock(session, block)) {
+        if (!validateHistorySummaryBlock(session, block as HistorySummaryBlock)) {
             return;
         }
 
@@ -746,8 +742,8 @@ export function handleSessionStreamChunk(
 
         EventBus.emit({
             event_type: 'interaction',
-            action: 'parser_result',
-            sub_action: 'session',
+            action: AI_GATEWAY_ROUTE_ACTION.PARSER_RESULT,
+            sub_action: AI_GATEWAY_ROUTE_SUB_ACTION.SESSION,
             process_uid: processUid,
             payload: {
                 session_id: session.sessionId,
@@ -772,7 +768,7 @@ export function handleSessionStreamChunk(
         if (block.block_slug !== 'tool' || !block.is_complete) return;
 
         const fallbackResultKey =
-            block.result_memory_uid ??
+            (typeof block.result_memory_uid === 'string' ? block.result_memory_uid : undefined) ??
             `system:session:${session.sessionId}:tool_result:${Date.now()}:${index}`;
 
         const interaction = buildToolInteractionFromBlock({
@@ -786,8 +782,8 @@ export function handleSessionStreamChunk(
 
         EventBus.emit({
             event_type: 'interaction',
-            action: 'parser_result',
-            sub_action: 'session',
+            action: AI_GATEWAY_ROUTE_ACTION.PARSER_RESULT,
+            sub_action: AI_GATEWAY_ROUTE_SUB_ACTION.SESSION,
             process_uid: processUid,
             payload: {
                 session_id: session.sessionId,

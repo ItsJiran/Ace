@@ -2,38 +2,57 @@ import { z } from 'zod';
 
 export const ProcessTypeSchema = z.string().describe('Process type identifier defined by core engine.');
 
-export const ProcessKindSchema = z.enum([
-    'ai_block',
-    'gateway_turn',
-    'tool_run',
-    'storage_action',
-    'event_flow',
-    'window_task',
-    'pipeline_run',
-    'fs_task',
-    'shell_task',
-    'custom',
-]);
+export const PROCESS_KIND = {
+    AI_BLOCK: 'ai_block',
+    GATEWAY_TURN: 'gateway_turn',
+    TOOL_RUN: 'tool_run',
+    STORAGE_ACTION: 'storage_action',
+    EVENT_FLOW: 'event_flow',
+    WINDOW_TASK: 'window_task',
+    PIPELINE_RUN: 'pipeline_run',
+    FS_TASK: 'fs_task',
+    SHELL_TASK: 'shell_task',
+    CUSTOM: 'custom',
+} as const;
 
-export const ProcessLifecycleStateSchema = z.enum([
-    'created',
-    'running',
-    'waiting',
-    'done',
-    'failed',
-    'cancelled',
-    'terminated',
-]);
+const PROCESS_KIND_VALUES = [
+    PROCESS_KIND.AI_BLOCK,
+    PROCESS_KIND.GATEWAY_TURN,
+    PROCESS_KIND.TOOL_RUN,
+    PROCESS_KIND.STORAGE_ACTION,
+    PROCESS_KIND.EVENT_FLOW,
+    PROCESS_KIND.WINDOW_TASK,
+    PROCESS_KIND.PIPELINE_RUN,
+    PROCESS_KIND.FS_TASK,
+    PROCESS_KIND.SHELL_TASK,
+    PROCESS_KIND.CUSTOM,
+] as const;
 
-export const ProcessStatusSchema = z.enum([
-    'created',
-    'running',
-    'waiting',
-    'done',
-    'failed',
-    'cancelled',
-    'terminated',
-]);
+export const ProcessKindSchema = z.enum(PROCESS_KIND_VALUES);
+
+export const PROCESS_STATUS = {
+    CREATED: 'created',
+    RUNNING: 'running',
+    WAITING: 'waiting',
+    DONE: 'done',
+    FAILED: 'failed',
+    CANCELLED: 'cancelled',
+    TERMINATED: 'terminated',
+} as const;
+
+const PROCESS_STATUS_VALUES = [
+    PROCESS_STATUS.CREATED,
+    PROCESS_STATUS.RUNNING,
+    PROCESS_STATUS.WAITING,
+    PROCESS_STATUS.DONE,
+    PROCESS_STATUS.FAILED,
+    PROCESS_STATUS.CANCELLED,
+    PROCESS_STATUS.TERMINATED,
+] as const;
+
+export const ProcessLifecycleStateSchema = z.enum(PROCESS_STATUS_VALUES);
+
+export const ProcessStatusSchema = z.enum(PROCESS_STATUS_VALUES);
 
 export const RuntimeMemoryScopeSchema = z.enum(['process', 'session', 'durable']);
 export const RuntimeMemoryRetentionPolicySchema = z.enum([

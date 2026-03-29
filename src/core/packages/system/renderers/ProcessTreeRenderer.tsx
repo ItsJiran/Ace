@@ -1,5 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ProcessRecord } from '#/schemas/process';
+import { PROCESS_STATUS } from '#/schemas/process';
 import { GitBranch } from 'lucide-react';
 
 export const registry: AceRegistryType.Renderer = {
@@ -21,11 +22,11 @@ interface ProcessTreeRendererProps {
 
 function statusClass(status: string | undefined) {
     if (!status) return 'text-zinc-300';
-    if (status === 'done') return 'text-emerald-300';
-    if (status === 'failed' || status === 'terminated' || status === 'cancelled') {
+    if (status === PROCESS_STATUS.DONE) return 'text-emerald-300';
+    if (status === PROCESS_STATUS.FAILED || status === PROCESS_STATUS.TERMINATED || status === PROCESS_STATUS.CANCELLED) {
         return 'text-rose-300';
     }
-    if (status === 'running' || status === 'created' || status === 'waiting') {
+    if (status === PROCESS_STATUS.RUNNING || status === PROCESS_STATUS.CREATED || status === PROCESS_STATUS.WAITING) {
         return 'text-amber-300';
     }
     return 'text-zinc-300';

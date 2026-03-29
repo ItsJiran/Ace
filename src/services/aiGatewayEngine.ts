@@ -41,6 +41,7 @@ import { AIContextEngine } from './aiContextEngine';
 import { AIContextMemoryEngine } from './aiContextMemoryEngine';
 import { StorageEngine } from './storageEngine';
 import { KernelEngine } from './kernelEngine';
+import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
 import type {
     AIGatewayFetchModelsResult,
     AIGatewayResponseResult,
@@ -66,7 +67,8 @@ function isLifecycleEventName(eventName?: string): boolean {
 
 
 export type { SDKProvider, AISession, AISessionSnapshot } from './aiGateway/types';
-import type { SDKProvider, AISessionSnapshot } from './aiGateway/types';
+import { AI_BLOCK_HANDLER_STATUS, AI_GATEWAY_PROCESS_TYPE, AI_SESSION_STATUS } from './aiGateway/types';
+import type { AIBlockHandlerStatus, SDKProvider, AISessionSnapshot } from './aiGateway/types';
 
 class AIGatewayEngineSingleton {
     /**
@@ -125,8 +127,8 @@ class AIGatewayEngineSingleton {
             session.activeAbortController.abort();
             session.activeAbortController = undefined;
         }
-        if (session.status === 'streaming') {
-            session.status = 'connected';
+        if (session.status === AI_SESSION_STATUS.STREAMING) {
+            session.status = AI_SESSION_STATUS.CONNECTED;
         }
     }
 
@@ -148,13 +150,13 @@ class AIGatewayEngineSingleton {
                     : undefined;
             if (!sessionId) return;
 
-            if (record.type === 'ai_gateway:session') {
+            if (record.type === AI_GATEWAY_PROCESS_TYPE.SESSION) {
                 this.abortSessionStream(sessionId);
                 this.closeSession(sessionId, { skipProcessLifecycle: true });
                 return;
             }
 
-            if (record.type === 'ai_gateway:response_turn' || record.type === 'ai_gateway:parser_stream') {
+            if (record.type === AI_GATEWAY_PROCESS_TYPE.RESPONSE_TURN || record.type === AI_GATEWAY_PROCESS_TYPE.PARSER_STREAM) {
                 this.abortSessionStream(sessionId);
             }
         });
@@ -202,31 +204,31 @@ class AIGatewayEngineSingleton {
         const sessionId = await AISessionManager.create(sdk, model);
 
         const processRecord = parentProcessUid
-            ? KernelEngine.spawnSubprocess(parentProcessUid, 'ai_gateway:session', {
+            ? KernelEngine.spawnSubprocess(parentProcessUid, AI_GATEWAY_PROCESS_TYPE.SESSION, {
                 metadata: {
                     session_id: sessionId,
                     sdk,
                     model,
                 },
-                process_kind: 'custom',
+                process_kind: PROCESS_KIND.CUSTOM,
                 owner_engine: 'aiGatewayEngine',
                 payload: {
-                    status: 'running',
+                    status: PROCESS_STATUS.RUNNING,
                     live_state: 'connected',
                     session_id: sessionId,
                     sdk,
                     model,
                 },
             })
-            : KernelEngine.spawnProcess('ai_gateway:session', {
+            : KernelEngine.spawnProcess(AI_GATEWAY_PROCESS_TYPE.SESSION, {
                 session_id: sessionId,
                 sdk,
                 model,
             }, {
-                process_kind: 'custom',
+                process_kind: PROCESS_KIND.CUSTOM,
                 owner_engine: 'aiGatewayEngine',
                 payload: {
-                    status: 'running',
+                    status: PROCESS_STATUS.RUNNING,
                     live_state: 'connected',
                     session_id: sessionId,
                     sdk,
@@ -234,7 +236,7 @@ class AIGatewayEngineSingleton {
                 },
             });
 
-        KernelEngine.updateProcessStatus(processRecord.process_uid, 'running');
+        KernelEngine.updateProcessStatus(processRecord.process_uid, PROCESS_STATUS.RUNNING);
         this.sessionProcessBySessionId.set(sessionId, processRecord.process_uid);
 
         AIContextEngine.attachSession(sessionId);
@@ -247,12 +249,12 @@ class AIGatewayEngineSingleton {
         const sessionProcessUid = this.sessionProcessBySessionId.get(sessionId);
         if (sessionProcessUid && !options?.skipProcessLifecycle) {
             KernelEngine.updateProcessPayload(sessionProcessUid, {
-                status: 'done',
+                status: PROCESS_STATUS.DONE,
                 live_state: 'closed',
                 session_id: sessionId,
                 ended_at: Date.now(),
             });
-            KernelEngine.updateProcessStatus(sessionProcessUid, 'done');
+            KernelEngine.updateProcessStatus(sessionProcessUid, PROCESS_STATUS.DONE);
             this.sessionProcessBySessionId.delete(sessionId);
         } else if (sessionProcessUid && options?.skipProcessLifecycle) {
             this.sessionProcessBySessionId.delete(sessionId);
@@ -321,14 +323,14 @@ class AIGatewayEngineSingleton {
                 ((latestBlockSlug === 'parser' && isHandlerRunning) || (!latestBlockSlug && !isHandlerRunning));
 
             // Group 5: final derived state used by UI monitors.
-            const derivedStatus: 'idle' | 'running' | 'parsing' | 'failed' =
+            const derivedStatus: AIBlockHandlerStatus =
                 isParserFailed
-                    ? 'failed'
+                    ? AI_BLOCK_HANDLER_STATUS.FAILED
                     : isHandlerRunning
-                        ? (latestBlockSlug === 'parser' ? 'parsing' : 'running')
+                        ? (latestBlockSlug === 'parser' ? AI_BLOCK_HANDLER_STATUS.PARSING : AI_BLOCK_HANDLER_STATUS.RUNNING)
                         : isParserParsing
-                            ? 'parsing'
-                            : 'idle';
+                            ? AI_BLOCK_HANDLER_STATUS.PARSING
+                            : AI_BLOCK_HANDLER_STATUS.IDLE;
 
             // block_slug represents the active runtime focus shown in block_handler_state.
             const derivedBlockSlug =

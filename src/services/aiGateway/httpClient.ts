@@ -1,6 +1,8 @@
 import { StorageEngine } from '../storageEngine';
 import { ProcessEngine } from '../processEngine';
 import { handleSessionStreamChunk } from './streamHandler';
+import { PROCESS_KIND } from '#/schemas/process';
+import { AI_GATEWAY_PROCESS_TYPE, AI_RESPONSE_STATUS, AI_SESSION_STATUS } from './types';
 import type { AISession } from './types';
 import type { AIGatewayConfig } from '../../schemas/ai_gateway';
 
@@ -40,7 +42,7 @@ export async function sendToSession(
 ): Promise<SendSessionStreamResult> {
     console.log(`[AIGatewayEngine] [${session.sessionId}] Sending: "${prompt}"`);
     session.termination_requested = false;
-    session.status = 'streaming';
+    session.status = AI_SESSION_STATUS.STREAMING;
     session.activeOutputRamKey = replyToRamKey;
 
     // ── PRE-ALLOCATION: write empty placeholder so subscribers see 'streaming' ──
@@ -57,7 +59,7 @@ export async function sendToSession(
         parser_batches: [],
         parser_batch_count: 0,
         events_total: 0,
-        status: 'streaming',
+        status: AI_RESPONSE_STATUS.STREAMING,
         session_id: session.sessionId,
         response_turns: Array.isArray(metadata?.response_turns_seed) ? metadata.response_turns_seed : [],
         active_response_turn_id: metadata?.prompt_turn_id,
@@ -75,7 +77,7 @@ export async function sendToSession(
             payload: createPayload,
             classifications: CLASSIFICATIONS,
             memory_scope: 'process',
-            retention_policy: 'drop_on_done',
+            retention_policy: 'keep_on_done',
         })
         : null;
 
@@ -112,11 +114,11 @@ export async function sendToSession(
     const sdkConfig = gatewayConfig.sdks[session.sdk];
     if (!sdkConfig?.api_key) {
         updateResponseMemory({
-            status: 'error',
+            status: AI_RESPONSE_STATUS.ERROR,
             error_message: `${session.sdk} API key not configured.`,
             finished_at: Date.now(),
         });
-        session.status = 'connected';
+        session.status = AI_SESSION_STATUS.CONNECTED;
         return {
             interrupted: false,
         };
@@ -125,11 +127,11 @@ export async function sendToSession(
     const baseUrl = await ensureGatewayServerUrl();
     if (!baseUrl) {
         updateResponseMemory({
-            status: 'error',
+            status: AI_RESPONSE_STATUS.ERROR,
             error_message: 'Gateway server not reachable. Please start the gateway sidecar.',
             finished_at: Date.now(),
         });
-        session.status = 'connected';
+        session.status = AI_SESSION_STATUS.CONNECTED;
         return {
             interrupted: false,
         };
@@ -152,11 +154,11 @@ export async function sendToSession(
         if (!response.ok || !response.body) {
             const errorText = await response.text();
             updateResponseMemory({
-                status: 'error',
+                status: AI_RESPONSE_STATUS.ERROR,
                 error_message: `Gateway error ${response.status}: ${errorText}`,
                 finished_at: Date.now(),
             });
-            session.status = 'connected';
+            session.status = AI_SESSION_STATUS.CONNECTED;
             return {
                 interrupted: false,
             };
@@ -168,15 +170,15 @@ export async function sendToSession(
         const parserProcessUid = ownerProcessUid
             ? ProcessEngine.spawnSubprocess({
                 parent_process_uid: ownerProcessUid,
-                type: 'ai_gateway:parser_stream',
+                type: AI_GATEWAY_PROCESS_TYPE.PARSER_STREAM,
                 metadata: {
                     session_id: session.sessionId,
                     reply_to_ram_key: replyToRamKey,
                 },
-                process_kind: 'ai_block',
+                process_kind: PROCESS_KIND.AI_BLOCK,
                 owner_engine: 'aiGatewayEngine',
                 payload: {
-                    status: 'running',
+                    status: AI_RESPONSE_STATUS.RUNNING,
                     stage: 'stream_parse',
                 },
             }).process_uid
@@ -237,7 +239,7 @@ export async function sendToSession(
 
             if (parserProcessUid) {
                 ProcessEngine.updatePayload(parserProcessUid, {
-                    status: 'running',
+                    status: AI_RESPONSE_STATUS.RUNNING,
                     last_chunk_bytes: value.byteLength,
                     updated_at: Date.now(),
                 });
@@ -246,11 +248,11 @@ export async function sendToSession(
 
         if (interrupted) {
             closeParserProcess('done');
-            session.status = 'connected';
+            session.status = AI_SESSION_STATUS.CONNECTED;
             session.activeAbortController = undefined;
             session.termination_requested = false;
             updateResponseMemory({
-                status: 'interrupted',
+                status: AI_RESPONSE_STATUS.INTERRUPTED,
                 parser_interrupt_reason: interruptReason ?? 'parser_interrupt_requested',
                 ignored_after_interrupt_chunks: ignoredChunkCount,
                 ignored_after_interrupt_bytes: ignoredByteCount,
@@ -268,11 +270,11 @@ export async function sendToSession(
             (error instanceof DOMException && error.name === 'AbortError')
             || String(error).toLowerCase().includes('abort');
         if (session.termination_requested || maybeAbortError) {
-            session.status = 'connected';
+            session.status = AI_SESSION_STATUS.CONNECTED;
             session.activeAbortController = undefined;
             session.termination_requested = false;
             updateResponseMemory({
-                status: 'interrupted',
+                status: AI_RESPONSE_STATUS.INTERRUPTED,
                 parser_interrupt_reason: 'terminated_by_process',
                 finished_at: Date.now(),
             });
@@ -285,12 +287,12 @@ export async function sendToSession(
         if (ownerProcessUid) {
             // parser process may not exist for pre-fetch failures; this is safe no-op if missing.
             const parserCandidates = ProcessEngine.getAll()
-                .filter((record) => record.parent_process_uid === ownerProcessUid && record.type === 'ai_gateway:parser_stream')
+                .filter((record) => record.parent_process_uid === ownerProcessUid && record.type === AI_GATEWAY_PROCESS_TYPE.PARSER_STREAM)
                 .sort((a, b) => b.updated_at - a.updated_at);
             const latestParser = parserCandidates[0];
             if (latestParser?.process_uid) {
                 ProcessEngine.updatePayload(latestParser.process_uid, {
-                    status: 'failed',
+                    status: AI_RESPONSE_STATUS.FAILED,
                     error_message: error instanceof Error ? error.message : String(error),
                     updated_at: Date.now(),
                 });
@@ -299,11 +301,11 @@ export async function sendToSession(
         }
         const errorMessage = error instanceof Error ? error.message : String(error);
         updateResponseMemory({
-            status: 'error',
+            status: AI_RESPONSE_STATUS.ERROR,
             error_message: errorMessage,
             finished_at: Date.now(),
         });
-        session.status = 'connected';
+        session.status = AI_SESSION_STATUS.CONNECTED;
         session.activeAbortController = undefined;
         session.termination_requested = false;
         return {
@@ -312,10 +314,10 @@ export async function sendToSession(
     }
 
     // ── FINALIZE ─────────────────────────────────────────────────────────────
-    session.status = 'connected';
+    session.status = AI_SESSION_STATUS.CONNECTED;
     session.activeAbortController = undefined;
     session.termination_requested = false;
-    updateResponseMemory({ status: 'completed', finished_at: Date.now() });
+    updateResponseMemory({ status: AI_RESPONSE_STATUS.COMPLETED, finished_at: Date.now() });
 
     return {
         interrupted: false,

@@ -1,5 +1,6 @@
 import { EventBus } from '../eventEngine';
 import { StorageEngine } from '../storageEngine';
+import { AI_GATEWAY_ROUTE_ACTION, AI_RESPONSE_STATUS } from './types';
 import type { SDKProvider } from './types';
 
 export function registerSendGatewayRoute(input: {
@@ -8,7 +9,7 @@ export function registerSendGatewayRoute(input: {
     getActiveSDK: () => SDKProvider | null;
     getActiveModel: () => string | null;
 }) {
-    EventBus.registerProcessRoute('send_gateway', async ({ payload, preallocated_memory, source }) => {
+    EventBus.registerProcessRoute(AI_GATEWAY_ROUTE_ACTION.SEND_GATEWAY, async ({ payload, preallocated_memory, source }) => {
         const prompt = typeof payload?.prompt === 'string' ? payload.prompt.trim() : '';
         const replyToRamKey =
             typeof preallocated_memory?.reply_to_ram_key === 'string'
@@ -26,7 +27,7 @@ export function registerSendGatewayRoute(input: {
                     text: '',
                     raw_response: '',
                     parser_batches: [],
-                    status: 'error',
+                    status: AI_RESPONSE_STATUS.ERROR,
                     error_message: 'Prompt is required for send_gateway.',
                     finished_at: Date.now(),
                 },

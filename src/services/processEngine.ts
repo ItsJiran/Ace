@@ -12,6 +12,7 @@ import type {
     RuntimeMemoryScope,
     RuntimeMemoryState,
 } from '#/schemas/process';
+import { PROCESS_STATUS } from '#/schemas/process';
 
 type ProcessTerminationHandler = (input: {
     record: ProcessRecord;
@@ -30,10 +31,10 @@ class ProcessEngineSingleton {
     private readonly cancellationTokens = new Map<string, CancellationToken>();
 
     private readonly terminalStateSet = new Set<ProcessLifecycleState>([
-        'done',
-        'failed',
-        'cancelled',
-        'terminated',
+        PROCESS_STATUS.DONE,
+        PROCESS_STATUS.FAILED,
+        PROCESS_STATUS.CANCELLED,
+        PROCESS_STATUS.TERMINATED,
     ]);
 
     private readonly processContextStack: string[] = [];
@@ -128,9 +129,9 @@ class ProcessEngineSingleton {
     }
 
     private canonicalStateFromStatus(status: ProcessStatus): ProcessLifecycleState {
-        if (status === 'created' || status === 'running' || status === 'waiting') return status;
-        if (status === 'done' || status === 'failed' || status === 'cancelled' || status === 'terminated') return status;
-        return 'created';
+        if (status === PROCESS_STATUS.CREATED || status === PROCESS_STATUS.RUNNING || status === PROCESS_STATUS.WAITING) return status;
+        if (status === PROCESS_STATUS.DONE || status === PROCESS_STATUS.FAILED || status === PROCESS_STATUS.CANCELLED || status === PROCESS_STATUS.TERMINATED) return status;
+        return PROCESS_STATUS.CREATED;
     }
 
     private statusFromLifecycleState(state: ProcessLifecycleState): ProcessStatus {
@@ -144,9 +145,9 @@ class ProcessEngineSingleton {
     private canTransition(from: ProcessLifecycleState, to: ProcessLifecycleState): boolean {
         if (from === to) return true;
         if (this.isTerminalState(from)) return false;
-        if (from === 'created') return to === 'running' || to === 'waiting' || this.isTerminalState(to);
-        if (from === 'running') return to === 'waiting' || this.isTerminalState(to);
-        if (from === 'waiting') return to === 'running' || this.isTerminalState(to);
+        if (from === PROCESS_STATUS.CREATED) return to === PROCESS_STATUS.RUNNING || to === PROCESS_STATUS.WAITING || this.isTerminalState(to);
+        if (from === PROCESS_STATUS.RUNNING) return to === PROCESS_STATUS.WAITING || this.isTerminalState(to);
+        if (from === PROCESS_STATUS.WAITING) return to === PROCESS_STATUS.RUNNING || this.isTerminalState(to);
         return false;
     }
 

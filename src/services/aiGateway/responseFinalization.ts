@@ -2,6 +2,7 @@ import { StorageEngine } from '../storageEngine';
 import { AIContextEngine } from '../aiContextEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { finalizeRequestProtocolState, stripHistorySummaryBlocksFromText } from './protocolLifecycle';
+import { AI_RESPONSE_STATUS } from './types';
 import type { AISession } from './types';
 
 const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
@@ -43,7 +44,7 @@ export function finalizeGatewaySessionResponse(input: {
         raw_response: rawResponseText,
         text: responseText,
         blocks: Array.isArray(rawResponseMemory?.blocks) ? rawResponseMemory.blocks : [],
-        status: typeof rawResponseMemory?.status === 'string' ? rawResponseMemory.status : 'completed',
+        status: typeof rawResponseMemory?.status === 'string' ? rawResponseMemory.status : AI_RESPONSE_STATUS.COMPLETED,
         error_message: typeof rawResponseMemory?.error_message === 'string' ? rawResponseMemory.error_message : undefined,
         updated_at: Date.now(),
     }, { status: 'out' });

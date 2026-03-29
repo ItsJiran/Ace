@@ -17,6 +17,7 @@ import type { AIContextMemoryEngine } from './services/aiContextMemoryEngine';
 import type { ParserEngine } from './services/parserEngine';
 import type { KernelEngine } from './services/kernelEngine';
 import type { Notification, NotificationCreateInput } from './schemas/notification';
+import type { SDKProvider, AISessionStatus } from './services/aiGateway/types';
 import type {
   AIGatewayConfig,
   AIGatewayFetchModelsResult,
@@ -25,13 +26,11 @@ import type {
   AIGatewayRadarScanResult,
 } from './schemas/ai_gateway';
 
-type SDKProvider = 'openai' | 'google' | 'anthropic';
-
 interface AIGatewaySessionSnapshot {
   sessionId: string;
   sdk: SDKProvider;
   model: string;
-  status: 'idle' | 'connected' | 'streaming' | 'error';
+  status: AISessionStatus;
   activeOutputRamKey?: string;
   isInsideEventBlock: boolean;
   activeEventBufferLength: number;

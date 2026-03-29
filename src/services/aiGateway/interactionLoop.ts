@@ -3,11 +3,13 @@ import { StorageEngine } from '../storageEngine';
 import { ParserEngine } from '../parserEngine';
 import { ProcessEngine } from '../processEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
+import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
 import { AIConfigManager } from './configManager';
 import { HealthProbe } from './healthProbe';
 import { sendToSession as sendStreamRequest } from './httpClient';
 import { prepareGatewaySessionRequest } from './requestPreparation';
 import { finalizeGatewaySessionResponse } from './responseFinalization';
+import { AI_FEEDBACK_LOOP_STATUS, AI_GATEWAY_PROCESS_TYPE } from './types';
 import type { AISession } from './types';
 import type { ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
@@ -329,7 +331,7 @@ export async function executeSessionInteractionLoop(input: {
 }): Promise<void> {
     const { session, sessionId, prompt, replyToRamKey, parentProcessUid } = input;
     const rootProcess = ProcessEngine.registerProcess(
-        'ai_gateway:response_turn',
+        AI_GATEWAY_PROCESS_TYPE.RESPONSE_TURN,
         {
             session_id: sessionId,
             reply_to_ram_key: replyToRamKey,
@@ -343,15 +345,15 @@ export async function executeSessionInteractionLoop(input: {
         undefined,
         {
             parent_process_uid: parentProcessUid,
-            process_kind: 'gateway_turn',
+            process_kind: PROCESS_KIND.GATEWAY_TURN,
             owner_engine: 'aiGatewayEngine',
             payload: {
-                status: 'queued',
+                status: PROCESS_STATUS.CREATED,
                 feedback_loop_turn: 0,
             },
         },
     );
-    ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'running');
+    ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.RUNNING);
 
     const updateResponseMemory = (payload: Record<string, unknown>) => {
         const updated = ProcessEngine.updateRuntimeMemory({
@@ -437,18 +439,18 @@ export async function executeSessionInteractionLoop(input: {
                 response_turns: [...existingTurns, currentTurn].slice(-20),
                 active_response_turn_id: promptTurnId,
                 active_response_attempt_index: continuationTurns + 1,
-                feedback_loop_status: continuationTurns > 0 ? 'completed' : 'none',
+                feedback_loop_status: continuationTurns > 0 ? AI_FEEDBACK_LOOP_STATUS.COMPLETED : AI_FEEDBACK_LOOP_STATUS.NONE,
                 feedback_loop_reason: continuationTurns > 0 ? 'tool_feedback_completed' : undefined,
                 feedback_loop_turn: continuationTurns,
                 last_feedback_at: Date.now(),
             });
 
             ProcessEngine.updatePayload(rootProcess.process_uid, {
-                status: 'done',
+                status: PROCESS_STATUS.DONE,
                 feedback_loop_turn: continuationTurns,
                 finished_at: Date.now(),
             });
-            ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'done');
+            ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.DONE);
             return;
         }
 
@@ -458,18 +460,18 @@ export async function executeSessionInteractionLoop(input: {
                 response_turns: [...existingTurns, currentTurn].slice(-20),
                 active_response_turn_id: promptTurnId,
                 active_response_attempt_index: continuationTurns + 1,
-                feedback_loop_status: 'interrupted',
+                feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
                 feedback_loop_reason: 'tool_feedback_loop_turn_cap_reached',
                 feedback_loop_turn: continuationTurns,
                 last_feedback_at: Date.now(),
                 parser_interrupt_reason: streamOutcome.interruptReason,
             });
             ProcessEngine.updatePayload(rootProcess.process_uid, {
-                status: 'failed',
+                status: PROCESS_STATUS.FAILED,
                 feedback_loop_turn: continuationTurns,
                 reason: 'tool_feedback_loop_turn_cap_reached',
             });
-            ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'failed');
+            ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.FAILED);
             return;
         }
 
@@ -480,18 +482,18 @@ export async function executeSessionInteractionLoop(input: {
                 response_turns: [...existingTurns, currentTurn].slice(-20),
                 active_response_turn_id: promptTurnId,
                 active_response_attempt_index: continuationTurns + 1,
-                feedback_loop_status: 'interrupted',
+                feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
                 feedback_loop_reason: 'tool_feedback_result_timeout',
                 feedback_loop_turn: continuationTurns,
                 last_feedback_at: Date.now(),
                 parser_interrupt_reason: streamOutcome.interruptReason,
             });
             ProcessEngine.updatePayload(rootProcess.process_uid, {
-                status: 'failed',
+                status: PROCESS_STATUS.FAILED,
                 feedback_loop_turn: continuationTurns,
                 reason: 'tool_feedback_result_timeout',
             });
-            ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'failed');
+            ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.FAILED);
             return;
         }
 
@@ -506,17 +508,17 @@ export async function executeSessionInteractionLoop(input: {
                 response_turns: [...existingTurns, currentTurn].slice(-20),
                 active_response_turn_id: promptTurnId,
                 active_response_attempt_index: continuationTurns + 1,
-                feedback_loop_status: 'interrupted',
+                feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
                 feedback_loop_reason: 'tool_feedback_payload_unavailable',
                 feedback_loop_turn: continuationTurns,
                 last_feedback_at: Date.now(),
             });
             ProcessEngine.updatePayload(rootProcess.process_uid, {
-                status: 'failed',
+                status: PROCESS_STATUS.FAILED,
                 feedback_loop_turn: continuationTurns,
                 reason: 'tool_feedback_payload_unavailable',
             });
-            ProcessEngine.updateLifecycleState(rootProcess.process_uid, 'failed');
+            ProcessEngine.updateLifecycleState(rootProcess.process_uid, PROCESS_STATUS.FAILED);
             return;
         }
 
@@ -527,14 +529,14 @@ export async function executeSessionInteractionLoop(input: {
             response_turns: [...existingTurns, currentTurn].slice(-20),
             active_response_turn_id: promptTurnId,
             active_response_attempt_index: continuationTurns + 1,
-            feedback_loop_status: 'active',
+            feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.ACTIVE,
             feedback_loop_reason: 'tool_feedback_injected',
             feedback_loop_turn: continuationTurns,
             last_feedback_at: Date.now(),
         });
 
         ProcessEngine.updatePayload(rootProcess.process_uid, {
-            status: 'running',
+            status: PROCESS_STATUS.RUNNING,
             feedback_loop_turn: continuationTurns,
             feedback_loop_reason: 'tool_feedback_injected',
             updated_at: Date.now(),
