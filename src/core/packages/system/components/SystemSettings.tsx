@@ -10,7 +10,7 @@ import type {
 } from '#/schemas/ai_gateway';
 import { memo, useState, useEffect, useRef } from 'react';
 import { Package, Keyboard, Wrench, Settings2, ChevronDown, ChevronRight, Box, Cpu, Layers, GitBranch, Activity, Monitor, LayoutTemplate, Puzzle } from 'lucide-react';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import { invoke } from '@tauri-apps/api/core';
 
 export const registry: AceRegistryType.Component = {
@@ -741,13 +741,13 @@ function formatBytes(b: number): string {
 }
 
 function PerformanceTab() {
-    const [stats, setStats] = useState(() => StorageEngine.getRAMStats());
+    const [stats, setStats] = useState(() => KernelEngine.getRAMStats());
     const [processMem, setProcessMem] = useState<{ rss: number; vm: number } | null>(null);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
         const tick = () => {
-            setStats(StorageEngine.getRAMStats());
+            setStats(KernelEngine.getRAMStats());
             invoke<[number, number]>('get_process_memory').then(([rss, vm]) => {
                 setProcessMem({ rss, vm });
             }).catch(() => {});

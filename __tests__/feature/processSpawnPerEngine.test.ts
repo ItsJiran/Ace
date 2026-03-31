@@ -5,7 +5,7 @@ import { ToolEngine } from '#/services/toolEngine';
 import { RegistryEngine } from '#/services/registryEngine';
 import { PipelineEngine } from '#/services/pipelineEngine';
 import { EventBus } from '#/services/eventEngine';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import { FSEngine } from '#/services/fsEngine';
 import { ShellEngine } from '#/services/shellEngine';
 
@@ -32,11 +32,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 describe('Process spawn pattern across engines', () => {
     beforeEach(() => {
-        (StorageEngine as any).global_ram.clear();
-        (StorageEngine as any).classification_ram.clear();
-        (StorageEngine as any).memory_sockets.clear();
-        (StorageEngine as any).parent_children.clear();
-        (StorageEngine as any).child_parent.clear();
+        KernelEngine.resetKernelSpace();
         (EventBus as any).routes.clear();
 
         if (!(globalThis as any).crypto) {

@@ -1,5 +1,5 @@
 import { FSEngine } from './fsEngine';
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 import { GlobalStateManager } from './globalStateManager';
 import { BASE_CONFIG_ITEMS, BASE_KEYBINDS } from '#/constants/defaults';
 import type { ConfigItem } from '#/schemas/config';
@@ -9,6 +9,13 @@ class ConfigEngineSingleton {
     private is_booted = false;
     private config_file = 'ace.config.json';
     private keybinds_file = 'ace.keybinds.json';
+    public readonly configMemoryUid = 'system:config';
+    public readonly keybindsMemoryUid = 'system:keybinds';
+
+    setupKernelSpace() {
+        KernelEngine.registerSystemMemory(this.configMemoryUid, [] as ConfigItem[]);
+        KernelEngine.registerSystemMemory(this.keybindsMemoryUid, [] as Keybind[]);
+    }
 
     /**
      * Boot sequence for the configuration system.
@@ -142,23 +149,13 @@ class ConfigEngineSingleton {
     }
 
     private syncConfigToRAM(items: ConfigItem[]) {
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:config',
-            payload: items,
-            classifications: ['system:core']
-        });
+        KernelEngine.updateMemory(this.configMemoryUid, items);
 
         GlobalStateManager.setActiveConfigItems(items);
     }
 
     private syncKeybindsToRAM(binds: Keybind[]) {
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:keybinds',
-            payload: binds,
-            classifications: ['system:core']
-        });
+        KernelEngine.updateMemory(this.keybindsMemoryUid, binds);
 
         GlobalStateManager.setActiveKeybinds(binds.filter(bind => bind.enabled));
     }
@@ -178,7 +175,7 @@ class ConfigEngineSingleton {
     }
 
     async updateConfigItem(key: string, value: any, category?: string, description?: string) {
-        const currentItems = (StorageEngine.readMemory('system:config') as ConfigItem[] | undefined) || [];
+        const currentItems = (KernelEngine.readMemory(this.configMemoryUid) as ConfigItem[] | undefined) || [];
         const nextItems = [...currentItems];
         const existingIndex = nextItems.findIndex((item) => item.key === key);
 

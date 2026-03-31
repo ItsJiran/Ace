@@ -1,5 +1,5 @@
 import { FSEngine } from './fsEngine';
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 import {
     RegistryPackageSchema,
     RegistryRuntimeSchemaMetadataSchema,
@@ -774,7 +774,7 @@ class RegistryEngineSingleton {
     /** Publish package summaries to Global RAM for diagnostics */
     private publishToRAM() {
         const packageList = this.getPackages();
-        StorageEngine.writeMemory('system:package_registry', packageList);
+        KernelEngine.writeMemory('system:package_registry', packageList);
         console.log('[RegistryEngine] RAM update:', packageList.length, 'packages');
     }
 }

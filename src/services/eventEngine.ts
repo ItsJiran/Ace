@@ -1,5 +1,5 @@
 import type { Interaction, CoreEngineHandlerArgs } from '#/schemas/events';
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 
 type ProcessCallback = (args: CoreEngineHandlerArgs<any>) => Promise<void>;
 type SyncProcessCallback = (args: CoreEngineHandlerArgs<any>) => void;
@@ -18,6 +18,11 @@ class EventEngineSingleton {
     private logFlushTimer: ReturnType<typeof setTimeout> | null = null;
     private static readonly LOG_FLUSH_MS = 200;
     private static readonly LOG_FLUSH_THRESHOLD = 15;
+    public readonly eventStreamMemoryUid = 'system:event_stream';
+
+    setupKernelSpace() {
+        KernelEngine.registerSystemMemory(this.eventStreamMemoryUid, [] as Array<Record<string, unknown>>);
+    }
 
     /**
      * A background Process (The Chef) "mounts" itself to listen for a specific action.
@@ -172,15 +177,10 @@ class EventEngineSingleton {
         if (this.logBuffer.length === 0) return;
 
         const toFlush = this.logBuffer.splice(0);
-        const current = (StorageEngine.readMemory('system:event_stream') as any[] | undefined) ?? [];
+        const current = (KernelEngine.readMemory(this.eventStreamMemoryUid) as any[] | undefined) ?? [];
         const next = [...current, ...toFlush].slice(-this.maxEventLogs);
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:event_stream',
-            payload: next,
-            classifications: ['system:core'],
-        });
+        KernelEngine.updateMemory(this.eventStreamMemoryUid, next);
     }
 }
 

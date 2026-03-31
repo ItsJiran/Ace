@@ -3,7 +3,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import type { WindowConfig } from '#/schemas/window';
 import type { AnimationRuntimeState, AnimationSequence, BoundsAnchor } from '#/schemas/animation';
 import { WindowEngine } from '#/services/windowEngine';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import { GlobalStateManager } from '#/services/globalStateManager';
 import { useAceMemory, useAceMemorySelector } from '#/hooks/useAceMemory';
 
@@ -308,7 +308,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             if (!config || !canCapturePointer || config.is_locked) return;
             if (e.button !== 0) return;
 
-            const allAnimations = StorageEngine.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined;
+            const allAnimations = KernelEngine.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined;
             const animState = allAnimations?.[config.window_uid];
             const interruptPolicy = animState?.is_running
                 ? (animState.interrupt_policy as 'lock' | 'retarget' | 'cancel' | undefined)

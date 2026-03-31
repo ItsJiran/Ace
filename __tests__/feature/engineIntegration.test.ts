@@ -1,16 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { parseAIStreamChunk } from '#/services/aiParser';
 import { EventBus } from '#/services/eventEngine';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import { RegistryEngine } from '#/services/registryEngine';
 import type { Interaction } from '#/schemas/events';
 
 describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket Workflow', () => {
     beforeEach(() => {
         (EventBus as any).routes.clear();
-        (StorageEngine as any).global_ram.clear();
-        (StorageEngine as any).classification_ram.clear();
-        (StorageEngine as any).memory_sockets.clear();
+        KernelEngine.resetKernelSpace();
 
         RegistryEngine.registerPackage({
             manifest: {
@@ -40,19 +38,15 @@ describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket
             '/src/core/packages/system/parsers/EventBlock.ts': await import('#/core/packages/system/parsers/EventBlock'),
         });
 
-        // 1. Setup the "React Component" (The Observability Socket)
         const reactComponentRenderSpy = vi.fn();
-        StorageEngine.subscribe('type:ai_response', reactComponentRenderSpy);
+        const createdMemoryUids: string[] = [];
 
-        // 2. Setup the "Background Tool Process" (The Commander listening to the EventBus)
         const mockToolExecutor = vi.fn().mockImplementation((interaction: Interaction) => {
-            // The Tool Executor executes the tool safely, and drops the raw data payload into Global RAM
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                process_uid: 'test_tool_executor',
-                payload: { raw_json: interaction.payload.text },
-                classifications: ['type:ai_response']
-            });
+            const memoryUid = KernelEngine.createMemory({ raw_json: interaction.payload.text }) as string;
+            createdMemoryUids.push(memoryUid);
+            const unsubscribe = KernelEngine.subscribe(memoryUid, reactComponentRenderSpy);
+            KernelEngine.updateMemory(memoryUid, { delivered: true });
+            unsubscribe();
         });
         EventBus.registerProcessRoute('send:chat_response', mockToolExecutor);
 
@@ -78,19 +72,11 @@ describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket
             payload: { text: "massive block" }
         });
 
-        // 6. Assertions!
-        // A. Ensure the EventBus successfully caught the request and routed it to the specific Process
         expect(mockToolExecutor).toHaveBeenCalledTimes(1);
-
-        // B. Ensure the Process successfully generated the memory payload, and the O(1) React socket fired!
         expect(reactComponentRenderSpy).toHaveBeenCalledTimes(1);
-
-        // C. Fetch the final payload directly from RAM to prove it works
-        const memoryArray = StorageEngine.readClassification('type:ai_response');
-        expect(memoryArray).toBeDefined();
-
-        const memoryId = memoryArray![0];
-        const massivePayloadData = StorageEngine.readMemory(memoryId);
+        const memoryId = createdMemoryUids[0];
+        expect(memoryId).toBeDefined();
+        const massivePayloadData = KernelEngine.readMemory(memoryId);
         expect(massivePayloadData.raw_json).toBe("massive block");
     });
 });

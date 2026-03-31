@@ -3,7 +3,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Play, Square, X, Activity } from 'lucide-react';
 import { AceWindow } from '#/components/layout/AceWindow';
 import type { AnimationSequence, AnimationSegment, LiteralBounds } from '#/schemas/animation';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import type { WindowConfig } from '#/schemas/window';
 
 export const registry: AceRegistryType.Window = {
@@ -29,7 +29,7 @@ const PATTERN_DESC: Record<SwarmPattern, string> = {
 };
 
 export default function StressTestWindow({ windowUid }: { windowUid: string }) {
-    const initialConfig = (StorageEngine.readMemory(`system:window:${windowUid}`) as WindowConfig | undefined) ?? undefined;
+    const initialConfig = (KernelEngine.readMemory(`system:window:${windowUid}`) as WindowConfig | undefined) ?? undefined;
     const initialPattern: SwarmPattern = initialConfig?.title?.toLowerCase().includes('prompt bar')
         ? 'prompt_bar_morph'
         : 'orbit';

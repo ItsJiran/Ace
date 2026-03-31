@@ -1,12 +1,10 @@
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import { ProcessEngine } from '../processEngine';
 import { handleSessionStreamChunk } from './streamHandler';
 import { PROCESS_KIND } from '#/schemas/process';
 import { AI_GATEWAY_PROCESS_TYPE, AI_RESPONSE_STATUS, AI_SESSION_STATUS } from './types';
 import type { AISession } from './types';
 import type { AIGatewayConfig } from '../../schemas/ai_gateway';
-
-const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
 
 export interface SendSessionStreamResult {
     interrupted: boolean;
@@ -73,22 +71,14 @@ export async function sendToSession(
             owner_process_uid: ownerProcessUid,
             owner_session_id: session.sessionId,
             memory_uid: replyToRamKey,
-            parent_memory_uid: `system:session:${session.sessionId}:context`,
             payload: createPayload,
-            classifications: CLASSIFICATIONS,
             memory_scope: 'process',
             retention_policy: 'keep_on_done',
         })
         : null;
 
     if (!createdByProcess) {
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: replyToRamKey,
-            parent_memory_uid: `system:session:${session.sessionId}:context`,
-            payload: createPayload,
-            classifications: CLASSIFICATIONS,
-        });
+        KernelEngine.writeMemory(replyToRamKey, createPayload);
     }
 
     const updateResponseMemory = (payload: Record<string, unknown>) => {
@@ -97,17 +87,10 @@ export async function sendToSession(
                 owner_process_uid: ownerProcessUid,
                 memory_uid: replyToRamKey,
                 payload,
-                classifications: CLASSIFICATIONS,
             })
             : false;
         if (!updated) {
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                process_uid: ownerProcessUid,
-                memory_uid: replyToRamKey,
-                payload,
-                classifications: CLASSIFICATIONS,
-            });
+            KernelEngine.updateMemory(replyToRamKey, payload);
         }
     };
 

@@ -109,19 +109,17 @@ export default function SystemWidget() {
             created_at: Date.now(),
         };
 
-        window.ACE.storage.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:install_requests',
-            payload: [...installQueue, nextRequest]
-        });
+        window.ACE.storage.updateMemory(
+            window.ACE.widget.installRequestsMemoryUid,
+            [...installQueue, nextRequest],
+        );
     };
 
     const removeInstallRequest = (id: string) => {
-        window.ACE.storage.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:install_requests',
-            payload: installQueue.filter((item) => item.id !== id)
-        });
+        window.ACE.storage.updateMemory(
+            window.ACE.widget.installRequestsMemoryUid,
+            installQueue.filter((item) => item.id !== id),
+        );
     };
 
     const updateConfigValue = async (item: ConfigItem, rawValue: string | boolean) => {

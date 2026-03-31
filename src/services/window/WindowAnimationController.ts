@@ -1,4 +1,4 @@
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import { EventBus } from '../eventEngine';
 import { applyEasing } from '#/core/patterns/easing';
 import type { 
@@ -36,6 +36,12 @@ interface AnimationSlot {
  * - Runtime state (for DevKit observability) is throttled globally.
  */
 export class WindowAnimationController {
+    static readonly runtimeMemoryUid = 'system:window_animations';
+
+    static setupKernelSpace(): void {
+        KernelEngine.registerSystemMemory(WindowAnimationController.runtimeMemoryUid, {} as Record<string, AnimationRuntimeState>);
+    }
+
     // ─── Core Animation State ───────────────────────────────────────────────
     private slots = new Map<string, AnimationSlot>();
     private liveBounds = new Map<string, LiteralBounds>();
@@ -72,7 +78,7 @@ export class WindowAnimationController {
         }
 
         // Verify window exists
-        const granular = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        const granular = KernelEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
         if (!granular) return;
 
         // Cache the DOM element reference upfront
@@ -262,7 +268,7 @@ export class WindowAnimationController {
         const cached = this.liveBounds.get(window_uid);
         if (cached) return { ...cached };
 
-        const granular = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        const granular = KernelEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
         if (granular) return { x: granular.x, y: granular.y, width: granular.width, height: granular.height };
 
         return { x: 0, y: 0, width: 56, height: 56 };
@@ -318,15 +324,11 @@ export class WindowAnimationController {
                 is_running: true,
             };
         }
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:window_animations',
-            payload,
-        });
+        KernelEngine.updateMemory(WindowAnimationController.runtimeMemoryUid, payload);
     }
 
     private writeCompletionState(uid: string, slot: AnimationSlot): void {
-        const existing = (StorageEngine.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined) ?? {};
+        const existing = (KernelEngine.readMemory(WindowAnimationController.runtimeMemoryUid) as Record<string, AnimationRuntimeState> | undefined) ?? {};
         existing[uid] = {
             window_uid: uid,
             pattern_id: slot.sequence.pattern_id,
@@ -339,21 +341,13 @@ export class WindowAnimationController {
             cycles: slot.cycles,
             is_running: false,
         };
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:window_animations',
-            payload: existing,
-        });
+        KernelEngine.updateMemory(WindowAnimationController.runtimeMemoryUid, existing);
     }
 
     private clearAnimationRuntimeState(window_uid: string) {
-        const existing = (StorageEngine.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined) ?? {};
+        const existing = (KernelEngine.readMemory(WindowAnimationController.runtimeMemoryUid) as Record<string, AnimationRuntimeState> | undefined) ?? {};
         delete existing[window_uid];
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:window_animations',
-            payload: existing,
-        });
+        KernelEngine.updateMemory(WindowAnimationController.runtimeMemoryUid, existing);
     }
 
     // ─── Lifecycle ──────────────────────────────────────────────────────────

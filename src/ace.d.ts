@@ -1,10 +1,10 @@
 import type { RegistryEngine } from './services/registryEngine';
 import type { WidgetEngine } from './services/widgetEngine';
 import type { ToolEngine } from './services/toolEngine';
-import type { ProcessEngine } from './services/processEngine';
+
 import type { WindowEngine } from './services/windowEngine';
 import type { EventBus } from './services/eventEngine';
-import type { StorageEngine } from './services/storageEngine';
+
 import type { PipelineEngine } from './services/pipelineEngine';
 import type { ConfigEngine } from './services/configEngine';
 import type { LayoutEngine } from './services/layoutEngine';
@@ -112,11 +112,10 @@ declare global {
       registry: RegistryEngine;
       widget: WidgetEngine;
       tool: ToolEngine;
-      process: ProcessEngine;
       kernel: InstanceType<typeof KernelEngine>;
       window: WindowEngine;
       event: EventBus;
-      storage: StorageEngine;
+      storage: InstanceType<typeof KernelEngine>;
       pipeline: PipelineEngine;
       config: ConfigEngine;
       layout: LayoutEngine;

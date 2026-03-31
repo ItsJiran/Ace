@@ -1,4 +1,4 @@
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 import type { GlobalState } from '#/schemas/globalState';
 import type { GlobalOverlayState } from '#/schemas/window';
 import type { ConfigItem } from '#/schemas/config';
@@ -33,40 +33,19 @@ const MOUSE_FOCUS_MEMORY_UID = 'system:mouse_focus_enabled';
 const FOCUSED_WINDOW_MEMORY_UID = 'system:focused_window_uid';
 
 class GlobalStateManagerSingleton {
-    constructor() {
-        const existing = StorageEngine.readMemory('system:global_state');
-        if (!existing) {
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: 'system:global_state',
-                payload: DEFAULT_GLOBAL_STATE,
-                classifications: ['system:core'],
-            });
-        }
+    public readonly stateMemoryUid = 'system:global_state';
+    public readonly overlayStateMemoryUid = 'system:overlay_state';
+    public readonly mouseFocusMemoryUid = MOUSE_FOCUS_MEMORY_UID;
+    public readonly focusedWindowMemoryUid = FOCUSED_WINDOW_MEMORY_UID;
 
-        const mouseFocusExisting = StorageEngine.readMemory(MOUSE_FOCUS_MEMORY_UID);
-        if (typeof mouseFocusExisting !== 'boolean') {
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: MOUSE_FOCUS_MEMORY_UID,
-                payload: true,
-                classifications: ['system:core'],
-            });
-        }
-
-        const focusedWindowExisting = StorageEngine.readMemory(FOCUSED_WINDOW_MEMORY_UID);
-        if (typeof focusedWindowExisting !== 'string' && focusedWindowExisting !== null) {
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: FOCUSED_WINDOW_MEMORY_UID,
-                payload: null,
-                classifications: ['system:core'],
-            });
-        }
+    setupKernelSpace() {
+        KernelEngine.registerSystemMemory(this.stateMemoryUid, DEFAULT_GLOBAL_STATE);
+        KernelEngine.registerSystemMemory(this.mouseFocusMemoryUid, true);
+        KernelEngine.registerSystemMemory(this.focusedWindowMemoryUid, null);
     }
 
     readState() {
-        return (StorageEngine.readMemory('system:global_state') as GlobalState | undefined) ?? DEFAULT_GLOBAL_STATE;
+        return (KernelEngine.readMemory(this.stateMemoryUid) as GlobalState | undefined) ?? DEFAULT_GLOBAL_STATE;
     }
 
     setCursorPosition(x: number, y: number) {
@@ -151,12 +130,7 @@ class GlobalStateManagerSingleton {
 
         this.syncOverlayState({ focused_window_uid });
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: FOCUSED_WINDOW_MEMORY_UID,
-            payload: focused_window_uid,
-            classifications: ['system:core'],
-        });
+        KernelEngine.updateMemory(this.focusedWindowMemoryUid, focused_window_uid);
     }
 
     /**
@@ -186,12 +160,7 @@ class GlobalStateManagerSingleton {
 
         // Separate write for consumers that subscribe only to this key
         if (!alreadyFocused) {
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: FOCUSED_WINDOW_MEMORY_UID,
-                payload: focused_window_uid,
-                classifications: ['system:core'],
-            });
+            KernelEngine.updateMemory(this.focusedWindowMemoryUid, focused_window_uid);
         }
     }
 
@@ -246,14 +215,9 @@ class GlobalStateManagerSingleton {
             },
         }));
 
-        const existing = StorageEngine.readMemory(MOUSE_FOCUS_MEMORY_UID);
+        const existing = KernelEngine.readMemory(this.mouseFocusMemoryUid);
         if (existing !== mouse_focus_enabled) {
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: MOUSE_FOCUS_MEMORY_UID,
-                payload: mouse_focus_enabled,
-                classifications: ['system:core'],
-            });
+            KernelEngine.updateMemory(this.mouseFocusMemoryUid, mouse_focus_enabled);
         }
     }
 
@@ -271,14 +235,9 @@ class GlobalStateManagerSingleton {
             },
         }));
 
-        const existing = StorageEngine.readMemory(MOUSE_FOCUS_MEMORY_UID);
+        const existing = KernelEngine.readMemory(this.mouseFocusMemoryUid);
         if (existing !== mouse_focus_enabled) {
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: MOUSE_FOCUS_MEMORY_UID,
-                payload: mouse_focus_enabled,
-                classifications: ['system:core'],
-            });
+            KernelEngine.updateMemory(this.mouseFocusMemoryUid, mouse_focus_enabled);
         }
     }
 
@@ -337,16 +296,11 @@ class GlobalStateManagerSingleton {
         const currentState = this.readState();
         const nextState = updater(currentState);
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:global_state',
-            payload: nextState,
-            classifications: ['system:core'],
-        });
+        KernelEngine.updateMemory(this.stateMemoryUid, nextState);
     }
 
     private syncOverlayState(patch: Partial<GlobalOverlayState>) {
-        const currentOverlay = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+        const currentOverlay = KernelEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
         if (!currentOverlay) return;
 
         const hasActualChange = Object.entries(patch).some(([key, value]) => {
@@ -356,12 +310,7 @@ class GlobalStateManagerSingleton {
             return;
         }
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:overlay_state',
-            payload: { ...currentOverlay, ...patch },
-            classifications: ['system:core'],
-        });
+        KernelEngine.updateMemory(this.overlayStateMemoryUid, { ...currentOverlay, ...patch });
     }
 }
 

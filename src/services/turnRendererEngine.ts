@@ -14,7 +14,7 @@
  *   system:turn:{turnId}:rd:{index} → Renderer data (props/content per entry)
  */
 
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ class TurnRendererEngineSingleton {
      */
     getRenderers(turnId: string): TurnRendererMemory | undefined {
         const key = rendererMemoryKey(turnId);
-        return StorageEngine.readMemory(key) as TurnRendererMemory | undefined;
+        return KernelEngine.readMemory(key) as TurnRendererMemory | undefined;
     }
 
     /**
@@ -66,7 +66,7 @@ class TurnRendererEngineSingleton {
      */
     initTurn(turnId: string, role: 'user' | 'assistant'): void {
         const key = rendererMemoryKey(turnId);
-        const existing = StorageEngine.readMemory(key);
+        const existing = KernelEngine.readMemory(key);
         if (existing) return; // Already initialized
 
         const payload: TurnRendererMemory = {
@@ -76,12 +76,7 @@ class TurnRendererEngineSingleton {
             updated_at: Date.now(),
         };
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: key,
-            payload,
-            classifications: CLASSIFICATIONS,
-        });
+        KernelEngine.writeMemory(key, payload);
     }
 
     /**
@@ -95,18 +90,13 @@ class TurnRendererEngineSingleton {
         status?: TurnRendererStatus;
     }): number {
         const memKey = rendererMemoryKey(turnId);
-        const current = (StorageEngine.readMemory(memKey) as TurnRendererMemory | undefined);
+        const current = (KernelEngine.readMemory(memKey) as TurnRendererMemory | undefined);
         const renderers = current?.renderers ? [...current.renderers] : [];
         const index = renderers.length;
         const dataKey = rendererDataKey(turnId, index);
 
         // Store renderer data (props) in dedicated memory
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: dataKey,
-            payload: entry.props ?? {},
-            classifications: CLASSIFICATIONS,
-        });
+        KernelEngine.writeMemory(dataKey, entry.props ?? {});
 
         // Add entry to renderer list
         const newEntry: TurnRendererEntry = {
@@ -126,12 +116,11 @@ class TurnRendererEngineSingleton {
             updated_at: Date.now(),
         };
 
-        StorageEngine.dispatchRAMAction({
-            action: current ? 'update_memory' : 'create_memory',
-            memory_uid: memKey,
-            payload,
-            classifications: CLASSIFICATIONS,
-        });
+        if (current) {
+            KernelEngine.updateMemory(memKey, payload);
+        } else {
+            KernelEngine.writeMemory(memKey, payload);
+        }
 
         return index;
     }
@@ -141,11 +130,7 @@ class TurnRendererEngineSingleton {
      */
     updateRendererData(turnId: string, index: number, data: Record<string, unknown>): void {
         const dataKey = rendererDataKey(turnId, index);
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: dataKey,
-            payload: data,
-        });
+        KernelEngine.updateMemory(dataKey, data);
     }
 
     /**
@@ -153,20 +138,16 @@ class TurnRendererEngineSingleton {
      */
     updateRendererStatus(turnId: string, index: number, status: TurnRendererStatus): void {
         const memKey = rendererMemoryKey(turnId);
-        const current = StorageEngine.readMemory(memKey) as TurnRendererMemory | undefined;
+        const current = KernelEngine.readMemory(memKey) as TurnRendererMemory | undefined;
         if (!current?.renderers?.[index]) return;
 
         const renderers = [...current.renderers];
         renderers[index] = { ...renderers[index], status };
 
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: memKey,
-            payload: {
-                ...current,
-                renderers,
-                updated_at: Date.now(),
-            },
+        KernelEngine.updateMemory(memKey, {
+            ...current,
+            renderers,
+            updated_at: Date.now(),
         });
     }
 
@@ -177,7 +158,7 @@ class TurnRendererEngineSingleton {
      */
     pushOrUpdateParagraph(turnId: string, text: string, status: TurnRendererStatus = 'streaming'): void {
         const memKey = rendererMemoryKey(turnId);
-        const current = StorageEngine.readMemory(memKey) as TurnRendererMemory | undefined;
+        const current = KernelEngine.readMemory(memKey) as TurnRendererMemory | undefined;
         const renderers = current?.renderers ?? [];
 
         if (renderers.length > 0) {
@@ -185,14 +166,10 @@ class TurnRendererEngineSingleton {
             if (last.renderer_slug === 'paragraph-renderer' && last.status === 'streaming') {
                 // Append to existing paragraph
                 const dataKey = last.memory_uid;
-                const existingData = (StorageEngine.readMemory(dataKey) ?? {}) as Record<string, unknown>;
+                const existingData = (KernelEngine.readMemory(dataKey) ?? {}) as Record<string, unknown>;
                 const currentText = typeof existingData.text === 'string' ? existingData.text : '';
 
-                StorageEngine.dispatchRAMAction({
-                    action: 'update_memory',
-                    memory_uid: dataKey,
-                    payload: { ...existingData, text: currentText + text },
-                });
+                KernelEngine.updateMemory(dataKey, { ...existingData, text: currentText + text });
 
                 // Update status if needed
                 if (status !== 'streaming') {
@@ -216,7 +193,7 @@ class TurnRendererEngineSingleton {
      */
     finalizeTurn(turnId: string): void {
         const memKey = rendererMemoryKey(turnId);
-        const current = StorageEngine.readMemory(memKey) as TurnRendererMemory | undefined;
+        const current = KernelEngine.readMemory(memKey) as TurnRendererMemory | undefined;
         if (!current?.renderers?.length) return;
 
         let changed = false;
@@ -230,14 +207,10 @@ class TurnRendererEngineSingleton {
 
         if (!changed) return;
 
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: memKey,
-            payload: {
-                ...current,
-                renderers,
-                updated_at: Date.now(),
-            },
+        KernelEngine.updateMemory(memKey, {
+            ...current,
+            renderers,
+            updated_at: Date.now(),
         });
     }
 }

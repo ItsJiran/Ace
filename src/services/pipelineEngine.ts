@@ -1,4 +1,3 @@
-import { StorageEngine } from '#/services/storageEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 
 export interface PipelineStep<TInput, TOutput> {
@@ -15,12 +14,17 @@ export interface PipelineContext {
 }
 
 export class PipelineEngine<TInitial, TFinal> {
+    static readonly registryMemoryUid = 'system:pipeline_registry';
     private steps: PipelineStep<any, any>[] = [];
     private readonly maxPipelineLogs = 120;
     public pipelineName: string;
 
     constructor(pipelineName: string) {
         this.pipelineName = pipelineName;
+    }
+
+    static setupKernelSpace() {
+        KernelEngine.registerSystemMemory(PipelineEngine.registryMemoryUid, [] as any[]);
     }
 
     // Menambahkan langkah ke dalam rantai
@@ -161,7 +165,7 @@ export class PipelineEngine<TInitial, TFinal> {
         process_uid: string | null;
         error: string | null;
     }) {
-        let current = (StorageEngine.readMemory('system:pipeline_registry') as any[] | undefined);
+        let current = (KernelEngine.readMemory(PipelineEngine.registryMemoryUid) as any[] | undefined);
         if (!Array.isArray(current)) current = [];
         
         const existing = current.find((item) => item.run_id === record.run_id);
@@ -181,11 +185,6 @@ export class PipelineEngine<TInitial, TFinal> {
             next = [...current, record].slice(-this.maxPipelineLogs);
         }
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:pipeline_registry',
-            payload: next,
-            classifications: ['system:core'],
-        });
+        KernelEngine.updateMemory(PipelineEngine.registryMemoryUid, next);
     }
 }

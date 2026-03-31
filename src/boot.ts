@@ -1,10 +1,9 @@
 import { RegistryEngine } from '#/services/registryEngine';
 import { WidgetEngine } from '#/services/widgetEngine';
 import { ToolEngine } from '#/services/toolEngine';
-import { ProcessEngine } from '#/services/processEngine';
+
 import { WindowEngine } from '#/services/windowEngine';
 import { EventBus } from '#/services/eventEngine';
-import { StorageEngine } from '#/services/storageEngine';
 import { PipelineEngine } from '#/services/pipelineEngine';
 import { ConfigEngine } from '#/services/configEngine';
 import { LayoutEngine } from '#/services/layoutEngine';
@@ -34,6 +33,18 @@ export async function bootACE() {
 
     bootPromise = (async () => {
         console.group('🚀 ACE: Booting System...');
+
+        KernelEngine.setupKernelSpace();
+        GlobalStateManager.setupKernelSpace();
+        ConfigEngine.setupKernelSpace();
+        EventBus.setupKernelSpace();
+        PipelineEngine.setupKernelSpace();
+        LoggerEngine.setupKernelSpace();
+        WidgetEngine.setupKernelSpace();
+        LayoutEngine.setupKernelSpace();
+        AIGatewayEngine.setupKernelSpace();
+        WindowEngine.setupKernelSpace();
+        KernelEngine.sealKernelSpace();
         
         // Initialize window.ACE registry bridge immediately so packages can register
         if (typeof window !== 'undefined') {
@@ -41,11 +52,10 @@ export async function bootACE() {
                 registry: RegistryEngine,
                 widget: WidgetEngine,
                 tool: ToolEngine,
-                process: ProcessEngine,
                 kernel: KernelEngine,
                 window: WindowEngine,
                 event: EventBus,
-                storage: StorageEngine,
+                storage: KernelEngine,
                 pipeline: PipelineEngine,
                 config: ConfigEngine,
                 layout: LayoutEngine,

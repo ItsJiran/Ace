@@ -1,5 +1,5 @@
 import { EventBus } from './eventEngine';
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 import { WindowEngine } from './windowEngine';
 import { GlobalStateManager } from './globalStateManager';
 import { ConfigEngine } from './configEngine';
@@ -10,6 +10,7 @@ class KeybindEngineSingleton {
     private isRouteBound = false;
     private allKeybinds: Keybind[] = [];
     private activeKeybinds: Keybind[] = [];
+    private keybindsUnsub?: () => void;
     private handleKeyDownRef?: (event: KeyboardEvent) => void;
     private lastTriggeredByUid = new Map<string, number>();
     private readonly triggerCooldownMs = 220;
@@ -33,8 +34,8 @@ class KeybindEngineSingleton {
             })));
         }
 
-        StorageEngine.subscribe('system:keybinds', (binds: Keybind[] | undefined) => {
-            this.allKeybinds = binds || [];
+        this.keybindsUnsub = KernelEngine.subscribe('system:keybinds', () => {
+            this.allKeybinds = (KernelEngine.readMemory('system:keybinds') as Keybind[] | undefined) || [];
             
             if (import.meta.env.DEV) {
                 this.injectDevKeybinds();
@@ -86,7 +87,7 @@ class KeybindEngineSingleton {
     }
 
     private syncActiveKeybinds() {
-        const binds = StorageEngine.readMemory('system:keybinds') as Keybind[] | undefined;
+        const binds = KernelEngine.readMemory('system:keybinds') as Keybind[] | undefined;
         this.allKeybinds = binds || [];
 
         if (import.meta.env.DEV) {

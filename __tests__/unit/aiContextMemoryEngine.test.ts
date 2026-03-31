@@ -1,14 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AIContextMemoryEngine } from '#/services/aiContextMemoryEngine';
 import { RegistryEngine } from '#/services/registryEngine';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 
 function resetStorageEngine() {
-    (StorageEngine as any).global_ram.clear();
-    (StorageEngine as any).classification_ram.clear();
-    (StorageEngine as any).memory_sockets.clear();
-    (StorageEngine as any).parent_children.clear();
-    (StorageEngine as any).child_parent.clear();
+    KernelEngine.resetKernelSpace();
 }
 
 function resetContextMemoryEngine() {
@@ -80,7 +76,7 @@ describe('AIContextMemoryEngine', () => {
             turn_number: 3,
             message_count: 2,
         });
-        expect(readEnvelopePayload(StorageEngine.readMemory('rag:memory:history:s1:turn-3'))).toEqual([
+        expect(readEnvelopePayload(KernelEngine.readMemory('rag:memory:history:s1:turn-3'))).toEqual([
             { role: 'user', text: 'refactor parser' },
             { role: 'assistant', text: 'working on it' },
         ]);
@@ -132,7 +128,7 @@ describe('AIContextMemoryEngine', () => {
             blocks: [{ type: 'text' }],
             turn_number: 7,
         });
-        expect(readEnvelopePayload(StorageEngine.readMemory(storageKey))).toEqual({
+        expect(readEnvelopePayload(KernelEngine.readMemory(storageKey))).toEqual({
             text: 'final response',
             blocks: [{ type: 'text' }],
             turn_number: 7,
@@ -200,12 +196,12 @@ describe('AIContextMemoryEngine', () => {
         expect(envelope.schema_version).toBe('1.0.0');
         expect(AIContextMemoryEngine.getMemory('test:schema:ok', { strictSchemaValidation: true })?.uid).toBe(item.uid);
 
-        const indexPayload = StorageEngine.readMemory('system:ai_context_memory:index') as Array<Record<string, unknown>>;
+        const indexPayload = KernelEngine.readMemory('system:ai_context_memory:index') as Array<Record<string, unknown>>;
         const snapshot = indexPayload.find((entry) => entry.uid === item.uid);
         expect(snapshot?.validation_status).toBe('validated');
         expect(snapshot?.schema_ref).toBe('test/pkg:tools:test_schema:payload');
 
-        const metrics = StorageEngine.readMemory('system:ai_context_memory:validation_metrics') as Record<string, unknown>;
+        const metrics = KernelEngine.readMemory('system:ai_context_memory:validation_metrics') as Record<string, unknown>;
         expect(metrics.validated).toBeGreaterThan(0);
     });
 

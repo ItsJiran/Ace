@@ -1,4 +1,3 @@
-import { StorageEngine } from './storageEngine';
 import { EventBus } from './eventEngine';
 import { RegistryEngine } from './registryEngine';
 import { GlobalStateManager } from './globalStateManager';
@@ -48,6 +47,9 @@ export interface SpawnWindowOptions {
  * immediately into the Global Storage RAM.
  */
 class WindowEngineSingleton {
+    public readonly overlayStateMemoryUid = 'system:overlay_state';
+    public readonly activeWindowsMemoryUid = 'system:active_windows';
+    public readonly renderedWindowsMemoryUid = 'system:rendered_windows';
     private highest_z_index = 100;
     private isRouteBound = false;
     
@@ -204,12 +206,14 @@ class WindowEngineSingleton {
         this.startAdaptivePacingLoop();
 
         this.registerTerminationHooks();
-
-        this.initializeState();
         
         // Start background bridges
         this.cursorBridge.start();
         this.alwaysOnTopBridge.start();
+    }
+
+    private windowMemoryUid(window_uid: string) {
+        return `system:window:${window_uid}`;
     }
 
     /**
@@ -229,12 +233,8 @@ class WindowEngineSingleton {
         invoke('set_ignore_cursor_events', { ignore }).catch(console.error);
     }
 
-    private initializeState() {
-        // 1. Initialize the root Overlay State
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:overlay_state',
-            payload: {
+    setupKernelSpace() {
+        KernelEngine.registerSystemMemory(this.overlayStateMemoryUid, {
                 mode: 'ambient',
                 focused_window_uid: null,
                 mouse_x: 0,
@@ -242,24 +242,12 @@ class WindowEngineSingleton {
                 debug_bg: import.meta.env?.DEV ? false : false,
                 is_overlay_locked: false,
             } satisfies GlobalOverlayState,
-            classifications: ['system:core']
         });
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:active_windows',
-            payload: [] as Array<{ uid: string; component: string }>,
-            classifications: ['system:core']
-        });
+        KernelEngine.registerSystemMemory(this.activeWindowsMemoryUid, [] as Array<{ uid: string; component: string }>);
 
-        // Separate memory for DOM rendering (batched, slower rate)
-        // App.tsx subscribes to this instead of system:active_windows
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:rendered_windows',
-            payload: [] as Array<{ uid: string; component: string }>,
-            classifications: ['system:core']
-        });
+        KernelEngine.registerSystemMemory(this.renderedWindowsMemoryUid, [] as Array<{ uid: string; component: string }>);
+        WindowAnimationController.setupKernelSpace();
 
         // Fix C: Prewarm the native IPC bridge at boot so the first spawn
         // does not pay the cold-path cost of the first-ever Tauri invoke.
@@ -356,13 +344,9 @@ class WindowEngineSingleton {
              this.toggleDebugBg();
          }
          if (payload.action === 'toggle_overlay_lock') {
-             const state = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+             const state = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState | undefined;
              if (state) {
-                 StorageEngine.dispatchRAMAction({
-                     action: 'update_memory',
-                     memory_uid: 'system:overlay_state',
-                     payload: { is_overlay_locked: !state.is_overlay_locked }
-                 });
+                KernelEngine.updateMemory(this.overlayStateMemoryUid, { is_overlay_locked: !state.is_overlay_locked });
              }
          }
          if (payload.action === 'open_devtools') {
@@ -388,9 +372,9 @@ class WindowEngineSingleton {
     // ─── Core Logic ─────────────────────────────────────────────────────────────
 
     private getMouseFocusEnabled() {
-        const mouseFocusMemory = StorageEngine.readMemory('system:mouse_focus_enabled');
+        const mouseFocusMemory = KernelEngine.readMemory('system:mouse_focus_enabled');
         if (typeof mouseFocusMemory === 'boolean') return mouseFocusMemory;
-        const globalState = StorageEngine.readMemory('system:global_state') as GlobalState | undefined;
+        const globalState = KernelEngine.readMemory('system:global_state') as GlobalState | undefined;
         return globalState?.focus.mouse_focus_enabled ?? true;
     }
 
@@ -399,31 +383,23 @@ class WindowEngineSingleton {
     }
 
     setOverlayMode(mode: 'ambient' | 'interactive') {
-        const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+        const overlayState = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState | undefined;
         if (overlayState?.mode === mode) return;
 
         GlobalStateManager.setOverlayMode(mode);
         
         // Update storage so CursorBridge sees the new mode on next poll
         if (overlayState) {
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: 'system:overlay_state',
-                payload: { mode }
-            });
+            KernelEngine.updateMemory(this.overlayStateMemoryUid, { mode });
         }
         
         this.fireSetIgnoreCursorEvents(mode === 'ambient');
     }
 
     toggleDebugBg() {
-        const state = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState;
+        const state = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState;
         if (state) {
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: 'system:overlay_state',
-                payload: { debug_bg: !state.debug_bg }
-            });
+            KernelEngine.updateMemory(this.overlayStateMemoryUid, { debug_bg: !state.debug_bg });
         }
     }
 
@@ -616,23 +592,18 @@ class WindowEngineSingleton {
             // Take up to BATCH_SIZE windows from the queue and add to rendered list
             const batch = this.renderingQueue.splice(0, WindowEngineSingleton.RENDERING_BATCH_SIZE);
             if (batch.length > 0) {
-                const renderedWindows = (StorageEngine.readMemory('system:rendered_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
+                const renderedWindows = (KernelEngine.readMemory(this.renderedWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
                 
                 // Build new rendered list with batch appended
                 const newRenderedList = [
                     ...renderedWindows,
                     ...batch.map((uid) => {
-                        const windowCfg = StorageEngine.readMemory(`system:window:${uid}`) as WindowConfig | undefined;
+                        const windowCfg = KernelEngine.readMemory(this.windowMemoryUid(uid)) as WindowConfig | undefined;
                         return { uid, component: windowCfg?.component ?? '' };
                     })
                 ];
 
-                StorageEngine.dispatchRAMAction({
-                    action: 'create_memory',
-                    memory_uid: 'system:rendered_windows',
-                    payload: newRenderedList,
-                    classifications: ['system:core']
-                });
+                KernelEngine.updateMemory(this.renderedWindowsMemoryUid, newRenderedList);
 
                 // Start pending animations exactly when windows become rendered.
                 // This keeps spawn visual and animation in sync.
@@ -692,35 +663,30 @@ class WindowEngineSingleton {
 
         // Defer heavy storage writes to run one-by-one with timeout pacing
         this.enqueueDeferredWrite(() => {
+            // Register window in kernel window_system (initialises empty Set of memory_uids)
+            KernelEngine.registerWindow(window_uid);
+
             const ownerProcessUid = options.__process_uid;
             if (ownerProcessUid) {
                 const created = KernelEngine.createRuntimeMemory({
                     owner_process_uid: ownerProcessUid,
-                    memory_uid: `system:window:${window_uid}`,
-                    parent_memory_uid: ownerProcessUid,
+                    memory_uid: this.windowMemoryUid(window_uid),
                     payload: freshWindow,
-                    classifications: ['system:windows'],
                 });
 
-                if (created) return;
+                if (created) {
+                    KernelEngine.linkMemoryToWindow(this.windowMemoryUid(window_uid), window_uid);
+                    return;
+                }
             }
 
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: `system:window:${window_uid}`,
-                payload: freshWindow,
-                classifications: ['system:windows']
-            });
+            KernelEngine.writeMemory(this.windowMemoryUid(window_uid), freshWindow);
+            KernelEngine.linkMemoryToWindow(this.windowMemoryUid(window_uid), window_uid);
         });
 
         this.enqueueDeferredWrite(() => {
-            const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: 'system:active_windows',
-                payload: [...activeWindows, { uid: window_uid, component: entryRef }],
-                classifications: ['system:core']
-            });
+            const activeWindows = (KernelEngine.readMemory(this.activeWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
+            KernelEngine.updateMemory(this.activeWindowsMemoryUid, [...activeWindows, { uid: window_uid, component: entryRef }]);
         });
 
         // Queue for rendering and focus after active_windows is updated
@@ -767,57 +733,43 @@ class WindowEngineSingleton {
         }
 
         // 1. Remove Granular Config
-        StorageEngine.dispatchRAMAction({
-            action: 'delete_memory',
-            memory_uid: `system:window:${window_uid}`
-        });
+        KernelEngine.deleteMemory(this.windowMemoryUid(window_uid));
 
-        const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:active_windows',
-            payload: activeWindows.filter((entry) => entry.uid !== window_uid),
-            classifications: ['system:core']
-        });
+        const activeWindows = (KernelEngine.readMemory(this.activeWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
+        KernelEngine.updateMemory(this.activeWindowsMemoryUid, activeWindows.filter((entry) => entry.uid !== window_uid));
 
         // Also remove from rendered windows (DOM)
-        const renderedWindows = (StorageEngine.readMemory('system:rendered_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:rendered_windows',
-            payload: renderedWindows.filter((entry) => entry.uid !== window_uid),
-            classifications: ['system:core']
-        });
+        const renderedWindows = (KernelEngine.readMemory(this.renderedWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
+        KernelEngine.updateMemory(this.renderedWindowsMemoryUid, renderedWindows.filter((entry) => entry.uid !== window_uid));
 
-        const focusedWindowUid = (StorageEngine.readMemory('system:focused_window_uid') as string | null | undefined)
-            ?? ((StorageEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
+        const focusedWindowUid = (KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined)
+            ?? ((KernelEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
         if (focusedWindowUid === window_uid) {
             GlobalStateManager.setFocusedWindow(null);
         }
+
+        // Remove window from kernel window_system tracking
+        KernelEngine.unregisterWindow(window_uid);
     }
 
     updateWindowConfig(window_uid: string, updates: Partial<WindowConfig>) {
-        const granularKey = `system:window:${window_uid}`;
-        const currentGranular = StorageEngine.readMemory(granularKey) as WindowConfig | undefined;
+        const granularKey = this.windowMemoryUid(window_uid);
+        const currentGranular = KernelEngine.readMemory(granularKey) as WindowConfig | undefined;
         
         if (currentGranular) {
             const nextConfig = { ...currentGranular, ...updates };
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: granularKey,
-                payload: nextConfig
-            });
+            KernelEngine.updateMemory(granularKey, nextConfig);
         }
     }
 
     focusWindow(window_uid: string) {
         if (!this.getMouseFocusEnabled()) return;
 
-        const focusedWindowUid = (StorageEngine.readMemory('system:focused_window_uid') as string | null | undefined)
-            ?? ((StorageEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
+        const focusedWindowUid = (KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined)
+            ?? ((KernelEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
 
-        const targetKey = `system:window:${window_uid}`;
-        const targetCfg = StorageEngine.readMemory(targetKey) as WindowConfig | undefined;
+        const targetKey = this.windowMemoryUid(window_uid);
+        const targetCfg = KernelEngine.readMemory(targetKey) as WindowConfig | undefined;
         if (!targetCfg) return;
 
         // No-op fast path: already focused and on top.
@@ -847,8 +799,8 @@ class WindowEngineSingleton {
         
         if (!window_uid) return;
 
-        const targetKey = `system:window:${window_uid}`;
-        const targetCfg = StorageEngine.readMemory(targetKey) as WindowConfig | undefined;
+        const targetKey = this.windowMemoryUid(window_uid);
+        const targetCfg = KernelEngine.readMemory(targetKey) as WindowConfig | undefined;
         if (!targetCfg) return;
 
         // Now apply the actual focus update
@@ -869,7 +821,7 @@ class WindowEngineSingleton {
             this.setOverlayMode('ambient');
             return;
         }
-        const currentWindow = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        const currentWindow = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as WindowConfig | undefined;
         if (!currentWindow) return;
 
         this.fireSetIgnoreCursorEvents(false);
@@ -884,13 +836,13 @@ class WindowEngineSingleton {
     }
 
     minimizeWindow(window_uid: string) {
-        const cfg = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        const cfg = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as WindowConfig | undefined;
         if (!cfg || cfg.is_minimized) return;
 
         this.updateWindowConfig(window_uid, { is_minimized: true });
 
         // If the minimized window was focused, clear focus + return to ambient
-        const focusedUid = StorageEngine.readMemory('system:focused_window_uid') as string | null | undefined;
+        const focusedUid = KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined;
         if (focusedUid === window_uid) {
             GlobalStateManager.setFocusedWindow(null);
             this.setOverlayMode('ambient');
@@ -898,7 +850,7 @@ class WindowEngineSingleton {
     }
 
     restoreWindow(window_uid: string) {
-        const cfg = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        const cfg = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as WindowConfig | undefined;
         if (!cfg) return;
 
         this.updateWindowConfig(window_uid, { is_minimized: false });
@@ -927,8 +879,8 @@ class WindowEngineSingleton {
      */
     updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number, _skipMonolith = false) {
         // 1. Update Granular Config for subscribed components
-        const granularKey = `system:window:${window_uid}`;
-        const currentGranular = StorageEngine.readMemory(granularKey) as WindowConfig | undefined;
+        const granularKey = this.windowMemoryUid(window_uid);
+        const currentGranular = KernelEngine.readMemory(granularKey) as WindowConfig | undefined;
         
         if (currentGranular) {
             // Optimization: Skip if identical
@@ -937,11 +889,7 @@ class WindowEngineSingleton {
             }
 
             const nextConfig = { ...currentGranular, x, y, width, height };
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                memory_uid: granularKey,
-                payload: nextConfig
-            });
+            KernelEngine.updateMemory(granularKey, nextConfig);
         }
     }
 
@@ -952,7 +900,7 @@ class WindowEngineSingleton {
     }
 
     playAnimation(window_uid: string, sequence: AnimationSequence): void {
-        const exists = StorageEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
+        const exists = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as WindowConfig | undefined;
         if (!exists) {
             this.pendingAnimations.set(window_uid, sequence);
             return;

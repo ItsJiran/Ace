@@ -1,4 +1,4 @@
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import { GlobalStateManager } from '../globalStateManager';
 import { cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import type { WindowConfig, GlobalOverlayState } from '#/schemas/window';
@@ -18,10 +18,9 @@ export class CursorBridge {
     private intervalId?: number;
     private onOverlayModeChange: (mode: 'ambient' | 'interactive') => void;
 
-    // Bounds cache — updated via StorageEngine subscriptions, not per-tick reads
+    // Bounds cache — refreshed from kernel memory on global change notifications.
     private cachedWindowList: WindowConfig[] = [];
     private activeWindowsUnsub?: () => void;
-    private windowUnsubs = new Map<string, () => void>();
 
     constructor(onOverlayModeChange: (mode: 'ambient' | 'interactive') => void) {
         this.onOverlayModeChange = onOverlayModeChange;
@@ -48,44 +47,11 @@ export class CursorBridge {
         );
     }
 
-    private updateCachedWindow(uid: string, config: WindowConfig | undefined) {
-        if (!config || config.is_minimized) {
-            this.cachedWindowList = this.cachedWindowList.filter(w => w.window_uid !== uid);
-        } else {
-            const idx = this.cachedWindowList.findIndex(w => w.window_uid === uid);
-            if (idx >= 0) {
-                this.cachedWindowList[idx] = config;
-            } else {
-                this.cachedWindowList.push(config);
-            }
-        }
-    }
-
-    private rebuildWindowSubscriptions(activeWindows: Array<{ uid: string; component: string }>) {
-        const newUids = new Set(activeWindows.map(e => e.uid));
-
-        // Unsubscribe from windows that are no longer active
-        for (const [uid, unsub] of this.windowUnsubs) {
-            if (!newUids.has(uid)) {
-                unsub();
-                this.windowUnsubs.delete(uid);
-                this.cachedWindowList = this.cachedWindowList.filter(w => w.window_uid !== uid);
-            }
-        }
-
-        // Subscribe to newly added windows
-        for (const { uid } of activeWindows) {
-            if (!this.windowUnsubs.has(uid)) {
-                const unsub = StorageEngine.subscribe(
-                    `system:window:${uid}`,
-                    (config: WindowConfig | undefined) => { this.updateCachedWindow(uid, config); }
-                );
-                this.windowUnsubs.set(uid, unsub);
-                // Seed from current RAM so cache is immediately valid
-                const config = StorageEngine.readMemory(`system:window:${uid}`) as WindowConfig | undefined;
-                this.updateCachedWindow(uid, config);
-            }
-        }
+    private rebuildWindowCache() {
+        const activeWindows = (KernelEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
+        this.cachedWindowList = activeWindows
+            .map(({ uid }) => KernelEngine.readMemory(`system:window:${uid}`) as WindowConfig | undefined)
+            .filter((config): config is WindowConfig => Boolean(config && !config.is_minimized));
     }
 
     public start() {
@@ -96,23 +62,20 @@ export class CursorBridge {
         let cachedScale = 1;
         let lastMetricsAt = 0;
 
-        // Subscribe to active window list changes to keep bounds cache in sync
-        this.activeWindowsUnsub = StorageEngine.subscribe(
+        this.activeWindowsUnsub = KernelEngine.subscribe(
             'system:active_windows',
-            (activeWindows: Array<{ uid: string; component: string }> | undefined) => {
-                this.rebuildWindowSubscriptions(activeWindows ?? []);
+            () => {
+                this.rebuildWindowCache();
             }
         );
-        // Seed initial cache
-        const initial = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
-        this.rebuildWindowSubscriptions(initial);
+        this.rebuildWindowCache();
 
         this.intervalId = window.setInterval(async () => {
             const state = GlobalStateManager.readState();
 
             // If mouse-focus behavior is disabled, always enforce ambient pass-through.
             if (!state.focus.mouse_focus_enabled) {
-                const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                const overlayState = KernelEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
                 if (overlayState?.mode !== 'ambient') {
                     this.onOverlayModeChange('ambient');
                 }
@@ -124,7 +87,7 @@ export class CursorBridge {
 
             if (windowList.length === 0) {
                 // If NO windows are open, force ambient mode (click-through)
-                const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                const overlayState = KernelEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
                 if (overlayState?.mode !== 'ambient') {
                     this.onOverlayModeChange('ambient');
                 }
@@ -170,7 +133,7 @@ export class CursorBridge {
                     return true;
                 });
 
-                const overlayState = StorageEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                const overlayState = KernelEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
 
                 // If overlay is locked, always force interactive mode.
                 if (overlayState?.is_overlay_locked) {
@@ -212,13 +175,8 @@ export class CursorBridge {
             window.clearInterval(this.intervalId);
             this.intervalId = undefined;
         }
-        // Clean up all StorageEngine subscriptions
         this.activeWindowsUnsub?.();
         this.activeWindowsUnsub = undefined;
-        for (const unsub of this.windowUnsubs.values()) {
-            unsub();
-        }
-        this.windowUnsubs.clear();
         this.cachedWindowList = [];
     }
 }

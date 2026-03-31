@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { KernelEngine } from '#/services/kernelEngine';
-import { StorageEngine } from '#/services/storageEngine';
 
 // Polyfill crypto for node/vitest environment if needed
 if (!globalThis.crypto) {
@@ -11,11 +10,7 @@ if (!globalThis.crypto) {
 
 describe('KernelEngine (Control Plane Facade)', () => {
     beforeEach(() => {
-        (StorageEngine as any).global_ram.clear();
-        (StorageEngine as any).classification_ram.clear();
-        (StorageEngine as any).memory_sockets.clear();
-        (StorageEngine as any).parent_children.clear();
-        (StorageEngine as any).child_parent.clear();
+        KernelEngine.resetKernelSpace();
     });
 
     describe('Phase A: Facade Foundation', () => {
@@ -194,7 +189,7 @@ describe('KernelEngine (Control Plane Facade)', () => {
             expect(memory_uid).toBeDefined();
             expect(memory_uid).not.toBeNull();
 
-            const stored = StorageEngine.readMemory(memory_uid!);
+            const stored = KernelEngine.readMemory(memory_uid!);
             expect(stored).toBeDefined();
             expect(stored.state).toBe('active');
         });
@@ -217,7 +212,7 @@ describe('KernelEngine (Control Plane Facade)', () => {
 
             expect(updated).toBe(true);
 
-            const stored = StorageEngine.readMemory(memory_uid!);
+            const stored = KernelEngine.readMemory(memory_uid!);
             expect(stored.value).toBe(2);
         });
 

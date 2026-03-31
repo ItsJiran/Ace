@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileT
 import { TurnRendererEngine } from '#/services/turnRendererEngine';
 import type { TurnRendererEntry } from '#/services/turnRendererEngine';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import { AI_BLOCK_HANDLER_STATUS, AI_SESSION_STATUS } from '#/services/aiGateway/types';
 import type { AIBlockHandlerStatus, AISessionStatus, SDKProvider } from '#/services/aiGateway/types';
 
@@ -1185,12 +1185,7 @@ export default function AISessionMonitor({ windowUid }: { windowUid?: string } =
                 tracked_at: now,
             };
             
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: parentRamKey,
-                payload: ramStats,
-                classifications: ['system:dev', 'system:ai_session_monitor'],
-            });
+            KernelEngine.writeMemory(parentRamKey, ramStats);
         }
     };
 

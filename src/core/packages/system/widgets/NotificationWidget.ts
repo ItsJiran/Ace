@@ -7,7 +7,7 @@ import {
     type Notification,
     type NotificationCreateInput,
 } from '#/schemas/notification';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 
 export const registry: AceRegistryType.Widget = {
     name: 'Notification Center',
@@ -27,18 +27,13 @@ interface NotificationAPI {
 }
 
 function safeReadNotifications(): Notification[] {
-    const current = StorageEngine.readMemory(NOTIFICATION_MEMORY_UID);
+    const current = KernelEngine.readMemory(NOTIFICATION_MEMORY_UID);
     const parsed = NotificationArraySchema.safeParse(current);
     return parsed.success ? parsed.data : [];
 }
 
 function persistNotifications(next: Notification[]) {
-    StorageEngine.dispatchRAMAction({
-        action: 'create_memory',
-        memory_uid: NOTIFICATION_MEMORY_UID,
-        payload: next,
-        classifications: ['system:core', 'system:notification'],
-    });
+    KernelEngine.writeMemory(NOTIFICATION_MEMORY_UID, next);
 }
 
 function createNotification(input: NotificationCreateInput): Notification {
@@ -64,7 +59,7 @@ export default function activate() {
     const existing = safeReadNotifications();
     persistNotifications(existing);
 
-    const activeWindows = (StorageEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
+    const activeWindows = (KernelEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
     const notificationWindowRef = 'itsjiran/ace-system:windows:notification-window';
     const hasNotificationWindow = activeWindows.some((w) => w.component === notificationWindowRef);
 

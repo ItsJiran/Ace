@@ -4,7 +4,7 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import { X, Minus, GripHorizontal } from 'lucide-react';
 import MockSettings from '../components/MockSettings';
 import type { WindowConfig } from '#/schemas/window';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import { WindowEngine } from '#/services/windowEngine';
 
 export const registry: AceRegistryType.Window = {
@@ -89,7 +89,7 @@ function MockSettingsShell({
 
 export default function MockSettingsWindow({ windowUid }: { windowUid: string }) {
     const initialConfig = useState<WindowConfig | null>(() => {
-        return (StorageEngine.readMemory(`system:window:${windowUid}`) as WindowConfig | undefined) ?? null;
+        return (KernelEngine.readMemory(`system:window:${windowUid}`) as WindowConfig | undefined) ?? null;
     })[0];
 
     const [isMounted, setIsMounted] = useState(false);

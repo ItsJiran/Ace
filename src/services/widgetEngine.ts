@@ -1,4 +1,5 @@
 import { RegistryEngine } from './registryEngine';
+import { KernelEngine } from './kernelEngine';
 import type { RegistryDomainEntry } from '../schemas/registry';
 
 /**
@@ -10,6 +11,12 @@ import type { RegistryDomainEntry } from '../schemas/registry';
  */
 
 class WidgetEngineSingleton {
+    public readonly installRequestsMemoryUid = 'system:install_requests';
+
+    setupKernelSpace() {
+        KernelEngine.registerSystemMemory(this.installRequestsMemoryUid, [] as Array<Record<string, unknown>>);
+    }
+
     /**
      * Retrieve a specific widget definition from the registry.
      * Wraps RegistryEngine.getDomainEntry with 'widgets' domain preset.

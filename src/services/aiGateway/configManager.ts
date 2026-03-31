@@ -22,7 +22,7 @@
  */
 
 import { FSEngine } from '../fsEngine';
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import { AIGatewayConfigSchema, type AIGatewayConfig } from '../../schemas/ai_gateway';
 import type { AIGatewayModel } from '../../schemas/ai_gateway';
 import type { SDKProvider } from './types';
@@ -165,12 +165,7 @@ class AIConfigManagerSingleton {
      * updates without holding a direct reference to this module.
      */
     syncToRAM(): void {
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: MEMORY_UID,
-            payload: JSON.parse(JSON.stringify(this.config)),
-            classifications: ['system:core', 'system:ai_gateway'],
-        });
+        KernelEngine.updateMemory(MEMORY_UID, JSON.parse(JSON.stringify(this.config)));
     }
 }
 

@@ -1,4 +1,4 @@
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 import { invoke } from '@tauri-apps/api/core';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
@@ -12,6 +12,7 @@ export interface LogEntry {
 const MAX_LOGS = 100;
 
 class LoggerEngineSingleton {
+    public readonly logsMemoryUid = 'system:logs';
     private originalConsole = {
         log: console.log,
         info: console.info,
@@ -21,16 +22,14 @@ class LoggerEngineSingleton {
 
     private isInitialized = false;
 
+    setupKernelSpace() {
+        KernelEngine.registerSystemMemory(this.logsMemoryUid, [] as LogEntry[]);
+    }
+
     init() {
         if (this.isInitialized) return;
 
-        // 1. Create the memory store
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: 'system:logs',
-            payload: [] as LogEntry[],
-            classifications: ['system:core']
-        });
+        this.setupKernelSpace();
 
         // 2. Intercept console calls
         (Object.keys(this.originalConsole) as LogLevel[]).forEach((level) => {
@@ -76,15 +75,10 @@ class LoggerEngineSingleton {
             id: Math.random().toString(36).substring(2, 9)
         };
 
-        const currentLogs = StorageEngine.readMemory('system:logs') as LogEntry[] || [];
+        const currentLogs = KernelEngine.readMemory(this.logsMemoryUid) as LogEntry[] || [];
         const newLogs = [...currentLogs, entry].slice(-MAX_LOGS);
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory', // Use create_memory to overwrite the array instead of merging it into an object
-            memory_uid: 'system:logs',
-            payload: newLogs,
-            classifications: ['system:core']
-        });
+        KernelEngine.updateMemory(this.logsMemoryUid, newLogs);
     }
 }
 

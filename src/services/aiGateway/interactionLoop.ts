@@ -1,5 +1,5 @@
 
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import { ParserEngine } from '../parserEngine';
 import { ProcessEngine } from '../processEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
@@ -14,8 +14,6 @@ import { AI_FEEDBACK_LOOP_STATUS, AI_GATEWAY_PROCESS_TYPE } from './types';
 import type { AISession } from './types';
 import type { ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
-
-const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
 const TOOL_FEEDBACK_LOOP_MAX_TURNS = 6;
 const TOOL_FEEDBACK_WAIT_TIMEOUT_MS = 12000;
 const TOOL_FEEDBACK_WAIT_INTERVAL_MS = 120;
@@ -52,7 +50,7 @@ function snapshotResponseAttemptFromMemory(input: {
     prompt: string;
 }): ResponseAttemptSnapshot {
     const { replyToRamKey, attemptIndex, prompt } = input;
-    const memory = (StorageEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
+    const memory = (KernelEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
 
     return {
         attempt_index: attemptIndex,
@@ -87,7 +85,7 @@ function drainParserRuntimeToResponseMemory(sessionId: string, replyToRamKey: st
     const drainedStopSignals = ParserEngine.drainSessionStopSignals(sessionId);
     const drainedTokenTraces = ParserEngine.drainTokenTraces(sessionId);
 
-    const memory = (StorageEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
+    const memory = (KernelEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
     const currentResults = Array.isArray(memory.parser_handler_results)
         ? (memory.parser_handler_results as ParserSessionEmitRecord[])
         : [];
@@ -103,23 +101,18 @@ function drainParserRuntimeToResponseMemory(sessionId: string, replyToRamKey: st
     const mergedTokenTraces = [...currentTokenTraces, ...drainedTokenTraces].slice(-200);
 
     if (drainedResults.length > 0 || drainedStopSignals.length > 0 || drainedTokenTraces.length > 0) {
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: replyToRamKey,
-            payload: {
-                parser_handler_results: mergedResults,
-                parser_handler_result_count: mergedResults.length,
-                parser_handler_last_result_at:
-                    mergedResults.length > 0 ? mergedResults[mergedResults.length - 1].at : undefined,
-                parser_stop_signals: mergedStopSignals,
-                parser_stop_signal_count: mergedStopSignals.length,
-                parser_last_stop_at:
-                    mergedStopSignals.length > 0 ? mergedStopSignals[mergedStopSignals.length - 1].at : undefined,
-                parser_token_traces: mergedTokenTraces,
-                parser_token_trace_count: mergedTokenTraces.length,
-                last_updated_at: Date.now(),
-            },
-            classifications: CLASSIFICATIONS,
+        KernelEngine.updateMemory(replyToRamKey, {
+            parser_handler_results: mergedResults,
+            parser_handler_result_count: mergedResults.length,
+            parser_handler_last_result_at:
+                mergedResults.length > 0 ? mergedResults[mergedResults.length - 1].at : undefined,
+            parser_stop_signals: mergedStopSignals,
+            parser_stop_signal_count: mergedStopSignals.length,
+            parser_last_stop_at:
+                mergedStopSignals.length > 0 ? mergedStopSignals[mergedStopSignals.length - 1].at : undefined,
+            parser_token_traces: mergedTokenTraces,
+            parser_token_trace_count: mergedTokenTraces.length,
+            last_updated_at: Date.now(),
         });
     }
 
@@ -339,22 +332,15 @@ export async function executeSessionInteractionLoop(input: {
             owner_process_uid: rootProcess.process_uid,
             memory_uid: replyToRamKey,
             payload,
-            classifications: CLASSIFICATIONS,
         });
 
         if (!updated) {
             // Fallback for memory created before process ownership metadata is attached.
-            StorageEngine.dispatchRAMAction({
-                action: 'update_memory',
-                process_uid: rootProcess.process_uid,
-                memory_uid: replyToRamKey,
-                payload,
-                classifications: CLASSIFICATIONS,
-            });
+            KernelEngine.updateMemory(replyToRamKey, payload);
         }
     };
 
-    const memoryBefore = (StorageEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
+    const memoryBefore = (KernelEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
     const existingTurns = Array.isArray(memoryBefore.response_turns)
         ? (memoryBefore.response_turns as ResponseTurnSnapshot[])
         : [];

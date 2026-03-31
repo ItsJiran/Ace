@@ -1,11 +1,9 @@
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import { AIContextEngine } from '../aiContextEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { finalizeRequestProtocolState, stripHistorySummaryBlocksFromText } from './protocolLifecycle';
 import { AI_RESPONSE_STATUS } from './types';
 import type { AISession } from './types';
-
-const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
 
 export function finalizeGatewaySessionResponse(input: {
     session: AISession;
@@ -16,20 +14,15 @@ export function finalizeGatewaySessionResponse(input: {
 }): { responseText: string; protocolState: ReturnType<typeof finalizeRequestProtocolState> } {
     const { session, sessionId, prompt, reply_to_ram_key, response_reference } = input;
 
-    const responseMemory = StorageEngine.readMemory(reply_to_ram_key) as { text?: unknown } | undefined;
+    const responseMemory = KernelEngine.readMemory(reply_to_ram_key) as { text?: unknown } | undefined;
     const rawStreamText = typeof responseMemory?.text === 'string' ? responseMemory.text : '';
 
     const responseText = stripHistorySummaryBlocksFromText(rawStreamText);
     if (responseText !== rawStreamText) {
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: reply_to_ram_key,
-            payload: { text: responseText },
-            classifications: CLASSIFICATIONS,
-        });
+        KernelEngine.updateMemory(reply_to_ram_key, { text: responseText });
     }
 
-    const rawResponseMemory = StorageEngine.readMemory(reply_to_ram_key) as {
+    const rawResponseMemory = KernelEngine.readMemory(reply_to_ram_key) as {
         raw_response?: unknown;
         blocks?: unknown;
         status?: unknown;
@@ -56,13 +49,8 @@ export function finalizeGatewaySessionResponse(input: {
         rawResponse: rawResponseText,
     });
 
-    StorageEngine.dispatchRAMAction({
-        action: 'update_memory',
-        memory_uid: reply_to_ram_key,
-        payload: {
-            protocol_validation: protocolState,
-        },
-        classifications: CLASSIFICATIONS,
+    KernelEngine.updateMemory(reply_to_ram_key, {
+        protocol_validation: protocolState,
     });
 
     AIContextMemoryEngine.pruneSessionMemories({ session_id: sessionId, retainPerType: 12, tags: ['history', 'raw'] });

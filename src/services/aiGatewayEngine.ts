@@ -39,7 +39,6 @@ import { executeSessionInteractionLoop } from './aiGateway/interactionLoop';
 import { finalizeRequestProtocolState } from './aiGateway/protocolLifecycle';
 import { AIContextEngine } from './aiContextEngine';
 import { AIContextMemoryEngine } from './aiContextMemoryEngine';
-import { StorageEngine } from './storageEngine';
 import { KernelEngine } from './kernelEngine';
 import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
 import type {
@@ -82,6 +81,11 @@ class AIGatewayEngineSingleton {
     private isRouteBound = false;
     private readonly sessionProcessBySessionId = new Map<string, string>();
     private isTerminationHookBound = false;
+
+    setupKernelSpace() {
+        KernelEngine.registerSystemMemory(this.memory_uid, null);
+        KernelEngine.registerSystemMemory(this.runtime_memory_uid, null);
+    }
 
     // ── Boot ──────────────────────────────────────────────────────────────────
 
@@ -274,7 +278,7 @@ class AIGatewayEngineSingleton {
             // Group 1: base context and response memory used by monitor panels.
             const contextState = AIContextEngine.getSessionContext(snapshot.sessionId);
             const responseMemory = snapshot.activeOutputRamKey
-                ? (StorageEngine.readMemory(snapshot.activeOutputRamKey) as Record<string, unknown> | undefined)
+                ? (KernelEngine.readMemory(snapshot.activeOutputRamKey) as Record<string, unknown> | undefined)
                 : undefined;
 
             // Group 2: lifecycle timeline extracted from parser runtime records.

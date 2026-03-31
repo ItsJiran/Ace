@@ -1,65 +1,37 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { StorageEngine } from '#/services/storageEngine';
-import type { RAMInteractivity } from '#/schemas/storage';
+import { KernelEngine } from '#/services/kernelEngine';
 
 describe('Global RAM Storage Engine (Pure Map & Sockets)', () => {
     beforeEach(() => {
-        // Clear the Singletons via internal state bypass for clean test runs
-        (StorageEngine as any).global_ram.clear();
-        (StorageEngine as any).classification_ram.clear();
-        (StorageEngine as any).memory_sockets.clear();
-        (StorageEngine as any).parent_children.clear();
-        (StorageEngine as any).child_parent.clear();
+        KernelEngine.resetKernelSpace();
     });
 
     it('should create memory, generate a memory_uid, and trigger sockets', () => {
         const mockSocket = vi.fn();
 
-        // Subscribe to a classification tag BEFORE the memory is written
-        const unsubscribe = StorageEngine.subscribe('type:chat', mockSocket);
-
-        const createRequest: RAMInteractivity = {
-            action: 'create_memory',
-            process_uid: 'test',
-            payload: { text: 'Hello World' },
-            classifications: ['type:chat']
-        };
-
-        const resultUid = StorageEngine.dispatchRAMAction(createRequest);
+        const resultUid = KernelEngine.createMemory({ text: 'Hello World' });
         expect(resultUid).toBeDefined();
         expect(resultUid).toMatch(/^mem-/);
 
-        // Assert the payload exists in RAM
-        expect(StorageEngine.readMemory(resultUid as string)).toEqual({ text: 'Hello World' });
+        const unsubscribe = KernelEngine.subscribe(resultUid as string, mockSocket);
+        KernelEngine.updateMemory(resultUid as string, { text: 'Hello World 2' });
 
-        // Assert the Classification Array was created
-        expect(StorageEngine.readClassification('type:chat')).toContain(resultUid);
-
-        // Crucial: Assert the Memory Bus fired instantly in O(1)
+        expect(KernelEngine.readMemory(resultUid as string)).toEqual({ text: 'Hello World 2' });
         expect(mockSocket).toHaveBeenCalledTimes(1);
-        expect(mockSocket).toHaveBeenCalledWith([resultUid]); // Called with the classification array
+        expect(mockSocket).toHaveBeenCalledWith({ text: 'Hello World 2' });
 
         unsubscribe();
     });
 
     it('should update memory, merge payloads, and re-fire specific sockets', () => {
-        const uid = StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            process_uid: 'test',
-            payload: { count: 1 }
-        }) as string;
+        const uid = KernelEngine.createMemory({ count: 1 }) as string;
 
         const specificMemorySocket = vi.fn();
-        StorageEngine.subscribe(uid, specificMemorySocket);
+        KernelEngine.subscribe(uid, specificMemorySocket);
 
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            process_uid: 'test',
-            memory_uid: uid,
-            payload: { count: 2, new_field: 'hello' }
-        });
+        KernelEngine.updateMemory(uid, { count: 2, new_field: 'hello' });
 
-        const mergedPayload = StorageEngine.readMemory(uid);
+        const mergedPayload = KernelEngine.readMemory(uid);
         expect(mergedPayload).toEqual({ count: 2, new_field: 'hello' });
 
         // The specific memory socket should have fired with the new merged payload
@@ -68,30 +40,17 @@ describe('Global RAM Storage Engine (Pure Map & Sockets)', () => {
     });
 
     it('should delete memory, index arrays, and fire null sockets', () => {
-        const uid = StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            process_uid: 'test',
-            payload: { data: 'old' },
-            classifications: ['temp_tag']
-        }) as string;
+        const uid = KernelEngine.createMemory({ data: 'old' }) as string;
 
         const socket = vi.fn();
-        StorageEngine.subscribe(uid, socket);
+        KernelEngine.subscribe(uid, socket);
 
-        expect(StorageEngine.readClassification('temp_tag')).toContain(uid);
-
-        const success = StorageEngine.dispatchRAMAction({
-            action: 'delete_memory',
-            process_uid: 'test',
-            memory_uid: uid
-        });
+        const success = KernelEngine.deleteMemory(uid);
 
         expect(success).toBe(true);
-        expect(StorageEngine.readMemory(uid)).toBeUndefined();
-        expect(StorageEngine.readClassification('temp_tag')).toBeUndefined(); // Array was emptied
+        expect(KernelEngine.readMemory(uid)).toBeUndefined();
 
-        // The socket should have fired with null to tell components it was deleted
         expect(socket).toHaveBeenCalledTimes(1);
-        expect(socket).toHaveBeenCalledWith(null);
+        expect(socket).toHaveBeenCalledWith(undefined);
     });
 });

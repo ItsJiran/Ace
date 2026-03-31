@@ -4,7 +4,7 @@ import { EventBus } from '#/services/eventEngine';
 import { registerSendGatewayRoute } from '#/services/aiGateway/sendGatewayRoute';
 import { sendToSession as sendStreamToSession } from '#/services/aiGateway/httpClient';
 import { ProcessEngine } from '#/services/processEngine';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import type { AIGatewayConfig } from '#/schemas/ai_gateway';
 
 vi.mock('#/services/aiGateway/streamHandler', () => ({
@@ -14,11 +14,7 @@ vi.mock('#/services/aiGateway/streamHandler', () => ({
 describe('Process parent propagation', () => {
     beforeEach(() => {
         (EventBus as any).routes.clear();
-        (StorageEngine as any).global_ram.clear();
-        (StorageEngine as any).classification_ram.clear();
-        (StorageEngine as any).memory_sockets.clear();
-        (StorageEngine as any).parent_children.clear();
-        (StorageEngine as any).child_parent.clear();
+        KernelEngine.resetKernelSpace();
 
         if (!(globalThis as any).crypto) {
             (globalThis as any).crypto = {

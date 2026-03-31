@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AceWindow } from '#/components/layout/AceWindow';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import { Database, RefreshCw, Activity } from 'lucide-react';
 
 export const registry: AceRegistryType.Window = {
@@ -20,14 +20,13 @@ export const registry: AceRegistryType.Window = {
     },
 };
 
-type SortKey = 'memory_uid' | 'approx_bytes' | 'listeners' | 'type' | 'parent_memory_uid' | 'child_count';
+type SortKey = 'memory_uid' | 'approx_bytes' | 'listeners' | 'type' | 'child_count';
 
 interface RAMEntry {
     memory_uid: string;
     approx_bytes: number;
     type: string;
     listeners: number;
-    parent_memory_uid?: string;
     child_count: number;
 }
 
@@ -38,17 +37,16 @@ function formatBytes(b: number): string {
 }
 
 export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
-    const [stats, setStats] = useState(() => StorageEngine.getRAMStats());
+    const [stats, setStats] = useState(() => KernelEngine.getRAMStats());
     const [isPaused, setIsPaused] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>('approx_bytes');
     const [sortAsc, setSortAsc] = useState(false);
     const [filter, setFilter] = useState('');
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
-    const [collapsedHierarchyNodes, setCollapsedHierarchyNodes] = useState<Record<string, boolean>>({});
     const [detailsCache, setDetailsCache] = useState<Record<string, string>>({});
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const refresh = () => setStats(StorageEngine.getRAMStats());
+    const refresh = () => setStats(KernelEngine.getRAMStats());
 
     useEffect(() => {
         if (isPaused) {
@@ -74,7 +72,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
 
         if (detailsCache[memoryUid] !== undefined) return;
 
-        const payload = StorageEngine.readMemory(memoryUid);
+        const payload = KernelEngine.readMemory(memoryUid);
         let preview = '';
         if (payload === undefined) {
             preview = '(no payload in global RAM for this key)';
@@ -112,117 +110,9 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
         else if (sortKey === 'approx_bytes') cmp = a.approx_bytes - b.approx_bytes;
         else if (sortKey === 'listeners') cmp = a.listeners - b.listeners;
         else if (sortKey === 'type') cmp = a.type.localeCompare(b.type);
-        else if (sortKey === 'parent_memory_uid') cmp = (a.parent_memory_uid || '').localeCompare(b.parent_memory_uid || '');
         else if (sortKey === 'child_count') cmp = a.child_count - b.child_count;
         return sortAsc ? cmp : -cmp;
     });
-
-    const rowByUid = new Map<string, RAMEntry>();
-    allRows.forEach((row) => {
-        rowByUid.set(row.memory_uid, row);
-    });
-
-    const ensureRow = (memory_uid: string): RAMEntry => {
-        const existing = rowByUid.get(memory_uid);
-        if (existing) return existing;
-
-        const synthesized: RAMEntry = {
-            memory_uid,
-            approx_bytes: 0,
-            type: '—',
-            listeners: listenerMap.get(memory_uid) ?? 0,
-            parent_memory_uid: undefined,
-            child_count: 0,
-        };
-        rowByUid.set(memory_uid, synthesized);
-        return synthesized;
-    };
-
-    // Build parent->children graph from explicit hierarchy links first,
-    // then backfill from row metadata as a secondary source.
-    const childrenByParent = new Map<string, Set<string>>();
-    const parentByChild = new Map<string, string>();
-
-    stats.hierarchy_links.forEach((link) => {
-        const childUid = link.child_memory_uid;
-        const parentUid = link.parent_memory_uid;
-        if (!childUid || !parentUid || childUid === parentUid) return;
-
-        ensureRow(childUid);
-        ensureRow(parentUid);
-
-        parentByChild.set(childUid, parentUid);
-        const bucket = childrenByParent.get(parentUid) || new Set<string>();
-        bucket.add(childUid);
-        childrenByParent.set(parentUid, bucket);
-    });
-
-    rowByUid.forEach((row) => {
-        const childUid = row.memory_uid;
-        const parentUid = row.parent_memory_uid;
-        if (!parentUid || childUid === parentUid) return;
-        if (parentByChild.has(childUid)) return;
-
-        ensureRow(parentUid);
-        parentByChild.set(childUid, parentUid);
-        const bucket = childrenByParent.get(parentUid) || new Set<string>();
-        bucket.add(childUid);
-        childrenByParent.set(parentUid, bucket);
-    });
-
-    // Refresh child_count from the reconciled graph so synthesized parents show accurate counts.
-    rowByUid.forEach((row) => {
-        row.child_count = (childrenByParent.get(row.memory_uid) || new Set<string>()).size;
-        row.parent_memory_uid = parentByChild.get(row.memory_uid);
-    });
-
-    const rootUids = Array.from(rowByUid.keys())
-        .filter((uid) => {
-            const parentUid = parentByChild.get(uid);
-            return !parentUid || !rowByUid.has(parentUid);
-        })
-        .sort((a, b) => a.localeCompare(b));
-
-    const hierarchyLines: Array<{ uid: string; depth: number; hasChildren: boolean }> = [];
-    const visitedGlobal = new Set<string>();
-    const appendHierarchy = (uid: string, depth: number, activePath = new Set<string>()) => {
-        if (visitedGlobal.has(uid) || activePath.has(uid)) return;
-
-        visitedGlobal.add(uid);
-        const nextPath = new Set(activePath);
-        nextPath.add(uid);
-
-        const children = Array.from(childrenByParent.get(uid) || new Set<string>()).sort((a, b) => a.localeCompare(b));
-        hierarchyLines.push({ uid, depth, hasChildren: children.length > 0 });
-        children.forEach((childUid) => appendHierarchy(childUid, depth + 1, nextPath));
-    };
-
-    rootUids.forEach((uid) => appendHierarchy(uid, 0));
-    Array.from(rowByUid.keys())
-        .sort((a, b) => a.localeCompare(b))
-        .forEach((uid) => {
-            if (!visitedGlobal.has(uid)) appendHierarchy(uid, 0);
-        });
-
-    const visibleHierarchyLines: Array<{ uid: string; depth: number; hasChildren: boolean }> = [];
-    const expandedPath: boolean[] = [];
-
-    hierarchyLines.forEach((line) => {
-        const isVisible = line.depth === 0 ? true : (expandedPath[line.depth - 1] ?? false);
-        expandedPath.length = line.depth;
-
-        const isExpanded = !collapsedHierarchyNodes[line.uid];
-        expandedPath[line.depth] = isVisible && (line.hasChildren ? isExpanded : true);
-
-        if (isVisible) visibleHierarchyLines.push(line);
-    });
-
-    const toggleHierarchyNode = (uid: string) => {
-        setCollapsedHierarchyNodes((prev) => ({
-            ...prev,
-            [uid]: !prev[uid],
-        }));
-    };
 
     const SortIndicator = ({ k }: { k: SortKey }) =>
         sortKey === k ? <span className="ml-0.5 text-zinc-400">{sortAsc ? '↑' : '↓'}</span> : null;
@@ -284,69 +174,6 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                     />
                 </div>
 
-                {/* ─── Hierarchy View ─────────────────────────── */}
-                <div className="px-3 py-2 border-b border-zinc-800/40 bg-zinc-950/20">
-                    <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Hierarchy</div>
-                    <div className="max-h-32 overflow-auto rounded border border-zinc-800/50 bg-zinc-950/40 space-y-1 p-2 text-[10px]">
-                        {visibleHierarchyLines.length > 0 ? visibleHierarchyLines.map((line) => {
-                            const row = rowByUid.get(line.uid);
-                            const children = Array.from(childrenByParent.get(line.uid) || new Set())
-                                .map(childUid => rowByUid.get(childUid))
-                                .filter((child): child is RAMEntry => Boolean(child));
-                            const isExpanded = !collapsedHierarchyNodes[line.uid];
-                            const contentPreview = detailsCache[line.uid] ? (
-                                detailsCache[line.uid].split('\n').slice(0, 2).join('\n')
-                            ) : null;
-
-                            return (
-                                <div key={`tree:${line.uid}`} className="border border-zinc-800/50 rounded bg-zinc-900/20 overflow-hidden">
-                                    <button
-                                        type="button"
-                                        onClick={() => line.hasChildren && toggleHierarchyNode(line.uid)}
-                                        className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left hover:bg-zinc-800/40 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span className="text-zinc-600 flex-shrink-0">
-                                                {line.hasChildren ? (isExpanded ? '▾' : '▸') : '•'}
-                                            </span>
-                                            <span className={`truncate font-mono ${line.depth === 0 ? 'text-cyan-300' : 'text-zinc-300'}`}>
-                                                {line.uid}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-[9px] text-zinc-500 flex-shrink-0">
-                                            <span>{row ? formatBytes(row.approx_bytes) : '-'}</span>
-                                            {children.length > 0 && <span className="text-zinc-600">({children.length})</span>}
-                                        </div>
-                                    </button>
-                                    
-                                    {isExpanded && line.hasChildren && (
-                                        <div className="border-t border-zinc-800/30 bg-black/30 p-2 space-y-1">
-                                            <div className="text-[9px] text-zinc-600 mb-1">
-                                                {contentPreview ? (
-                                                    <div className="mb-1 p-1 bg-zinc-900/50 rounded border border-zinc-800/30 max-h-[40px] overflow-hidden">
-                                                        <pre className="text-[8px] whitespace-pre-wrap break-words text-zinc-400">{contentPreview}</pre>
-                                                    </div>
-                                                ) : null}
-                                                <div className="font-semibold text-zinc-500">Children:</div>
-                                            </div>
-                                            <div className="space-y-0.5">
-                                                {children.map((child) => (
-                                                    <div key={child?.memory_uid} className="flex items-center justify-between px-2 py-0.5 bg-zinc-950/50 rounded border border-zinc-800/40 text-[9px]">
-                                                        <span className="text-zinc-400 font-mono truncate">{child?.memory_uid}</span>
-                                                        <span className="text-zinc-500 flex-shrink-0">{child ? formatBytes(child.approx_bytes) : '-'}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        }) : (
-                            <div className="text-zinc-600 text-center py-2">No parent-child references yet.</div>
-                        )}
-                    </div>
-                </div>
-
                 <div className="flex-1 overflow-auto min-h-0">
                     <table className="w-full text-xs border-collapse">
                         <thead className="sticky top-0 bg-zinc-900/90 backdrop-blur-sm z-10">
@@ -362,9 +189,6 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                                 </th>
                                 <th className={`${thClass}`} onClick={() => handleSort('type')}>
                                     Type <SortIndicator k="type" />
-                                </th>
-                                <th className={`${thClass}`} onClick={() => handleSort('parent_memory_uid')}>
-                                    Parent <SortIndicator k="parent_memory_uid" />
                                 </th>
                                 <th className={`${thClass} text-right`} onClick={() => handleSort('child_count')}>
                                     Children <SortIndicator k="child_count" />
@@ -409,16 +233,13 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                                             <td className="px-2 py-1 font-mono text-zinc-500">
                                                 {row.type}
                                             </td>
-                                            <td className="px-2 py-1 font-mono text-[10px] text-zinc-500 max-w-[200px] truncate" title={row.parent_memory_uid || '-'}>
-                                                {row.parent_memory_uid || '—'}
-                                            </td>
                                             <td className="px-2 py-1 text-right font-mono text-zinc-400">
                                                 {row.child_count > 0 ? row.child_count : '—'}
                                             </td>
                                         </tr>
                                         {isExpanded && (
                                             <tr className="border-b border-zinc-800/40 bg-black/20">
-                                                <td colSpan={6} className="px-2 py-2">
+                                                <td colSpan={5} className="px-2 py-2">
                                                     <pre className="max-h-60 overflow-auto text-[10px] leading-4 font-mono text-zinc-300 bg-zinc-950/70 border border-zinc-800/70 rounded p-2 whitespace-pre-wrap break-all">
                                                         {detailsCache[row.memory_uid] ?? 'Loading...'}
                                                     </pre>
@@ -430,7 +251,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                             })}
                             {sorted.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-3 py-6 text-center text-zinc-600 text-xs">
+                                    <td colSpan={5} className="px-3 py-6 text-center text-zinc-600 text-xs">
                                         No entries match the filter.
                                     </td>
                                 </tr>

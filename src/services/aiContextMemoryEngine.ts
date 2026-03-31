@@ -1,4 +1,4 @@
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 import { RegistryEngine } from './registryEngine';
 import type {
     ContextBuildOptions,
@@ -158,10 +158,7 @@ class AIContextMemoryEngineSingleton {
         const previousMemoryKey = this.extractMemoryKey(existing?.metadata);
         if (previousMemoryKey && previousMemoryKey !== memory_key) {
             this.memoryKeyToUid.delete(previousMemoryKey);
-            StorageEngine.dispatchRAMAction({
-                action: 'delete_memory',
-                memory_uid: previousMemoryKey,
-            });
+            KernelEngine.deleteMemory(previousMemoryKey);
         }
 
         this.items.set(uid, item);
@@ -284,16 +281,10 @@ class AIContextMemoryEngineSingleton {
         const memory_key = this.extractMemoryKey(item.metadata);
         if (memory_key) {
             this.memoryKeyToUid.delete(memory_key);
-            StorageEngine.dispatchRAMAction({
-                action: 'delete_memory',
-                memory_uid: memory_key,
-            });
+            KernelEngine.deleteMemory(memory_key);
         }
 
-        StorageEngine.dispatchRAMAction({
-            action: 'delete_memory',
-            memory_uid: this.itemMemoryUid(uid),
-        });
+        KernelEngine.deleteMemory(this.itemMemoryUid(uid));
 
         this.syncIndex();
         return true;
@@ -427,41 +418,18 @@ class AIContextMemoryEngineSingleton {
     }
 
     private syncItem(item: ContextMemoryItem) {
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: this.itemMemoryUid(item.uid),
-            payload: item,
-            classifications: this.classificationTags,
-            parent_memory_uid: `system:session:${item.session_id}:context_memory`,
-        });
+        KernelEngine.writeMemory(this.itemMemoryUid(item.uid), item);
 
         const memory_key = this.extractMemoryKey(item.metadata);
         if (memory_key) {
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: memory_key,
-                payload: item.payload,
-                classifications: this.classificationTags,
-                parent_memory_uid: `system:session:${item.session_id}:context_memory`,
-            });
+            KernelEngine.writeMemory(memory_key, item.payload);
         }
     }
 
     private syncIndex() {
         const snapshots = this.listMemories().map((item) => this.toSnapshot(item));
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: this.indexMemoryUid,
-            payload: snapshots,
-            classifications: this.classificationTags,
-        });
-
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: this.validationMetricsMemoryUid,
-            payload: this.buildValidationMetrics(snapshots),
-            classifications: this.classificationTags,
-        });
+        KernelEngine.writeMemory(this.indexMemoryUid, snapshots);
+        KernelEngine.writeMemory(this.validationMetricsMemoryUid, this.buildValidationMetrics(snapshots));
     }
 
     private toSnapshot(item: ContextMemoryItem): ContextMemorySnapshot {

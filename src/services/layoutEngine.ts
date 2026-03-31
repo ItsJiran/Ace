@@ -1,4 +1,4 @@
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 import { EventBus } from './eventEngine';
 import { WindowEngine } from './windowEngine';
 import { FSEngine } from './fsEngine';
@@ -17,7 +17,12 @@ import { LayoutSnapshotSchema } from '#/schemas/layout';
  */
 class LayoutEngineSingleton {
     private readonly LAYOUTS_DIR = 'layouts'; // Removed .ace prefix to avoid forbidden path issues
+    public readonly availableLayoutsMemoryUid = 'system:available_layouts';
     private activeLayoutUid?: string;
+
+    setupKernelSpace() {
+        KernelEngine.registerSystemMemory(this.availableLayoutsMemoryUid, [] as Array<{ name: string; path: string }>);
+    }
 
     /**
      * Initializes the Layout Engine.
@@ -45,7 +50,8 @@ class LayoutEngineSingleton {
      * @param name The display name of the layout
      */
     async saveLayout(name: string) {
-        const activeWindowUids = (StorageEngine.readClassification('system:windows') as string[] | undefined) || [];
+        const activeWindowUids = ((KernelEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) || [])
+            .map((entry) => entry.uid);
         if (activeWindowUids.length === 0) {
             console.warn('[LayoutEngine] No windows to save.');
             return;
@@ -55,7 +61,7 @@ class LayoutEngineSingleton {
 
         // 1. Iterate over all active windows in RAM
         for (const window_uid of activeWindowUids) {
-            const winConfig = StorageEngine.readMemory(`system:window:${window_uid}`) as Record<string, any> | undefined;
+            const winConfig = KernelEngine.readMemory(`system:window:${window_uid}`) as Record<string, any> | undefined;
             if (!winConfig) continue;
 
             // Skip ephemeral/tooltip windows if necessary
@@ -179,12 +185,10 @@ class LayoutEngineSingleton {
             const layoutFiles = files.filter(f => f.name.endsWith('.json'));
             
             // Write to RAM for UI to display list
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: 'system:available_layouts',
-                payload: layoutFiles.map(f => ({ name: f.name, path: f.path })),
-                classifications: ['system:layouts']
-            });
+            KernelEngine.updateMemory(
+                this.availableLayoutsMemoryUid,
+                layoutFiles.map(f => ({ name: f.name, path: f.path })),
+            );
         } catch (error) {
             // dir might not exist yet
         }

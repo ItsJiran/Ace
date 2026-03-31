@@ -6,7 +6,7 @@ import { AceWindow } from '#/components/layout/AceWindow';
 import type { UseAceWindowResult } from '#/hooks/useAceWindow';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { WindowEngine } from '#/services/windowEngine';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import {
     Settings2, LayoutDashboard, Terminal, MessageSquare, Cpu, Layers,
     Package, Activity, Code2, Globe, Zap, Bot, Monitor, Search, FileText,
@@ -653,7 +653,7 @@ function DockBarInner({ w, windowUid }: { w: UseAceWindowResult; windowUid: stri
 
     // ── Mode change ───────────────────────────────────────────────────────────
     const handleModeChange = useCallback((next: DockMode) => {
-        StorageEngine.dispatchRAMAction({ action: 'create_memory', memory_uid: DOCK_MODE_KEY, payload: next });
+        KernelEngine.writeMemory(DOCK_MODE_KEY, next);
         const { width, height } = MODE_BOUNDS[next];
         const sw = window.innerWidth, sh = window.innerHeight;
         const nx = next === 'vertical' ? 12 : Math.round(sw / 2 - width / 2);
@@ -663,7 +663,7 @@ function DockBarInner({ w, windowUid }: { w: UseAceWindowResult; windowUid: stri
 
     // ── Pill direction change ─────────────────────────────────────────────────
     const handlePillDirChange = useCallback((next: PillDirection) => {
-        StorageEngine.dispatchRAMAction({ action: 'create_memory', memory_uid: DOCK_PILL_DIR_KEY, payload: next });
+        KernelEngine.writeMemory(DOCK_PILL_DIR_KEY, next);
     }, []);
 
     // ── Context menu ──────────────────────────────────────────────────────────

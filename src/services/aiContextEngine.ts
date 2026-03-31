@@ -9,7 +9,7 @@
  * Registers EventBus routes for 'context:retrieve' and 'context:store' actions.
  */
 import { EventBus } from './eventEngine';
-import { StorageEngine } from './storageEngine';
+import { KernelEngine } from './kernelEngine';
 import { AIContextMemoryEngine, type CreateContextMemoryInput } from './aiContextMemoryEngine';
 import {
     buildContextForSession,
@@ -100,10 +100,7 @@ class AIContextEngineSingleton {
         const existed = this.sessions.delete(sessionId);
         if (!existed) return false;
 
-        StorageEngine.dispatchRAMAction({
-            action: 'delete_memory',
-            memory_uid: sessionMemoryUid(sessionId),
-        });
+        KernelEngine.deleteMemory(sessionMemoryUid(sessionId));
 
         this.syncIndex();
         return true;
@@ -252,12 +249,7 @@ class AIContextEngineSingleton {
                     };
 
                     if (resultKey) {
-                        StorageEngine.dispatchRAMAction({
-                            action: 'create_memory',
-                            memory_uid: resultKey,
-                            payload: errorResult,
-                            classifications: ['system:dev', 'system:ai_context_memory'],
-                        });
+                        KernelEngine.writeMemory(resultKey, errorResult);
                     }
 
                     this.publishContextResult({
@@ -291,12 +283,7 @@ class AIContextEngineSingleton {
                 };
 
                 if (resultKey) {
-                    StorageEngine.dispatchRAMAction({
-                        action: 'create_memory',
-                        memory_uid: resultKey,
-                        payload: retrieveResult,
-                        classifications: ['system:dev', 'system:ai_context_memory'],
-                    });
+                    KernelEngine.writeMemory(resultKey, retrieveResult);
                 }
 
                 this.publishContextResult({
@@ -377,12 +364,7 @@ class AIContextEngineSingleton {
                 };
 
                 if (resultKey) {
-                    StorageEngine.dispatchRAMAction({
-                        action: 'create_memory',
-                        memory_uid: resultKey,
-                        payload: storeResult,
-                        classifications: ['system:dev', 'system:ai_context_memory'],
-                    });
+                    KernelEngine.writeMemory(resultKey, storeResult);
                 }
 
                 this.publishContextResult({

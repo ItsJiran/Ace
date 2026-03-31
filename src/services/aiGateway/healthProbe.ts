@@ -26,7 +26,7 @@
  *  Any other HTTP server on that port is silently rejected.
  */
 
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import type { AIGatewaySidecarHealthResult, AIGatewayRadarScanResult } from '../../schemas/ai_gateway';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8888';
@@ -237,21 +237,17 @@ class HealthProbeSingleton {
      * online/offline updates without coupling to this module directly.
      */
     private syncRuntimeToRAM(health: AIGatewaySidecarHealthResult, foundPorts: number[]): void {
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: RUNTIME_MEMORY_UID,
-            payload: {
-                base_url: health.base_url,
-                status: health.ok ? 'online' : 'offline',
-                status_code: health.status_code,
-                latency_ms: health.latency_ms,
-                gateway_name: health.gateway_name,
+        KernelEngine.updateMemory(RUNTIME_MEMORY_UID, {
+            base_url: health.base_url,
+            status: health.ok ? 'online' : 'offline',
+            status_code: health.status_code,
+            latency_ms: health.latency_ms,
+            gateway_name: health.gateway_name,
                 gateway_contract_version: health.gateway_contract_version,
                 found_ports: foundPorts,
                 last_error_message: health.error_message ?? null,
                 last_checked_at: Date.now(),
             },
-            classifications: ['system:core', 'system:ai_gateway'],
         });
     }
 

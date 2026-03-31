@@ -1,4 +1,4 @@
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import { ProcessEngine } from '../processEngine';
 import { EventBus } from '../eventEngine';
 import { AIContextEngine } from '../aiContextEngine';
@@ -10,8 +10,6 @@ import type { AIMessageBlock } from '#/services/aiParser';
 import type { AISession, ParsedBatchEvent, ParserBatchRecord } from './types';
 import type { Interaction } from '../../schemas/events';
 import type { BaseBlock, ParserInterruptMode, ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
-
-const CLASSIFICATIONS: string[] = ['system:dev', 'system:ai_parser'];
 
 type RuntimeActionBlock = {
     block_slug: 'tool' | 'storage';
@@ -303,7 +301,6 @@ function writeParserFailureMemory(input: {
             owner_session_id: session.sessionId,
             memory_uid: parserErrorMemoryUid,
             payload,
-            classifications: CLASSIFICATIONS,
             memory_scope: 'process',
             retention_policy: 'keep_on_done',
         });
@@ -313,16 +310,10 @@ function writeParserFailureMemory(input: {
                 owner_process_uid: processUid,
                 memory_uid: parserErrorMemoryUid,
                 payload,
-                classifications: CLASSIFICATIONS,
             });
         }
     } else {
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: parserErrorMemoryUid,
-            payload,
-            classifications: CLASSIFICATIONS,
-        });
+        KernelEngine.writeMemory(parserErrorMemoryUid, payload);
     }
 
     return parserErrorMemoryUid;
@@ -384,16 +375,11 @@ export function handleSessionStreamChunk(
             },
         });
 
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            memory_uid: ramKey,
-            payload: {
-                parser_runtime_status: 'failed',
-                parser_last_error: reason,
-                parser_error_memory_uid: parserErrorMemoryUid,
-                last_updated_at: Date.now(),
-            },
-            classifications: CLASSIFICATIONS,
+        KernelEngine.updateMemory(ramKey, {
+            parser_runtime_status: 'failed',
+            parser_last_error: reason,
+            parser_error_memory_uid: parserErrorMemoryUid,
+            last_updated_at: Date.now(),
         });
 
         emitParserSessionResult({
@@ -509,7 +495,7 @@ export function handleSessionStreamChunk(
         AIContextEngine.ingestHistorySummaryBlock(session.sessionId, block.block_slug, block.payload_json);
     });
 
-    const memoryState = (StorageEngine.readMemory(ramKey) || {}) as {
+    const memoryState = (KernelEngine.readMemory(ramKey) || {}) as {
         text?: string;
         raw_response?: string;
         blocks?: AIMessageBlock[];
@@ -648,18 +634,11 @@ export function handleSessionStreamChunk(
             owner_process_uid: processUid,
             memory_uid: ramKey,
             payload: streamPayload,
-            classifications: CLASSIFICATIONS,
         })
         : false;
 
     if (!updatedByProcess) {
-        StorageEngine.dispatchRAMAction({
-            action: 'update_memory',
-            process_uid: processUid,
-            memory_uid: ramKey,
-            payload: streamPayload,
-            classifications: CLASSIFICATIONS,
-        });
+        KernelEngine.updateMemory(ramKey, streamPayload);
     }
 
     if (memoryState.response_reference?.storage_key) {

@@ -1,7 +1,6 @@
 import { RegistryEngine } from './registryEngine';
 import { KernelEngine } from './kernelEngine';
 import { EventBus } from './eventEngine';
-import { StorageEngine } from './storageEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 import type { CoreEngineHandlerArgs } from '#/schemas/events';
@@ -73,7 +72,6 @@ class ToolEngineSingleton {
                 owner_process_uid: processUid,
                 memory_uid: resultMemoryUid,
                 payload,
-                classifications: ['system:dev', 'system:tool_runner'],
                 memory_scope: 'session',
                 retention_policy: 'keep_on_done',
             });
@@ -83,18 +81,12 @@ class ToolEngineSingleton {
                     owner_process_uid: processUid,
                     memory_uid: resultMemoryUid,
                     payload,
-                    classifications: ['system:dev', 'system:tool_runner'],
                 });
             }
             return;
         }
 
-        StorageEngine.dispatchRAMAction({
-            action: 'create_memory',
-            memory_uid: resultMemoryUid,
-            payload,
-            classifications: ['system:dev', 'system:tool_runner'],
-        });
+        KernelEngine.writeMemory(resultMemoryUid, payload);
     }
 
     private buildToolMemoryEnvelope(input: {

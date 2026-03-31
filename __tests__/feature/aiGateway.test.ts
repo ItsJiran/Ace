@@ -1,15 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { handleSessionStreamChunk } from '#/services/aiGateway/streamHandler';
 import { AIContextEngine } from '#/services/aiContextEngine';
-import { StorageEngine } from '#/services/storageEngine';
+import { KernelEngine } from '#/services/kernelEngine';
 import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import type { AISession } from '#/services/aiGateway/types';
 
 describe('AI Gateway history summary protocol', () => {
 	beforeEach(() => {
-		(StorageEngine as any).global_ram.clear();
-		(StorageEngine as any).classification_ram.clear();
-		(StorageEngine as any).memory_sockets.clear();
+		KernelEngine.resetKernelSpace();
 	});
 
 	it('keeps the first valid history_summary_ai_response block and ignores later duplicates', () => {
@@ -45,10 +43,7 @@ describe('AI Gateway history summary protocol', () => {
 			},
 		};
 
-		StorageEngine.dispatchRAMAction({
-			action: 'create_memory',
-			memory_uid: ramKey,
-			payload: {
+		KernelEngine.writeMemory(ramKey, {
 				text: '',
 				raw_response: '',
 				blocks: [],
@@ -60,8 +55,6 @@ describe('AI Gateway history summary protocol', () => {
 					storage_key: 'system:ai_context_rag:payload:ctxref-response',
 				},
 				protocol_validation: session.currentProtocolState,
-			},
-			classifications: ['system:test'],
 		});
 
 		handleSessionStreamChunk(
@@ -121,10 +114,7 @@ describe('AI Gateway history summary protocol', () => {
 			},
 		};
 
-		StorageEngine.dispatchRAMAction({
-			action: 'create_memory',
-			memory_uid: ramKey,
-			payload: {
+		KernelEngine.writeMemory(ramKey, {
 				text: '',
 				raw_response: '',
 				blocks: [],
@@ -132,8 +122,6 @@ describe('AI Gateway history summary protocol', () => {
 				parser_batch_count: 0,
 				events_total: 0,
 				protocol_validation: session.currentProtocolState,
-			},
-			classifications: ['system:test'],
 		});
 
 		handleSessionStreamChunk(

@@ -1,5 +1,5 @@
 import { EventBus } from '../eventEngine';
-import { StorageEngine } from '../storageEngine';
+import { KernelEngine } from '../kernelEngine';
 import { AI_GATEWAY_ROUTE_ACTION, AI_RESPONSE_STATUS } from './types';
 import type { SDKProvider } from './types';
 
@@ -19,19 +19,14 @@ export function registerSendGatewayRoute(input: {
                     : `system:ai_parser:test:${Date.now()}`;
 
         if (!prompt) {
-            StorageEngine.dispatchRAMAction({
-                action: 'create_memory',
-                memory_uid: replyToRamKey,
-                payload: {
-                    prompt,
-                    text: '',
-                    raw_response: '',
-                    parser_batches: [],
-                    status: AI_RESPONSE_STATUS.ERROR,
-                    error_message: 'Prompt is required for send_gateway.',
-                    finished_at: Date.now(),
-                },
-                classifications: ['system:dev', 'system:ai_parser'],
+            KernelEngine.writeMemory(replyToRamKey, {
+                prompt,
+                text: '',
+                raw_response: '',
+                parser_batches: [],
+                status: AI_RESPONSE_STATUS.ERROR,
+                error_message: 'Prompt is required for send_gateway.',
+                finished_at: Date.now(),
             });
             return;
         }

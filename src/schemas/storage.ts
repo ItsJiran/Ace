@@ -51,27 +51,36 @@ export const GlobalClassificationRAMSchema = z.record(
  * RAM Interactivity Schema
  * When a component interacts with the Storage Engine to create/remove dynamic memory.
  */
-export const RAMInteractivitySchema = z.object({
-    action: z.enum(['create_memory', 'read_memory', 'update_memory', 'delete_memory']),
-    /** The originating process/widget requesting the memory action */
+const BaseRAMActionSchema = z.object({
     process_uid: z.string().optional(),
     widget_uid: z.string().optional(),
-
-    /** The specific ID of the memory block being modified. (Generated securely on 'create_memory') */
-    memory_uid: z.string().optional(),
-
-    /** Optional parent link for memory hierarchy visualization (parent -> child). */
-    parent_memory_uid: z.string().optional(),
-
-    /** The arbitrary payload data to store */
     payload: z.any().optional(),
-
-    /** 
-     * When creating memory, the engine will automatically populate the Global Classification RAM 
-     * with these keys to make the payload easily searchable later.
-     * (e.g., ["widget_slug:calendar", "event_type:meeting"])
-     */
-    classifications: z.array(z.string()).optional(),
 });
+
+export const RAMInteractivitySchema = z.discriminatedUnion('action', [
+    BaseRAMActionSchema.extend({
+        action: z.literal('create_memory'),
+    }),
+    BaseRAMActionSchema.extend({
+        action: z.literal('set_memory'),
+        memory_uid: z.string(),
+    }),
+    BaseRAMActionSchema.extend({
+        action: z.literal('write_memory'),
+        memory_uid: z.string(),
+    }),
+    BaseRAMActionSchema.extend({
+        action: z.literal('read_memory'),
+        memory_uid: z.string(),
+    }),
+    BaseRAMActionSchema.extend({
+        action: z.literal('update_memory'),
+        memory_uid: z.string(),
+    }),
+    BaseRAMActionSchema.extend({
+        action: z.literal('delete_memory'),
+        memory_uid: z.string(),
+    }),
+]);
 
 export type RAMInteractivity = z.infer<typeof RAMInteractivitySchema>;
