@@ -2,25 +2,18 @@ import { EventBus } from './eventEngine';
 import { RegistryEngine } from './registryEngine';
 import { GlobalStateManager } from './globalStateManager';
 import { KernelEngine } from './kernelEngine';
-import { invoke } from '@tauri-apps/api/core';
-import type { WindowConfig, GlobalOverlayState } from '#/schemas/window';
-import type { GlobalState } from '#/schemas/globalState';
+import type { WindowConfig } from '#/schemas/window';
 import type { AnimationSequence, BoundsAnchor } from '#/schemas/animation';
-import { CursorBridge } from './window/CursorBridge';
-import { AlwaysOnTopBridge } from './window/AlwaysOnTopBridge';
 import { WindowAnimationController } from './window/WindowAnimationController';
-import SpawnQueueWorker from '#/workers/spawnQueueWorker?worker';
+import { WindowOverlayManager } from './window/WindowOverlayManager';
+import { WindowFocusManager } from './window/WindowFocusManager';
+import { WindowLifecycleManager } from './window/WindowLifecycleManager';
 
 export interface SpawnWindowOptions {
-    /** 
-     * Identify the target window from the registry.
-     * Recommendation: Use `package` and `window` for precise lookup.
-     */
     package?: string;
     window?: string;
     component_name?: string;
 
-    // Overrides
     title?: string;
     x?: number;
     y?: number;
@@ -36,227 +29,59 @@ export interface SpawnWindowOptions {
     animation_sequence?: AnimationSequence;
     parent_process_uid?: string;
 
-    /** Internal flag to avoid nested duplicate tracking when already wrapped by route-level ProcessEngine.track. */
     __skip_process_tracking?: boolean;
     __process_uid?: string;
 }
 
-/**
- * The WindowEngine is responsible for managing the logical boundaries, focus, and state
- * of the 2D overlay layer. It does NOT render UI directly. Instead, it syncs state
- * immediately into the Global Storage RAM.
- */
 class WindowEngineSingleton {
     public readonly overlayStateMemoryUid = 'system:overlay_state';
     public readonly activeWindowsMemoryUid = 'system:active_windows';
     public readonly renderedWindowsMemoryUid = 'system:rendered_windows';
     private highest_z_index = 100;
     private isRouteBound = false;
-    
-    // Sub-systems
-    
-    /**
-     * Spawn Queue Worker: Manages spawn queueing in a separate thread.
-     * Prevents main UI thread blocking from delaying spawn operations.
-     */
-    private spawnQueueWorker: Worker;
-    
-    /**
-     * Map of pending spawn requests by UID (for tracking/cancellation)
-     */
-    private pendingSpawnRequests = new Map<string, SpawnWindowOptions>();
-    private pendingSpawnProcesses = new Map<string, string>();
-    private activeWindowProcesses = new Map<string, string>();
     private isTerminationHookBound = false;
 
-    /**
-     * ARCHITECTURE: Debounce focus updates to prevent cascading subscriptions
-     * When 50 windows check focus simultaneously, threads block.
-     * This batches focus updates to avoid thrashing subscription evaluations.
-     */
-    private pendingFocusWindow: string | null = null;
-    private focusUpdateScheduled = false;
-
-    /**
-     * Deferred Memory Write Queue: applies storage writes one-by-one using timeout.
-      * Delay adapts based on RAF frame time + queue pressure.
-     */
-    private deferredWrites: Array<() => void> = [];
-    private writeScheduled = false;
-     private static readonly WRITE_DELAY_MIN_MS = 10;
-     private static readonly WRITE_DELAY_MAX_MS = 50;
-
-     /**
-      * RAF performance sampling for adaptive spawn pacing.
-      */
-     private frameTimeEmaMs = 16.67;
-     private currentFrameTimeMs = 16.67;
-     private lastRafTs = 0;
-     private static readonly CURRENT_FPS_WEIGHT = 0.6;
-    /**
-     * Bridges the native OS Cursor interactions with the Overlay state.
-     * 
-     * Rationale:
-     * - We render a transparent full-screen window. By default, this blocks ALL clicks to the OS.
-     * - We need to intelligently toggle the window between "click-through" (Ambient) and "interactive" (Interactive).
-     * - Browser Engine typically doesn't know what's BEHIND the webview (OS desktop, other apps).
-     * - This Bridge polls cursor position against our internal Window Registry bounds to determine if/when to let clicks pass through.
-     */
-    private cursorBridge: CursorBridge;
-
-    /**
-     * Enforces the Overlay's "Always On Top" status at the OS level.
-     * 
-     * Rationale:
-     * - Some Linux WMs or OS behaviors fight for focus.
-     * - This bridge periodically re-asserts our z-order at the OS level to ensure the Assistant remains visible.
-     */
-    private alwaysOnTopBridge: AlwaysOnTopBridge;
-
-    /**
-     * Manages high-performance animation loops (RAF) for window movement/transitions.
-     * Decouples the "Engine" state logic from the per-frame math of moving windows.
-     */
+    private overlayManager: WindowOverlayManager;
+    private focusManager: WindowFocusManager;
+    private lifecycleManager: WindowLifecycleManager;
     private animationController: WindowAnimationController;
 
-    /**
-     * Rendering Queue: separates logical window creation from DOM rendering.
-     * 
-     * Problem: Writing to system:active_windows at 50ms intervals causes React
-     * to re-render the App component 40 times when spawning 40 windows.
-     * Each re-render tries to reconcile new MemoizedWindowItems in the DOM,
-     * freezing the main thread for multiple frames.
-     * 
-     * Solution: Batch DOM insertions every 150-200ms instead.
-     * - Logical: Windows added to system:active_windows immediately (50ms)
-     * - Rendering: Windows added to system:rendered_windows in batches (150ms)
-     * - App.tsx subscribes to system:rendered_windows only
-     * 
-     * Result: Smooth spawn animation (~40-60 FPS) with batched DOM insertion.
-     */
-    private renderingQueue: string[] = [];  // Window UIDs pending DOM insertion
-    private renderingQueueTimer: ReturnType<typeof setTimeout> | null = null;
-    private static readonly RENDERING_QUEUE_INTERVAL_MS = 120;  // Frequent smaller batches to reduce burst cost
-    private static readonly RENDERING_BATCH_SIZE = 2;  // Smaller batch avoids heavy reconciliation spikes
-
-    /**
-     * Deferred animation requests for windows that are not yet spawned
-     * (common when spawn queue is active and client calls playAnimation immediately).
-     */
-    private pendingAnimations = new Map<string, AnimationSequence>();
-
-    /**
-     * Fix A: Debounce guard for set_ignore_cursor_events IPC.
-     * Prevents redundant native IPC calls when multiple code paths fire the same
-     * mode in quick succession (e.g. CursorBridge + flushPendingFocus + enterWindowSurface).
-     */
-    private lastCursorEventsIgnore: boolean | null = null;
-    private lastCursorEventsAt = 0;
-    private static readonly CURSOR_EVENTS_DEBOUNCE_MS = 250;
-
     constructor() {
-        this.cursorBridge = new CursorBridge((mode) => this.setOverlayMode(mode));
-        this.alwaysOnTopBridge = new AlwaysOnTopBridge();
-
+        this.overlayManager = new WindowOverlayManager();
         
         this.animationController = new WindowAnimationController(
             (uid, x, y, w, h) => this.updateWindowBounds(uid, x, y, w, h, true),
             (uid) => this.closeWindow(uid)
         );
 
-        // Initialize spawn queue worker
-        this.spawnQueueWorker = new SpawnQueueWorker();
-        this.spawnQueueWorker.onmessage = (event: MessageEvent) => {
-            const { type, payload } = event.data;
-            if (type === 'spawn') {
-                const { id } = payload;
-                const spawnOptions = this.pendingSpawnRequests.get(id);
-                if (spawnOptions) {
-                    this.pendingSpawnRequests.delete(id);
-                    const spawnProcessUid = this.pendingSpawnProcesses.get(id);
-                    if (spawnProcessUid) {
-                        spawnOptions.__process_uid = spawnProcessUid;
-                        KernelEngine.updateProcessStatus(spawnProcessUid, 'running', {
-                            queue_state: 'spawning',
-                            window_uid: id,
-                        });
-                    }
-                    const spawnedUid = this.spawnWindowImmediate(spawnOptions);
-                    if (spawnProcessUid) {
-                        if (!spawnedUid) {
-                            KernelEngine.updateProcessStatus(spawnProcessUid, 'failed', {
-                                queue_state: 'failed',
-                                window_uid: id,
-                            });
-                        } else {
-                            KernelEngine.updateProcessPayload(spawnProcessUid, {
-                                status: 'running',
-                                queue_state: 'spawned',
-                                window_uid: spawnedUid,
-                                live_state: 'open',
-                            });
-                            this.activeWindowProcesses.set(spawnedUid, spawnProcessUid);
-                        }
-                        this.pendingSpawnProcesses.delete(id);
-                    }
-                }
-            }
-        };
+        this.focusManager = new WindowFocusManager({
+            getHighestZIndex: () => this.highest_z_index,
+            bumpZIndex: () => { this.highest_z_index += 1; return this.highest_z_index; },
+            updateWindowConfig: (uid, updates) => this.updateWindowConfig(uid, updates),
+            setOverlayMode: (mode) => this.overlayManager.setOverlayMode(mode),
+            fireSetIgnoreCursorEvents: (ignore) => this.overlayManager.fireSetIgnoreCursorEvents(ignore),
+        });
 
-        this.startAdaptivePacingLoop();
+        this.lifecycleManager = new WindowLifecycleManager({
+            bumpZIndex: () => { this.highest_z_index += 1; return this.highest_z_index; },
+            focusWindow: (uid) => this.focusManager.focusWindow(uid),
+            updateWindowConfig: (uid, updates) => this.updateWindowConfig(uid, updates),
+            animationController: this.animationController,
+            windowMemoryUid: (uid) => this.windowMemoryUid(uid),
+        });
 
+        this.overlayManager.startBridges();
         this.registerTerminationHooks();
-        
-        // Start background bridges
-        this.cursorBridge.start();
-        this.alwaysOnTopBridge.start();
     }
 
     private windowMemoryUid(window_uid: string) {
         return `system:window:${window_uid}`;
     }
 
-    /**
-     * Fix A: Deduplicating wrapper around set_ignore_cursor_events.
-     * Skips the IPC call if the same value was sent within the debounce window.
-     */
-    private fireSetIgnoreCursorEvents(ignore: boolean): void {
-        const now = performance.now();
-        if (
-            this.lastCursorEventsIgnore === ignore &&
-            now - this.lastCursorEventsAt < WindowEngineSingleton.CURSOR_EVENTS_DEBOUNCE_MS
-        ) {
-            return;
-        }
-        this.lastCursorEventsIgnore = ignore;
-        this.lastCursorEventsAt = now;
-        invoke('set_ignore_cursor_events', { ignore }).catch(console.error);
-    }
-
     setupKernelSpace() {
-        KernelEngine.registerSystemMemory(this.overlayStateMemoryUid, {
-                mode: 'ambient',
-                focused_window_uid: null,
-                mouse_x: 0,
-                mouse_y: 0,
-                debug_bg: import.meta.env?.DEV ? false : false,
-                is_overlay_locked: false,
-            } satisfies GlobalOverlayState,
-        });
-
-        KernelEngine.registerSystemMemory(this.activeWindowsMemoryUid, [] as Array<{ uid: string; component: string }>);
-
-        KernelEngine.registerSystemMemory(this.renderedWindowsMemoryUid, [] as Array<{ uid: string; component: string }>);
+        this.overlayManager.setupKernelSpace();
+        this.lifecycleManager.setupKernelSpace();
         WindowAnimationController.setupKernelSpace();
-
-        // Fix C: Prewarm the native IPC bridge at boot so the first spawn
-        // does not pay the cold-path cost of the first-ever Tauri invoke.
-        invoke('set_ignore_cursor_events', { ignore: true })
-            .then(() => {
-                this.lastCursorEventsIgnore = true;
-                this.lastCursorEventsAt = performance.now();
-            })
-            .catch(() => {});
     }
 
     private registerTerminationHooks() {
@@ -310,7 +135,7 @@ class WindowEngineSingleton {
                         if (mode) this.setOverlayMode(mode);
                     }
                     if (action === 'debug_action') {
-                        await this.handleDebugAction(payload);
+                        await this.overlayManager.handleDebugAction(payload);
                     }
                     if (action === 'close_window') {
                         const targetUid = payload?.window_uid || source?.window_uid;
@@ -339,417 +164,28 @@ class WindowEngineSingleton {
         this.isRouteBound = true;
     }
 
-    private async handleDebugAction(payload: any) {
-         if (payload.action === 'toggle_debug_bg') {
-             this.toggleDebugBg();
-         }
-         if (payload.action === 'toggle_overlay_lock') {
-             const state = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState | undefined;
-             if (state) {
-                KernelEngine.updateMemory(this.overlayStateMemoryUid, { is_overlay_locked: !state.is_overlay_locked });
-             }
-         }
-         if (payload.action === 'open_devtools') {
-            try {
-                await invoke('open_devtools');
-            } catch (e) {
-                console.warn('[WindowEngine] Failed to open devtools:', e);
-            }
-         }
-         if (payload.action === 'focus_devtools') {
-            try {
-                // Determine if we need to relax always-on-top momentarily
-                // (AlwaysOnTopBridge handles re-asserting later)
-                const appWindow = await import('@tauri-apps/api/window').then(m => m.getCurrentWindow());
-                await appWindow.setAlwaysOnTop(false);
-                await invoke('focus_devtools');
-            } catch (e) {
-                console.warn('[WindowEngine] Failed to focus devtools:', e);
-            }
-         }
-    }
-
-    // ─── Core Logic ─────────────────────────────────────────────────────────────
-
-    private getMouseFocusEnabled() {
-        const mouseFocusMemory = KernelEngine.readMemory('system:mouse_focus_enabled');
-        if (typeof mouseFocusMemory === 'boolean') return mouseFocusMemory;
-        const globalState = KernelEngine.readMemory('system:global_state') as GlobalState | undefined;
-        return globalState?.focus.mouse_focus_enabled ?? true;
-    }
-
     getRegistry({ packageRef, slug }: { packageRef: string; slug: string }) {
         return RegistryEngine.getDomainEntry(packageRef, 'windows', slug);
     }
 
     setOverlayMode(mode: 'ambient' | 'interactive') {
-        const overlayState = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState | undefined;
-        if (overlayState?.mode === mode) return;
-
-        GlobalStateManager.setOverlayMode(mode);
-        
-        // Update storage so CursorBridge sees the new mode on next poll
-        if (overlayState) {
-            KernelEngine.updateMemory(this.overlayStateMemoryUid, { mode });
-        }
-        
-        this.fireSetIgnoreCursorEvents(mode === 'ambient');
+        this.overlayManager.setOverlayMode(mode);
     }
 
     toggleDebugBg() {
-        const state = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState;
-        if (state) {
-            KernelEngine.updateMemory(this.overlayStateMemoryUid, { debug_bg: !state.debug_bg });
-        }
+        this.overlayManager.toggleDebugBg();
     }
 
     setMousePosition(x: number, y: number) {
         GlobalStateManager.setCursorPosition(x, y);
     }
 
-    /**
-     * Enqueues one storage write and processes writes at timed intervals.
-     * Delay starts at 80ms and applies exponential backoff under heavy queue load.
-     */
-    private enqueueDeferredWrite(writeAction: () => void): void {
-        this.deferredWrites.push(writeAction);
-        if (!this.writeScheduled) {
-            this.writeScheduled = true;
-            this.scheduleNextDeferredWrite();
-        }
-    }
-
-    private scheduleNextDeferredWrite(): void {
-        const delay = this.getAdaptiveWriteDelayMs();
-
-        setTimeout(() => {
-            this.processNextDeferredWrite();
-        }, delay);
-    }
-
-    private processNextDeferredWrite(): void {
-        const write = this.deferredWrites.shift();
-
-        try {
-            write?.();
-        } catch (e) {
-            console.error('[WindowEngine] Deferred write failed:', e);
-        }
-
-        const pending = this.deferredWrites.length;
-        if (pending === 0) {
-            this.writeScheduled = false;
-            return;
-        }
-
-        this.scheduleNextDeferredWrite();
-    }
-
-    private getAdaptiveWriteDelayMs(): number {
-        const pending = this.deferredWrites.length;
-        // Parameter 1: EMA frame-time
-        // Parameter 2: queue pressure
-        // Parameter 3: weighted current frame-time (instantaneous FPS contribution)
-        const weightedFrameMs =
-            this.frameTimeEmaMs * (1 - WindowEngineSingleton.CURRENT_FPS_WEIGHT)
-            + this.currentFrameTimeMs * WindowEngineSingleton.CURRENT_FPS_WEIGHT;
-        const frameBased = Math.round(weightedFrameMs * 1.05);
-
-        // Aggressive queue pressure penalty during burst spawns
-        const pressurePenalty = pending >= 16 ? 22 : pending >= 10 ? 14 : pending >= 6 ? 8 : pending >= 3 ? 4 : 0;
-
-        const candidate = frameBased + pressurePenalty;
-        return Math.max(
-            WindowEngineSingleton.WRITE_DELAY_MIN_MS,
-            Math.min(WindowEngineSingleton.WRITE_DELAY_MAX_MS, candidate)
-        );
-    }
-
-    private startAdaptivePacingLoop(): void {
-        const tick = (ts: number) => {
-            if (this.lastRafTs > 0) {
-                const delta = ts - this.lastRafTs;
-                // Clamp outliers to avoid spikes from tab switches.
-                const clamped = Math.max(8, Math.min(80, delta));
-                this.currentFrameTimeMs = clamped;
-                // Faster EMA response so throttling reacts earlier to frame drops.
-                this.frameTimeEmaMs = this.frameTimeEmaMs * 0.75 + clamped * 0.25;
-
-                this.publishSpawnTelemetry();
-            }
-
-            this.lastRafTs = ts;
-            requestAnimationFrame(tick);
-        };
-
-        requestAnimationFrame(tick);
-    }
-
-    private publishSpawnTelemetry(): void {
-        const activeSpawnLoad = this.pendingSpawnRequests.size + this.deferredWrites.length + this.renderingQueue.length;
-        if (activeSpawnLoad === 0) return;
-
-        const currentFps = Math.max(1, Math.min(240, 1000 / this.currentFrameTimeMs));
-        const emaFps = Math.max(1, Math.min(240, 1000 / this.frameTimeEmaMs));
-
-        this.spawnQueueWorker.postMessage({
-            type: 'set_telemetry',
-            payload: {
-                current_fps: currentFps,
-                ema_fps: emaFps,
-                pressure: activeSpawnLoad,
-            },
-        });
-    }
-    // ─── Window Lifecycle ───────────────────────────────────────────────────────
-
-    /**
-     * Public entry point: enqueues a spawn request to the worker.
-     * 
-     * The spawn worker manages queueing and spawns windows at a steady 80ms interval
-     * in a separate thread, preventing main UI thread blocking.
-     */
     spawnWindow(options: SpawnWindowOptions): string | null {
-        // Prime worker with freshest telemetry before enqueueing new burst items.
-        this.publishSpawnTelemetry();
-
-        // Allocate the UID immediately so callers can track it if needed
-        const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
-        const spawnOptions = { ...options, _reserved_uid: window_uid } as any;
-
-        if (!options.__skip_process_tracking) {
-            const parentProcessUid = options.parent_process_uid ?? KernelEngine.getCurrentProcessContext();
-            const metadata = {
-                source_process_uid: parentProcessUid,
-                package: options.package,
-                window: options.window,
-                component_name: options.component_name,
-                window_uid,
-            };
-
-            const processRecord = parentProcessUid
-                ? KernelEngine.spawnSubprocess(parentProcessUid, 'window:instance', {
-                    metadata,
-                    process_kind: 'custom',
-                    owner_engine: 'windowEngine',
-                    payload: {
-                        status: 'running',
-                        action: 'window_instance',
-                        queue_state: 'queued',
-                        window_uid,
-                        live_state: 'queued',
-                    },
-                })
-                : KernelEngine.spawnProcess('window:instance', metadata, {
-                    process_kind: 'custom',
-                    owner_engine: 'windowEngine',
-                    payload: {
-                        status: 'running',
-                        action: 'window_instance',
-                        queue_state: 'queued',
-                        window_uid,
-                        live_state: 'queued',
-                    },
-                });
-
-            KernelEngine.updateProcessStatus(processRecord.process_uid, 'waiting', {
-                queue_state: 'queued',
-                window_uid,
-            });
-            this.pendingSpawnProcesses.set(window_uid, processRecord.process_uid);
-        }
-        
-        // Store the request for when worker tells us to spawn
-        this.pendingSpawnRequests.set(window_uid, spawnOptions);
-        
-        // Send to worker for queueing
-        this.spawnQueueWorker.postMessage({
-            type: 'enqueue',
-            payload: {
-                id: window_uid,
-                options: spawnOptions,
-            },
-        });
-        
-        return window_uid;
-    }
-
-    /**
-     * Flushes the rendering queue: batches pending window UIDs into system:rendered_windows
-     * at a slower rate than spawn operations (150ms batch rate).
-     * 
-     * This prevents React from re-rendering the App component 40 times when spawning 40 windows.
-     * Instead, it batches 3 windows per 150ms increment, resulting in smooth DOM insertion
-     * without frame drops.
-     */
-    private flushRenderingQueue(): void {
-        if (this.renderingQueueTimer !== null) return; // Already scheduled
-        if (this.renderingQueue.length === 0) return;
-
-        this.renderingQueueTimer = setTimeout(() => {
-            this.renderingQueueTimer = null;
-
-            // Take up to BATCH_SIZE windows from the queue and add to rendered list
-            const batch = this.renderingQueue.splice(0, WindowEngineSingleton.RENDERING_BATCH_SIZE);
-            if (batch.length > 0) {
-                const renderedWindows = (KernelEngine.readMemory(this.renderedWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
-                
-                // Build new rendered list with batch appended
-                const newRenderedList = [
-                    ...renderedWindows,
-                    ...batch.map((uid) => {
-                        const windowCfg = KernelEngine.readMemory(this.windowMemoryUid(uid)) as WindowConfig | undefined;
-                        return { uid, component: windowCfg?.component ?? '' };
-                    })
-                ];
-
-                KernelEngine.updateMemory(this.renderedWindowsMemoryUid, newRenderedList);
-
-                // Start pending animations exactly when windows become rendered.
-                // This keeps spawn visual and animation in sync.
-                requestAnimationFrame(() => {
-                    for (const uid of batch) {
-                        const pendingSeq = this.pendingAnimations.get(uid);
-                        if (!pendingSeq) continue;
-                        this.pendingAnimations.delete(uid);
-                        this.animationController.playAnimation(uid, pendingSeq);
-                    }
-                });
-            }
-
-            // Schedule the next batch if any remain
-            if (this.renderingQueue.length > 0) {
-                this.flushRenderingQueue();
-            }
-        }, WindowEngineSingleton.RENDERING_QUEUE_INTERVAL_MS);
-    }
-
-    private spawnWindowImmediate(options: SpawnWindowOptions & { _reserved_uid?: string }): string | null {
-        // Resolve package/window names to a unique entry reference
-        let entryRef = '';
-        
-        if (options.package && options.window) {
-            entryRef = `${options.package}:windows:${options.window}`;
-        } else {
-            console.error('[WindowEngine] spawnWindow failed: Missing required package/window identifiers.', options);
-            return null;
-        }
-
-        const window_uid = options._reserved_uid ?? ('win-' + Math.random().toString(36).substring(2, 9));
-        this.highest_z_index += 1;
-
-        const freshWindow: WindowConfig = {
-            window_uid,
-            component: entryRef,
-            // Defaults
-            x: options.x ?? 100,
-            y: options.y ?? 100,
-            width: options.width ?? 400,
-            height: options.height ?? 300,
-            z_index: this.highest_z_index,
-            
-            // Overrides
-            opacity: options.opacity ?? 1,
-            is_locked: options.is_locked ?? false,
-            always_on_top: options.always_on_top ?? false,
-            chrome_style: options.chrome_style ?? 'standard',
-            drag_surface: options.drag_surface ?? 'header',
-            hide_ring: options.hide_ring ?? false,
-            
-            // State
-            is_focused: false,
-            is_minimized: false
-        };
-
-        // Defer heavy storage writes to run one-by-one with timeout pacing
-        this.enqueueDeferredWrite(() => {
-            // Register window in kernel window_system (initialises empty Set of memory_uids)
-            KernelEngine.registerWindow(window_uid);
-
-            const ownerProcessUid = options.__process_uid;
-            if (ownerProcessUid) {
-                const created = KernelEngine.createRuntimeMemory({
-                    owner_process_uid: ownerProcessUid,
-                    memory_uid: this.windowMemoryUid(window_uid),
-                    payload: freshWindow,
-                });
-
-                if (created) {
-                    KernelEngine.linkMemoryToWindow(this.windowMemoryUid(window_uid), window_uid);
-                    return;
-                }
-            }
-
-            KernelEngine.writeMemory(this.windowMemoryUid(window_uid), freshWindow);
-            KernelEngine.linkMemoryToWindow(this.windowMemoryUid(window_uid), window_uid);
-        });
-
-        this.enqueueDeferredWrite(() => {
-            const activeWindows = (KernelEngine.readMemory(this.activeWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
-            KernelEngine.updateMemory(this.activeWindowsMemoryUid, [...activeWindows, { uid: window_uid, component: entryRef }]);
-        });
-
-        // Queue for rendering and focus after active_windows is updated
-        this.enqueueDeferredWrite(() => {
-            // Queue window for DOM rendering in batches (separate from logical active_windows)
-            // This prevents React from re-rendering App 40 times when spawning 40 windows
-            this.renderingQueue.push(window_uid);
-            this.flushRenderingQueue();
-
-            this.focusWindow(window_uid);
-        });
-
-        // Store spawn animation until window is actually rendered.
-        if (options.animation_sequence) {
-            this.pendingAnimations.set(window_uid, options.animation_sequence);
-        }
-
-        return window_uid;
+        return this.lifecycleManager.spawnWindow(options);
     }
 
     closeWindow(window_uid: string, options?: { skipProcessLifecycle?: boolean }) {
-        const windowProcessUid = this.activeWindowProcesses.get(window_uid);
-        if (windowProcessUid && !options?.skipProcessLifecycle) {
-            KernelEngine.updateProcessPayload(windowProcessUid, {
-                status: 'done',
-                live_state: 'closed',
-                ended_window_uid: window_uid,
-                ended_at: Date.now(),
-            });
-            KernelEngine.updateProcessStatus(windowProcessUid, 'done');
-            this.activeWindowProcesses.delete(window_uid);
-        } else if (windowProcessUid && options?.skipProcessLifecycle) {
-            this.activeWindowProcesses.delete(window_uid);
-        }
-
-        // Stop any running animations
-        this.animationController.cancelAnimation(window_uid);
-        this.pendingAnimations.delete(window_uid);
-
-        // Remove from rendering queue if pending
-        const queueIndex = this.renderingQueue.indexOf(window_uid);
-        if (queueIndex !== -1) {
-            this.renderingQueue.splice(queueIndex, 1);
-        }
-
-        // 1. Remove Granular Config
-        KernelEngine.deleteMemory(this.windowMemoryUid(window_uid));
-
-        const activeWindows = (KernelEngine.readMemory(this.activeWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
-        KernelEngine.updateMemory(this.activeWindowsMemoryUid, activeWindows.filter((entry) => entry.uid !== window_uid));
-
-        // Also remove from rendered windows (DOM)
-        const renderedWindows = (KernelEngine.readMemory(this.renderedWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
-        KernelEngine.updateMemory(this.renderedWindowsMemoryUid, renderedWindows.filter((entry) => entry.uid !== window_uid));
-
-        const focusedWindowUid = (KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined)
-            ?? ((KernelEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
-        if (focusedWindowUid === window_uid) {
-            GlobalStateManager.setFocusedWindow(null);
-        }
-
-        // Remove window from kernel window_system tracking
-        KernelEngine.unregisterWindow(window_uid);
+        this.lifecycleManager.closeWindow(window_uid, options);
     }
 
     updateWindowConfig(window_uid: string, updates: Partial<WindowConfig>) {
@@ -763,127 +199,30 @@ class WindowEngineSingleton {
     }
 
     focusWindow(window_uid: string) {
-        if (!this.getMouseFocusEnabled()) return;
-
-        const focusedWindowUid = (KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined)
-            ?? ((KernelEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
-
-        const targetKey = this.windowMemoryUid(window_uid);
-        const targetCfg = KernelEngine.readMemory(targetKey) as WindowConfig | undefined;
-        if (!targetCfg) return;
-
-        // No-op fast path: already focused and on top.
-        if (focusedWindowUid === window_uid && targetCfg.z_index >= this.highest_z_index) {
-            return;
-        }
-
-        // ARCHITECTURE: Queue focus update instead of executing immediately
-        // This prevents cascading subscription evaluations across 50 windows
-        // Defer to next event loop to let mouse handler complete first
-        this.pendingFocusWindow = window_uid;
-        
-        if (!this.focusUpdateScheduled) {
-            this.focusUpdateScheduled = true;
-            // Use setTimeout(..., 0) to push to macrotask queue
-            // This gives the current frame time to complete rendering
-            setTimeout(() => {
-                this.flushPendingFocus();
-            }, 0);
-        }
-    }
-
-    private flushPendingFocus() {
-        const window_uid = this.pendingFocusWindow;
-        this.pendingFocusWindow = null;
-        this.focusUpdateScheduled = false;
-        
-        if (!window_uid) return;
-
-        const targetKey = this.windowMemoryUid(window_uid);
-        const targetCfg = KernelEngine.readMemory(targetKey) as WindowConfig | undefined;
-        if (!targetCfg) return;
-
-        // Now apply the actual focus update
-        this.highest_z_index += 1;
-        this.updateWindowConfig(window_uid, {
-            z_index: this.highest_z_index
-        });
-
-        // Atomic: combines setFocusedWindow + setOverlayMode into one pass.
-        // Eliminates duplicate writes to system:global_state and system:overlay_state.
-        GlobalStateManager.setFocusedWindowInteractive(window_uid);
-
-        this.fireSetIgnoreCursorEvents(false);
+        this.focusManager.focusWindow(window_uid);
     }
 
     enterWindowSurface(window_uid: string) {
-        if (!this.getMouseFocusEnabled()) {
-            this.setOverlayMode('ambient');
-            return;
-        }
-        const currentWindow = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as WindowConfig | undefined;
-        if (!currentWindow) return;
-
-        this.fireSetIgnoreCursorEvents(false);
+        this.focusManager.enterWindowSurface(window_uid);
     }
 
-    leaveWindowSurface(_window_uid: string) {
-        if (!this.getMouseFocusEnabled()) {
-            this.setOverlayMode('ambient');
-            return;
-        }
-        // Cursor bridge controls transitions
+    leaveWindowSurface(window_uid: string) {
+        this.focusManager.leaveWindowSurface(window_uid);
     }
 
     minimizeWindow(window_uid: string) {
-        const cfg = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as WindowConfig | undefined;
-        if (!cfg || cfg.is_minimized) return;
-
-        this.updateWindowConfig(window_uid, { is_minimized: true });
-
-        // If the minimized window was focused, clear focus + return to ambient
-        const focusedUid = KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined;
-        if (focusedUid === window_uid) {
-            GlobalStateManager.setFocusedWindow(null);
-            this.setOverlayMode('ambient');
-        }
+        this.focusManager.minimizeWindow(window_uid);
     }
 
     restoreWindow(window_uid: string) {
-        const cfg = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as WindowConfig | undefined;
-        if (!cfg) return;
-
-        this.updateWindowConfig(window_uid, { is_minimized: false });
-        this.focusWindow(window_uid);
+        this.focusManager.restoreWindow(window_uid);
     }
 
-    /**
-     * Updates the logical position and size of a window in the Registry.
-     * 
-     * @param window_uid - The unique identifier of the window.
-     * @param x - Absolute screen X position.
-     * @param y - Absolute screen Y position.
-     * @param width - Window width in pixels.
-     * @param height - Window height in pixels.
-     * 
-     * Why Manual Bounds? (vs Browser Engine Automatic Layout)
-     * 1. Persistence: Browser engines discard element state (scroll, position) on unmount/refresh. 
-     *    We need windows to "remember" their last known position across sessions or "Show/Hide" toggles.
-     * 2. Global Awareness: The Registry acts as a "Single Source of Truth" (SSOT) for the entire OS simulation.
-     *    Other systems (e.g., Layout Engine, snapping logic, or multi-window communication) need to query 
-     *    where a window IS without DOM access.
-     * 3. Performance: Reading from RAM (O(1)) is faster than querying the DOM (forcing reflows) 
-     *    when calculating complex interactions or animations.
-     * 4. Decoupling: This allows "Headless" management. A window can exist in logic (e.g., minimized tray icon)
-     *    without being rendered in the DOM at all, yet still have bounds ready for its return.
-     */
     updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number, _skipMonolith = false) {
-        // 1. Update Granular Config for subscribed components
         const granularKey = this.windowMemoryUid(window_uid);
         const currentGranular = KernelEngine.readMemory(granularKey) as WindowConfig | undefined;
         
         if (currentGranular) {
-            // Optimization: Skip if identical
             if (currentGranular.x === x && currentGranular.y === y && currentGranular.width === width && currentGranular.height === height) {
                 return;
             }
@@ -893,21 +232,12 @@ class WindowEngineSingleton {
         }
     }
 
-    // ─── Animation Delegation ──────────────────────────────────────────────────
-
     isAnimationLocked(window_uid: string): boolean {
         return this.animationController.isAnimationLocked(window_uid);
     }
 
     playAnimation(window_uid: string, sequence: AnimationSequence): void {
-        const exists = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as WindowConfig | undefined;
-        if (!exists) {
-            this.pendingAnimations.set(window_uid, sequence);
-            return;
-        }
-
-        this.pendingAnimations.delete(window_uid);
-        this.animationController.playAnimation(window_uid, sequence);
+        this.lifecycleManager.playAnimation(window_uid, sequence);
     }
 
     cancelAnimation(window_uid: string): void {
