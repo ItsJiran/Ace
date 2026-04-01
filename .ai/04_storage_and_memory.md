@@ -4,12 +4,32 @@ Canonical runtime note: gateway + parser + context + RAG mechanism is documented
 
 Because the ecosystem must pass massive strings (like a 10-page AI streamed response) between the Gateway Process, the Markdown Parser Process, and the React UI instantaneously, traditional Redux/Zustand logic is fundamentally flawed and too slow.
 
-We utilize a **Key-Based Observability Mesh** leveraging native `Map` singletons and React 18 Sockets (`src/services/storageEngine.ts`).
+We utilize a **Key-Based Observability Mesh** leveraging native `Map` singletons and React 18 Sockets (`src/services/kernelEngine.ts` / `KernelMemoryManager`).
 
 ## ⚡ Global RAM & Sockets
-1. **Global RAM**: A massive flat dictionary mapping a single, unique `memory_uid` directly to a heavy payload object.
+1. **Global RAM**: A massive flat dictionary mapping a single, unique `memory_uid` directly to a heavy payload object (`KernelState.kernel_memory: Map<string, any>`).
 2. **Classification Index**: A secondary index grouping `memory_uid`s under recognizable string tags (e.g., `"type:chat_history": ["mem-1", "mem-2"]`).
-3. **The Sockets**: The `StorageEngine` holds lightning-fast observable Sets routing straight into the `useAceMemory()` React hook.
+3. **The Sockets**: `KernelMemoryManager` holds key-scoped observable listener sets, routing directly into the `useAceMemory()` React hook via `useSyncExternalStore`.
+
+### Subscription Architecture (Key-Scoped — Critical)
+
+`KernelState.change_listeners` is a **`Map<string, Set<() => void>>`** keyed by `memory_uid`.
+
+```typescript
+// subscribe(uid, cb) adds cb ONLY to the Set for that uid
+KernelEngine.subscribe('system:overlay_state', (data) => { ... });
+
+// When system:overlay_state is written, ONLY its listeners fire.
+// Other keys' listeners are completely unaffected — O(1) reactivity.
+```
+
+**This is the critical design invariant** — a write to `system:rendered_windows` will never cause overlay state subscribers to re-evaluate, and vice versa. This eliminates the previously-observed catastrophic fan-out where ANY memory write would fire every component subscription.
+
+> [!WARNING]
+> **Historical Bug (Fixed 2026-04-01):** The previous implementation used a single global `Set<() => void>`. Every `subscribe()` call added to this shared set, and every `notifyMemoryChanged()` would fire ALL registered callbacks regardless of which key changed. With many windows and active polling loops, this created an O(N×M) storm on every write. The architecture is now O(1) per key.
+
+> [!IMPORTANT]
+> **`resetKernelSpace()` does NOT clear `change_listeners`.** React's `useSyncExternalStore` subscribes during first render — before `bootACE()` runs in a `useEffect`. Clearing the listener map would destroy those subscriptions permanently, causing the UI to be completely non-reactive after boot. Only `kernel_memory` is cleared/re-initialized on reset.
 
 > [!IMPORTANT]
 > **Strict Rendering Law**: If any React Component deals with shared RAM-backed data, it MUST utilize React 18's `useSyncExternalStore` API (via the `useAceMemory` hook). However, high-frequency local interaction state such as hover, typing, drag frames, spring motion, and pointer-local runtime must stay in local `useState` / `useRef` and should not be written through RAM on every frame.

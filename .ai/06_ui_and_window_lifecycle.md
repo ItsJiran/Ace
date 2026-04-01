@@ -14,8 +14,8 @@ The window layer is governed by runtime config and global state, especially `win
 2. **Routing**: The `EventBus` routes it to the `WindowEngine`.
 3. **Allocation**: `WindowEngine` generates a unique `window_uid`, assigns a `z_index`, and creates a `WindowConfig` entry.
 4. **Metadata**: The config may include `opacity`, `is_locked`, `always_on_top`, `chrome_style`, and `drag_surface`.
-5. **RAM Commitment**: The new window config is stored at `system:window:<uid>`. The window is then registered into `window_sys` (the `KernelWindowManager` source of truth) which immediately calls `flushToMemory()` to write the updated `system:rendered_windows`. This is the **sole** window index key — `system:active_windows` no longer exists.
-6. **UI Rendering**: `App.tsx` subscribes to `system:rendered_windows` and mounts the corresponding `AceWindow` shell (or custom local-state shell) wrapped in `ProcessContextProvider` + `WindowContextProvider`.
+5. **RAM Commitment**: The new window config is stored at `system:window:<uid>`. The window is then registered into `window_sys` (the `KernelWindowManager` source of truth). `registerWindow()` schedules a deferred `flushToMemory()` via `queueMicrotask` — this means multiple sequential spawns during the same event loop tick (e.g., all autostart widgets activating during boot) coalesce into a **single** `system:rendered_windows` write and therefore a single React render pass. This is the **sole** window index key — `system:active_windows` no longer exists.
+6. **UI Rendering**: `App.tsx` subscribes to `system:rendered_windows` and mounts the corresponding `AceWindow` shell (or custom local-state shell) wrapped in `ProcessContextProvider` + `WindowContextProvider`. On first mount, windows render with `opacity: 0` until their `isMounted` state activates (10ms timeout), preventing first-frame opacity flash before `WindowAnimationController` acquires the DOM element.
 
 ### 2. Physical State Updates (Resize/Move)
 1. **Direct Manipulation**: User drags a window.

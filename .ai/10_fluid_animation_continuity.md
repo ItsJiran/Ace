@@ -74,6 +74,8 @@ Implementation guidance for ACE:
 3. Use RAF for frame-accurate updates when animating real window geometry.
 4. Keep motion interruption-safe: replay, cancel, retarget, and close should not produce jumps.
 5. Profile FPS during stress scenarios and optimize before adding visual complexity.
+6. **Animation teardown must clear inline styles.** `WindowAnimationController.removeSlot()` clears `transform`, `width`, `height`, and `opacity` from the DOM element when a slot is removed. Failure to do so leaves stale inline styles that override React's layout on the next render cycle.
+7. **Pre-mount opacity gate.** `useAceWindow` returns `opacity: 0` in `rootStyle` until `isMounted = true` (set after a 10ms `setTimeout` in `useEffect`). This prevents the first-frame flash where the window briefly renders fully opaque before `WindowAnimationController` acquires it and sets the animation `from` state (typically `opacity: 0`). Never apply `config.opacity` directly in `rootStyle` before the mount gate resolves.
 
 ## Performance-Critical Pattern: RAF Decoupling (Drag Optimization)
 
@@ -215,6 +217,8 @@ Design intent:
 4. Enter/expand feel spring-based and alive.
 5. Fade behavior is clean (no opacity jitter).
 6. Transition remains readable and smooth at target FPS.
+7. Window renders invisible (`opacity: 0`) on its first paint; opacity only transitions to configured value once `isMounted = true` in `useAceWindow`.
+8. After animation completes and `removeSlot()` is called, no inline `transform`, `width`, `height`, or `opacity` remains on the DOM element.
 
 ## Scope Note
 
@@ -279,6 +283,31 @@ Semantic strings are resolved by WindowEngine at the moment each segment activat
 Every running animation writes to `system:window_animations` (a `Record<uid, AnimationRuntimeState>`) on each RAF frame. Components can subscribe via `useAceMemory('system:window_animations')` to display live phase, segment index, cycle count, and running state.
 
 Example display: `fps:60 phase:expand cycle:2 run`
+
+### Slot Lifecycle and Style Cleanup
+
+When `WindowAnimationController` finishes a sequence (or a window is closed), it calls `removeSlot(uid)`. This method:
+1. Clears the inline styles it previously wrote: `element.style.transform = ''`, `width = ''`, `height = ''`, `opacity = ''`.
+2. Removes the slot from `this.slots` and `this.liveBounds`.
+3. Calls `clearAnimationRuntimeState(uid)` to remove the RAM observability entry.
+
+This teardown is required because the same DOM element may be re-used or re-rendered by React with layout values derived from `config` — stale inline styles would silently override them.
+
+### First-Frame Opacity Contract
+
+`useAceWindow` owns the initial opacity of every ACE window:
+
+```typescript
+const rootStyle: CSSProperties = {
+    width: config.width,
+    height: config.height,
+    zIndex: ...,
+    opacity: isMounted ? (config.opacity ?? 1) : 0,  // transparent until mount
+    willChange: 'transform',
+};
+```
+
+`isMounted` becomes `true` inside a `useEffect → setTimeout(10ms)` after the first render. During those first milliseconds, `WindowAnimationController` acquires the element and sets the animation `from` state (which typically starts at `opacity: 0` for enter animations). By the time `isMounted` resolves and React applies `config.opacity`, the animation loop has already taken ownership of the `opacity` style and drives it to the target. Without this gate, a single-frame flash of the fully-opaque window is visible before the animation begins.
 
 ### Usage Examples
 

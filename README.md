@@ -34,6 +34,29 @@ Notes:
 - This README now tracks active and pending work only.
 - Completed details and long examples are maintained in `.ai/` documentation.
 
+## Recently Completed (2026-04-01 Kernel Reactivity & Boot Quality)
+
+- **Overlay State Reactivity Fix**: Overlay state (`system:overlay_state`) is now fully reactive in React.
+  - Root cause: `KernelState.resetKernelSpace()` was calling `change_listeners.clear()`, destroying React's `useSyncExternalStore` subscriptions before `bootACE()` ran in `useEffect`. React subscribes during first render (before boot), so clearing listeners severed the connection permanently.
+  - Fix: `resetKernelSpace()` only clears `kernel_memory`; `change_listeners` is never reset.
+
+- **Key-Scoped Reactive Subscriptions**: Eliminated a global subscription storm that caused severe slowdowns.
+  - Root cause: `KernelState.change_listeners` was a single `Set<() => void>`. Every `subscribe(uid, cb)` added to this one set. Every `notifyMemoryChanged()` call fired ALL listeners regardless of which key changed → O(N×M) per write.
+  - Fix: `change_listeners` is now a `Map<string, Set<() => void>>` keyed by `memory_uid`. `subscribe(uid, cb)` buckets listeners by uid. `notifyMemoryChanged(uid)` only fires listeners for that specific uid → O(1) per key.
+
+- **Window Spawn Batching via `queueMicrotask`**: Eliminated one-by-one window appearance jitter during boot.
+  - Root cause: `KernelWindowManager.flushToMemory()` was called synchronously per window registration. Sequential autostart spawns triggered multiple React renders, causing windows to appear one at a time.
+  - Fix: `flushToMemory()` now defers the `writeMemory` call via `queueMicrotask` with an `isFlushPending` guard. Multiple sequential spawns within the same microtask checkpoint coalesce into a single React render.
+
+- **First-Frame Opacity Gate in `useAceWindow`**: Eliminated visible opacity flash before enter animations.
+  - Root cause: `useAceWindow` returned `opacity: config.opacity ?? 1` immediately. `WindowAnimationController` would then set `opacity: 0` as the animation `from` state, producing a brief fully-opaque flash on frame 0.
+  - Fix: `rootStyle.opacity` is `0` until `isMounted = true` (set after a 10ms `setTimeout` in `useEffect`). The element renders transparent until the animation loop takes ownership of opacity.
+
+- **`WindowAnimationController.removeSlot()` Style Cleanup**: Prevented layout corruption after animation ends.
+  - `removeSlot()` now explicitly clears `element.style.transform`, `width`, `height`, and `opacity` after use. Previously, stale inline styles from animation frames silently overrode React's layout values on subsequent renders.
+
+- **`WindowOverlayManager.startBridges()` Idempotency**: Added `bridgesStarted` guard to prevent double-starting `CursorBridge` (48ms polling) and `AlwaysOnTopBridge` on hot reload or multiple init calls.
+
 ## Recently Completed (2026-03-29 Phase E Performance Optimization)
 
 - **Core Window Drag Performance Optimization**: Fixed 10+ FPS drop during multi-window dragging:

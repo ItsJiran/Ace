@@ -4,13 +4,33 @@ Canonical runtime note: gateway + parser + context + RAG mechanism is documented
 
 Because ACE relies on a strict decoupling of state, routing, and UI, the application cannot simply "render React" on load. The bootup sequence must be meticulously ordered to prevent race conditions, ghost events, or UI crashes.
 
-The bootup sequence operates in **7 Phases**, executed through the `BootupPipeline` registered in `src/core/packages/system/pipelines/BootupPipeline.ts`.
+The bootup sequence has two distinct stages:
+
+1. **Pre-Pipeline Stage** — direct calls in `bootACE()` (`src/boot.ts`) that run synchronously before the pipeline begins.
+2. **BootupPipeline Phases 1–7** — registered in `src/core/packages/system/pipelines/BootupPipeline.ts`.
+
+### Pre-Pipeline Stage (`bootACE()` in `boot.ts`)
+
+Before `BootupPipeline` runs, `bootACE()` calls `setupKernelSpace()` on all core engines in a fixed order:
+
+1. `KernelEngine.resetKernelSpace()` — clears kernel memory only (NOT change_listeners — see note below).
+2. `LoggerEngine.setupKernelSpace() + init()` — registers `system:logs`, starts console interceptor.
+3. `GlobalStateManager.setupKernelSpace()` — registers global cursor/focus/keybind state slots.
+4. `ConfigEngine.setupKernelSpace()` — registers `system:config` slot.
+5. `EventBus.setupKernelSpace()` — registers `system:event_stream`.
+6. `PipelineEngine.setupKernelSpace()`, `WidgetEngine.setupKernelSpace()`, `LayoutEngine.setupKernelSpace()`, `AIGatewayEngine.setupKernelSpace()`.
+7. `WindowEngine.setupKernelSpace()` — registers `system:overlay_state` with initial ambient state, prewarms `set_ignore_cursor_events` IPC, then starts `CursorBridge` + `AlwaysOnTopBridge` via `overlayManager.startBridges()`.
+
+> [!IMPORTANT]
+> `resetKernelSpace()` intentionally does **NOT** clear `change_listeners`. React's `useSyncExternalStore` (via `useAceMemory`) subscribes during first render, before `bootACE()` runs. Clearing the listener map at reset time would permanently sever those subscriptions. Only `kernel_memory` is cleared.
+
+Only after all `setupKernelSpace()` calls complete does `window.ACE` registry get populated and `BootupPipeline` execute.
 
 ### Phase 1: Init Core Runtime Bed
 * **Action:** Bring up the absolute runtime foundation first.
 * **Execution:**
   1. Boot `loggerService` — initialize logging.
-  2. Validate critical services (`StorageEngine`, `EventBus`) exist on `window.ACE`.
+  2. Validate critical services (`KernelEngine`/storage, `EventBus`) exist on `window.ACE`.
 * **Rule:** The rest of the system must treat this layer as the prerequisite bedrock.
 
 ### Phase 2: Init Config And Global State
@@ -52,10 +72,12 @@ The bootup sequence operates in **7 Phases**, executed through the `BootupPipeli
 ### Phase 7: Init Engine Routes (Centralized Route Gate)
 * **Action:** Register all engine-backed EventBus routes in a single phase.
 * **Execution:**
-  1. `WindowEngine.registerEventRoutes()` — binds `open_window`, `close_window`, etc.
-  2. `KeybindEngine.registerEventRoutes()` — binds keybind actions.
+  1. `WindowEngine.registerEventRoutes()` — binds `open_window`, `close_window`, `set_overlay_mode`, `debug_action`.
+  2. `KeybindEngine.registerEventRoutes()` — binds keybind lookup/toggle actions.
   3. `AIGatewayEngine.registerEventRoutes()` — binds `send_gateway` (delegates to `sendGatewayRoute.ts`).
   4. `ToolEngine.registerEventRoutes()` — binds `execute_tool`.
+  5. `AIContextEngine.registerEventRoutes()` — binds context memory reservation routes.
+  6. `ParserEngine.registerEventRoutes()` — binds `parse_stream` and output routing.
 * **Why centralized:** All route registrations happen in one auditable location. This prevents route conflicts, ensures deterministic ordering, and makes it easy to trace which engine owns which action.
 
 ## What Does Not Boot Upfront

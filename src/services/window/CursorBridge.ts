@@ -21,6 +21,10 @@ export class CursorBridge {
     // Bounds cache — refreshed from kernel memory on global change notifications.
     private cachedWindowList: WindowConfig[] = [];
     private activeWindowsUnsub?: () => void;
+    // Per-window bounds subscriptions — rebuilt whenever the rendered window list changes.
+    // Required so that drag-committed bounds (written to system:window:<uid>) also
+    // invalidate the cache; without these the hit-test positions stay stale after a move.
+    private windowUnsubs: (() => void)[] = [];
 
     constructor(onOverlayModeChange: (mode: 'ambient' | 'interactive') => void) {
         this.onOverlayModeChange = onOverlayModeChange;
@@ -48,9 +52,27 @@ export class CursorBridge {
     }
 
     private rebuildWindowCache() {
-        this.cachedWindowList = KernelEngine.getRenderedWindows()
+        // Tear down previous per-window subscriptions before re-subscribing.
+        for (const unsub of this.windowUnsubs) unsub();
+        this.windowUnsubs = [];
+
+        const rendered = KernelEngine.getRenderedWindows();
+        this.cachedWindowList = rendered
             .map(({ uid }) => KernelEngine.readMemory(`system:window:${uid}`) as WindowConfig | undefined)
             .filter((config): config is WindowConfig => Boolean(config && !config.is_minimized));
+
+        // Subscribe to each window's individual config key so that drag-committed
+        // bounds (written to system:window:<uid> by updateWindowBounds) immediately
+        // refresh the hit-test cache — without this, the cursor bridge uses stale
+        // positions after a window is moved.
+        for (const { uid } of rendered) {
+            const unsub = KernelEngine.subscribe(`system:window:${uid}`, () => {
+                this.cachedWindowList = KernelEngine.getRenderedWindows()
+                    .map(({ uid: u }) => KernelEngine.readMemory(`system:window:${u}`) as WindowConfig | undefined)
+                    .filter((config): config is WindowConfig => Boolean(config && !config.is_minimized));
+            });
+            this.windowUnsubs.push(unsub);
+        }
     }
 
     public start() {
@@ -176,6 +198,8 @@ export class CursorBridge {
         }
         this.activeWindowsUnsub?.();
         this.activeWindowsUnsub = undefined;
+        for (const unsub of this.windowUnsubs) unsub();
+        this.windowUnsubs = [];
         this.cachedWindowList = [];
     }
 }
