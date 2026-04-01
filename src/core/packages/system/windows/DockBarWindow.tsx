@@ -4,7 +4,7 @@ import type { WindowConfig } from '#/schemas/window';
 import type { RegistryPackage } from '#/schemas/registry';
 import { AceWindow } from '#/components/layout/AceWindow';
 import type { UseAceWindowResult } from '#/hooks/useAceWindow';
-import { useAceMemory } from '#/hooks/useAceMemory';
+import { useAceMemory, useAceMemorySelector } from '#/hooks/useAceMemory';
 import { WindowEngine } from '#/services/windowEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 import {
@@ -264,7 +264,18 @@ function DockEntry({ uid, selfUid, pkgs, compact, vertical, onContextMenu }: {
     vertical?: boolean;
     onContextMenu?: (e: React.MouseEvent) => void;
 }) {
-    const config = useAceMemory<WindowConfig>(`system:window:${uid}`);
+    // Selector: subscribe only to the three fields DockEntry renders.
+    // This prevents a re-render on every focus event (which bumps z_index only).
+    type DockEntrySnapshot = { is_minimized: boolean; title: string; component: string } | undefined;
+    const config = useAceMemorySelector<WindowConfig, DockEntrySnapshot>(
+        `system:window:${uid}`,
+        (win) => win ? { is_minimized: win.is_minimized, title: win.title || '', component: win.component } : undefined,
+        (a, b) => {
+            if (a === b) return true;
+            if (!a || !b) return a === b;
+            return a.is_minimized === b.is_minimized && a.title === b.title && a.component === b.component;
+        }
+    );
     const [hov, setHov] = useState(false);
 
     // Hooks must run before early return

@@ -35,6 +35,7 @@ class KernelEngineSingleton {
     public deleteMemory = KernelMemoryManager.deleteMemory.bind(KernelMemoryManager);
     public subscribe = KernelMemoryManager.subscribe.bind(KernelMemoryManager);
     public getRAMStats = KernelMemoryManager.getRAMStats.bind(KernelMemoryManager);
+    public batch = KernelMemoryManager.batch.bind(KernelMemoryManager);
 
     // ── Process lifecycle ────────────────────────────────────────────────────
     public spawnProcess = KernelProcessManager.spawnProcess.bind(KernelProcessManager);

@@ -38,11 +38,39 @@ function isShallowEqual(a: any, b: any): boolean {
  * - Reactive Listeners: Propagates physical RAM mutations immediately out to the UI React hooks.
  */
 export class KernelMemoryManager {
+    // Batch mode: suppress per-write notifications and fire them all once at the end.
+    private static isBatching = false;
+    private static batchedNotifications = new Set<string>();
+
     private static notifyMemoryChanged(memory_uid: string): void {
+        if (this.isBatching) {
+            this.batchedNotifications.add(memory_uid);
+            return;
+        }
         const listeners = KernelState.change_listeners.get(memory_uid);
         if (listeners) {
             for (const listener of Array.from(listeners)) {
                 try { listener(); } catch (error) { console.error('[KernelMemoryManager] Listener error:', error); }
+            }
+        }
+    }
+
+    /**
+     * Execute `fn` in batch mode: all RAM writes inside the callback defer their
+     * listener notifications until `fn` returns, then each unique key fires once.
+     * Prevents sequential writes from cascading into separate React render passes.
+     */
+    static batch(fn: () => void): void {
+        if (this.isBatching) { fn(); return; } // Already batching — just run
+        this.isBatching = true;
+        try {
+            fn();
+        } finally {
+            this.isBatching = false;
+            const pending = Array.from(this.batchedNotifications);
+            this.batchedNotifications.clear();
+            for (const uid of pending) {
+                this.notifyMemoryChanged(uid);
             }
         }
     }

@@ -94,6 +94,11 @@ export class CursorBridge {
         this.intervalId = window.setInterval(async () => {
             const state = GlobalStateManager.readState();
 
+            // Skip all expensive IPC polling if the user is currently actively interacting/dragging
+            if (state.cursor.is_pointer_down) {
+                return;
+            }
+
             // If mouse-focus behavior is disabled, always enforce ambient pass-through.
             if (!state.focus.mouse_focus_enabled) {
                 const overlayState = KernelEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;

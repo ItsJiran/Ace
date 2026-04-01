@@ -502,10 +502,18 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             width: config.width,
             height: config.height,
             zIndex: config.always_on_top ? 9999 + config.z_index : config.z_index,
-            opacity: isMounted ? (config.opacity ?? 1) : 0,
             willChange: 'transform',
         };
-    }, [config, isMounted]);
+    }, [config]);
+
+    // Sync config.opacity to DOM directly so changes don't require rootStyle to recompute.
+    // Skip when not yet mounted (opacity-0 Tailwind class handles the hidden state) or minimized
+    // (rootStyle's minimized branch owns opacity:0 there).
+    useLayoutEffect(() => {
+        const el = elementRef.current;
+        if (!el || !config || !isMounted || config.is_minimized) return;
+        el.style.opacity = String(config.opacity ?? 1);
+    }, [isMounted, config?.opacity, config?.is_minimized]);
 
     // -------------------------------------------------------------------------
     // Headless Event Bindings

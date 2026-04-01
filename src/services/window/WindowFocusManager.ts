@@ -50,11 +50,12 @@ export class WindowFocusManager {
         
         if (!this.focusUpdateScheduled) {
             this.focusUpdateScheduled = true;
-            // Use setTimeout(..., 0) to push to macrotask queue
-            // This gives the current frame time to complete rendering
-            setTimeout(() => {
+            // queueMicrotask runs in the same event-loop phase as KernelWindowManager's
+            // flushToMemory, so focus writes are coalesced with window-list writes into
+            // one React render pass instead of scheduling a separate macrotask frame.
+            queueMicrotask(() => {
                 this.flushPendingFocus();
-            }, 0);
+            });
         }
     }
 
@@ -69,15 +70,13 @@ export class WindowFocusManager {
         const targetCfg = KernelEngine.readMemory(targetKey) as WindowConfig | undefined;
         if (!targetCfg) return;
 
-        // Now apply the actual focus update
-        const newZIndex = this.deps.bumpZIndex();
-        this.deps.updateWindowConfig(window_uid, {
-            z_index: newZIndex
+        // Batch all writes so every subscriber fires exactly once after they all land,
+        // rather than cascading through four separate React render passes.
+        KernelEngine.batch(() => {
+            const newZIndex = this.deps.bumpZIndex();
+            this.deps.updateWindowConfig(window_uid, { z_index: newZIndex });
+            GlobalStateManager.setFocusedWindowInteractive(window_uid);
         });
-
-        // Atomic: combines setFocusedWindow + setOverlayMode into one pass.
-        // Eliminates duplicate writes to system:global_state and system:overlay_state.
-        GlobalStateManager.setFocusedWindowInteractive(window_uid);
 
         this.deps.fireSetIgnoreCursorEvents(false);
     }

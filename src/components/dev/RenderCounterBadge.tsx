@@ -10,7 +10,7 @@ interface RenderCounterBadgeProps {
 export function RenderCounterBadge({ componentName, className, style, show = true }: RenderCounterBadgeProps) {
     const renderCount = useRenderCount(componentName);
 
-    return null;
+    // return null;
     if (!import.meta.env.DEV || !show) return null;
 
     return (
