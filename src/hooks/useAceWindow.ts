@@ -375,11 +375,9 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                     el.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
                 }
                 
-                // ARCHITECTURE CHANGE: Update local state (not global!)
-                // This allows motion updates without triggering global subscriptions.
-                // Only this window's component will render, not all 50 windows.
-                setLocalX(currentX);
-                setLocalY(currentY);
+                // ARCHITECTURE CHANGE: DO NOT update React state on every frame!
+                // We rely purely on direct DOM manipulation above to skip React render cycles.
+                // setLocalX/setLocalY are only called when the spring finally settles.
 
                 // Continue loop if not settled
                 const settled = Math.abs(vx) < precision && Math.abs(vy) < precision && 

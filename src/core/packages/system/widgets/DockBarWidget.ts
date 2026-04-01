@@ -15,13 +15,31 @@ export default function activate() {
     const width  = 480;
     const height = 60;
 
-    window.ACE.window.spawnWindow({
-        package: 'itsjiran/ace-system',
-        window:  'dock-bar-window',
-        title:   'DockBar',
-        width,
-        height,
-        x: Math.max(0, Math.round(screenW / 2 - width / 2)),
-        y: Math.max(0, Math.round(screenH - height - 24)),
-    });
+    const spawn = () => {
+        const aceWindow = window.ACE?.window;
+        const aceStorage = window.ACE?.storage;
+        if (!aceWindow?.spawnWindow || !aceStorage?.readMemory) return false;
+
+        aceWindow.spawnWindow({
+            package: 'itsjiran/ace-system',
+            window:  'dock-bar-window',
+            title:   'DockBar',
+            width,
+            height,
+            x: Math.max(0, Math.round(screenW / 2 - width / 2)),
+            y: Math.max(0, Math.round(screenH - height - 24)),
+        });
+        return true;
+    };
+
+    if (spawn()) return;
+
+    // Boot race fallback: retry briefly until bridge APIs are ready.
+    let tries = 0;
+    const retryId = window.setInterval(() => {
+        tries += 1;
+        if (spawn() || tries >= 40) {
+            window.clearInterval(retryId);
+        }
+    }, 100);
 }

@@ -45,6 +45,8 @@ class KernelEngineSingleton {
     public isProcessActive = KernelProcessManager.isProcessActive.bind(KernelProcessManager);
     public terminateProcess = KernelProcessManager.terminateProcess.bind(KernelProcessManager);
     public killProcess = KernelProcessManager.killProcess.bind(KernelProcessManager);
+    public terminateSubtree = (process_uid: string, reason?: string) => 
+        KernelProcessManager.terminateProcess(process_uid, { cascade: true, reason });
     public getAllProcesses = KernelProcessManager.getAllProcesses.bind(KernelProcessManager);
 
     // ── Runtime memory management ────────────────────────────────────────────
@@ -71,9 +73,7 @@ class KernelEngineSingleton {
         return KernelState.kernel_memory;
     }
 
-    public registerTerminationHandler(engine: string, handler: any) {
-        return () => {};
-    }
+    public registerTerminationHandler = KernelProcessManager.registerTerminationHandler.bind(KernelProcessManager);
 }
 
 export const KernelEngine = new KernelEngineSingleton();

@@ -84,7 +84,7 @@ export class CursorBridge {
         let lastMetricsAt = 0;
 
         this.activeWindowsUnsub = KernelEngine.subscribe(
-            'system:rendered_windows',
+            'system:window_system',
             () => {
                 this.rebuildWindowCache();
             }

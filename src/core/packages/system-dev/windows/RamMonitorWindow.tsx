@@ -20,10 +20,11 @@ export const registry: AceRegistryType.Window = {
     },
 };
 
-type SortKey = 'memory_uid' | 'approx_bytes' | 'listeners' | 'type' | 'child_count';
+type SortKey = 'memory_uid' | 'approx_bytes' | 'listeners' | 'type' | 'child_count' | 'process_uid';
 
 interface RAMEntry {
     memory_uid: string;
+    process_uid: string;
     approx_bytes: number;
     type: string;
     listeners: number;
@@ -36,6 +37,51 @@ function formatBytes(b: number): string {
     return `${(b / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function serializeMemoryPayload(payload: unknown): string {
+    const seen = new WeakSet<object>();
+
+    const toSerializable = (value: unknown): unknown => {
+        if (value === null || value === undefined) return value;
+        if (typeof value !== 'object') return value;
+
+        const obj = value as object;
+        if (seen.has(obj)) return '[Circular]';
+        seen.add(obj);
+
+        if (value instanceof Map) {
+            return {
+                __type: 'Map',
+                size: value.size,
+                entries: Array.from(value.entries()).map(([k, v]) => [k, toSerializable(v)]),
+            };
+        }
+
+        if (value instanceof Set) {
+            return {
+                __type: 'Set',
+                size: value.size,
+                values: Array.from(value.values()).map((v) => toSerializable(v)),
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value.map((v) => toSerializable(v));
+        }
+
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+            out[k] = toSerializable(v);
+        }
+        return out;
+    };
+
+    try {
+        return JSON.stringify(toSerializable(payload), null, 2);
+    } catch {
+        return String(payload);
+    }
+}
+
 export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     const [stats, setStats] = useState(() => KernelEngine.getRAMStats());
     const [isPaused, setIsPaused] = useState(false);
@@ -43,6 +89,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     const [sortAsc, setSortAsc] = useState(false);
     const [filter, setFilter] = useState('');
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
+    const [expandedProcesses, setExpandedProcesses] = useState<Set<string>>(new Set());
     const [detailsCache, setDetailsCache] = useState<Record<string, string>>({});
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -67,6 +114,18 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
         }
     };
 
+    const toggleProcessExpanded = (processUid: string) => {
+        setExpandedProcesses(prev => {
+            const next = new Set(prev);
+            if (next.has(processUid)) {
+                next.delete(processUid);
+            } else {
+                next.add(processUid);
+            }
+            return next;
+        });
+    };
+
     const openDetails = (memoryUid: string) => {
         setExpandedKey((prev) => (prev === memoryUid ? null : memoryUid));
 
@@ -77,11 +136,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
         if (payload === undefined) {
             preview = '(no payload in global RAM for this key)';
         } else {
-            try {
-                preview = JSON.stringify(payload, null, 2);
-            } catch {
-                preview = String(payload);
-            }
+            preview = serializeMemoryPayload(payload);
         }
         setDetailsCache((prev) => ({ ...prev, [memoryUid]: preview }));
     };
@@ -96,23 +151,44 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     // Keys that have listeners but no memory entry (subscriptions to non-existent keys)
     const orphanListeners: RAMEntry[] = (stats.listeners_by_key || [])
         .filter(l => !rows.find(r => r.memory_uid === l.key))
-        .map(l => ({ memory_uid: l.key, approx_bytes: 0, type: '—', listeners: l.listeners, child_count: 0 }));
+        .map(l => ({ memory_uid: l.key, process_uid: '(orphan)', approx_bytes: 0, type: '—', listeners: l.listeners, child_count: 0 }));
 
     const allRows = [...rows, ...orphanListeners];
 
     const filtered = filter
-        ? allRows.filter(r => r.memory_uid.toLowerCase().includes(filter.toLowerCase()))
+        ? allRows.filter(r => r.memory_uid.toLowerCase().includes(filter.toLowerCase()) || r.process_uid.toLowerCase().includes(filter.toLowerCase()))
         : allRows;
 
-    const sorted = [...filtered].sort((a, b) => {
-        let cmp = 0;
-        if (sortKey === 'memory_uid') cmp = a.memory_uid.localeCompare(b.memory_uid);
-        else if (sortKey === 'approx_bytes') cmp = a.approx_bytes - b.approx_bytes;
-        else if (sortKey === 'listeners') cmp = a.listeners - b.listeners;
-        else if (sortKey === 'type') cmp = a.type.localeCompare(b.type);
-        else if (sortKey === 'child_count') cmp = a.child_count - b.child_count;
-        return sortAsc ? cmp : -cmp;
-    });
+    // Group by process_uid
+    const grouped = new Map<string, RAMEntry[]>();
+    for (const row of filtered) {
+        if (!grouped.has(row.process_uid)) {
+            grouped.set(row.process_uid, []);
+        }
+        grouped.get(row.process_uid)!.push(row);
+    }
+
+    // Sort entries within each process group
+    const sortGroupedEntries = (entries: RAMEntry[]): RAMEntry[] => {
+        return [...entries].sort((a, b) => {
+            let cmp = 0;
+            if (sortKey === 'memory_uid') cmp = a.memory_uid.localeCompare(b.memory_uid);
+            else if (sortKey === 'approx_bytes') cmp = a.approx_bytes - b.approx_bytes;
+            else if (sortKey === 'listeners') cmp = a.listeners - b.listeners;
+            else if (sortKey === 'type') cmp = a.type.localeCompare(b.type);
+            else if (sortKey === 'child_count') cmp = a.child_count - b.child_count;
+            else if (sortKey === 'process_uid') cmp = a.process_uid.localeCompare(b.process_uid);
+            return sortAsc ? cmp : -cmp;
+        });
+    };
+
+    // Sort processes by their total memory usage
+    const sortedProcesses = Array.from(grouped.entries())
+        .sort((a, b) => {
+            const aTotal = a[1].reduce((sum, r) => sum + r.approx_bytes, 0);
+            const bTotal = b[1].reduce((sum, r) => sum + r.approx_bytes, 0);
+            return bTotal - aTotal;
+        });
 
     const SortIndicator = ({ k }: { k: SortKey }) =>
         sortKey === k ? <span className="ml-0.5 text-zinc-400">{sortAsc ? '↑' : '↓'}</span> : null;
@@ -137,10 +213,6 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                     <div className="text-xs">
                         <span className="text-zinc-400">Total Size:</span>
                         <span className="font-mono font-bold text-white ml-1">{formatBytes(stats.approx_total_bytes)}</span>
-                    </div>
-                    <div className="text-xs">
-                        <span className="text-zinc-400">Classifications:</span>
-                        <span className="font-mono font-bold text-white ml-1">{stats.classification_entries}</span>
                     </div>
 
                     <div className="ml-auto flex items-center gap-2">
@@ -181,6 +253,9 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                                 <th className={thClass} onClick={() => handleSort('memory_uid')}>
                                     Key <SortIndicator k="memory_uid" />
                                 </th>
+                                <th className={`${thClass}`} onClick={() => handleSort('process_uid')}>
+                                    Process <SortIndicator k="process_uid" />
+                                </th>
                                 <th className={`${thClass} text-right`} onClick={() => handleSort('approx_bytes')}>
                                     Size <SortIndicator k="approx_bytes" />
                                 </th>
@@ -196,62 +271,96 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {sorted.map((row, i) => {
-                                const isSystem = row.memory_uid.startsWith('system:');
-                                const isWindow = row.memory_uid.startsWith('system:window:');
-                                const hasListeners = row.listeners > 0;
-                                const isExpanded = expandedKey === row.memory_uid;
+                            {sortedProcesses.map(([processUid, processEntries], processIdx) => {
+                                const isProcessExpanded = expandedProcesses.has(processUid);
+                                const processTotal = processEntries.reduce((sum, e) => sum + e.approx_bytes, 0);
+                                const sortedProcessRows = sortGroupedEntries(processEntries);
 
                                 return (
-                                    <Fragment key={row.memory_uid}>
+                                    <Fragment key={processUid}>
+                                        {/* Process Group Header */}
                                         <tr
-                                            onClick={() => openDetails(row.memory_uid)}
-                                            className={`border-b border-zinc-800/30 cursor-pointer ${
-                                                i % 2 === 0 ? 'bg-zinc-900/20' : 'bg-transparent'
-                                            } hover:bg-zinc-700/20 transition-colors`}
+                                            onClick={() => toggleProcessExpanded(processUid)}
+                                            className={`border-b border-zinc-800/30 cursor-pointer font-semibold ${
+                                                processIdx % 2 === 0 ? 'bg-zinc-800/40' : 'bg-zinc-800/20'
+                                            } hover:bg-zinc-700/30 transition-colors`}
                                         >
-                                            <td className="px-2 py-1 font-mono">
-                                                <span className="text-zinc-500 mr-1">{isExpanded ? '▾' : '▸'}</span>
-                                                <span
-                                                    className={
-                                                        isWindow ? 'text-purple-400' :
-                                                        isSystem ? 'text-blue-400' :
-                                                        'text-zinc-300'
-                                                    }
-                                                >
-                                                    {row.memory_uid}
-                                                </span>
+                                            <td className="px-2 py-1.5 font-mono">
+                                                <span className="text-zinc-500 mr-1">{isProcessExpanded ? '▼' : '▶'}</span>
+                                                <span className="text-blue-300">{processUid}</span>
                                             </td>
-                                            <td className="px-2 py-1 text-right font-mono text-zinc-400">
-                                                {row.approx_bytes > 0 ? formatBytes(row.approx_bytes) : '—'}
+                                            <td className="px-2 py-1.5 font-mono text-zinc-400">
+                                                {processEntries.length} entries
                                             </td>
-                                            <td className="px-2 py-1 text-right font-mono">
-                                                <span className={hasListeners ? 'text-emerald-400' : 'text-zinc-600'}>
-                                                    {row.listeners || '—'}
-                                                </span>
+                                            <td className="px-2 py-1.5 text-right font-mono text-emerald-400">
+                                                {formatBytes(processTotal)}
                                             </td>
-                                            <td className="px-2 py-1 font-mono text-zinc-500">
-                                                {row.type}
-                                            </td>
-                                            <td className="px-2 py-1 text-right font-mono text-zinc-400">
-                                                {row.child_count > 0 ? row.child_count : '—'}
-                                            </td>
+                                            <td colSpan={3} />
                                         </tr>
-                                        {isExpanded && (
-                                            <tr className="border-b border-zinc-800/40 bg-black/20">
-                                                <td colSpan={5} className="px-2 py-2">
-                                                    <pre className="max-h-60 overflow-auto text-[10px] leading-4 font-mono text-zinc-300 bg-zinc-950/70 border border-zinc-800/70 rounded p-2 whitespace-pre-wrap break-all">
-                                                        {detailsCache[row.memory_uid] ?? 'Loading...'}
-                                                    </pre>
-                                                </td>
-                                            </tr>
-                                        )}
+
+                                        {/* Memory entries for this process */}
+                                        {isProcessExpanded && sortedProcessRows.map((row, entryIdx) => {
+                                            const isWindow = row.memory_uid.startsWith('system:window:');
+                                            const isSystem = row.memory_uid.startsWith('system:');
+                                            const hasListeners = row.listeners > 0;
+                                            const isExpanded = expandedKey === row.memory_uid;
+
+                                            return (
+                                                <Fragment key={row.memory_uid}>
+                                                    <tr
+                                                        onClick={() => openDetails(row.memory_uid)}
+                                                        className={`border-b border-zinc-800/20 cursor-pointer pl-6 ${
+                                                            entryIdx % 2 === 0 ? 'bg-zinc-900/40' : 'bg-transparent'
+                                                        } hover:bg-zinc-700/20 transition-colors`}
+                                                    >
+                                                        <td className="px-2 py-1 font-mono">
+                                                            <span className="text-zinc-500 mr-1">{isExpanded ? '▾' : '▸'}</span>
+                                                            <span
+                                                                className={
+                                                                    isWindow ? 'text-purple-400' :
+                                                                    isSystem ? 'text-blue-400' :
+                                                                    'text-zinc-300'
+                                                                }
+                                                            >
+                                                                {row.memory_uid}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-2 py-1 font-mono text-zinc-600 text-xs">
+                                                            —
+                                                        </td>
+                                                        <td className="px-2 py-1 text-right font-mono text-zinc-400">
+                                                            {row.approx_bytes > 0 ? formatBytes(row.approx_bytes) : '—'}
+                                                        </td>
+                                                        <td className="px-2 py-1 text-right font-mono">
+                                                            <span className={hasListeners ? 'text-emerald-400' : 'text-zinc-600'}>
+                                                                {row.listeners || '—'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-2 py-1 font-mono text-zinc-500">
+                                                            {row.type}
+                                                        </td>
+                                                        <td className="px-2 py-1 text-right font-mono text-zinc-400">
+                                                            {row.child_count > 0 ? row.child_count : '—'}
+                                                        </td>
+                                                    </tr>
+                                                    {isExpanded && (
+                                                        <tr className="border-b border-zinc-800/40 bg-black/20">
+                                                            <td colSpan={6} className="px-2 py-2 pl-12">
+                                                                <pre className="max-h-60 overflow-auto text-[10px] leading-4 font-mono text-zinc-300 bg-zinc-950/70 border border-zinc-800/70 rounded p-2 whitespace-pre-wrap break-all">
+                                                                    {detailsCache[row.memory_uid] ?? 'Loading...'}
+                                                                </pre>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </Fragment>
+                                            );
+                                        })}
                                     </Fragment>
                                 );
                             })}
-                            {sorted.length === 0 && (
+                            {sortedProcesses.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-3 py-6 text-center text-zinc-600 text-xs">
+                                    <td colSpan={6} className="px-3 py-6 text-center text-zinc-600 text-xs">
                                         No entries match the filter.
                                     </td>
                                 </tr>
@@ -262,7 +371,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
 
                 {/* ─── Footer ───────────────────────────────────── */}
                 <div className="px-3 py-1.5 border-t border-zinc-800/40 text-[10px] text-zinc-600 flex items-center justify-between">
-                    <span>{sorted.length} / {allRows.length} keys shown</span>
+                    <span>{sortedProcesses.length} processes, {filtered.length} keys total</span>
                     <span>sampled {new Date(stats.sampled_at).toLocaleTimeString()}</span>
                 </div>
             </div>

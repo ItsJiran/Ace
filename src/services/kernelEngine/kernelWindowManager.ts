@@ -3,45 +3,38 @@ import { KernelMemoryManager } from './kernelMemoryManager';
 import type { KernelWindowEntry } from './types';
 
 export class KernelWindowManager {
-    /** The kernel_memory key that React's useAceMemory subscribes to for re-renders. */
-    private static readonly RENDERED_WINDOWS_KEY = 'system:rendered_windows';
-
-    private static isFlushPending = false;
-
-    private static flushToMemory(): void {
-        if (!this.isFlushPending) {
-            this.isFlushPending = true;
-            queueMicrotask(() => {
-                this.isFlushPending = false;
-                KernelMemoryManager.writeMemory(
-                    KernelWindowManager.RENDERED_WINDOWS_KEY,
-                    this.getRenderedWindows(),
-                );
-            });
-        }
-    }
+    /** Reactive key for window registry snapshots. */
+    private static readonly WINDOW_SYSTEM_KEY = 'system:window_system';
 
     static registerWindow(window_uid: string, process_uid: string, component: string): void {
-        if (!KernelState.window_sys.has(window_uid)) {
-            KernelState.window_sys.set(window_uid, {
-                window_uid,
-                process_uid,
-                component,
-                memory_uids: new Set(),
-            });
-            this.flushToMemory();
-        }
+        if (KernelState.window_sys.has(window_uid)) return;
+
+        const nextWindowSystem = new Map(KernelState.window_sys);
+        nextWindowSystem.set(window_uid, {
+            window_uid,
+            process_uid,
+            component,
+            memory_uid: undefined,
+        });
+        KernelMemoryManager.writeMemory(KernelWindowManager.WINDOW_SYSTEM_KEY, nextWindowSystem);
     }
 
     static linkMemoryToWindow(memory_uid: string, window_uid: string): void {
         const entry = KernelState.window_sys.get(window_uid);
-        if (entry) {
-            entry.memory_uids.add(memory_uid);
-        }
+        if (!entry) return;
+        if (entry.memory_uid === memory_uid) return;
+
+        const nextWindowSystem = new Map(KernelState.window_sys);
+        nextWindowSystem.set(window_uid, {
+            ...entry,
+            memory_uid,
+        });
+        KernelMemoryManager.writeMemory(KernelWindowManager.WINDOW_SYSTEM_KEY, nextWindowSystem);
     }
 
     static getWindowMemories(window_uid: string): Set<string> {
-        return KernelState.window_sys.get(window_uid)?.memory_uids ?? new Set();
+        const memoryUid = KernelState.window_sys.get(window_uid)?.memory_uid;
+        return memoryUid ? new Set([memoryUid]) : new Set();
     }
 
     static getWindowEntry(window_uid: string): KernelWindowEntry | undefined {
@@ -61,7 +54,9 @@ export class KernelWindowManager {
     }
 
     static unregisterWindow(window_uid: string): void {
-        KernelState.window_sys.delete(window_uid);
-        this.flushToMemory();
+        if (!KernelState.window_sys.has(window_uid)) return;
+        const nextWindowSystem = new Map(KernelState.window_sys);
+        nextWindowSystem.delete(window_uid);
+        KernelMemoryManager.writeMemory(KernelWindowManager.WINDOW_SYSTEM_KEY, nextWindowSystem);
     }
 }

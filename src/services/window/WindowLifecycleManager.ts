@@ -15,8 +15,8 @@ export interface WindowLifecycleDependencies {
 
 export class WindowLifecycleManager {
     private activeWindowProcesses = new Map<string, string>();
-
     private pendingAnimations = new Map<string, AnimationSequence>();
+    private windowSubscriptions = new Map<string, () => void>();
 
     private deps: WindowLifecycleDependencies;
 
@@ -146,6 +146,14 @@ export class WindowLifecycleManager {
         KernelEngine.linkMemoryToWindow(this.deps.windowMemoryUid(window_uid), window_uid);
         this.deps.focusWindow(window_uid);
 
+        // Terminate window from `system:window_system` automatically if its granular tracking memory is destroyed
+        const unsub = KernelEngine.subscribe(this.deps.windowMemoryUid(window_uid), (data) => {
+            if (data === undefined) {
+                this.closeWindow(window_uid, { skipProcessLifecycle: true });
+            }
+        });
+        this.windowSubscriptions.set(window_uid, unsub);
+
         if (options.animation_sequence) {
             this.pendingAnimations.set(window_uid, options.animation_sequence);
             requestAnimationFrame(() => {
@@ -160,6 +168,12 @@ export class WindowLifecycleManager {
     }
 
     closeWindow(window_uid: string, options?: { skipProcessLifecycle?: boolean }) {
+        const unsub = this.windowSubscriptions.get(window_uid);
+        if (unsub) {
+            unsub();
+            this.windowSubscriptions.delete(window_uid);
+        }
+
         const windowProcessUid = this.activeWindowProcesses.get(window_uid);
         if (windowProcessUid && !options?.skipProcessLifecycle) {
             KernelEngine.updateProcessStatus(windowProcessUid, 'done', {

@@ -85,23 +85,31 @@ class WindowEngineSingleton {
         if (this.isTerminationHookBound) return;
 
         KernelEngine.registerTerminationHandler('windowEngine', ({ record }: { record: any }) => {
-            if (record.type !== 'window:instance') return;
+            // First, close any windows explicitly owned by this process in the window registry
+            const ownedWindows = KernelEngine.getRenderedWindows().filter(w => w.process_uid === record.process_uid);
+            for (const win of ownedWindows) {
+                this.closeWindow(win.uid, { skipProcessLifecycle: true });
+            }
 
-            const payload = (record.payload && typeof record.payload === 'object')
-                ? (record.payload as Record<string, unknown>)
-                : undefined;
-            const metadata = (record.metadata && typeof record.metadata === 'object')
-                ? (record.metadata as Record<string, unknown>)
-                : undefined;
-
-            const windowUid = typeof payload?.window_uid === 'string'
-                ? payload.window_uid
-                : typeof metadata?.window_uid === 'string'
-                    ? metadata.window_uid
+            // Next, if it's specifically a window:instance process, ensure we also catch it by its metadata payload
+            if (record.type === 'window:instance') {
+                const payload = (record.payload && typeof record.payload === 'object')
+                    ? (record.payload as Record<string, unknown>)
+                    : undefined;
+                const metadata = (record.metadata && typeof record.metadata === 'object')
+                    ? (record.metadata as Record<string, unknown>)
                     : undefined;
 
-            if (!windowUid) return;
-            this.closeWindow(windowUid, { skipProcessLifecycle: true });
+                const windowUid = typeof payload?.window_uid === 'string'
+                    ? payload.window_uid
+                    : typeof metadata?.window_uid === 'string'
+                        ? metadata.window_uid
+                        : undefined;
+
+                if (windowUid && !ownedWindows.some(w => w.uid === windowUid)) {
+                    this.closeWindow(windowUid, { skipProcessLifecycle: true });
+                }
+            }
         });
 
         this.isTerminationHookBound = true;

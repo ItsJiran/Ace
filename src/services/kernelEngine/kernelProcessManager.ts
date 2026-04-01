@@ -5,6 +5,22 @@ import { KernelTelemetry } from './kernelTelemetry';
 
 export class KernelProcessManager {
 
+    private static terminationHandlers = new Map<string, Array<(args: { record: ProcessRecord, reason: string }) => void>>();
+
+    static registerTerminationHandler(engine: string, handler: (args: { record: ProcessRecord, reason: string }) => void): () => void {
+        let handlers = this.terminationHandlers.get(engine);
+        if (!handlers) {
+            handlers = [];
+            this.terminationHandlers.set(engine, handlers);
+        }
+        handlers.push(handler);
+        return () => {
+            const currentHandlers = this.terminationHandlers.get(engine);
+            if (currentHandlers) {
+                this.terminationHandlers.set(engine, currentHandlers.filter(h => h !== handler));
+            }
+        };
+    }
 
     static spawnProcess(
         type: string,
@@ -27,8 +43,8 @@ export class KernelProcessManager {
             owner_engine: options?.owner_engine,
             metadata: metadata || {}
         };
-        const { abort_signal, memories_id } = this._registerKernelProcess(record, null);
-        KernelTelemetry.logDebug('spawnProcess', { process_uid, type, memories_id, owner_engine: options?.owner_engine });
+        const { abort_signal } = this._registerKernelProcess(record, null);
+        KernelTelemetry.logDebug('spawnProcess', { process_uid, type, owner_engine: options?.owner_engine });
         return { ...record, abort_signal };
     }
 
@@ -55,14 +71,23 @@ export class KernelProcessManager {
             owner_engine: options?.owner_engine,
             metadata: options?.metadata || {}
         };
-        const { abort_signal, memories_id } = this._registerKernelProcess(record, parent_process_uid);
-        KernelTelemetry.logDebug('spawnSubprocess', { process_uid, parent_process_uid, type, memories_id, owner_engine: options?.owner_engine });
+        const { abort_signal } = this._registerKernelProcess(record, parent_process_uid);
+        KernelTelemetry.logDebug('spawnSubprocess', { process_uid, parent_process_uid, type, owner_engine: options?.owner_engine });
         return { ...record, abort_signal };
     }
 
     static updateProcessStatus(process_uid: string, status: ProcessStatus, metadata_patch?: Record<string, any>): boolean {
         const entry = KernelState.proc_sys.get(process_uid);
         if (!entry) return false;
+        
+        entry.original_record.status = status;
+        if (metadata_patch) {
+            entry.original_record.metadata = {
+                ...entry.original_record.metadata,
+                ...metadata_patch
+            };
+        }
+        
         KernelTelemetry.logDebug('updateProcessStatus', { process_uid, status, hasMetadataPatch: !!metadata_patch });
         return true;
     }
@@ -71,10 +96,8 @@ export class KernelProcessManager {
         const entry = KernelState.proc_sys.get(process_uid);
         if (!entry) return undefined;
         return {
-            process_uid: entry.process_uid,
-            parent_process_uid: entry.ppid || undefined,
-            type: 'unknown',
-            status: 'running' as ProcessStatus,
+            ...entry.original_record,
+            status: entry.original_record.status,
             lifecycle_state: entry.lifecycle_status as ProcessLifecycleState
         };
     }
@@ -93,7 +116,7 @@ export class KernelProcessManager {
             timeout_ms?: number;
         }
     ): boolean {
-        this._abortKernelProcess(process_uid, options?.cascade ?? true);
+        this._abortKernelProcess(process_uid, options?.cascade ?? true, options?.reason ?? 'kernel_terminate');
         KernelTelemetry.logDebug('terminateProcess', {
             process_uid,
             mode: options?.mode ?? 'graceful',
@@ -104,41 +127,31 @@ export class KernelProcessManager {
     }
 
     static killProcess(process_uid: string): boolean {
-        this._abortKernelProcess(process_uid, false);
+        this._abortKernelProcess(process_uid, false, 'force_terminated');
         KernelTelemetry.logDebug('killProcess', { process_uid });
         return true;
     }
 
     static getAllProcesses(): ProcessRecord[] {
         return Array.from(KernelState.proc_sys.values()).map(entry => ({
-            process_uid: entry.process_uid,
-            parent_process_uid: entry.ppid || undefined,
-            type: 'unknown',
-            status: 'running' as ProcessStatus,
+            ...entry.original_record,
+            status: entry.original_record.status,
             lifecycle_state: entry.lifecycle_status as ProcessLifecycleState
         }));
     }
 
-    private static _registerKernelProcess(record: ProcessRecord, ppid: string | null): { abort_signal: AbortSignal; memories_id: string } {
+    private static _registerKernelProcess(record: ProcessRecord, ppid: string | null): { abort_signal: AbortSignal } {
         const abort_controller = new AbortController();
-        const memories_id = 'mem-' + Math.random().toString(36).substring(2, 11);
-
-        KernelState.kernel_memory.set(memories_id, {
-            process_uid: record.process_uid,
-            process_type: record.type,
-            lifecycle_status: 'created',
-            created_at: Date.now(),
-        });
 
         KernelState.proc_sys.set(record.process_uid, {
             process_uid: record.process_uid,
             ppid,
-            memories_id,
-            memories_ids: new Set([memories_id]),
+            memories_ids: new Set(),
             children_ids: new Set(),
             abort_controller,
             lifecycle_status: 'created',
             created_at: Date.now(),
+            original_record: { ...record },
         });
 
         if (ppid) {
@@ -146,10 +159,10 @@ export class KernelProcessManager {
             if (parent_entry) parent_entry.children_ids.add(record.process_uid);
         }
 
-        return { abort_signal: abort_controller.signal, memories_id };
+        return { abort_signal: abort_controller.signal };
     }
 
-    private static _abortKernelProcess(process_uid: string, cascade: boolean): void {
+    private static _abortKernelProcess(process_uid: string, cascade: boolean, reason: string): void {
         const entry = KernelState.proc_sys.get(process_uid);
         if (!entry) return;
 
@@ -157,14 +170,28 @@ export class KernelProcessManager {
         entry.lifecycle_status = 'terminated';
         entry.terminated_at = Date.now();
         
+        const record = this.getProcess(process_uid);
+        
         // Clean up RAM owned by this process
         for (const memId of entry.memories_ids) {
             KernelMemoryManager.deleteMemory(memId);
         }
 
+        if (record) {
+            for (const engineHandlers of this.terminationHandlers.values()) {
+                for (const handler of engineHandlers) {
+                    try {
+                        handler({ record, reason });
+                    } catch (err) {
+                        console.error(`[KernelProcessManager] Termination handler failed:`, err);
+                    }
+                }
+            }
+        }
+
         if (cascade) {
             for (const child_uid of entry.children_ids) {
-                this._abortKernelProcess(child_uid, true);
+                this._abortKernelProcess(child_uid, true, reason);
             }
         }
         KernelState.proc_sys.delete(process_uid);

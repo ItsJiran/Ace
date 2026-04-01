@@ -12,20 +12,20 @@ import type {
 export interface KernelProcessEntry {
     process_uid: string;
     ppid: string | null;
-    memories_id: string;            // Primary state record UID for this process
     memories_ids: Set<string>;      // All memory UIDs owned by this process
     children_ids: Set<string>;      // Child process UIDs
     abort_controller: AbortController;
     lifecycle_status: 'created' | 'running' | 'waiting' | 'done' | 'failed' | 'cancelled' | 'terminated';
     created_at: number;
     terminated_at?: number;
+    original_record: ProcessRecord; // Store the original record
 }
 
 export interface KernelWindowEntry {
     window_uid: string;
     process_uid: string;
     component: string;
-    memory_uids: Set<string>;
+    memory_uid?: string;
 }
 
 export interface KernelSharedEntry {

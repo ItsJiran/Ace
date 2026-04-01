@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ProcessRecord } from '#/schemas/process';
 import { PROCESS_STATUS } from '#/schemas/process';
+import { KernelEngine } from '#/services/kernelEngine';
 
 export const registry: AceRegistryType.Component = {
     name: 'process_monitor_dev',
@@ -22,8 +23,13 @@ export default function ProcessMonitorDev() {
     };
 
     const refresh = () => {
-        const all = (window.ACE.process as any).getAll() as ProcessRecord[];
-        setRows(all);
+        try {
+            const all = KernelEngine.getAllProcesses();
+            setRows(all);
+        } catch (error) {
+            console.error('[ProcessMonitorDev] Failed to refresh processes:', error);
+            setRows([]);
+        }
     };
 
     useEffect(() => {
@@ -38,14 +44,14 @@ export default function ProcessMonitorDev() {
         if (isTerminalStatus(record.status)) return;
         setEndingProcessUid(record.process_uid);
         try {
-            await Promise.resolve(
-                (window.ACE.process as any).terminateProcess(record.process_uid, {
-                    mode: 'force',
-                    cascade: true,
-                    reason: 'process_monitor_end_task',
-                }),
-            );
+            KernelEngine.terminateProcess(record.process_uid, {
+                mode: 'force',
+                cascade: true,
+                reason: 'process_monitor_end_task',
+            });
             refresh();
+        } catch (error) {
+            console.error('[ProcessMonitorDev] Failed to terminate process:', error);
         } finally {
             setEndingProcessUid(null);
         }

@@ -6,11 +6,12 @@ import type { ConfigItem } from '#/schemas/config';
 import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
 import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
+import type { KernelWindowEntry } from '#/services/kernelEngine/types';
 
 export const registry: AceRegistryType.Component = {
     name: 'system_widget',
     slug: 'system-widget',
-    data_requirements: ['system:config', 'system:keybinds', 'system:rendered_windows', 'system:install_requests'],
+    data_requirements: ['system:config', 'system:keybinds', 'system:window_system', 'system:install_requests'],
     react_behavior: 'system_center',
 };
 
@@ -57,7 +58,8 @@ export default function SystemWidget() {
     const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
     const _keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
     const keybinds = Array.isArray(_keybinds) ? _keybinds : [];
-    const activeWindowsIndex = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
+    const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>('system:window_system');
+    const activeWindowsIndex = Array.from(windowSystem?.values() ?? []).map((entry) => ({ uid: entry.window_uid, component: entry.component }));
     const installQueue = useAceMemory<InstallRequest[]>('system:install_requests') ?? [];
     const packageSummaries = useAceMemory<PackageSummary[]>('system:package_registry') ?? [];
     const [openWindows, setOpenWindows] = useState<WindowConfig[]>([]);

@@ -12,6 +12,20 @@ const textEncoder = new TextEncoder();
  */
 function isShallowEqual(a: any, b: any): boolean {
     if (Object.is(a, b)) return true;
+    if (a instanceof Map && b instanceof Map) {
+        if (a.size !== b.size) return false;
+        for (const [k, v] of a.entries()) {
+            if (!b.has(k) || !Object.is(v, b.get(k))) return false;
+        }
+        return true;
+    }
+    if (a instanceof Set && b instanceof Set) {
+        if (a.size !== b.size) return false;
+        for (const v of a.values()) {
+            if (!b.has(v)) return false;
+        }
+        return true;
+    }
     if (Array.isArray(a) && Array.isArray(b)) {
         if (a.length !== b.length) return false;
         return a.every((val, i) => Object.is(val, b[i]));
@@ -94,7 +108,13 @@ export class KernelMemoryManager {
         if (isShallowEqual(existingPayload, payload)) return;
 
         const immutablePayload = payload && typeof payload === 'object'
-            ? Array.isArray(payload) ? [...payload] : { ...payload }
+            ? payload instanceof Map
+                ? new Map(payload)
+                : payload instanceof Set
+                    ? new Set(payload)
+                    : Array.isArray(payload)
+                        ? [...payload]
+                        : { ...payload }
             : payload;
 
         KernelState.kernel_memory.set(memory_uid, immutablePayload);
@@ -282,11 +302,28 @@ export class KernelMemoryManager {
     }
 
     static getRAMStats() {
+        // Build reverse map: memory_uid → process_uid by iterating all processes
+        const memoryToProcessMap = new Map<string, string>();
+        for (const [processUid, processEntry] of KernelState.proc_sys.entries()) {
+            for (const memoryUid of processEntry.memories_ids) {
+                memoryToProcessMap.set(memoryUid, processUid);
+            }
+        }
+
         const entries = Array.from(KernelState.kernel_memory.entries()).map(([k, v]) => ({
             memory_uid: k,
+            process_uid: memoryToProcessMap.get(k) || '(orphan)',
             approx_bytes: this.estimatePayloadBytes(v),
-            type: Array.isArray(v) ? 'array' : typeof v,
-            child_count: 0
+            type:
+                v instanceof Map ? 'map'
+                : v instanceof Set ? 'set'
+                : Array.isArray(v) ? 'array'
+                : typeof v,
+            child_count:
+                v instanceof Map || v instanceof Set ? v.size
+                : Array.isArray(v) ? v.length
+                : (v && typeof v === 'object') ? Object.keys(v as Record<string, unknown>).length
+                : 0
         })).sort((a, b) => b.approx_bytes - a.approx_bytes);
 
         const approxTotalBytes = entries.reduce((acc, curr) => acc + curr.approx_bytes, 0);
@@ -318,6 +355,20 @@ export class KernelMemoryManager {
         if (typeof payload === 'string') return textEncoder.encode(payload).length;
         if (typeof payload === 'number' || typeof payload === 'boolean' || typeof payload === 'bigint') {
             return textEncoder.encode(String(payload)).length;
+        }
+        if (payload instanceof Map) {
+            try {
+                return textEncoder.encode(JSON.stringify(Array.from(payload.entries()))).length;
+            } catch {
+                return 0;
+            }
+        }
+        if (payload instanceof Set) {
+            try {
+                return textEncoder.encode(JSON.stringify(Array.from(payload.values()))).length;
+            } catch {
+                return 0;
+            }
         }
         try {
             const serialized = JSON.stringify(payload);

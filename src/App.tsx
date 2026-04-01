@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { useProcessContext } from '#/hooks/useProcessContext';
 import { ProcessContextProvider } from '#/hooks/useProcessContext';
@@ -7,6 +8,7 @@ import { initializeBridgeHooks, registerProcessContextHook } from '#/services/br
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useRenderCount } from '#/hooks/useRenderCount';
 import { MemoizedWindowItem } from '#/components/layout/MemoizedWindowItem';
+import type { KernelWindowEntry } from '#/services/kernelEngine/types';
 
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
@@ -47,7 +49,24 @@ function App() {
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
-  const renderedWindows = useAceMemory<Array<{ uid: string; component: string; process_uid: string }>>('system:rendered_windows') ?? [];
+  const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>('system:window_system');
+
+  const renderedWindowNodes = useMemo(() => {
+    const nodes: ReactNode[] = [];
+    if (!windowSystem) return nodes;
+
+    for (const entry of windowSystem.values()) {
+      nodes.push(
+        <ProcessContextProvider key={entry.window_uid} process_uid={entry.process_uid}>
+          <WindowContextProvider window_uid={entry.window_uid} process_uid={entry.process_uid}>
+            <MemoizedWindowItem uid={entry.window_uid} component={entry.component} />
+          </WindowContextProvider>
+        </ProcessContextProvider>,
+      );
+    }
+
+    return nodes;
+  }, [windowSystem]);
 
 
   if (!isBootReady || !overlayState) return null;
@@ -68,18 +87,7 @@ function App() {
       }}
     >
       {/* Render semua window */}
-      {renderedWindows.map((entry) => {
-        return (
-          <ProcessContextProvider key={entry.uid} process_uid={entry.process_uid}>
-            <WindowContextProvider window_uid={entry.uid} process_uid={entry.process_uid}>
-              <MemoizedWindowItem
-                uid={entry.uid}
-                component={entry.component}
-              />
-            </WindowContextProvider>
-          </ProcessContextProvider>
-        );
-      })}
+      {renderedWindowNodes}
 
       {/* Developer Feedback UI */}
       {import.meta.env.DEV && (

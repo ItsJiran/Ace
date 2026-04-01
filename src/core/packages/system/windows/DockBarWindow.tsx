@@ -7,6 +7,7 @@ import type { UseAceWindowResult } from '#/hooks/useAceWindow';
 import { useAceMemory, useAceMemorySelector } from '#/hooks/useAceMemory';
 import { WindowEngine } from '#/services/windowEngine';
 import { KernelEngine } from '#/services/kernelEngine';
+import type { KernelWindowEntry } from '#/services/kernelEngine/types';
 import {
     Settings2, LayoutDashboard, Terminal, MessageSquare, Cpu, Layers,
     Package, Activity, Code2, Globe, Zap, Bot, Monitor, Search, FileText,
@@ -427,7 +428,8 @@ function HorizontalBar({ windowUid, pkgs, onDragStart, onContextMenu, isDragging
     onContextMenu: (e: React.MouseEvent) => void;
     isDragging: boolean;
 }) {
-    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
+    const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>('system:window_system');
+    const aws = Array.from(windowSystem?.values() ?? []).map((entry) => ({ uid: entry.window_uid, component: entry.component }));
     const entries = aws.filter(w => w.uid !== windowUid);
 
     return (
@@ -469,7 +471,8 @@ function VerticalBar({ windowUid, pkgs, onDragStart, onContextMenu, isDragging }
     onContextMenu: (e: React.MouseEvent) => void;
     isDragging: boolean;
 }) {
-    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
+    const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>('system:window_system');
+    const aws = Array.from(windowSystem?.values() ?? []).map((entry) => ({ uid: entry.window_uid, component: entry.component }));
     const entries = aws.filter(w => w.uid !== windowUid);
 
     return (
@@ -520,7 +523,8 @@ function PillBar({ windowUid, pkgs, pillDir, onDragStart, onContextMenu, isDragg
     onContextMenu: (e: React.MouseEvent) => void;
     isDragging: boolean;
 }) {
-    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
+    const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>('system:window_system');
+    const aws = Array.from(windowSystem?.values() ?? []).map((entry) => ({ uid: entry.window_uid, component: entry.component }));
     const entries = aws.filter(w => w.uid !== windowUid);
     const [expanded, setExpanded] = useState(false);
     const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
