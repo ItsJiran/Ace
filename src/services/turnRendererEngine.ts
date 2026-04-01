@@ -39,7 +39,6 @@ export interface TurnRendererMemory {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_PACKAGE_REF = 'itsjiran/ace-system';
-const CLASSIFICATIONS = ['system:turn_renderer'];
 
 function rendererMemoryKey(turnId: string): string {
     return `system:turn:${turnId}:renderers`;

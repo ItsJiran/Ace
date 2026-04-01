@@ -34,7 +34,7 @@ export async function bootACE() {
     bootPromise = (async () => {
         console.group('🚀 ACE: Booting System...');
 
-        KernelEngine.setupKernelSpace();
+        KernelEngine.resetKernelSpace();
         GlobalStateManager.setupKernelSpace();
         ConfigEngine.setupKernelSpace();
         EventBus.setupKernelSpace();
@@ -44,7 +44,6 @@ export async function bootACE() {
         LayoutEngine.setupKernelSpace();
         AIGatewayEngine.setupKernelSpace();
         WindowEngine.setupKernelSpace();
-        KernelEngine.sealKernelSpace();
         
         // Initialize window.ACE registry bridge immediately so packages can register
         if (typeof window !== 'undefined') {

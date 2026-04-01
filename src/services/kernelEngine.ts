@@ -4,19 +4,27 @@ import { KernelMemoryManager } from './kernelEngine/kernelMemoryManager';
 import { KernelContextManager } from './kernelEngine/kernelContextManager';
 import { KernelWindowManager } from './kernelEngine/kernelWindowManager';
 
+/**
+ * KernelEngineSingleton (Facade)
+ *
+ * This acts as the "OS Kernel" for the entire assistant platform.
+ * It does not contain direct logic; instead, it delegates method calls
+ * into its specific sub-services:
+ * - KernelState: Pure active memory holding.
+ * - KernelMemoryManager: Read/Write/Garbage-collect RAM limits.
+ * - KernelProcessManager: CPU virtualization, process tracking.
+ * - KernelContextManager: Route/Closure execution context tracing.
+ * - KernelWindowManager: Base OS window process mappings.
+ */
 class KernelEngineSingleton {
     constructor() {
-        KernelState.bootKernelSpace();
-        KernelState.sealKernelSpace();
+        // KernelState initialises system maps in its own constructor.
     }
 
-    public setupKernelSpace = KernelState.bootKernelSpace.bind(KernelState);
-    public sealKernelSpace = KernelState.sealKernelSpace.bind(KernelState);
-
-    // ── RAM (read / write / delete) ──────────────────────────────────────────
+    // ── Memory (read / write / delete) ──────────────────────────────────────────
     public readMemory = KernelMemoryManager.readMemory.bind(KernelMemoryManager);
 
-    // ── RAM Dispatcher ────────────────────────────────────────────────────────
+    // ── Memory Dispatcher ────────────────────────────────────────────────────────
     public commitMemory = KernelMemoryManager.commitMemory.bind(KernelMemoryManager);
     public createMemory = KernelMemoryManager.createMemory.bind(KernelMemoryManager);
     public setMemory = KernelMemoryManager.setMemory.bind(KernelMemoryManager);
@@ -55,7 +63,7 @@ class KernelEngineSingleton {
     public resetKernelSpace = KernelState.resetKernelSpace.bind(KernelState);
 
     public getPhysicalRAM() {
-        return KernelState.physical_ram;
+        return KernelState.kernel_memory;
     }
 
     public registerTerminationHandler(engine: string, handler: any) {

@@ -1,68 +1,228 @@
 import type { RAMInteractivity } from '#/schemas/storage';
-import { ProcessRuntimeMemoryMeta, RuntimeMemoryRetentionPolicy, RuntimeMemoryScope, RuntimeMemoryState } from '#/schemas/process';
+import { ProcessRuntimeMemoryMeta, RuntimeMemoryRetentionPolicy, RuntimeMemoryScope } from '#/schemas/process';
 import { KernelState } from './kernelState';
 import { KernelTelemetry } from './kernelTelemetry';
-import { KernelProcessManager } from './kernelProcessManager';
+import { KernelContextManager } from './kernelContextManager';
 
 const generateUid = () => 'mem-' + Math.random().toString(36).substring(2, 11);
+const textEncoder = new TextEncoder();
 
+/**
+ * Utility to perform deep/shallow equals, avoiding unnecessary storage thrashing.
+ */
 function isShallowEqual(a: any, b: any): boolean {
     if (Object.is(a, b)) return true;
-
     if (Array.isArray(a) && Array.isArray(b)) {
         if (a.length !== b.length) return false;
-        for (let i = 0; i < a.length; i += 1) {
-            if (!Object.is(a[i], b[i])) return false;
-        }
-        return true;
+        return a.every((val, i) => Object.is(val, b[i]));
     }
-
-    if (
-        a && b &&
-        typeof a === 'object' &&
-        typeof b === 'object' &&
-        !Array.isArray(a) &&
-        !Array.isArray(b)
-    ) {
+    if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
         const aKeys = Object.keys(a);
         const bKeys = Object.keys(b);
         if (aKeys.length !== bKeys.length) return false;
-        for (const key of aKeys) {
-            if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
-            if (!Object.is(a[key], b[key])) return false;
-        }
-        return true;
+        return aKeys.every(key => Object.prototype.hasOwnProperty.call(b, key) && Object.is(a[key], b[key]));
     }
-
     return false;
 }
 
-const textEncoder = new TextEncoder();
-
+/**
+ * KernelMemoryManager
+ * 
+ * Sub-service of the KernelEngine responsible for allocating, updating,
+ * and deleting memory blocks within the 'physical' RAM tracking system.
+ * 
+ * Concepts:
+ * - kernel_memory: The central Map<string, any> holding live state across window and hooks.
+ * - process_uid: Every piece of memory must be attributed to a process ID.
+ *   This ensures memory can be traced, monitored, and garbage-collected when the parent process dies.
+ * - Reactive Listeners: Propagates physical RAM mutations immediately out to the UI React hooks.
+ */
 export class KernelMemoryManager {
     private static notifyMemoryChanged(): void {
         for (const listener of KernelState.change_listeners) {
-            try {
-                listener();
-            } catch (error) {
-                console.error('[KernelMemoryManager] Change listener failed:', error);
-            }
+            try { listener(); } catch (error) { console.error('[KernelMemoryManager] Listener error:', error); }
         }
     }
 
-    private static writeMemoryInternal(memory_uid: string, payload: any): void {
-        const existingPayload = KernelState.physical_ram.get(memory_uid);
-
-        if (isShallowEqual(existingPayload, payload)) {
-            return;
+    /**
+     * Resolves the requesting process's UID.
+     * A process_uid is always required — every piece of memory must be bound to a
+     * process so it can be traced and garbage-collected when that process terminates.
+     */
+    private static _getProcessUid(provided?: string): string {
+        const uid = provided || KernelContextManager.getCurrentProcessContext();
+        if (!uid) {
+            throw new Error('[KernelMemoryManager] memory operations require a process_uid.');
         }
+        return uid;
+    }
+
+    /**
+     * Internal mutation handler that establishes equality checks and bounds the memory to its owner process.
+     */
+    private static writeMemoryInternal(memory_uid: string, payload: any, process_uid?: string): void {
+        const existingPayload = KernelState.kernel_memory.get(memory_uid);
+
+        if (isShallowEqual(existingPayload, payload)) return;
 
         const immutablePayload = payload && typeof payload === 'object'
             ? Array.isArray(payload) ? [...payload] : { ...payload }
             : payload;
 
-        KernelState.physical_ram.set(memory_uid, immutablePayload);
+        KernelState.kernel_memory.set(memory_uid, immutablePayload);
+
+        if (process_uid) {
+            const proc = KernelState.proc_sys.get(process_uid);
+            if (proc) proc.memories_ids.add(memory_uid);
+        }
+
         this.notifyMemoryChanged();
+    }
+
+    // ─── Public API ────────────────────────────────────────────────────────
+
+    /**
+     * Create generic memory.
+     * @param payload Struct or primitive to store.
+     * @param process_uid Required owning process UID. Every piece of kernel memory must be bound to a
+     *   process so it can be traced and garbage-collected when that process (or its ancestors) terminates.
+     * @param memory_uid Optional designated ID. If omitted, a new distinct ID is generated.
+     */
+    static createMemory(payload: any, process_uid: string, memory_uid?: string): string {
+        const uid = memory_uid || generateUid();
+        this.writeMemoryInternal(uid, payload, this._getProcessUid(process_uid));
+        return uid;
+    }
+
+    static setMemory(memory_uid: string, payload: any, process_uid?: string): boolean {
+        if (!memory_uid) return false;
+        if (KernelState.kernel_memory.has(memory_uid)) {
+            throw new Error(`[KernelMemoryManager] setMemory requires unique uid: ${memory_uid}`);
+        }
+        this.writeMemoryInternal(memory_uid, payload, process_uid);
+        return true;
+    }
+
+    static writeMemory(memory_uid: string, payload: any, process_uid?: string): boolean {
+        if (!memory_uid) return false;
+        this.writeMemoryInternal(memory_uid, payload, process_uid);
+        return true;
+    }
+
+    static readMemory(memory_uid: string): any {
+        return memory_uid ? KernelState.kernel_memory.get(memory_uid) : undefined;
+    }
+
+    static updateMemory(memory_uid: string, payload: any, process_uid?: string): boolean {
+        if (!memory_uid || !KernelState.kernel_memory.has(memory_uid)) return false;
+
+        const existing = KernelState.kernel_memory.get(memory_uid);
+        const merged = { ...existing, ...payload };
+
+        if (!isShallowEqual(existing, merged)) {
+            this.writeMemoryInternal(memory_uid, merged, process_uid);
+        }
+        return true;
+    }
+
+    static deleteMemory(memory_uid: string): boolean {
+        if (!memory_uid || !KernelState.kernel_memory.has(memory_uid)) return false;
+        KernelState.kernel_memory.delete(memory_uid);
+        this.notifyMemoryChanged();
+        return true;
+    }
+
+    static subscribe(memory_uid: string, callback: (data: any) => void): () => void {
+        const listener = () => callback(this.readMemory(memory_uid));
+        KernelState.change_listeners.add(listener);
+        return () => KernelState.change_listeners.delete(listener);
+    }
+
+    static commitMemory(request: RAMInteractivity): any {
+        const { action, payload, memory_uid, process_uid } = request as any;
+        switch (action) {
+            case 'create_memory': return this.createMemory(payload, process_uid, memory_uid);
+            case 'set_memory': return this.setMemory(memory_uid, payload, process_uid);
+            case 'write_memory': return this.writeMemory(memory_uid, payload, process_uid);
+            case 'read_memory': return this.readMemory(memory_uid);
+            case 'update_memory': return this.updateMemory(memory_uid, payload, process_uid);
+            case 'delete_memory': return this.deleteMemory(memory_uid);
+        }
+    }
+
+    /**
+     * Register a system-level memory slot (engine singletons, boot-time state).
+     * Idempotent — silently skips if the uid is already registered.
+     * Unlike createMemory / setMemory, this does NOT require a process_uid because
+     * system memories are owned by the kernel, not by any user-space process.
+     */
+    static registerSystemMemory(input: { memory_uid: string; payload: any }): void {
+        if (KernelState.kernel_memory.has(input.memory_uid)) return;
+        const immutablePayload = input.payload && typeof input.payload === 'object'
+            ? Array.isArray(input.payload) ? [...input.payload] : { ...input.payload }
+            : input.payload;
+        KernelState.kernel_memory.set(input.memory_uid, immutablePayload);
+        this.notifyMemoryChanged();
+        KernelTelemetry.logDebug('registerSystemMemory', { memory_uid: input.memory_uid });
+    }
+
+    // ─── Runtime Specific Allocation ──────────────────────────────────────
+
+    static createRuntimeMemory(input: {
+        owner_process_uid: string;
+        memory_uid?: string;
+        payload: Record<string, any>;
+        owner_session_id?: string;
+        memory_scope?: RuntimeMemoryScope;
+        retention_policy?: RuntimeMemoryRetentionPolicy;
+    }): string | null {
+        const uid = this.createMemory(input.payload, input.owner_process_uid, input.memory_uid);
+        KernelTelemetry.logDebug('createRuntimeMemory', { memory_uid: uid, owner_process_uid: input.owner_process_uid });
+        return uid;
+    }
+
+    static updateRuntimeMemory(input: {
+        owner_process_uid: string;
+        memory_uid: string;
+        payload: Record<string, any>;
+    }): boolean {
+        const updated = this.updateMemory(input.memory_uid, input.payload, input.owner_process_uid);
+        if (updated) {
+            KernelTelemetry.logDebug('updateRuntimeMemory', { memory_uid: input.memory_uid, owner_process_uid: input.owner_process_uid });
+        }
+        return updated;
+    }
+
+    static getRuntimeMemoryMeta(memory_uid: string): ProcessRuntimeMemoryMeta | undefined {
+        return undefined; // Stubbed for now
+    }
+
+    static enforceRuntimeMemoryOwnership(input: { process_uid: string; memory_uid: string }): { allowed: boolean; reason?: string } {
+        return { allowed: true }; 
+    }
+
+    static getRAMStats() {
+        const entries = Array.from(KernelState.kernel_memory.entries()).map(([k, v]) => ({
+            memory_uid: k,
+            approx_bytes: this.estimatePayloadBytes(v),
+            type: Array.isArray(v) ? 'array' : typeof v,
+            child_count: 0
+        })).sort((a, b) => b.approx_bytes - a.approx_bytes);
+
+        const approxTotalBytes = entries.reduce((acc, curr) => acc + curr.approx_bytes, 0);
+        const lCount = KernelState.change_listeners.size;
+
+        return {
+            memory_entries: entries.length,
+            change_listener_total: lCount,
+            socket_keys: 0,
+            socket_listener_total: lCount,
+            approx_total_bytes: approxTotalBytes,
+            approx_total_kb: approxTotalBytes / 1024,
+            approx_total_mb: approxTotalBytes / (1024 * 1024),
+            largest_memories: entries,
+            sampled_at: Date.now(),
+        };
     }
 
     private static estimatePayloadBytes(payload: unknown): number {
@@ -73,169 +233,9 @@ export class KernelMemoryManager {
         }
         try {
             const serialized = JSON.stringify(payload);
-            if (!serialized) return 0;
-            return textEncoder.encode(serialized).length;
+            return serialized ? textEncoder.encode(serialized).length : 0;
         } catch {
             return 0;
         }
-    }
-
-    static createMemory(payload: any): string {
-        const newUid = generateUid();
-        this.writeMemoryInternal(newUid, payload);
-        return newUid;
-    }
-
-    static setMemory(memory_uid: string, payload: any): boolean {
-        if (!memory_uid) return false;
-        if (!KernelState.isKernelSpaceOpen()) {
-            throw new Error(`[KernelMemoryManager] setMemory is only allowed during kernel setup: ${memory_uid}`);
-        }
-        if (KernelState.physical_ram.has(memory_uid)) {
-            throw new Error(`[KernelMemoryManager] setMemory requires a unique memory_uid: ${memory_uid}`);
-        }
-        this.writeMemoryInternal(memory_uid, payload);
-        return true;
-    }
-
-    static writeMemory(memory_uid: string, payload: any): boolean {
-        if (!memory_uid) return false;
-        this.writeMemoryInternal(memory_uid, payload);
-        return true;
-    }
-
-    static readMemory(memory_uid: string): any {
-        if (!memory_uid) return undefined;
-        return KernelState.physical_ram.get(memory_uid);
-    }
-
-    static updateMemory(memory_uid: string, payload: any): boolean {
-        if (!memory_uid || !KernelState.physical_ram.has(memory_uid)) return false;
-
-        const existingPayload = KernelState.physical_ram.get(memory_uid);
-        const mergedPayload = { ...existingPayload, ...payload };
-
-        if (isShallowEqual(existingPayload, mergedPayload)) {
-            return true;
-        }
-
-        this.writeMemoryInternal(memory_uid, mergedPayload);
-        return true;
-    }
-
-    static deleteMemory(memory_uid: string): boolean {
-        if (!memory_uid || !KernelState.physical_ram.has(memory_uid)) return false;
-        KernelState.physical_ram.delete(memory_uid);
-        this.notifyMemoryChanged();
-        return true;
-    }
-
-    static subscribe(memory_uid: string, callback: (data: any) => void): () => void {
-        const listener = () => {
-            callback(this.readMemory(memory_uid));
-        };
-        KernelState.change_listeners.add(listener);
-        return () => {
-            KernelState.change_listeners.delete(listener);
-        };
-    }
-
-    static commitMemory(request: RAMInteractivity): any {
-        const { action, payload } = request;
-
-        switch (action) {
-            case 'create_memory':
-                return this.createMemory(payload);
-            case 'set_memory':
-                return this.setMemory(request.memory_uid, payload);
-            case 'write_memory':
-                return this.writeMemory(request.memory_uid, payload);
-            case 'read_memory':
-                return this.readMemory(request.memory_uid);
-            case 'update_memory':
-                return this.updateMemory(request.memory_uid, payload);
-            case 'delete_memory':
-                return this.deleteMemory(request.memory_uid);
-        }
-    }
-
-    static registerSystemMemory(input: {
-        memory_uid: string;
-        payload: any;
-    }): void {
-        if (KernelState.physical_ram.has(input.memory_uid)) return;
-        this.setMemory(input.memory_uid, input.payload);
-        KernelTelemetry.logDebug('registerSystemMemory', { memory_uid: input.memory_uid });
-    }
-
-    static createRuntimeMemory(input: {
-        owner_process_uid: string;
-        memory_uid?: string;
-        payload: Record<string, any>;
-        owner_session_id?: string;
-        memory_scope?: RuntimeMemoryScope;
-        retention_policy?: RuntimeMemoryRetentionPolicy;
-    }): string | null {
-        const uid = input.memory_uid || ('mem-' + Math.random().toString(36).substring(2, 11));
-        this.writeMemoryInternal(uid, input.payload);
-        KernelTelemetry.logDebug('createRuntimeMemory', { memory_uid: uid, owner_process_uid: input.owner_process_uid });
-        return uid;
-    }
-
-    static updateRuntimeMemory(input: {
-        owner_process_uid: string;
-        memory_uid: string;
-        payload: Record<string, any>;
-    }): boolean {
-        this.writeMemoryInternal(input.memory_uid, input.payload);
-        KernelTelemetry.logDebug('updateRuntimeMemory', { memory_uid: input.memory_uid, owner_process_uid: input.owner_process_uid });
-        return true;
-    }
-
-    static getRuntimeMemoryMeta(memory_uid: string): ProcessRuntimeMemoryMeta | undefined {
-        return undefined; // Stubbed for now
-    }
-
-    static enforceRuntimeMemoryOwnership(input: {
-        process_uid: string;
-        memory_uid: string;
-    }): { allowed: boolean; reason?: string } {
-        if (input.process_uid === 'system') return { allowed: true };
-        return { allowed: true }; // Simplified
-    }
-
-    static getRAMStats() {
-        const byKey: Array<{ memory_uid: string; approx_bytes: number; type: string; child_count: number }> = [];
-        let approxTotalBytes = 0;
-
-        for (const [memory_uid, payload] of KernelState.physical_ram.entries()) {
-            const approx_bytes = this.estimatePayloadBytes(payload);
-            approxTotalBytes += approx_bytes;
-            byKey.push({
-                memory_uid,
-                approx_bytes,
-                type: Array.isArray(payload) ? 'array' : typeof payload,
-                child_count: 0,
-            });
-        }
-
-        byKey.sort((a, b) => b.approx_bytes - a.approx_bytes);
-
-        const listenerCount = KernelState.change_listeners.size;
-
-        return {
-            memory_entries: KernelState.physical_ram.size,
-            change_listener_total: listenerCount,
-            classification_entries: 0,
-            socket_keys: 0,
-            socket_listener_total: listenerCount,
-            approx_total_bytes: approxTotalBytes,
-            approx_total_kb: approxTotalBytes / 1024,
-            approx_total_mb: approxTotalBytes / (1024 * 1024),
-            largest_memories: byKey,
-            listeners_by_key: [],
-            hierarchy_links: [],
-            sampled_at: Date.now(),
-        };
     }
 }

@@ -6,9 +6,12 @@ import { RegistryEngine } from '#/services/registryEngine';
 import type { Interaction } from '#/schemas/events';
 
 describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket Workflow', () => {
+    let testProcessUid: string;
+
     beforeEach(() => {
         (EventBus as any).routes.clear();
         KernelEngine.resetKernelSpace();
+        testProcessUid = KernelEngine.spawnProcess('test').process_uid;
 
         RegistryEngine.registerPackage({
             manifest: {
@@ -42,7 +45,7 @@ describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket
         const createdMemoryUids: string[] = [];
 
         const mockToolExecutor = vi.fn().mockImplementation((interaction: Interaction) => {
-            const memoryUid = KernelEngine.createMemory({ raw_json: interaction.payload.text }) as string;
+            const memoryUid = KernelEngine.createMemory({ raw_json: interaction.payload.text }, testProcessUid) as string;
             createdMemoryUids.push(memoryUid);
             const unsubscribe = KernelEngine.subscribe(memoryUid, reactComponentRenderSpy);
             KernelEngine.updateMemory(memoryUid, { delivered: true });

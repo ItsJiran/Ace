@@ -1,8 +1,11 @@
 import { ProcessStatus, ProcessRecord, ProcessKind, ProcessLifecycleState } from '#/schemas/process';
 import { KernelState } from './kernelState';
+import { KernelMemoryManager } from './kernelMemoryManager';
 import { KernelTelemetry } from './kernelTelemetry';
 
 export class KernelProcessManager {
+
+
     static spawnProcess(
         type: string,
         metadata?: Record<string, any>,
@@ -120,7 +123,7 @@ export class KernelProcessManager {
         const abort_controller = new AbortController();
         const memories_id = 'mem-' + Math.random().toString(36).substring(2, 11);
 
-        KernelState.physical_ram.set(memories_id, {
+        KernelState.kernel_memory.set(memories_id, {
             process_uid: record.process_uid,
             process_type: record.type,
             lifecycle_status: 'created',
@@ -153,6 +156,11 @@ export class KernelProcessManager {
         entry.abort_controller.abort();
         entry.lifecycle_status = 'terminated';
         entry.terminated_at = Date.now();
+        
+        // Clean up RAM owned by this process
+        for (const memId of entry.memories_ids) {
+            KernelMemoryManager.deleteMemory(memId);
+        }
 
         if (cascade) {
             for (const child_uid of entry.children_ids) {

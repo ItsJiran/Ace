@@ -2,14 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { KernelEngine } from '#/services/kernelEngine';
 
 describe('Global RAM Storage Engine (Pure Map & Sockets)', () => {
+    let testProcessUid: string;
+
     beforeEach(() => {
         KernelEngine.resetKernelSpace();
+        testProcessUid = KernelEngine.spawnProcess('test').process_uid;
     });
 
     it('should create memory, generate a memory_uid, and trigger sockets', () => {
         const mockSocket = vi.fn();
 
-        const resultUid = KernelEngine.createMemory({ text: 'Hello World' });
+        const resultUid = KernelEngine.createMemory({ text: 'Hello World' }, testProcessUid);
         expect(resultUid).toBeDefined();
         expect(resultUid).toMatch(/^mem-/);
 
@@ -24,7 +27,7 @@ describe('Global RAM Storage Engine (Pure Map & Sockets)', () => {
     });
 
     it('should update memory, merge payloads, and re-fire specific sockets', () => {
-        const uid = KernelEngine.createMemory({ count: 1 }) as string;
+        const uid = KernelEngine.createMemory({ count: 1 }, testProcessUid) as string;
 
         const specificMemorySocket = vi.fn();
         KernelEngine.subscribe(uid, specificMemorySocket);
@@ -40,7 +43,7 @@ describe('Global RAM Storage Engine (Pure Map & Sockets)', () => {
     });
 
     it('should delete memory, index arrays, and fire null sockets', () => {
-        const uid = KernelEngine.createMemory({ data: 'old' }) as string;
+        const uid = KernelEngine.createMemory({ data: 'old' }, testProcessUid) as string;
 
         const socket = vi.fn();
         KernelEngine.subscribe(uid, socket);
