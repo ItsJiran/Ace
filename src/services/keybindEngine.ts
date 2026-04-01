@@ -15,6 +15,7 @@ class KeybindEngineSingleton {
     private lastTriggeredByUid = new Map<string, number>();
     private readonly triggerCooldownMs = 220;
     private _lastKeybindsRaw: unknown = undefined;
+    private globallyRegisteredShortcuts = new Set<string>();
 
     init() {
         if (this.isInitialized) return;
@@ -35,6 +36,7 @@ class KeybindEngineSingleton {
             })));
         }
 
+        this.keybindsUnsub?.();
         this.keybindsUnsub = KernelEngine.subscribe('system:keybinds', () => {
             const raw = KernelEngine.readMemory('system:keybinds');
             // subscribe fires on ANY memory change; skip if keybinds ref is unchanged.
@@ -79,6 +81,14 @@ class KeybindEngineSingleton {
             if (!matchedKeybind) {
                 if (import.meta.env.DEV) {
                     console.log('[KeybindEngine] No matching keybind for current keydown.');
+                }
+                return;
+            }
+
+            const canonicalShortcut = this.canonicalizeShortcut(matchedKeybind.shortcut);
+            if (this.isTauriRuntime() && this.globallyRegisteredShortcuts.has(canonicalShortcut)) {
+                if (import.meta.env.DEV) {
+                    console.log('[KeybindEngine] Skipping local keydown because shortcut is handled globally:', canonicalShortcut);
                 }
                 return;
             }
@@ -174,6 +184,7 @@ class KeybindEngineSingleton {
         try {
             const { register, unregisterAll } = await import('@tauri-apps/plugin-global-shortcut');
             await unregisterAll();
+            this.globallyRegisteredShortcuts.clear();
 
             const shortcuts = [...new Set(this.activeKeybinds.map((bind) => bind.shortcut).filter(Boolean))];
             if (shortcuts.length === 0) {
@@ -203,6 +214,7 @@ class KeybindEngineSingleton {
                         this.triggerKeybind(matched, 'global');
                     });
                     registered.push(pluginShortcut);
+                    this.globallyRegisteredShortcuts.add(canonicalRegistered);
                 } catch (error) {
                     console.warn(`[KeybindEngine] Global shortcut rejected by OS: ${shortcut}`, error);
                 }

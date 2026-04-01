@@ -68,8 +68,6 @@ class WindowEngineSingleton {
             animationController: this.animationController,
             windowMemoryUid: (uid) => this.windowMemoryUid(uid),
         });
-
-        this.overlayManager.startBridges();
         this.registerTerminationHooks();
     }
 
@@ -80,12 +78,13 @@ class WindowEngineSingleton {
     setupKernelSpace() {
         this.overlayManager.setupKernelSpace();
         WindowAnimationController.setupKernelSpace();
+        this.overlayManager.startBridges();
     }
 
     private registerTerminationHooks() {
         if (this.isTerminationHookBound) return;
 
-        KernelEngine.registerTerminationHandler('windowEngine', ({ record }) => {
+        KernelEngine.registerTerminationHandler('windowEngine', ({ record }: { record: any }) => {
             if (record.type !== 'window:instance') return;
 
             const payload = (record.payload && typeof record.payload === 'object')

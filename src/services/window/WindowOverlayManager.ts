@@ -11,6 +11,7 @@ export class WindowOverlayManager {
     private cursorBridge: CursorBridge;
     private alwaysOnTopBridge: AlwaysOnTopBridge;
 
+    private bridgesStarted = false;
     private lastCursorEventsIgnore: boolean | null = null;
     private lastCursorEventsAt = 0;
     private static readonly CURSOR_EVENTS_DEBOUNCE_MS = 250;
@@ -21,6 +22,8 @@ export class WindowOverlayManager {
     }
 
     startBridges() {
+        if (this.bridgesStarted) return;
+        this.bridgesStarted = true;
         this.cursorBridge.start();
         this.alwaysOnTopBridge.start();
     }
@@ -37,12 +40,12 @@ export class WindowOverlayManager {
 
         // Prewarm the native IPC bridge at boot so the first spawn
         // does not pay the cold-path cost of the first-ever Tauri invoke.
-        // invoke('set_ignore_cursor_events', { ignore: true })
-        //     .then(() => {
-        //         this.lastCursorEventsIgnore = true;
-        //         this.lastCursorEventsAt = performance.now();
-        //     })
-        //     .catch(() => {});
+        invoke('set_ignore_cursor_events', { ignore: true })
+            .then(() => {
+                this.lastCursorEventsIgnore = true;
+                this.lastCursorEventsAt = performance.now();
+            })
+            .catch(() => {});
     }
 
     fireSetIgnoreCursorEvents(ignore: boolean): void {
@@ -55,7 +58,7 @@ export class WindowOverlayManager {
         }
         this.lastCursorEventsIgnore = ignore;
         this.lastCursorEventsAt = now;
-        // invoke('set_ignore_cursor_events', { ignore }).catch(console.error);
+        invoke('set_ignore_cursor_events', { ignore }).catch(console.error);
     }
 
     setOverlayMode(mode: 'ambient' | 'interactive') {

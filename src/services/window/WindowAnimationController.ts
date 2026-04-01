@@ -371,6 +371,13 @@ export class WindowAnimationController {
     }
 
     private removeSlot(uid: string): void {
+        const slot = this.slots.get(uid);
+        if (slot?.element) {
+            slot.element.style.transform = '';
+            slot.element.style.width = '';
+            slot.element.style.height = '';
+            slot.element.style.opacity = '';
+        }
         this.slots.delete(uid);
         this.liveBounds.delete(uid);
         this.clearAnimationRuntimeState(uid);

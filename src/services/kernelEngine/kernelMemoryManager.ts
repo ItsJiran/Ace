@@ -38,9 +38,12 @@ function isShallowEqual(a: any, b: any): boolean {
  * - Reactive Listeners: Propagates physical RAM mutations immediately out to the UI React hooks.
  */
 export class KernelMemoryManager {
-    private static notifyMemoryChanged(): void {
-        for (const listener of KernelState.change_listeners) {
-            try { listener(); } catch (error) { console.error('[KernelMemoryManager] Listener error:', error); }
+    private static notifyMemoryChanged(memory_uid: string): void {
+        const listeners = KernelState.change_listeners.get(memory_uid);
+        if (listeners) {
+            for (const listener of Array.from(listeners)) {
+                try { listener(); } catch (error) { console.error('[KernelMemoryManager] Listener error:', error); }
+            }
         }
     }
 
@@ -73,7 +76,7 @@ export class KernelMemoryManager {
             if (proc) proc.memories_ids.add(memory_uid);
         }
 
-        this.notifyMemoryChanged();
+        this.notifyMemoryChanged(memory_uid);
     }
 
     // ─── Public API ────────────────────────────────────────────────────────
@@ -160,14 +163,26 @@ export class KernelMemoryManager {
     static deleteMemory(memory_uid: string): boolean {
         if (!memory_uid || !KernelState.kernel_memory.has(memory_uid)) return false;
         KernelState.kernel_memory.delete(memory_uid);
-        this.notifyMemoryChanged();
+        this.notifyMemoryChanged(memory_uid);
         return true;
     }
 
     static subscribe(memory_uid: string, callback: (data: any) => void): () => void {
+        if (!KernelState.change_listeners.has(memory_uid)) {
+            KernelState.change_listeners.set(memory_uid, new Set());
+        }
         const listener = () => callback(this.readMemory(memory_uid));
-        KernelState.change_listeners.add(listener);
-        return () => KernelState.change_listeners.delete(listener);
+        KernelState.change_listeners.get(memory_uid)!.add(listener);
+        
+        return () => {
+            const listeners = KernelState.change_listeners.get(memory_uid);
+            if (listeners) {
+                listeners.delete(listener);
+                if (listeners.size === 0) {
+                    KernelState.change_listeners.delete(memory_uid);
+                }
+            }
+        };
     }
 
     static commitMemory(request: RAMInteractivity): any {
@@ -194,7 +209,7 @@ export class KernelMemoryManager {
             ? Array.isArray(payload) ? [...payload] : { ...payload }
             : payload;
         KernelState.kernel_memory.set(memory_uid, immutablePayload);
-        this.notifyMemoryChanged();
+        this.notifyMemoryChanged(memory_uid);
         KernelTelemetry.logDebug('registerSystemMemory', { memory_uid });
     }
 

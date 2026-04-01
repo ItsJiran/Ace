@@ -502,10 +502,10 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             width: config.width,
             height: config.height,
             zIndex: config.always_on_top ? 9999 + config.z_index : config.z_index,
-            opacity: config.opacity ?? 1,
+            opacity: isMounted ? (config.opacity ?? 1) : 0,
             willChange: 'transform',
         };
-    }, [config]);
+    }, [config, isMounted]);
 
     // -------------------------------------------------------------------------
     // Headless Event Bindings

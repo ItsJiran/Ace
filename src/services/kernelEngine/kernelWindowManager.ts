@@ -6,11 +6,19 @@ export class KernelWindowManager {
     /** The kernel_memory key that React's useAceMemory subscribes to for re-renders. */
     private static readonly RENDERED_WINDOWS_KEY = 'system:rendered_windows';
 
+    private static isFlushPending = false;
+
     private static flushToMemory(): void {
-        KernelMemoryManager.writeMemory(
-            KernelWindowManager.RENDERED_WINDOWS_KEY,
-            this.getRenderedWindows(),
-        );
+        if (!this.isFlushPending) {
+            this.isFlushPending = true;
+            queueMicrotask(() => {
+                this.isFlushPending = false;
+                KernelMemoryManager.writeMemory(
+                    KernelWindowManager.RENDERED_WINDOWS_KEY,
+                    this.getRenderedWindows(),
+                );
+            });
+        }
     }
 
     static registerWindow(window_uid: string, process_uid: string, component: string): void {

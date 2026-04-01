@@ -2,7 +2,6 @@ import { KernelEngine } from '../kernelEngine';
 import { GlobalStateManager } from '../globalStateManager';
 import type { WindowConfig } from '#/schemas/window';
 import type { AnimationSequence } from '#/schemas/animation';
-import SpawnQueueWorker from '#/workers/spawnQueueWorker?worker';
 import { WindowAnimationController } from './WindowAnimationController';
 import type { SpawnWindowOptions } from '../windowEngine';
 
@@ -15,157 +14,21 @@ export interface WindowLifecycleDependencies {
 }
 
 export class WindowLifecycleManager {
-    private spawnQueueWorker: Worker;
-    private pendingSpawnRequests = new Map<string, SpawnWindowOptions>();
-    private pendingSpawnProcesses = new Map<string, string>();
     private activeWindowProcesses = new Map<string, string>();
-
-    // Rendering Queue
-    private renderingQueue: string[] = [];
-    private renderingQueueTimer: ReturnType<typeof setTimeout> | null = null;
-    private static readonly RENDERING_QUEUE_INTERVAL_MS = 120;
-    private static readonly RENDERING_BATCH_SIZE = 2;
-
-    // Deferred Memory Write Queue
-    private deferredWrites: Array<() => void> = [];
-    private writeScheduled = false;
-    private static readonly WRITE_DELAY_MIN_MS = 10;
-    private static readonly WRITE_DELAY_MAX_MS = 50;
-
-    // RAF performance sampling
-    private frameTimeEmaMs = 16.67;
-    private currentFrameTimeMs = 16.67;
-    private lastRafTs = 0;
-    private static readonly CURRENT_FPS_WEIGHT = 0.6;
 
     private pendingAnimations = new Map<string, AnimationSequence>();
 
-    constructor(private deps: WindowLifecycleDependencies) {
-        // Initialize spawn queue worker
-        this.spawnQueueWorker = new SpawnQueueWorker();
-        this.spawnQueueWorker.onmessage = (event: MessageEvent) => {
-            const { type, payload } = event.data;
-            if (type === 'spawn') {
-                const { id } = payload;
-                const spawnOptions = this.pendingSpawnRequests.get(id);
-                if (spawnOptions) {
-                    this.pendingSpawnRequests.delete(id);
-                    const spawnProcessUid = this.pendingSpawnProcesses.get(id);
-                    if (spawnProcessUid) {
-                        spawnOptions.__process_uid = spawnProcessUid;
-                        KernelEngine.updateProcessStatus(spawnProcessUid, 'running', {
-                            queue_state: 'spawning',
-                            window_uid: id,
-                        });
-                    }
-                    const spawnedUid = this.spawnWindowImmediate(spawnOptions);
-                    if (spawnProcessUid) {
-                        if (!spawnedUid) {
-                            KernelEngine.updateProcessStatus(spawnProcessUid, 'failed', {
-                                queue_state: 'failed',
-                                window_uid: id,
-                            });
-                        } else {
-                            KernelEngine.updateProcessStatus(spawnProcessUid, 'running', {
-                                queue_state: 'spawned',
-                                window_uid: spawnedUid,
-                                live_state: 'open',
-                            });
-                            this.activeWindowProcesses.set(spawnedUid, spawnProcessUid);
-                        }
-                        this.pendingSpawnProcesses.delete(id);
-                    }
-                }
-            }
-        };
+    private deps: WindowLifecycleDependencies;
 
-        this.startAdaptivePacingLoop();
-    }
-
-    // ─── Deferred Writes and Adaptive Pacing ──────────────────────────────────
-    private enqueueDeferredWrite(writeAction: () => void): void {
-        this.deferredWrites.push(writeAction);
-        if (!this.writeScheduled) {
-            this.writeScheduled = true;
-            this.scheduleNextDeferredWrite();
-        }
-    }
-
-    private scheduleNextDeferredWrite(): void {
-        const delay = this.getAdaptiveWriteDelayMs();
-
-        setTimeout(() => {
-            this.processNextDeferredWrite();
-        }, delay);
-    }
-
-    private processNextDeferredWrite(): void {
-        const write = this.deferredWrites.shift();
-
-        try {
-            write?.();
-        } catch (e) {
-            console.error('[WindowLifecycle] Deferred write failed:', e);
-        }
-
-        const pending = this.deferredWrites.length;
-        if (pending === 0) {
-            this.writeScheduled = false;
-            return;
-        }
-
-        this.scheduleNextDeferredWrite();
-    }
-
-    private getAdaptiveWriteDelayMs(): number {
-        const pending = this.deferredWrites.length;
-        const weightedFrameMs =
-            this.frameTimeEmaMs * (1 - WindowLifecycleManager.CURRENT_FPS_WEIGHT)
-            + this.currentFrameTimeMs * WindowLifecycleManager.CURRENT_FPS_WEIGHT;
-        const frameBased = Math.round(weightedFrameMs * 1.05);
-
-        const pressurePenalty = pending >= 16 ? 22 : pending >= 10 ? 14 : pending >= 6 ? 8 : pending >= 3 ? 4 : 0;
-
-        const candidate = frameBased + pressurePenalty;
-        return Math.max(
-            WindowLifecycleManager.WRITE_DELAY_MIN_MS,
-            Math.min(WindowLifecycleManager.WRITE_DELAY_MAX_MS, candidate)
-        );
-    }
-
-    private startAdaptivePacingLoop(): void {
-        const tick = (ts: number) => {
-            if (this.lastRafTs > 0) {
-                const delta = ts - this.lastRafTs;
-                const clamped = Math.max(8, Math.min(80, delta));
-                this.currentFrameTimeMs = clamped;
-                this.frameTimeEmaMs = this.frameTimeEmaMs * 0.75 + clamped * 0.25;
-
-                this.publishSpawnTelemetry();
-            }
-
-            this.lastRafTs = ts;
-            requestAnimationFrame(tick);
-        };
-
-        requestAnimationFrame(tick);
+    constructor(deps: WindowLifecycleDependencies) {
+        this.deps = deps;
     }
 
     private publishSpawnTelemetry(): void {
-        const activeSpawnLoad = this.pendingSpawnRequests.size + this.deferredWrites.length + this.renderingQueue.length;
+        const activeSpawnLoad = this.pendingAnimations.size;
         if (activeSpawnLoad === 0) return;
 
-        const currentFps = Math.max(1, Math.min(240, 1000 / this.currentFrameTimeMs));
-        const emaFps = Math.max(1, Math.min(240, 1000 / this.frameTimeEmaMs));
-
-        this.spawnQueueWorker.postMessage({
-            type: 'set_telemetry',
-            payload: {
-                current_fps: currentFps,
-                ema_fps: emaFps,
-                pressure: activeSpawnLoad,
-            },
-        });
+        // Worker queue was removed. Keep method as a lightweight hook for future diagnostics.
     }
 
     // ─── Lifecycle Operations ──────────────────────────────────────────────────
@@ -174,6 +37,7 @@ export class WindowLifecycleManager {
 
         const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
         const spawnOptions = { ...options, _reserved_uid: window_uid } as any;
+        let spawnProcessUid: string | undefined = undefined;
 
         if (!options.__skip_process_tracking) {
             const parentProcessUid = options.parent_process_uid ?? KernelEngine.getCurrentProcessContext();
@@ -193,9 +57,9 @@ export class WindowLifecycleManager {
                     payload: {
                         status: 'running',
                         action: 'window_instance',
-                        queue_state: 'queued',
+                        queue_state: 'spawning',
                         window_uid,
-                        live_state: 'queued',
+                        live_state: 'spawning',
                     },
                 })
                 : KernelEngine.spawnProcess('window:instance', metadata, {
@@ -204,28 +68,34 @@ export class WindowLifecycleManager {
                     payload: {
                         status: 'running',
                         action: 'window_instance',
-                        queue_state: 'queued',
+                        queue_state: 'spawning',
                         window_uid,
-                        live_state: 'queued',
+                        live_state: 'spawning',
                     },
                 });
 
-            KernelEngine.updateProcessStatus(processRecord.process_uid, 'waiting', {
-                queue_state: 'queued',
-                window_uid,
-            });
-            this.pendingSpawnProcesses.set(window_uid, processRecord.process_uid);
+            spawnProcessUid = processRecord.process_uid;
         }
         
-        this.pendingSpawnRequests.set(window_uid, spawnOptions);
+        spawnOptions.__process_uid = spawnProcessUid;
         
-        this.spawnQueueWorker.postMessage({
-            type: 'enqueue',
-            payload: {
-                id: window_uid,
-                options: spawnOptions,
-            },
-        });
+        const spawnedUid = this.spawnWindowImmediate(spawnOptions);
+        
+        if (spawnProcessUid) {
+            if (!spawnedUid) {
+                KernelEngine.updateProcessStatus(spawnProcessUid, 'failed', {
+                    queue_state: 'failed',
+                    window_uid,
+                });
+            } else {
+                KernelEngine.updateProcessStatus(spawnProcessUid, 'running', {
+                    queue_state: 'spawned',
+                    window_uid: spawnedUid,
+                    live_state: 'open',
+                });
+                this.activeWindowProcesses.set(spawnedUid, spawnProcessUid);
+            }
+        }
         
         return window_uid;
     }
@@ -261,64 +131,32 @@ export class WindowLifecycleManager {
             is_minimized: false
         };
 
-        this.enqueueDeferredWrite(() => {
-            const ownerProcessUid = options.__process_uid;
-            KernelEngine.registerWindow(window_uid, ownerProcessUid ?? '', entryRef);
-
-            if (ownerProcessUid) {
-                const created = KernelEngine.createRuntimeMemory({
-                    owner_process_uid: ownerProcessUid,
-                    memory_uid: this.deps.windowMemoryUid(window_uid),
-                    payload: freshWindow,
-                });
-
-                if (created) {
-                    KernelEngine.linkMemoryToWindow(this.deps.windowMemoryUid(window_uid), window_uid);
-                    return;
-                }
-            }
-
+        const ownerProcessUid = options.__process_uid;
+        if (ownerProcessUid) {
+            KernelEngine.createRuntimeMemory({
+                owner_process_uid: ownerProcessUid,
+                memory_uid: this.deps.windowMemoryUid(window_uid),
+                payload: freshWindow,
+            });
+        } else {
             KernelEngine.writeMemory(this.deps.windowMemoryUid(window_uid), freshWindow);
-            KernelEngine.linkMemoryToWindow(this.deps.windowMemoryUid(window_uid), window_uid);
-        });
+        }
 
-        this.enqueueDeferredWrite(() => {
-            this.renderingQueue.push(window_uid);
-            this.flushRenderingQueue();
-
-            this.deps.focusWindow(window_uid);
-        });
+        KernelEngine.registerWindow(window_uid, ownerProcessUid ?? '', entryRef);
+        KernelEngine.linkMemoryToWindow(this.deps.windowMemoryUid(window_uid), window_uid);
+        this.deps.focusWindow(window_uid);
 
         if (options.animation_sequence) {
             this.pendingAnimations.set(window_uid, options.animation_sequence);
+            requestAnimationFrame(() => {
+                const pendingSeq = this.pendingAnimations.get(window_uid);
+                if (!pendingSeq) return;
+                this.pendingAnimations.delete(window_uid);
+                this.deps.animationController.playAnimation(window_uid, pendingSeq);
+            });
         }
 
         return window_uid;
-    }
-
-    private flushRenderingQueue(): void {
-        if (this.renderingQueueTimer !== null) return;
-        if (this.renderingQueue.length === 0) return;
-
-        this.renderingQueueTimer = setTimeout(() => {
-            this.renderingQueueTimer = null;
-
-            const batch = this.renderingQueue.splice(0, WindowLifecycleManager.RENDERING_BATCH_SIZE);
-            if (batch.length > 0) {
-                requestAnimationFrame(() => {
-                    for (const uid of batch) {
-                        const pendingSeq = this.pendingAnimations.get(uid);
-                        if (!pendingSeq) continue;
-                        this.pendingAnimations.delete(uid);
-                        this.deps.animationController.playAnimation(uid, pendingSeq);
-                    }
-                });
-            }
-
-            if (this.renderingQueue.length > 0) {
-                this.flushRenderingQueue();
-            }
-        }, WindowLifecycleManager.RENDERING_QUEUE_INTERVAL_MS);
     }
 
     closeWindow(window_uid: string, options?: { skipProcessLifecycle?: boolean }) {
@@ -337,15 +175,10 @@ export class WindowLifecycleManager {
         this.deps.animationController.cancelAnimation(window_uid);
         this.pendingAnimations.delete(window_uid);
 
-        const queueIndex = this.renderingQueue.indexOf(window_uid);
-        if (queueIndex !== -1) {
-            this.renderingQueue.splice(queueIndex, 1);
-        }
-
         KernelEngine.deleteMemory(this.deps.windowMemoryUid(window_uid));
 
         const focusedWindowUid = (KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined)
-            ?? ((KernelEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
+            ?? ((KernelEngine.readMemory('system:global_state') as any)?.focus?.focused_window_uid ?? null);
         if (focusedWindowUid === window_uid) {
             GlobalStateManager.setFocusedWindow(null);
         }

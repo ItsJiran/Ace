@@ -200,10 +200,11 @@ class EventEngineSingleton {
         if (this.logBuffer.length === 0) return;
 
         const toFlush = this.logBuffer.splice(0);
-        const current = (KernelEngine.readMemory(this.eventStreamMemoryUid) as any[] | undefined) ?? [];
+        const raw = KernelEngine.readMemory(this.eventStreamMemoryUid);
+        const current = Array.isArray(raw) ? raw : [];
         const next = [...current, ...toFlush].slice(-this.maxEventLogs);
 
-        KernelEngine.updateMemory(this.eventStreamMemoryUid, next);
+        KernelEngine.writeMemory(this.eventStreamMemoryUid, next);
     }
 }
 

@@ -9,7 +9,8 @@ import type { KernelProcessEntry, KernelSharedEntry, KernelWindowEntry } from '.
  */
 class KernelStateSingleton {
     public readonly kernel_memory = new Map<string, any>();
-    public readonly change_listeners = new Set<() => void>();
+    // Convert change_listeners from a single global Set to a Map grouping by memory_uid
+    public readonly change_listeners = new Map<string, Set<() => void>>();
 
     constructor() {
         this._initSystemMaps();
@@ -22,7 +23,11 @@ class KernelStateSingleton {
     }
 
     resetKernelSpace(): void {
-        this.change_listeners.clear();
+        // NOTE: Do NOT clear change_listeners map here.
+        // React's useSyncExternalStore subscribes during the first render
+        // (before bootACE runs in a useEffect). Clearing listeners severs
+        // those subscriptions permanently, causing the UI to never react
+        // to subsequent kernel memory updates.
         this.kernel_memory.clear();
         this._initSystemMaps();
     }

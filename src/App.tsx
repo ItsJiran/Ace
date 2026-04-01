@@ -56,7 +56,6 @@ function App() {
   if (!isBootReady || !overlayState) return null;
   const isAmbient = overlayState.mode === 'ambient';
 
-
   return (
     // 🚀 THE MAGIC WRAPPER
     // Di Tauri, bg-transparent biasanya cukup, tapi 0.005 tetap aman digunakan
