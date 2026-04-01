@@ -761,7 +761,7 @@ function PerformanceTab() {
     const heapUsedPct  = heapInfo ? (heapInfo.usedJSHeapSize  / heapInfo.jsHeapSizeLimit) * 100 : null;
     const heapTotalPct = heapInfo ? (heapInfo.totalJSHeapSize / heapInfo.jsHeapSizeLimit) * 100 : null;
 
-    const listenerMap = new Map(stats.listeners_by_key.map((l: { key: string; listeners: number }) => [l.key, l.listeners]));
+    const listenerMap = new Map((stats.listeners_by_key || []).map((l: { key: string; listeners: number }) => [l.key, l.listeners]));
     const topEntries  = stats.largest_memories.slice(0, 30);
 
     const ramStoreBytes  = stats.approx_total_bytes;
@@ -989,8 +989,10 @@ function SystemSettingsComponent() {
     const [activeTab, setActiveTab] = useState<TabId>('packages');
 
     const packages  = useAceMemory<RegistryPackage[]>('system:package_registry') ?? [];
-    const keybinds  = useAceMemory<any[]>('system:keybinds') ?? [];
-    const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
+    const _keybinds = useAceMemory<any[]>('system:keybinds') ?? [];
+    const keybinds  = Array.isArray(_keybinds) ? _keybinds : [];
+    const _configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
+    const configItems = Array.isArray(_configItems) ? _configItems : [];
     const gatewayConfig = useAceMemory<AIGatewayConfig>('system:ai_gateway_config') ?? {
         version: 2,
         active_sdk: null,

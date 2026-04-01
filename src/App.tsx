@@ -12,9 +12,6 @@ function App() {
   const [isBootReady, setIsBootReady] = useState(false);
   const renderCount = useRenderCount('GlobalOverlay');
 
-  // Get process context for bridge registration
-  useProcessContext();
-
   // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
   useEffect(() => {
     let isMounted = true;

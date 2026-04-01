@@ -149,13 +149,13 @@ class ConfigEngineSingleton {
     }
 
     private syncConfigToRAM(items: ConfigItem[]) {
-        KernelEngine.updateMemory(this.configMemoryUid, items);
+        KernelEngine.writeMemory(this.configMemoryUid, items);
 
         GlobalStateManager.setActiveConfigItems(items);
     }
 
     private syncKeybindsToRAM(binds: Keybind[]) {
-        KernelEngine.updateMemory(this.keybindsMemoryUid, binds);
+        KernelEngine.writeMemory(this.keybindsMemoryUid, binds);
 
         GlobalStateManager.setActiveKeybinds(binds.filter(bind => bind.enabled));
     }

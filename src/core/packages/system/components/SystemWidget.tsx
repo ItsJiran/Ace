@@ -55,7 +55,8 @@ export default function SystemWidget() {
     const { emit: emitOpenWindow } = useAceEvent('open_window');
 
     const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
-    const keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
+    const _keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
+    const keybinds = Array.isArray(_keybinds) ? _keybinds : [];
     const activeWindowsIndex = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
     const installQueue = useAceMemory<InstallRequest[]>('system:install_requests') ?? [];
     const packageSummaries = useAceMemory<PackageSummary[]>('system:package_registry') ?? [];

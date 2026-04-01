@@ -58,7 +58,7 @@ export function ProcessContextProvider({
     process_uid,
     parent_process_uid,
 }: ProcessContextProviderProps) {
-    const parent = useProcessContext();
+    const parent = useContext(ProcessContext);
 
     const value: ProcessContextValue = {
         process_uid,

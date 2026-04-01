@@ -122,7 +122,10 @@ export class KernelMemoryManager {
             return { uid: memory_uid, created: true };
         }
         const existing = KernelState.kernel_memory.get(memory_uid);
-        const merged = { ...existing, ...payload };
+        const merged = (typeof existing === 'object' && existing !== null && typeof payload === 'object' && payload !== null && !Array.isArray(existing) && !Array.isArray(payload)) 
+            ? { ...existing, ...payload } 
+            : payload;
+            
         if (!isShallowEqual(existing, merged)) {
             this.writeMemoryInternal(memory_uid, merged, process_uid);
         }
@@ -152,7 +155,9 @@ export class KernelMemoryManager {
         if (!memory_uid || !KernelState.kernel_memory.has(memory_uid)) return false;
 
         const existing = KernelState.kernel_memory.get(memory_uid);
-        const merged = { ...existing, ...payload };
+        const merged = (typeof existing === 'object' && existing !== null && typeof payload === 'object' && payload !== null && !Array.isArray(existing) && !Array.isArray(payload)) 
+            ? { ...existing, ...payload } 
+            : payload;
 
         if (!isShallowEqual(existing, merged)) {
             this.writeMemoryInternal(memory_uid, merged, process_uid);
@@ -257,17 +262,25 @@ export class KernelMemoryManager {
         })).sort((a, b) => b.approx_bytes - a.approx_bytes);
 
         const approxTotalBytes = entries.reduce((acc, curr) => acc + curr.approx_bytes, 0);
-        const lCount = KernelState.change_listeners.size;
+        let lCount = 0;
+        const listenersByKey: {key: string, listeners: number}[] = [];
+        for (const [key, listeners] of KernelState.change_listeners.entries()) {
+            lCount += listeners.size;
+            if (listeners.size > 0) {
+                listenersByKey.push({ key, listeners: listeners.size });
+            }
+        }
 
         return {
             memory_entries: entries.length,
             change_listener_total: lCount,
-            socket_keys: 0,
-            socket_listener_total: lCount,
+            socket_keys: 0, // Legacy field
+            socket_listener_total: lCount, // Legacy field
             approx_total_bytes: approxTotalBytes,
             approx_total_kb: approxTotalBytes / 1024,
             approx_total_mb: approxTotalBytes / (1024 * 1024),
             largest_memories: entries,
+            listeners_by_key: listenersByKey,
             sampled_at: Date.now(),
         };
     }

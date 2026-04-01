@@ -87,14 +87,14 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     };
 
     // Merge size + listener data into unified rows
-    const listenerMap = new Map(stats.listeners_by_key.map(l => [l.key, l.listeners]));
+    const listenerMap = new Map((stats.listeners_by_key || []).map(l => [l.key, l.listeners]));
     const rows: RAMEntry[] = stats.largest_memories.map(m => ({
         ...m,
         listeners: listenerMap.get(m.memory_uid) ?? 0,
     }));
 
     // Keys that have listeners but no memory entry (subscriptions to non-existent keys)
-    const orphanListeners: RAMEntry[] = stats.listeners_by_key
+    const orphanListeners: RAMEntry[] = (stats.listeners_by_key || [])
         .filter(l => !rows.find(r => r.memory_uid === l.key))
         .map(l => ({ memory_uid: l.key, approx_bytes: 0, type: '—', listeners: l.listeners, child_count: 0 }));
 
