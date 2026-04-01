@@ -115,43 +115,25 @@ class WindowEngineSingleton {
             const { action, payload, source } = interaction;
             const sourceProcessUid = typeof source?.process_uid === 'string' ? source.process_uid : undefined;
 
-            await KernelEngine.trackAsync(
-                `window:${action}`,
-                {
-                    action,
-                    source_process_uid: sourceProcessUid,
-                },
-                async () => {
-                    if (action === 'open_window') {
-                        this.spawnWindow({
-                            ...(payload ?? {}),
-                            parent_process_uid: sourceProcessUid,
-                        });
+            if (action === 'open_window') {
+                    this.spawnWindow({
+                        ...(payload ?? {}),
+                        parent_process_uid: sourceProcessUid,
+                    });
+                }
+                if (action === 'set_overlay_mode') {
+                    const mode = payload.mode as 'ambient' | 'interactive';
+                    if (mode) this.setOverlayMode(mode);
+                }
+                if (action === 'debug_action') {
+                    await this.overlayManager.handleDebugAction(payload);
+                }
+                if (action === 'close_window') {
+                    const targetUid = payload?.window_uid || source?.window_uid;
+                    if (targetUid) {
+                        this.closeWindow(targetUid);
                     }
-                    if (action === 'set_overlay_mode') {
-                        const mode = payload.mode as 'ambient' | 'interactive';
-                        if (mode) this.setOverlayMode(mode);
-                    }
-                    if (action === 'debug_action') {
-                        await this.overlayManager.handleDebugAction(payload);
-                    }
-                    if (action === 'close_window') {
-                        const targetUid = payload?.window_uid || source?.window_uid;
-                        if (targetUid) {
-                            this.closeWindow(targetUid);
-                        }
-                    }
-                },
-                {
-                    parent_process_uid: sourceProcessUid,
-                    process_kind: 'window_task',
-                    owner_engine: 'windowEngine',
-                    payload: {
-                        status: 'running',
-                        action,
-                    },
-                },
-            );
+                }
         };
 
         EventBus.registerProcessRoute('open_window', coreHandler);

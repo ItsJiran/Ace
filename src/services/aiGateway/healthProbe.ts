@@ -243,11 +243,10 @@ class HealthProbeSingleton {
             status_code: health.status_code,
             latency_ms: health.latency_ms,
             gateway_name: health.gateway_name,
-                gateway_contract_version: health.gateway_contract_version,
-                found_ports: foundPorts,
-                last_error_message: health.error_message ?? null,
-                last_checked_at: Date.now(),
-            },
+            gateway_contract_version: health.gateway_contract_version,
+            found_ports: foundPorts,
+            last_error_message: health.error_message ?? null,
+            last_checked_at: Date.now(),
         });
     }
 

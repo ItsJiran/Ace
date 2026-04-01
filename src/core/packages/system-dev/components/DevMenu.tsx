@@ -2,6 +2,7 @@ import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, W
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
+import { useAceEvent } from '#/hooks/useAceEvent';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 
@@ -14,6 +15,8 @@ export const registry: AceRegistryType.Component = {
 export default function DevMenu() {
     const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
     const isAmbient = overlayState?.mode === 'ambient';
+
+    const { emit: emitDebugAction } = useAceEvent('debug_action');
 
     const spawnSystemSettings = () => {
         window.ACE.window.spawnWindow({
@@ -277,11 +280,7 @@ export default function DevMenu() {
     };
 
     const openDevTools = () => {
-        window.ACE.event.emit({
-            event_type: 'interaction',
-            action: 'debug_action',
-            payload: { action: 'open_devtools' }
-        } as any);
+        emitDebugAction({ action: 'open_devtools' });
     };
 
     const toggleFPS = () => {

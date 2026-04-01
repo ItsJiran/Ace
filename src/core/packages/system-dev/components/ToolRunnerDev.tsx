@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { z } from 'zod';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ToolManifestEntry } from '#/services/toolEngine';
+import { useAceEvent } from '#/hooks/useAceEvent';
 
 export const registry: AceRegistryType.Component = {
     name: 'tool_runner_dev',
@@ -229,6 +230,7 @@ export default function ToolRunnerDev() {
     const [selectedTool, setSelectedTool] = useState<ToolManifestEntry | null>(null);
     const [payloadText, setPayloadText] = useState('{}');
     const [result, setResult] = useState<ToolResult>({ status: 'idle', output: '' });
+    const { emit: emitExecuteTool } = useAceEvent('execute_tool');
 
     const loadTools = useCallback(() => {
         const all = (window.ACE.tool as any).getAll() as ToolManifestEntry[];
@@ -283,14 +285,10 @@ export default function ToolRunnerDev() {
         setResult({ status: 'running', output: '' });
         try {
             // Fire via EventBus so it goes through the standard execute_tool route
-            window.ACE.event.emit({
-                event_type: 'interaction',
-                action: 'execute_tool',
-                payload: {
-                    package_ref: selectedTool.packageRef,
-                    tool_slug: selectedTool.slug,
-                    payload: parsedPayload,
-                },
+            emitExecuteTool({
+                package_ref: selectedTool.packageRef,
+                tool_slug: selectedTool.slug,
+                payload: parsedPayload,
             });
             setResult({ status: 'ok', output: `Dispatched execute_tool → ${selectedTool.packageRef}/${selectedTool.slug}\nPayload: ${JSON.stringify(parsedPayload, null, 2)}` });
         } catch (err) {

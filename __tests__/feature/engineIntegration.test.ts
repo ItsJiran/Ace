@@ -72,6 +72,7 @@ describe('Feature: Gateway Stream -> Event Bus -> Process Exec -> Storage Socket
             event_type: 'interaction',
             action: aiEvent.headers.action as 'send',
             sub_action: aiEvent.headers.sub_action,
+            process_uid: 'test-integration-process',
             payload: { text: "massive block" }
         });
 

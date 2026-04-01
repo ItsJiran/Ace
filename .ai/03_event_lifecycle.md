@@ -70,8 +70,8 @@ All engine EventBus routes are registered in a single boot phase (Phase 7: Init 
 2. **Route:** The `eventEngine` matches this command to the `windowEngine`'s listener.
 3. **Spatial/OS Update:** The `windowEngine` takes over.
     * It allocates a `WindowConfig` with bounds, z-index, focus, and optional metadata such as `opacity`, `is_locked`, `always_on_top`, `chrome_style`, and `drag_surface`.
-    * It writes the config into `system:window:<uid>`, appends the instance to `system:active_windows`, then batches visual mounting through `system:rendered_windows`.
-4. **React:** The root `App.tsx` observes `system:rendered_windows` and mounts the `<CalendarWindow />` shell onto the screen.
+    * It writes the config into `system:window:<uid>`, then calls `KernelWindowManager.registerWindow()` which updates `window_sys` and flushes to `system:rendered_windows` (the sole window index key — `system:active_windows` has been removed).
+4. **React:** `App.tsx` subscribes to `system:rendered_windows`. Each entry is wrapped in `ProcessContextProvider` + `WindowContextProvider` before mounting the window shell.
 
 ---
 
@@ -81,7 +81,7 @@ All engine EventBus routes are registered in a single boot phase (Phase 7: Init 
 1. **Failure Catch:** The executing engine (e.g., `fsEngine` or `shellEngine`) catches an error during its own execution.
 2. **Emit Transient Event:** It emits `{ action: 'trigger_animation', target_widget: 'settings_panel', anim: 'shake' }`.
 3. **Bypass RAM (Crucial):** This is a *Transient UI Event*. It is **NOT** saved to the `storageEngine`. Saving `{ isShaking: true }` would create a nightmare of having to manually reset it to `false` later.
-4. **Direct Listen:** The `<SettingsPanel />` React component currently has an active `useAceListener('trigger_animation')` hook.
+4. **Direct Listen:** The `<SettingsPanel />` React component currently has an active `useAceEvent('trigger_animation', callback)` hook.
 5. **React & Cleanup:** The hook catches the event, verifies the `target_widget` ID, and applies a CSS class to shake the DOM element. The hook's `unsubscribe` function guarantees no memory leaks if the panel is closed.
 
 ---
@@ -103,10 +103,16 @@ All engine EventBus routes are registered in a single boot phase (Phase 7: Init 
 
 1. **Rule Check:** Can this be stored in RAM via `useState`? *No. Triggering React state updates at 60 FPS will choke the browser thread and freeze the app.*
 2. **The Flow:** The background audio engine (Tauri Rust) emits high-frequency IPC events containing byte arrays.
-3. **Direct Canvas Listen:** The `<AudioVisualizer />` component uses the `useAceListener` hook to intercept these specific high-frequency events.
+3. **Direct Canvas Listen:** The `<AudioVisualizer />` component uses the `useAceEvent` hook to intercept these specific high-frequency events.
 4. **DOM Bypass Render:** Inside the hook's callback, instead of setting React state, the code directly manipulates an HTML5 `<canvas>` `ref` (e.g., `canvasContext.fillRect(...)`). This bypasses the React Virtual DOM entirely, ensuring perfectly smooth 60 FPS rendering.
 
 ---
+
+## Sync Update 2026-04-01 (window_sys Refactoring)
+
+- `system:active_windows` has been **completely removed** from the entire codebase. `system:rendered_windows` is the sole consumer-facing window index key.
+- `KernelWindowManager.registerWindow()` / `unregisterWindow()` now always call `flushToMemory()`, which writes `system:rendered_windows` from the `window_sys` Map. This single atomic path eliminates the previous dual-key out-of-sync window.
+- Case 4 updated: `App.tsx` wraps each window entry in `ProcessContextProvider` + `WindowContextProvider`, providing `process_uid` and `window_uid` to the full component tree.
 
 ## Sync Update (2026-03-27)
 

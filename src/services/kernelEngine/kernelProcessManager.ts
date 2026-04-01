@@ -1,4 +1,4 @@
-import { ProcessStatus, ProcessRecord, ProcessKind, ProcessLifecycleState } from '#/schemas/process';
+import type { ProcessStatus, ProcessRecord, ProcessKind, ProcessLifecycleState } from '#/schemas/process';
 import { KernelState } from './kernelState';
 import { KernelMemoryManager } from './kernelMemoryManager';
 import { KernelTelemetry } from './kernelTelemetry';

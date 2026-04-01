@@ -1,4 +1,4 @@
-import { KernelProcessEntry, KernelSharedEntry, KernelWindowEntry } from './types';
+import type { KernelProcessEntry, KernelSharedEntry, KernelWindowEntry } from './types';
 
 /**
  * KernelStateSingleton

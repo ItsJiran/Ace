@@ -71,7 +71,7 @@ Each `WindowLayoutEntry` can persist:
 - `restoration_strategy`
 
 ### Current Save/Load Flow
-1. `saveLayout(name)` snapshots `system:active_windows` plus each active `system:window:<uid>` config.
+1. `saveLayout(name)` reads active windows via `KernelEngine.getRenderedWindows()` (derived from `system:rendered_windows` / `window_sys`) plus each active `system:window:<uid>` config.
 2. The snapshot is validated with Zod.
 3. The snapshot is serialized to a JSON file in AppConfig.
 4. `loadLayout(name)` reads and validates the JSON.
@@ -107,9 +107,11 @@ Implemented:
 - Borderless full-drag test window in Dev Kit
 - File-backed `LayoutEngine`
 - Boot phase for layout initialization
+- `useWindowContext` hook (`src/hooks/useWindowContext.tsx`) — provides `{ window_uid, process_uid }` to window component trees
+- `ProcessContextProvider` + `WindowContextProvider` wrapping per window in `App.tsx`
+- `window_sys` (`Map<string, KernelWindowEntry>`) as the source of truth in `KernelState`; `system:rendered_windows` is the sole derived window index
 
 Pending:
-- `useWindowContext` for child-owned chrome actions
 - Resize primitives for fully custom widgets
 - First-class `LocalWindowShell` contract for production windows that should bypass shared runtime subscriptions
 - Widget-level snapshot contract (`getSnapshot()` or equivalent)
@@ -117,6 +119,12 @@ Pending:
 - `WindowEngine` action wrappers for layout operations
 
 ---
+
+## Sync Update 2026-04-01 (window_sys Refactoring)
+
+- `system:active_windows` has been **completely removed**. Layout engine (`saveLayout`) now reads windows via `KernelEngine.getRenderedWindows()` backed by `system:rendered_windows`.
+- `useWindowContext` hook is now **implemented** (`src/hooks/useWindowContext.tsx`). Moved from Pending to Implemented.
+- `App.tsx` wraps each window in `ProcessContextProvider` + `WindowContextProvider` so `window_uid` and `process_uid` are available throughout the window component tree without prop drilling.
 
 ## Sync Update (2026-03-27)
 

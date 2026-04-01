@@ -154,9 +154,14 @@ export class WindowAnimationController {
             if (onComplete === 'close_window') {
                 this.closeWindowCb(uid);
             } else if (typeof onComplete === 'object' && 'emit_event' in onComplete) {
+                // Resolve the window's owning process so the event carries
+                // a real process identity (needed for destroy signals, child
+                // spawning, memory scoping, etc.).
+                const windowEntry = KernelEngine.getWindowEntry(uid);
                 EventBus.emit({
                     event_type: 'interaction',
                     action: onComplete.emit_event,
+                    process_uid: windowEntry?.process_uid ?? 'system:animation_controller',
                     window_uid: uid,
                     payload: {},
                 });

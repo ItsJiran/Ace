@@ -3,6 +3,7 @@ import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Work
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useAceMemory } from '#/hooks/useAceMemory';
+import { useAceEvent } from '#/hooks/useAceEvent';
 
 interface RuntimeRegistryDomains {
     windows?: Array<{
@@ -38,28 +39,20 @@ export default function SystemDevConsole() {
     const isAmbient = overlayState?.mode === 'ambient';
     const isDebugBg = overlayState?.debug_bg ?? false;
 
+    const { emit: emitOpenWindow } = useAceEvent('open_window');
+    const { emit: emitOverlayMode } = useAceEvent('set_overlay_mode');
+    const { emit: emitDebugAction } = useAceEvent('debug_action');
+
     const openDevWindow = (component_name: string, title: string, x: number, y: number, width: number, height: number) => {
-        window.ACE.event.emit({
-            event_type: 'interaction',
-            action: 'open_window',
-            payload: { component_name, title, x, y, width, height }
-        } as any);
+        emitOpenWindow({ component_name, title, x, y, width, height });
     };
 
     const toggleOverlayMode = () => {
-        window.ACE.event.emit({
-            event_type: 'interaction',
-            action: 'set_overlay_mode',
-            payload: { mode: isAmbient ? 'interactive' : 'ambient' }
-        } as any);
+        emitOverlayMode({ mode: isAmbient ? 'interactive' : 'ambient' });
     };
 
     const toggleDebugBg = () => {
-        window.ACE.event.emit({
-            event_type: 'interaction',
-            action: 'debug_action',
-            payload: { action: 'toggle_debug_bg' }
-        } as any);
+        emitDebugAction({ action: 'toggle_debug_bg' });
     };
 
     const spawnRAMViewer = () => {

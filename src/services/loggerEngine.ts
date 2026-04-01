@@ -17,10 +17,13 @@ class LoggerEngineSingleton {
         log: console.log,
         info: console.info,
         warn: console.warn,
-        error: console.error
+        error: console.error,
+        group: console.group,
+        groupEnd: console.groupEnd,
     };
 
     private isInitialized = false;
+    private globalHandlersBound = false;
 
     setupKernelSpace() {
         KernelEngine.registerSystemMemory(this.logsMemoryUid, [] as LogEntry[]);
@@ -31,29 +34,27 @@ class LoggerEngineSingleton {
 
         this.setupKernelSpace();
 
-        // 2. Intercept console calls
+        // Intercept console calls and mirror them into RAM + debug.log.
         (Object.keys(this.originalConsole) as LogLevel[]).forEach((level) => {
-            (console as any)[level] = async (...args: any[]) => {
-                // Call original console immediately
+            (console as any)[level] = (...args: any[]) => {
                 this.originalConsole[level](...args);
-
-                // Format the message
-                const message = args.map(arg =>
-                    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-                ).join(' ');
-
-                this.addLog(level, message);
-
-                // Write to debug.log file via Rust
-                const timestamp = new Date().toISOString();
-                const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-                try {
-                    await invoke('log_to_file', { line: logLine });
-                } catch (err) {
-                    // Silently fail if Rust backend isn't ready or IPC fails, to avoid loops
-                }
+                this.writeEntry(level, args);
             };
         });
+
+        console.group = (...args: any[]) => {
+            this.originalConsole.group(...args);
+            this.writeEntry('info', args);
+        };
+
+        console.groupEnd = (...args: any[]) => {
+            this.originalConsole.groupEnd(...args);
+            if (args.length > 0) {
+                this.writeEntry('info', args);
+            }
+        };
+
+        this.bindGlobalHandlers();
 
         this.isInitialized = true;
         
@@ -65,6 +66,61 @@ class LoggerEngineSingleton {
         // Keep direct logging available for services that want explicit writes.
         this.originalConsole[level](message);
         this.addLog(level, message);
+        this.writeToDebugLog(level, message);
+    }
+
+    private bindGlobalHandlers() {
+        if (this.globalHandlersBound || typeof window === 'undefined') return;
+
+        window.addEventListener('error', (event) => {
+            const message = event.error instanceof Error
+                ? event.error.stack || event.error.message
+                : event.message || 'Unknown window error';
+            this.originalConsole.error('[GlobalError]', message);
+            this.addLog('error', `[GlobalError] ${message}`);
+            this.writeToDebugLog('error', `[GlobalError] ${message}`);
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            const reason = event.reason instanceof Error
+                ? event.reason.stack || event.reason.message
+                : this.formatArgs([event.reason]);
+            this.originalConsole.error('[UnhandledRejection]', reason);
+            this.addLog('error', `[UnhandledRejection] ${reason}`);
+            this.writeToDebugLog('error', `[UnhandledRejection] ${reason}`);
+        });
+
+        this.globalHandlersBound = true;
+    }
+
+    private writeEntry(level: LogLevel, args: any[]) {
+        const message = this.formatArgs(args);
+        this.addLog(level, message);
+        this.writeToDebugLog(level, message);
+    }
+
+    private formatArgs(args: any[]): string {
+        return args.map((arg) => {
+            if (arg instanceof Error) {
+                return arg.stack || arg.message;
+            }
+            if (typeof arg === 'object' && arg !== null) {
+                try {
+                    return JSON.stringify(arg, null, 2);
+                } catch {
+                    return '[Unserializable Object]';
+                }
+            }
+            return String(arg);
+        }).join(' ');
+    }
+
+    private writeToDebugLog(level: LogLevel, message: string) {
+        const timestamp = new Date().toISOString();
+        const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+        void invoke('log_to_file', { line: logLine }).catch(() => {
+            // Ignore backend logging failures to avoid logging loops.
+        });
     }
 
     private addLog(level: LogLevel, message: string) {

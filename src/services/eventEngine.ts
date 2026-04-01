@@ -85,9 +85,32 @@ class EventEngineSingleton {
     /**
      * A React Component (The Waiter) or Gateway "emits" an interaction.
      * This follows the Unified Lifecycle: Ingestion -> Validation -> Allocation.
+     *
+     * Convention: always supply `process_uid` so receivers can identify
+     * and manage (e.g. terminate) the originating process. Use `useAceEvent`
+     * from React components — it injects `process_uid` automatically from
+     * `ProcessContextProvider`. Engine-level emits should call `emitWithParent`.
      */
     emit(interaction: Interaction) {
         const normalized = this.normalizeInteraction(interaction);
+
+        // Hard enforcement: process_uid is mandatory for all emitted events.
+        // Every event must carry an origin identity so receivers can:
+        //  - send destroy / cancel signals back to the originating process
+        //  - spawn child windows or async work under the correct parent
+        //  - create runtime memory scoped to the correct process
+        // React components: use useAceEvent (auto-injects from ProcessContextProvider).
+        // Engines: pass process_uid explicitly or use emitWithParent().
+        if (!normalized.process_uid) {
+            console.error(
+                `[EventBus] REJECTED emit('${normalized.action}') — missing process_uid. ` +
+                `Every event must carry an origin identity. ` +
+                `Use useAceEvent (auto-injects from context) or pass process_uid explicitly.`
+            );
+            this.logEvent(normalized, 'rejected');
+            return;
+        }
+
         this.logEvent(normalized, 'emitted');
 
         // --- PHASE 2: INGESTION & VALIDATION ---
@@ -140,7 +163,7 @@ class EventEngineSingleton {
         });
     }
 
-    private logEvent(interaction: Interaction, status: 'emitted' | 'routed' | 'dropped') {
+    private logEvent(interaction: Interaction, status: 'emitted' | 'routed' | 'dropped' | 'rejected') {
         const entry = {
             id: `evt-${crypto.randomUUID()}`,
             at: Date.now(),

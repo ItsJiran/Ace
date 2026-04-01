@@ -32,14 +32,16 @@ export async function bootACE() {
     }
 
     bootPromise = (async () => {
+        KernelEngine.resetKernelSpace();
+        LoggerEngine.setupKernelSpace();
+        LoggerEngine.init();
+
         console.group('🚀 ACE: Booting System...');
 
-        KernelEngine.resetKernelSpace();
         GlobalStateManager.setupKernelSpace();
         ConfigEngine.setupKernelSpace();
         EventBus.setupKernelSpace();
         PipelineEngine.setupKernelSpace();
-        LoggerEngine.setupKernelSpace();
         WidgetEngine.setupKernelSpace();
         LayoutEngine.setupKernelSpace();
         AIGatewayEngine.setupKernelSpace();

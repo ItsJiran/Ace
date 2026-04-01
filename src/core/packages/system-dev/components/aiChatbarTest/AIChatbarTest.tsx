@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useAceMemory } from '#/hooks/useAceMemory';
+import { useAceEvent } from '#/hooks/useAceEvent';
 import type { ChatMessage, GatewayConfig, ParserBatchMemory, SDKProvider } from './types';
 import { SystemHeader } from './SystemHeader';
 import { ConfigPanel } from './ConfigPanel';
@@ -18,6 +19,7 @@ const IDLE_MEMORY_KEY = 'system:dev:chatbar:idle';
 
 export default function AIChatbarTest() {
     const gatewayConfig = useAceMemory<GatewayConfig>(window.ACE.ai_gateway.memory_uid);
+    const { emit: emitSendGateway } = useAceEvent('send_gateway');
 
     const [memoryPrefix, setMemoryPrefix] = useState('system:dev:chatbar');
     const [activeMemoryUid, setActiveMemoryUid] = useState(IDLE_MEMORY_KEY);
@@ -158,19 +160,17 @@ export default function AIChatbarTest() {
         setActiveMemoryUid(turnMemoryUid);
         feedbackLoopTurnRef.current = 0;
 
-        window.ACE.event.emit({
-            event_type: 'interaction',
-            action: 'send_gateway',
-            payload: {
-                prompt: normalizedPrompt,
+        emitSendGateway(
+            { prompt: normalizedPrompt },
+            {
+                preallocated_memory: {
+                    reply_to_ram_key: turnMemoryUid,
+                    session_id: sid,
+                    sdk: selectedSdk,
+                    model: modelToUse,
+                },
             },
-            preallocated_memory: {
-                reply_to_ram_key: turnMemoryUid,
-                session_id: sid,
-                sdk: selectedSdk,
-                model: modelToUse,
-            },
-        } as any);
+        );
 
         setPrompt('');
     };

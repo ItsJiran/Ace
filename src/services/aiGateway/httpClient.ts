@@ -1,5 +1,4 @@
 import { KernelEngine } from '../kernelEngine';
-import { ProcessEngine } from '../processEngine';
 import { handleSessionStreamChunk } from './streamHandler';
 import { PROCESS_KIND } from '#/schemas/process';
 import { AI_GATEWAY_PROCESS_TYPE, AI_RESPONSE_STATUS, AI_SESSION_STATUS } from './types';
@@ -67,7 +66,7 @@ export async function sendToSession(
 
     const ownerProcessUid = typeof metadata?.process_uid === 'string' ? metadata.process_uid : undefined;
     const createdByProcess = ownerProcessUid
-        ? ProcessEngine.createRuntimeMemory({
+        ? KernelEngine.createRuntimeMemory({
             owner_process_uid: ownerProcessUid,
             owner_session_id: session.sessionId,
             memory_uid: replyToRamKey,
@@ -83,7 +82,7 @@ export async function sendToSession(
 
     const updateResponseMemory = (payload: Record<string, unknown>) => {
         const updated = ownerProcessUid
-            ? ProcessEngine.updateRuntimeMemory({
+            ? KernelEngine.updateRuntimeMemory({
                 owner_process_uid: ownerProcessUid,
                 memory_uid: replyToRamKey,
                 payload,
@@ -151,33 +150,23 @@ export async function sendToSession(
         const decoder = new TextDecoder();
 
         const parserProcessUid = ownerProcessUid
-            ? ProcessEngine.spawnSubprocess({
-                parent_process_uid: ownerProcessUid,
-                type: AI_GATEWAY_PROCESS_TYPE.PARSER_STREAM,
+            ? KernelEngine.spawnSubprocess(ownerProcessUid, AI_GATEWAY_PROCESS_TYPE.PARSER_STREAM, {
                 metadata: {
                     session_id: session.sessionId,
                     reply_to_ram_key: replyToRamKey,
                 },
                 process_kind: PROCESS_KIND.AI_BLOCK,
                 owner_engine: 'aiGatewayEngine',
-                payload: {
-                    status: AI_RESPONSE_STATUS.RUNNING,
-                    stage: 'stream_parse',
-                },
             }).process_uid
             : undefined;
 
         if (parserProcessUid) {
-            ProcessEngine.updateLifecycleState(parserProcessUid, 'running');
+            KernelEngine.updateProcessStatus(parserProcessUid, 'running');
         }
 
         const closeParserProcess = (state: 'done' | 'failed') => {
             if (!parserProcessUid) return;
-            ProcessEngine.updatePayload(parserProcessUid, {
-                status: state,
-                updated_at: Date.now(),
-            });
-            ProcessEngine.updateLifecycleState(parserProcessUid, state);
+            KernelEngine.updateProcessStatus(parserProcessUid, state);
         };
 
         let interrupted = false;
@@ -221,13 +210,7 @@ export async function sendToSession(
                 continue;
             }
 
-            if (parserProcessUid) {
-                ProcessEngine.updatePayload(parserProcessUid, {
-                    status: AI_RESPONSE_STATUS.RUNNING,
-                    last_chunk_bytes: value.byteLength,
-                    updated_at: Date.now(),
-                });
-            }
+            // per-chunk progress is tracked by the memory update, not process payload
         }
 
         if (interrupted) {
@@ -270,17 +253,12 @@ export async function sendToSession(
 
         if (ownerProcessUid) {
             // parser process may not exist for pre-fetch failures; this is safe no-op if missing.
-            const parserCandidates = ProcessEngine.getAll()
+            const parserCandidates = KernelEngine.getAllProcesses()
                 .filter((record) => record.parent_process_uid === ownerProcessUid && record.type === AI_GATEWAY_PROCESS_TYPE.PARSER_STREAM)
                 .sort((a, b) => b.updated_at - a.updated_at);
             const latestParser = parserCandidates[0];
             if (latestParser?.process_uid) {
-                ProcessEngine.updatePayload(latestParser.process_uid, {
-                    status: AI_RESPONSE_STATUS.FAILED,
-                    error_message: error instanceof Error ? error.message : String(error),
-                    updated_at: Date.now(),
-                });
-                ProcessEngine.updateLifecycleState(latestParser.process_uid, 'failed');
+                KernelEngine.updateProcessStatus(latestParser.process_uid, 'failed');
             }
         }
         const errorMessage = error instanceof Error ? error.message : String(error);

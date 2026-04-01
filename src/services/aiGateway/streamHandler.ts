@@ -1,5 +1,4 @@
 import { KernelEngine } from '../kernelEngine';
-import { ProcessEngine } from '../processEngine';
 import { EventBus } from '../eventEngine';
 import { AIContextEngine } from '../aiContextEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
@@ -296,7 +295,7 @@ function writeParserFailureMemory(input: {
     };
 
     if (processUid) {
-        const created = ProcessEngine.createRuntimeMemory({
+        const created = KernelEngine.createRuntimeMemory({
             owner_process_uid: processUid,
             owner_session_id: session.sessionId,
             memory_uid: parserErrorMemoryUid,
@@ -306,7 +305,7 @@ function writeParserFailureMemory(input: {
         });
 
         if (!created) {
-            ProcessEngine.updateRuntimeMemory({
+            KernelEngine.updateRuntimeMemory({
                 owner_process_uid: processUid,
                 memory_uid: parserErrorMemoryUid,
                 payload,
@@ -630,7 +629,7 @@ export function handleSessionStreamChunk(
     };
 
     const updatedByProcess = processUid
-        ? ProcessEngine.updateRuntimeMemory({
+        ? KernelEngine.updateRuntimeMemory({
             owner_process_uid: processUid,
             memory_uid: ramKey,
             payload: streamPayload,

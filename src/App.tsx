@@ -17,13 +17,26 @@ function App() {
 
   // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
   useEffect(() => {
-    import('./boot').then(({ bootACE }) => {
-      bootACE().then(() => {
-        setIsBootReady(true);
-      }).catch(() => {
-        setIsBootReady(false);
-      });
-    });
+    let isMounted = true;
+
+    void (async () => {
+      try {
+        const { bootACE } = await import('./boot');
+        await bootACE();
+        if (isMounted) {
+          setIsBootReady(true);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setIsBootReady(false);
+        }
+        console.error('[App] bootACE failed:', error);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // [Phase E] Initialize bridge hooks after React mounts
@@ -38,8 +51,11 @@ function App() {
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
   const renderedWindows = useAceMemory<Array<{ uid: string; component: string; process_uid: string }>>('system:rendered_windows') ?? [];
+
+
   if (!isBootReady || !overlayState) return null;
   const isAmbient = overlayState.mode === 'ambient';
+
 
   return (
     // 🚀 THE MAGIC WRAPPER

@@ -233,7 +233,10 @@ class KeybindEngineSingleton {
         GlobalStateManager.markKeybindRunning(matchedKeybind.keybind_uid);
 
         try {
-            EventBus.emit(matchedKeybind.intent);
+            EventBus.emit({
+                ...matchedKeybind.intent,
+                process_uid: matchedKeybind.intent.process_uid ?? 'system:keybind_engine',
+            });
         } finally {
             GlobalStateManager.clearRunningKeybind(matchedKeybind.keybind_uid);
         }

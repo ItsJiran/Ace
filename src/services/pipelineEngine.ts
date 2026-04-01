@@ -38,26 +38,24 @@ export class PipelineEngine<TInitial, TFinal> {
         // Optional: wrap entire pipeline as a tracked ProcessEngine record
         if (context.tracked) {
             const parentProcessUid = context.parent_process_uid ?? context.process_uid;
-            return KernelEngine.trackAsync(
-                `pipeline:${this.pipelineName}`,
-                {
-                    pipeline_name: this.pipelineName,
-                    parent_process_uid: parentProcessUid,
-                },
-                async (process_uid) => {
-                    return this._run(input, { ...context, process_uid, tracked: false });
-                },
-                {
-                    parent_process_uid: parentProcessUid,
+            const proc = parentProcessUid
+                ? KernelEngine.spawnSubprocess(parentProcessUid, `pipeline:${this.pipelineName}`, {
+                    metadata: { pipeline_name: this.pipelineName },
                     process_kind: 'pipeline_run',
                     owner_engine: 'pipelineEngine',
-                    payload: {
-                        status: 'running',
-                        pipeline_name: this.pipelineName,
-                        current_step: 'boot',
-                    },
-                },
-            );
+                })
+                : KernelEngine.spawnProcess(`pipeline:${this.pipelineName}`, { pipeline_name: this.pipelineName }, {
+                    process_kind: 'pipeline_run',
+                    owner_engine: 'pipelineEngine',
+                });
+            try {
+                const result = await this._run(input, { ...context, process_uid: proc.process_uid, tracked: false });
+                KernelEngine.updateProcessStatus(proc.process_uid, 'done');
+                return result;
+            } catch (err) {
+                KernelEngine.updateProcessStatus(proc.process_uid, 'failed');
+                throw err;
+            }
         }
         return this._run(input, context);
     }

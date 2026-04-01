@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useAceMemory } from '#/hooks/useAceMemory';
+import { useAceEvent } from '#/hooks/useAceEvent';
 
 type SDKProvider = 'openai' | 'google' | 'anthropic';
 
@@ -34,6 +35,7 @@ const IDLE_MEMORY_KEY = 'system:dev:prompt_chatbar:idle';
 
 export default function AIPromptChatbarDev() {
     const gatewayConfig = useAceMemory<GatewayConfig>(window.ACE.ai_gateway.memory_uid);
+    const { emit: emitSendGateway } = useAceEvent('send_gateway');
 
     const [selectedSdk, setSelectedSdk] = useState<SDKProvider>('openai');
     const [selectedModel, setSelectedModel] = useState('');
@@ -91,17 +93,17 @@ export default function AIPromptChatbarDev() {
         setIsSending(true);
         setActiveMemoryUid(memoryUid);
 
-        window.ACE.event.emit({
-            event_type: 'interaction',
-            action: 'send_gateway',
-            payload: { prompt: normalizedPrompt },
-            preallocated_memory: {
-                reply_to_ram_key: memoryUid,
-                session_id: sid,
-                sdk: selectedSdk,
-                model: modelToUse,
+        emitSendGateway(
+            { prompt: normalizedPrompt },
+            {
+                preallocated_memory: {
+                    reply_to_ram_key: memoryUid,
+                    session_id: sid,
+                    sdk: selectedSdk,
+                    model: modelToUse,
+                },
             },
-        } as any);
+        );
 
         setPrompt('');
     };

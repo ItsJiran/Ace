@@ -205,8 +205,9 @@ class AIContextEngineSingleton {
 
         EventBus.registerProcessRoute(
             'context:retrieve',
-            ({ payload, preallocated_memory }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown> }) => {
+            ({ payload, preallocated_memory, source }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown>; source?: { process_uid?: string } }) => {
                 const raw = (payload ?? {}) as ContextActionPayload;
+                const sourceProcessUid = source?.process_uid ?? 'system:ai_context_engine';
                 const sessionId =
                     typeof preallocated_memory?.session_id === 'string'
                         ? preallocated_memory.session_id
@@ -224,6 +225,7 @@ class AIContextEngineSingleton {
 
                 if (!memoryKey) {
                     this.publishContextResult({
+                        process_uid: sourceProcessUid,
                         sessionId,
                         eventName: 'parser_handler_error',
                         payload: {
@@ -253,6 +255,7 @@ class AIContextEngineSingleton {
                     }
 
                     this.publishContextResult({
+                        process_uid: sourceProcessUid,
                         sessionId,
                         eventName: 'parser_handler_error',
                         payload: {
@@ -287,6 +290,7 @@ class AIContextEngineSingleton {
                 }
 
                 this.publishContextResult({
+                    process_uid: sourceProcessUid,
                     sessionId,
                     eventName: 'parser_handler_result',
                     payload: {
@@ -305,8 +309,9 @@ class AIContextEngineSingleton {
 
         EventBus.registerProcessRoute(
             'context:store',
-            ({ payload, preallocated_memory }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown> }) => {
+            ({ payload, preallocated_memory, source }: { payload: Record<string, unknown>; preallocated_memory?: Record<string, unknown>; source?: { process_uid?: string } }) => {
                 const raw = (payload ?? {}) as ContextActionPayload;
+                const sourceProcessUid = source?.process_uid ?? 'system:ai_context_engine';
                 const sessionId =
                     typeof preallocated_memory?.session_id === 'string'
                         ? preallocated_memory.session_id
@@ -328,6 +333,7 @@ class AIContextEngineSingleton {
 
                 if (!sessionId) {
                     this.publishContextResult({
+                        process_uid: sourceProcessUid,
                         sessionId,
                         eventName: 'parser_handler_error',
                         payload: {
@@ -368,6 +374,7 @@ class AIContextEngineSingleton {
                 }
 
                 this.publishContextResult({
+                    process_uid: sourceProcessUid,
                     sessionId,
                     eventName: 'parser_handler_result',
                     payload: {
@@ -386,17 +393,19 @@ class AIContextEngineSingleton {
     }
 
     private publishContextResult(input: {
+        process_uid: string;
         sessionId?: string;
         eventName: 'parser_handler_result' | 'parser_handler_error';
         payload: Record<string, unknown>;
     }) {
-        const { sessionId, eventName, payload } = input;
+        const { process_uid, sessionId, eventName, payload } = input;
         if (!sessionId) return;
 
         EventBus.emit({
             event_type: 'interaction',
             action: 'parser_result',
             sub_action: 'session',
+            process_uid,
             payload: {
                 session_id: sessionId,
                 parsed_tag: 'context',

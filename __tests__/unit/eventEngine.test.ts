@@ -19,6 +19,7 @@ describe('EventBus (Command Pattern Routing)', () => {
             event_type: 'interaction',
             action: 'send',
             sub_action: 'send_gateway',
+            process_uid: 'test-process-1',
             payload: { text: "Hello AI" }
         };
 
@@ -31,8 +32,8 @@ describe('EventBus (Command Pattern Routing)', () => {
                 action: 'send',
                 sub_action: 'send_gateway',
                 payload: { text: 'Hello AI' },
-                preallocated_memory: {},
-                source: expect.objectContaining({ process_uid: undefined }),
+                preallocated_memory: expect.objectContaining({ parent_process_uid: 'test-process-1' }),
+                source: expect.objectContaining({ process_uid: 'test-process-1' }),
             }),
         );
 
@@ -55,6 +56,7 @@ describe('EventBus (Command Pattern Routing)', () => {
         const interaction: Interaction = {
             event_type: 'interaction',
             action: 'open',
+            process_uid: 'test-process-2',
             payload: { widget: "calendar" }
         };
 
@@ -78,6 +80,7 @@ describe('EventBus (Command Pattern Routing)', () => {
         EventBus.emit({
             event_type: 'interaction',
             action: 'execute_tool',
+            process_uid: 'test-process-3',
             payload: {}
         });
 
@@ -98,6 +101,7 @@ describe('EventBus (Command Pattern Routing)', () => {
         EventBus.emit({
             event_type: 'interaction',
             action: 'close',
+            process_uid: 'test-process-4',
             payload: {}
         });
 
@@ -158,5 +162,26 @@ describe('EventBus (Command Pattern Routing)', () => {
                 preallocated_memory: expect.objectContaining({ parent_process_uid: 'proc-parent-helper' }),
             }),
         );
+    });
+
+    it('should reject events that have no process_uid', () => {
+        const handler = vi.fn();
+        EventBus.registerProcessRoute('some_action', handler);
+
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        EventBus.emit({
+            event_type: 'interaction',
+            action: 'some_action',
+            payload: { data: 'test' },
+        });
+
+        // Handler must NOT fire — event was rejected
+        expect(handler).not.toHaveBeenCalled();
+        expect(spy).toHaveBeenCalledWith(
+            expect.stringContaining('REJECTED'),
+        );
+
+        spy.mockRestore();
     });
 });

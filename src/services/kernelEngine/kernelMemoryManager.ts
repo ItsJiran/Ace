@@ -1,5 +1,5 @@
 import type { RAMInteractivity } from '#/schemas/storage';
-import { ProcessRuntimeMemoryMeta, RuntimeMemoryRetentionPolicy, RuntimeMemoryScope } from '#/schemas/process';
+import type { ProcessRuntimeMemoryMeta, RuntimeMemoryRetentionPolicy, RuntimeMemoryScope } from '#/schemas/process';
 import { KernelState } from './kernelState';
 import { KernelTelemetry } from './kernelTelemetry';
 import { KernelContextManager } from './kernelContextManager';
@@ -46,15 +46,12 @@ export class KernelMemoryManager {
 
     /**
      * Resolves the requesting process's UID.
-     * A process_uid is always required — every piece of memory must be bound to a
-     * process so it can be traced and garbage-collected when that process terminates.
+     * Returns undefined when no uid is provided and async context tracking is not active.
+     * Async context tracking is not implemented yet — callers that need ownership tracking
+     * must pass process_uid explicitly.
      */
-    private static _getProcessUid(provided?: string): string {
-        const uid = provided || KernelContextManager.getCurrentProcessContext();
-        if (!uid) {
-            throw new Error('[KernelMemoryManager] memory operations require a process_uid.');
-        }
-        return uid;
+    private static _getProcessUid(provided?: string): string | undefined {
+        return provided || KernelContextManager.getCurrentProcessContext() || undefined;
     }
 
     /**
@@ -191,14 +188,14 @@ export class KernelMemoryManager {
      * Unlike createMemory / setMemory, this does NOT require a process_uid because
      * system memories are owned by the kernel, not by any user-space process.
      */
-    static registerSystemMemory(input: { memory_uid: string; payload: any }): void {
-        if (KernelState.kernel_memory.has(input.memory_uid)) return;
-        const immutablePayload = input.payload && typeof input.payload === 'object'
-            ? Array.isArray(input.payload) ? [...input.payload] : { ...input.payload }
-            : input.payload;
-        KernelState.kernel_memory.set(input.memory_uid, immutablePayload);
+    static registerSystemMemory(memory_uid: string, payload: any): void {
+        if (KernelState.kernel_memory.has(memory_uid)) return;
+        const immutablePayload = payload && typeof payload === 'object'
+            ? Array.isArray(payload) ? [...payload] : { ...payload }
+            : payload;
+        KernelState.kernel_memory.set(memory_uid, immutablePayload);
         this.notifyMemoryChanged();
-        KernelTelemetry.logDebug('registerSystemMemory', { memory_uid: input.memory_uid });
+        KernelTelemetry.logDebug('registerSystemMemory', { memory_uid });
     }
 
     // ─── Runtime Specific Allocation ──────────────────────────────────────

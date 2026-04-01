@@ -111,7 +111,7 @@
 
                 // Open devtools automatically in debug builds
                 if cfg!(debug_assertions) {
-                    // window.open_devtools();
+                    window.open_devtools();
                 }
                 Ok(())
             })

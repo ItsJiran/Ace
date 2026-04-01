@@ -1,6 +1,7 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useEffect, useMemo, useState } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
+import { useAceEvent } from '#/hooks/useAceEvent';
 import type { ConfigItem } from '#/schemas/config';
 import type { Keybind } from '#/schemas/keybinds';
 import type { WindowConfig } from '#/schemas/window';
@@ -51,6 +52,7 @@ export default function SystemWidget() {
     const [toolSource, setToolSource] = useState('');
     const [toolNote, setToolNote] = useState('');
     const [shortcutDrafts, setShortcutDrafts] = useState<Record<string, string>>({});
+    const { emit: emitOpenWindow } = useAceEvent('open_window');
 
     const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
     const keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
@@ -203,10 +205,10 @@ export default function SystemWidget() {
 
                             <SectionCard title="System Actions" subtitle="Jump to related system surfaces">
                                 <div className="grid grid-cols-1 gap-2">
-                                    <button data-window-action="true" onClick={() => window.ACE.event.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'tools_registry_list', title: 'Tools Registry', x: 180, y: 120, width: 520, height: 380 } } as any)} className={buttonClass}>Open Tools Registry</button>
-                                    <button data-window-action="true" onClick={() => window.ACE.event.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'window_registry_list', title: 'Window Registry', x: 240, y: 160, width: 520, height: 380 } } as any)} className={buttonClass}>Open Window Registry</button>
-                                    <button data-window-action="true" onClick={() => window.ACE.event.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'process_monitor', title: 'Process Monitor', x: 300, y: 200, width: 560, height: 420 } } as any)} className={buttonClass}>Open Process Monitor</button>
-                                    <button data-window-action="true" onClick={() => window.ACE.event.emit({ event_type: 'interaction', action: 'open_window', payload: { package: 'itsjiran/ace-system-dev', window: 'stress_test_menu', title: 'Stress Test Menu', x: 360, y: 100, width: 440, height: 340 } } as any)} className={buttonClass}>Open Stress Test Menu</button>
+                                    <button data-window-action="true" onClick={() => emitOpenWindow({ package: 'itsjiran/ace-system-dev', window: 'tools_registry_list', title: 'Tools Registry', x: 180, y: 120, width: 520, height: 380 })} className={buttonClass}>Open Tools Registry</button>
+                                    <button data-window-action="true" onClick={() => emitOpenWindow({ package: 'itsjiran/ace-system-dev', window: 'window_registry_list', title: 'Window Registry', x: 240, y: 160, width: 520, height: 380 })} className={buttonClass}>Open Window Registry</button>
+                                    <button data-window-action="true" onClick={() => emitOpenWindow({ package: 'itsjiran/ace-system-dev', window: 'process_monitor', title: 'Process Monitor', x: 300, y: 200, width: 560, height: 420 })} className={buttonClass}>Open Process Monitor</button>
+                                    <button data-window-action="true" onClick={() => emitOpenWindow({ package: 'itsjiran/ace-system-dev', window: 'stress_test_menu', title: 'Stress Test Menu', x: 360, y: 100, width: 440, height: 340 })} className={buttonClass}>Open Stress Test Menu</button>
                                 </div>
                             </SectionCard>
                         </div>

@@ -39,24 +39,24 @@ class ToolEngineSingleton {
         run: (processUid: string) => Promise<T>;
     }): Promise<T> {
         const { routeType, sourceProcessUid, metadata, payload, run } = input;
-        return KernelEngine.trackAsync(
-            routeType,
-            {
-                ...(metadata || {}),
-                source_process_uid: sourceProcessUid,
-            },
-            async (process_uid) => run(process_uid),
-            {
-                parent_process_uid: sourceProcessUid,
+        const proc = sourceProcessUid
+            ? KernelEngine.spawnSubprocess(sourceProcessUid, routeType, {
+                metadata: { ...(metadata || {}), source_process_uid: sourceProcessUid },
                 process_kind: 'tool_run',
                 owner_engine: 'toolEngine',
-                payload: {
-                    status: 'running',
-                    route_type: routeType,
-                    ...(payload || {}),
-                },
-            },
-        );
+            })
+            : KernelEngine.spawnProcess(routeType, metadata || {}, {
+                process_kind: 'tool_run',
+                owner_engine: 'toolEngine',
+            });
+        try {
+            const result = await run(proc.process_uid);
+            KernelEngine.updateProcessStatus(proc.process_uid, 'done');
+            return result;
+        } catch (err) {
+            KernelEngine.updateProcessStatus(proc.process_uid, 'failed');
+            throw err;
+        }
     }
 
     private writeToolResultMemory(input: {
@@ -154,17 +154,19 @@ class ToolEngineSingleton {
     }
 
     private publishToolActionResult(input: {
+        process_uid: string;
         sessionId?: string;
         eventName: HandlerLifecycleEventName;
         payload: Record<string, unknown>;
     }) {
-        const { sessionId, eventName, payload } = input;
+        const { process_uid, sessionId, eventName, payload } = input;
         if (!sessionId) return;
 
         EventBus.emit({
             event_type: 'interaction',
             action: 'parser_result',
             sub_action: 'session',
+            process_uid,
             payload: {
                 session_id: sessionId,
                 parsed_tag: 'tool',
@@ -177,11 +179,13 @@ class ToolEngineSingleton {
     }
 
     private publishToolActionStarted(input: {
+        process_uid: string;
         sessionId?: string;
         action: 'list' | 'view_schema' | 'execute';
         payload: Record<string, unknown>;
     }) {
         this.publishToolActionResult({
+            process_uid: input.process_uid,
             sessionId: input.sessionId,
             eventName: PARSER_RUNTIME_EVENT.HANDLER_STARTED,
             payload: {
@@ -274,23 +278,24 @@ class ToolEngineSingleton {
 
         const toolDef = result.entry.implementation as ToolDefinition<any>;
 
-        return KernelEngine.trackAsync(
-            `tool:${packageRef}:${toolSlug}`,
-            { packageRef, toolSlug, payload },
-            async (process_uid) => {
-                return toolDef.handler(validatedArgs, process_uid);
-            },
-            {
-                parent_process_uid: options?.parent_process_uid,
+        const proc = options?.parent_process_uid
+            ? KernelEngine.spawnSubprocess(options.parent_process_uid, `tool:${packageRef}:${toolSlug}`, {
+                metadata: { packageRef, toolSlug },
                 process_kind: 'tool_run',
                 owner_engine: 'toolEngine',
-                payload: {
-                    status: 'running',
-                    package_ref: packageRef,
-                    tool_slug: toolSlug,
-                },
-            },
-        );
+            })
+            : KernelEngine.spawnProcess(`tool:${packageRef}:${toolSlug}`, { packageRef, toolSlug }, {
+                process_kind: 'tool_run',
+                owner_engine: 'toolEngine',
+            });
+        try {
+            const result = await toolDef.handler(validatedArgs, proc.process_uid);
+            KernelEngine.updateProcessStatus(proc.process_uid, 'done');
+            return result;
+        } catch (err) {
+            KernelEngine.updateProcessStatus(proc.process_uid, 'failed');
+            throw err;
+        }
     }
 
     registerEventRoutes() {
@@ -314,6 +319,7 @@ class ToolEngineSingleton {
                 },
                 run: async (process_uid) => {
                     this.publishToolActionStarted({
+                        process_uid,
                         sessionId,
                         action: 'list',
                         payload: {
@@ -340,6 +346,7 @@ class ToolEngineSingleton {
                     }
 
                     this.publishToolActionResult({
+                        process_uid,
                         sessionId,
                         eventName: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
                         payload: {
@@ -384,6 +391,7 @@ class ToolEngineSingleton {
                 },
                 run: async (process_uid) => {
                     this.publishToolActionStarted({
+                        process_uid,
                         sessionId,
                         action: 'view_schema',
                         payload: {
@@ -395,6 +403,7 @@ class ToolEngineSingleton {
 
                     if (!package_ref || !tool_slug) {
                         this.publishToolActionResult({
+                            process_uid,
                             sessionId,
                             eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                             payload: {
@@ -438,6 +447,7 @@ class ToolEngineSingleton {
                     }
 
                     this.publishToolActionResult({
+                        process_uid,
                         sessionId,
                         eventName: result?.entry ? PARSER_RUNTIME_EVENT.HANDLER_RESULT : PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                         payload: {
@@ -495,6 +505,7 @@ class ToolEngineSingleton {
                 },
                 run: async (routeProcessUid) => {
                     this.publishToolActionStarted({
+                        process_uid: routeProcessUid,
                         sessionId,
                         action: 'execute',
                         payload: {
@@ -506,6 +517,7 @@ class ToolEngineSingleton {
 
                     if (!package_ref || !tool_slug) {
                         this.publishToolActionResult({
+                            process_uid: routeProcessUid,
                             sessionId,
                             eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                             payload: {
@@ -546,6 +558,7 @@ class ToolEngineSingleton {
                         }
 
                         this.publishToolActionResult({
+                            process_uid: routeProcessUid,
                             sessionId,
                             eventName: PARSER_RUNTIME_EVENT.HANDLER_RESULT,
                             payload: {
@@ -583,6 +596,7 @@ class ToolEngineSingleton {
                         }
 
                         this.publishToolActionResult({
+                            process_uid: routeProcessUid,
                             sessionId,
                             eventName: PARSER_RUNTIME_EVENT.HANDLER_ERROR,
                             payload: {

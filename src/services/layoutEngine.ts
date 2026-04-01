@@ -145,6 +145,7 @@ class LayoutEngineSingleton {
                 EventBus.emit({
                     event_type: 'interaction',
                     action: 'open_window',
+                    process_uid: 'system:layout_engine',
                     payload: {
                         package: pkg,
                         window: windowId,

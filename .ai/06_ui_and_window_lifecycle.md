@@ -14,8 +14,8 @@ The window layer is governed by runtime config and global state, especially `win
 2. **Routing**: The `EventBus` routes it to the `WindowEngine`.
 3. **Allocation**: `WindowEngine` generates a unique `window_uid`, assigns a `z_index`, and creates a `WindowConfig` entry.
 4. **Metadata**: The config may include `opacity`, `is_locked`, `always_on_top`, `chrome_style`, and `drag_surface`.
-5. **RAM Commitment**: The new window config is stored at `system:window:<uid>`, the logical index is appended to `system:active_windows`, and DOM rendering is batched into `system:rendered_windows`.
-6. **UI Rendering**: The main overlay React component detects the rendered entry and mounts the corresponding `AceWindow` shell or a custom local-state shell.
+5. **RAM Commitment**: The new window config is stored at `system:window:<uid>`. The window is then registered into `window_sys` (the `KernelWindowManager` source of truth) which immediately calls `flushToMemory()` to write the updated `system:rendered_windows`. This is the **sole** window index key — `system:active_windows` no longer exists.
+6. **UI Rendering**: `App.tsx` subscribes to `system:rendered_windows` and mounts the corresponding `AceWindow` shell (or custom local-state shell) wrapped in `ProcessContextProvider` + `WindowContextProvider`.
 
 ### 2. Physical State Updates (Resize/Move)
 1. **Direct Manipulation**: User drags a window.
@@ -94,6 +94,15 @@ The system avoids long-lived props or deep nesting. Instead, it uses **Dependenc
 - `is_locked` means manual dragging is disabled, but buttons, inputs, focus, and context menu interaction remain active.
 
 ---
+
+## Sync Update 2026-04-01 (window_sys Refactoring)
+
+- `system:active_windows` has been **completely removed**. `system:rendered_windows` is now the sole window index key.
+- `window_sys` (`Map<string, KernelWindowEntry>`) in `KernelState` is the in-memory source of truth. `KernelWindowManager.flushToMemory()` derives `system:rendered_windows` from it on every `registerWindow`/`unregisterWindow` call.
+- `KernelWindowEntry` shape: `{ window_uid, process_uid, component, memory_uids: Set<string> }`.
+- `WindowLifecycleManager.setupKernelSpace()` and `activeWindowsMemoryUid` have been removed.
+- `useWindowContext` hook created at `src/hooks/useWindowContext.tsx` — provides `{ window_uid, process_uid }` to window component trees.
+- `App.tsx` wraps each rendered window entry in `<ProcessContextProvider>` + `<WindowContextProvider>` before mounting the window shell.
 
 ## Sync Update (2026-03-27)
 

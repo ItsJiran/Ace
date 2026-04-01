@@ -213,7 +213,7 @@ There is exactly one exception where a React component is allowed to listen dire
 
     The Rule: We do not save { isShaking: true } in Global RAM because it creates a nightmare of manually resetting state to false.
 
-    The Execution: Components use a specialized, auto-cleaning hook (e.g., useAceListener) to listen for specific transient actions.
+    The Execution: Components use a specialized, auto-cleaning hook (`useAceEvent`) to listen for and/or emit transient actions.
 
     Safety Mechanism: The hook strictly requires an unsubscribe cleanup function on component unmount to guarantee zero ghost listeners and memory leaks.
 
