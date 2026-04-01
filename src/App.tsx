@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { useProcessContext } from '#/hooks/useProcessContext';
+import { ProcessContextProvider } from '#/hooks/useProcessContext';
+import { WindowContextProvider } from '#/hooks/useWindowContext';
 import { initializeBridgeHooks, registerProcessContextHook } from '#/services/bridgeHooks';
 import type { GlobalOverlayState } from '#/schemas/window';
 import { useRenderCount } from '#/hooks/useRenderCount';
@@ -35,7 +37,7 @@ function App() {
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
-  const renderedWindows = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
+  const renderedWindows = useAceMemory<Array<{ uid: string; component: string; process_uid: string }>>('system:rendered_windows') ?? [];
   if (!isBootReady || !overlayState) return null;
   const isAmbient = overlayState.mode === 'ambient';
 
@@ -56,11 +58,14 @@ function App() {
       {/* Render semua window */}
       {renderedWindows.map((entry) => {
         return (
-          <MemoizedWindowItem 
-              key={entry.uid} 
-              uid={entry.uid}
-              component={entry.component}
-          />
+          <ProcessContextProvider key={entry.uid} process_uid={entry.process_uid}>
+            <WindowContextProvider window_uid={entry.uid} process_uid={entry.process_uid}>
+              <MemoizedWindowItem
+                uid={entry.uid}
+                component={entry.component}
+              />
+            </WindowContextProvider>
+          </ProcessContextProvider>
         );
       })}
 

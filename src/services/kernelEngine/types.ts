@@ -21,6 +21,13 @@ export interface KernelProcessEntry {
     terminated_at?: number;
 }
 
+export interface KernelWindowEntry {
+    window_uid: string;
+    process_uid: string;
+    component: string;
+    memory_uids: Set<string>;
+}
+
 export interface KernelSharedEntry {
     memory_uid: string;
     lifecycle_status: 'active' | 'stale' | 'archived';

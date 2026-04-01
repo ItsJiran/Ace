@@ -416,7 +416,7 @@ function HorizontalBar({ windowUid, pkgs, onDragStart, onContextMenu, isDragging
     onContextMenu: (e: React.MouseEvent) => void;
     isDragging: boolean;
 }) {
-    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:active_windows') ?? [];
+    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
     const entries = aws.filter(w => w.uid !== windowUid);
 
     return (
@@ -458,7 +458,7 @@ function VerticalBar({ windowUid, pkgs, onDragStart, onContextMenu, isDragging }
     onContextMenu: (e: React.MouseEvent) => void;
     isDragging: boolean;
 }) {
-    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:active_windows') ?? [];
+    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
     const entries = aws.filter(w => w.uid !== windowUid);
 
     return (
@@ -509,7 +509,7 @@ function PillBar({ windowUid, pkgs, pillDir, onDragStart, onContextMenu, isDragg
     onContextMenu: (e: React.MouseEvent) => void;
     isDragging: boolean;
 }) {
-    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:active_windows') ?? [];
+    const aws = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
     const entries = aws.filter(w => w.uid !== windowUid);
     const [expanded, setExpanded] = useState(false);
     const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

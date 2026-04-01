@@ -27,6 +27,8 @@ class KernelEngineSingleton {
     // ── Memory Dispatcher ────────────────────────────────────────────────────────
     public commitMemory = KernelMemoryManager.commitMemory.bind(KernelMemoryManager);
     public createMemory = KernelMemoryManager.createMemory.bind(KernelMemoryManager);
+    public createMemoryIfNotExist = KernelMemoryManager.createMemoryIfNotExist.bind(KernelMemoryManager);
+    public createOrUpdateMemory = KernelMemoryManager.createOrUpdateMemory.bind(KernelMemoryManager);
     public setMemory = KernelMemoryManager.setMemory.bind(KernelMemoryManager);
     public writeMemory = KernelMemoryManager.writeMemory.bind(KernelMemoryManager);
     public updateMemory = KernelMemoryManager.updateMemory.bind(KernelMemoryManager);
@@ -55,6 +57,8 @@ class KernelEngineSingleton {
     public registerWindow = KernelWindowManager.registerWindow.bind(KernelWindowManager);
     public linkMemoryToWindow = KernelWindowManager.linkMemoryToWindow.bind(KernelWindowManager);
     public getWindowMemories = KernelWindowManager.getWindowMemories.bind(KernelWindowManager);
+    public getWindowEntry = KernelWindowManager.getWindowEntry.bind(KernelWindowManager);
+    public getRenderedWindows = KernelWindowManager.getRenderedWindows.bind(KernelWindowManager);
     public unregisterWindow = KernelWindowManager.unregisterWindow.bind(KernelWindowManager);
 
     // ── Process context ──────────────────────────────────────────────────────

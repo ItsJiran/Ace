@@ -59,9 +59,8 @@ export default function activate() {
     const existing = safeReadNotifications();
     persistNotifications(existing);
 
-    const activeWindows = (KernelEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
     const notificationWindowRef = 'itsjiran/ace-system:windows:notification-window';
-    const hasNotificationWindow = activeWindows.some((w) => w.component === notificationWindowRef);
+    const hasNotificationWindow = KernelEngine.getRenderedWindows().some((w) => w.component === notificationWindowRef);
 
     if (!hasNotificationWindow) {
         const screenW = typeof window !== 'undefined' ? window.innerWidth : 1920;

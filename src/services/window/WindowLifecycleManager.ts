@@ -15,9 +15,6 @@ export interface WindowLifecycleDependencies {
 }
 
 export class WindowLifecycleManager {
-    public readonly activeWindowsMemoryUid = 'system:active_windows';
-    public readonly renderedWindowsMemoryUid = 'system:rendered_windows';
-
     private spawnQueueWorker: Worker;
     private pendingSpawnRequests = new Map<string, SpawnWindowOptions>();
     private pendingSpawnProcesses = new Map<string, string>();
@@ -84,11 +81,6 @@ export class WindowLifecycleManager {
         };
 
         this.startAdaptivePacingLoop();
-    }
-
-    setupKernelSpace() {
-        KernelEngine.registerSystemMemory(this.activeWindowsMemoryUid, [] as Array<{ uid: string; component: string }>);
-        KernelEngine.registerSystemMemory(this.renderedWindowsMemoryUid, [] as Array<{ uid: string; component: string }>);
     }
 
     // ─── Deferred Writes and Adaptive Pacing ──────────────────────────────────
@@ -271,9 +263,9 @@ export class WindowLifecycleManager {
         };
 
         this.enqueueDeferredWrite(() => {
-            KernelEngine.registerWindow(window_uid);
-
             const ownerProcessUid = options.__process_uid;
+            KernelEngine.registerWindow(window_uid, ownerProcessUid ?? '', entryRef);
+
             if (ownerProcessUid) {
                 const created = KernelEngine.createRuntimeMemory({
                     owner_process_uid: ownerProcessUid,
@@ -289,11 +281,6 @@ export class WindowLifecycleManager {
 
             KernelEngine.writeMemory(this.deps.windowMemoryUid(window_uid), freshWindow);
             KernelEngine.linkMemoryToWindow(this.deps.windowMemoryUid(window_uid), window_uid);
-        });
-
-        this.enqueueDeferredWrite(() => {
-            const activeWindows = (KernelEngine.readMemory(this.activeWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
-            KernelEngine.updateMemory(this.activeWindowsMemoryUid, [...activeWindows, { uid: window_uid, component: entryRef }]);
         });
 
         this.enqueueDeferredWrite(() => {
@@ -319,18 +306,6 @@ export class WindowLifecycleManager {
 
             const batch = this.renderingQueue.splice(0, WindowLifecycleManager.RENDERING_BATCH_SIZE);
             if (batch.length > 0) {
-                const renderedWindows = (KernelEngine.readMemory(this.renderedWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
-                
-                const newRenderedList = [
-                    ...renderedWindows,
-                    ...batch.map((uid) => {
-                        const windowCfg = KernelEngine.readMemory(this.deps.windowMemoryUid(uid)) as WindowConfig | undefined;
-                        return { uid, component: windowCfg?.component ?? '' };
-                    })
-                ];
-
-                KernelEngine.updateMemory(this.renderedWindowsMemoryUid, newRenderedList);
-
                 requestAnimationFrame(() => {
                     for (const uid of batch) {
                         const pendingSeq = this.pendingAnimations.get(uid);
@@ -371,12 +346,6 @@ export class WindowLifecycleManager {
         }
 
         KernelEngine.deleteMemory(this.deps.windowMemoryUid(window_uid));
-
-        const activeWindows = (KernelEngine.readMemory(this.activeWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
-        KernelEngine.updateMemory(this.activeWindowsMemoryUid, activeWindows.filter((entry) => entry.uid !== window_uid));
-
-        const renderedWindows = (KernelEngine.readMemory(this.renderedWindowsMemoryUid) as Array<{ uid: string; component: string }> | undefined) ?? [];
-        KernelEngine.updateMemory(this.renderedWindowsMemoryUid, renderedWindows.filter((entry) => entry.uid !== window_uid));
 
         const focusedWindowUid = (KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined)
             ?? ((KernelEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);

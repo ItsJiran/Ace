@@ -48,8 +48,7 @@ export class CursorBridge {
     }
 
     private rebuildWindowCache() {
-        const activeWindows = (KernelEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) ?? [];
-        this.cachedWindowList = activeWindows
+        this.cachedWindowList = KernelEngine.getRenderedWindows()
             .map(({ uid }) => KernelEngine.readMemory(`system:window:${uid}`) as WindowConfig | undefined)
             .filter((config): config is WindowConfig => Boolean(config && !config.is_minimized));
     }
@@ -63,7 +62,7 @@ export class CursorBridge {
         let lastMetricsAt = 0;
 
         this.activeWindowsUnsub = KernelEngine.subscribe(
-            'system:active_windows',
+            'system:rendered_windows',
             () => {
                 this.rebuildWindowCache();
             }

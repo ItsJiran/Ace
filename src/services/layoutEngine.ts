@@ -50,8 +50,7 @@ class LayoutEngineSingleton {
      * @param name The display name of the layout
      */
     async saveLayout(name: string) {
-        const activeWindowUids = ((KernelEngine.readMemory('system:active_windows') as Array<{ uid: string; component: string }> | undefined) || [])
-            .map((entry) => entry.uid);
+        const activeWindowUids = KernelEngine.getRenderedWindows().map((entry) => entry.uid);
         if (activeWindowUids.length === 0) {
             console.warn('[LayoutEngine] No windows to save.');
             return;

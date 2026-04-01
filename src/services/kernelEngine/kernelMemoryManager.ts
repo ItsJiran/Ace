@@ -89,9 +89,44 @@ export class KernelMemoryManager {
      * @param memory_uid Optional designated ID. If omitted, a new distinct ID is generated.
      */
     static createMemory(payload: any, process_uid: string, memory_uid?: string): string {
+        if (memory_uid && KernelState.kernel_memory.has(memory_uid)) {
+            throw new Error(`[KernelMemoryManager] createMemory: uid already exists — use writeMemory or updateMemory to mutate existing entries: ${memory_uid}`);
+        }
         const uid = memory_uid || generateUid();
         this.writeMemoryInternal(uid, payload, this._getProcessUid(process_uid));
         return uid;
+    }
+
+    /**
+     * Create memory only if the uid does not already exist.
+     * If a slot with the same uid is already present, silently returns that uid without touching the existing payload.
+     * Requires `memory_uid` — callers that want auto-generated ids should use `createMemory` instead.
+     */
+    static createMemoryIfNotExist(memory_uid: string, payload: any, process_uid: string): string {
+        if (KernelState.kernel_memory.has(memory_uid)) return memory_uid;
+        this.writeMemoryInternal(memory_uid, payload, this._getProcessUid(process_uid));
+        return memory_uid;
+    }
+
+    /**
+     * Create memory if the uid does not exist, or return (and optionally merge) the existing entry.
+     * - If the uid is new: allocates with `payload` and returns `{ uid, created: true }`.
+     * - If the uid already exists: merges `payload` into the existing value (shallow merge),
+     *   notifies listeners, and returns `{ uid, created: false }`.
+     *
+     * Use this when you want "ensure this memory exists with at least these values" semantics.
+     */
+    static createOrUpdateMemory(memory_uid: string, payload: any, process_uid: string): { uid: string; created: boolean } {
+        if (!KernelState.kernel_memory.has(memory_uid)) {
+            this.writeMemoryInternal(memory_uid, payload, this._getProcessUid(process_uid));
+            return { uid: memory_uid, created: true };
+        }
+        const existing = KernelState.kernel_memory.get(memory_uid);
+        const merged = { ...existing, ...payload };
+        if (!isShallowEqual(existing, merged)) {
+            this.writeMemoryInternal(memory_uid, merged, process_uid);
+        }
+        return { uid: memory_uid, created: false };
     }
 
     static setMemory(memory_uid: string, payload: any, process_uid?: string): boolean {

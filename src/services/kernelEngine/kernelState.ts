@@ -1,4 +1,4 @@
-import { KernelProcessEntry, KernelSharedEntry } from './types';
+import { KernelProcessEntry, KernelSharedEntry, KernelWindowEntry } from './types';
 
 /**
  * KernelStateSingleton
@@ -18,7 +18,7 @@ class KernelStateSingleton {
     private _initSystemMaps(): void {
         this.kernel_memory.set('system:process_system', new Map<string, KernelProcessEntry>());
         this.kernel_memory.set('system:shared_system',  new Map<string, KernelSharedEntry>());
-        this.kernel_memory.set('system:window_system',  new Map<string, Set<string>>());
+        this.kernel_memory.set('system:window_system',  new Map<string, KernelWindowEntry>());
     }
 
     resetKernelSpace(): void {
@@ -31,8 +31,8 @@ class KernelStateSingleton {
         return this.kernel_memory.get('system:process_system') as Map<string, KernelProcessEntry>;
     }
 
-    get window_sys(): Map<string, Set<string>> {
-        return this.kernel_memory.get('system:window_system') as Map<string, Set<string>>;
+    get window_sys(): Map<string, KernelWindowEntry> {
+        return this.kernel_memory.get('system:window_system') as Map<string, KernelWindowEntry>;
     }
 }
 

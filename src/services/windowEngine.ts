@@ -35,8 +35,7 @@ export interface SpawnWindowOptions {
 
 class WindowEngineSingleton {
     public readonly overlayStateMemoryUid = 'system:overlay_state';
-    public readonly activeWindowsMemoryUid = 'system:active_windows';
-    public readonly renderedWindowsMemoryUid = 'system:rendered_windows';
+
     private highest_z_index = 100;
     private isRouteBound = false;
     private isTerminationHookBound = false;
@@ -80,7 +79,6 @@ class WindowEngineSingleton {
 
     setupKernelSpace() {
         this.overlayManager.setupKernelSpace();
-        this.lifecycleManager.setupKernelSpace();
         WindowAnimationController.setupKernelSpace();
     }
 

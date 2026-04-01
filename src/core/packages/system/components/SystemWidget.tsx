@@ -9,7 +9,7 @@ import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 export const registry: AceRegistryType.Component = {
     name: 'system_widget',
     slug: 'system-widget',
-    data_requirements: ['system:config', 'system:keybinds', 'system:active_windows', 'system:install_requests'],
+    data_requirements: ['system:config', 'system:keybinds', 'system:rendered_windows', 'system:install_requests'],
     react_behavior: 'system_center',
 };
 
@@ -54,7 +54,7 @@ export default function SystemWidget() {
 
     const configItems = useAceMemory<ConfigItem[]>('system:config') ?? [];
     const keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
-    const activeWindowsIndex = useAceMemory<Array<{ uid: string; component: string }>>('system:active_windows') ?? [];
+    const activeWindowsIndex = useAceMemory<Array<{ uid: string; component: string }>>('system:rendered_windows') ?? [];
     const installQueue = useAceMemory<InstallRequest[]>('system:install_requests') ?? [];
     const packageSummaries = useAceMemory<PackageSummary[]>('system:package_registry') ?? [];
     const [openWindows, setOpenWindows] = useState<WindowConfig[]>([]);
