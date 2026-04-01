@@ -170,7 +170,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
         
         const x = localX ?? 0;
         const y = localY ?? 0;
-        elementRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        elementRef.current.style.transform = `translate(${x}px, ${y}px)`;
     }, [localX, localY]);
 
     useEffect(() => {
@@ -372,12 +372,14 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                 // OPTIMIZATION: Apply transform directly to DOM (bypasses React)
                 const el = elementRef.current || document.getElementById(elementId);
                 if (el) {
-                    el.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+                    el.style.transform = `translate(${currentX}px, ${currentY}px)`;
                 }
                 
-                // ARCHITECTURE CHANGE: DO NOT update React state on every frame!
-                // We rely purely on direct DOM manipulation above to skip React render cycles.
-                // setLocalX/setLocalY are only called when the spring finally settles.
+                // ARCHITECTURE CHANGE: Update local state (not global!)
+                // This allows motion updates without triggering global subscriptions.
+                // Only this window's component will render, not all 50 windows.
+                setLocalX(currentX);
+                setLocalY(currentY);
 
                 // Continue loop if not settled
                 const settled = Math.abs(vx) < precision && Math.abs(vy) < precision && 
@@ -390,7 +392,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                     // Final snap and cleanup
                     rafId = null;
                     if (el) {
-                        el.style.transform = `translate3d(${targetX}px, ${targetY}px, 0)`;
+                        el.style.transform = `translate(${targetX}px, ${targetY}px)`;
                     }
                     
                     // Update local state to final position
