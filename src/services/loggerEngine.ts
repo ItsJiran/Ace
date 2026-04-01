@@ -48,7 +48,7 @@ class LoggerEngineSingleton {
         };
 
         console.groupEnd = (...args: any[]) => {
-            this.originalConsole.groupEnd(...args);
+            this.originalConsole.groupEnd();
             if (args.length > 0) {
                 this.writeEntry('info', args);
             }
@@ -73,21 +73,28 @@ class LoggerEngineSingleton {
         if (this.globalHandlersBound || typeof window === 'undefined') return;
 
         window.addEventListener('error', (event) => {
+            const pageUrl = this.getPageUrl();
             const message = event.error instanceof Error
                 ? event.error.stack || event.error.message
                 : event.message || 'Unknown window error';
-            this.originalConsole.error('[GlobalError]', message);
-            this.addLog('error', `[GlobalError] ${message}`);
-            this.writeToDebugLog('error', `[GlobalError] ${message}`);
+            const source = event.filename
+                ? `${event.filename}:${event.lineno}:${event.colno}`
+                : pageUrl;
+            const fullMessage = `[GlobalError] ${source} ${message}`;
+            this.originalConsole.error('[GlobalError]', source, message);
+            this.addLog('error', fullMessage);
+            this.writeToDebugLog('error', fullMessage);
         });
 
         window.addEventListener('unhandledrejection', (event) => {
+            const pageUrl = this.getPageUrl();
             const reason = event.reason instanceof Error
                 ? event.reason.stack || event.reason.message
                 : this.formatArgs([event.reason]);
-            this.originalConsole.error('[UnhandledRejection]', reason);
-            this.addLog('error', `[UnhandledRejection] ${reason}`);
-            this.writeToDebugLog('error', `[UnhandledRejection] ${reason}`);
+            const fullMessage = `[UnhandledRejection] ${pageUrl} ${reason}`;
+            this.originalConsole.error('[UnhandledRejection]', pageUrl, reason);
+            this.addLog('error', fullMessage);
+            this.writeToDebugLog('error', fullMessage);
         });
 
         this.globalHandlersBound = true;
@@ -97,6 +104,11 @@ class LoggerEngineSingleton {
         const message = this.formatArgs(args);
         this.addLog(level, message);
         this.writeToDebugLog(level, message);
+    }
+
+    private getPageUrl(): string {
+        if (typeof window === 'undefined') return 'unknown://runtime';
+        return window.location.href;
     }
 
     private formatArgs(args: any[]): string {
@@ -131,10 +143,11 @@ class LoggerEngineSingleton {
             id: Math.random().toString(36).substring(2, 9)
         };
 
-        const currentLogs = KernelEngine.readMemory(this.logsMemoryUid) as LogEntry[] || [];
+        const raw = KernelEngine.readMemory(this.logsMemoryUid);
+        const currentLogs = Array.isArray(raw) ? raw as LogEntry[] : [];
         const newLogs = [...currentLogs, entry].slice(-MAX_LOGS);
 
-        KernelEngine.updateMemory(this.logsMemoryUid, newLogs);
+        KernelEngine.writeMemory(this.logsMemoryUid, newLogs);
     }
 }
 

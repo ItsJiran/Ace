@@ -14,6 +14,7 @@ class KeybindEngineSingleton {
     private handleKeyDownRef?: (event: KeyboardEvent) => void;
     private lastTriggeredByUid = new Map<string, number>();
     private readonly triggerCooldownMs = 220;
+    private _lastKeybindsRaw: unknown = undefined;
 
     init() {
         if (this.isInitialized) return;
@@ -35,7 +36,11 @@ class KeybindEngineSingleton {
         }
 
         this.keybindsUnsub = KernelEngine.subscribe('system:keybinds', () => {
-            this.allKeybinds = (KernelEngine.readMemory('system:keybinds') as Keybind[] | undefined) || [];
+            const raw = KernelEngine.readMemory('system:keybinds');
+            // subscribe fires on ANY memory change; skip if keybinds ref is unchanged.
+            if (raw === this._lastKeybindsRaw) return;
+            this._lastKeybindsRaw = raw;
+            this.allKeybinds = Array.isArray(raw) ? raw as Keybind[] : [];
             
             if (import.meta.env.DEV) {
                 this.injectDevKeybinds();
@@ -87,8 +92,8 @@ class KeybindEngineSingleton {
     }
 
     private syncActiveKeybinds() {
-        const binds = KernelEngine.readMemory('system:keybinds') as Keybind[] | undefined;
-        this.allKeybinds = binds || [];
+        const binds = KernelEngine.readMemory('system:keybinds');
+        this.allKeybinds = Array.isArray(binds) ? binds as Keybind[] : [];
 
         if (import.meta.env.DEV) {
             this.injectDevKeybinds();

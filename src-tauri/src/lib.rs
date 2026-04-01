@@ -60,6 +60,32 @@
         }
     }
 
+    #[tauri::command]
+    fn log_to_file(app: tauri::AppHandle, line: String) -> Result<(), String> {
+        use std::fs::{create_dir_all, OpenOptions};
+        use std::io::Write;
+
+        let log_dir = app
+            .path()
+            .app_log_dir()
+            .map_err(|e| format!("log_to_file: failed to resolve app log dir: {}", e))?;
+
+        create_dir_all(&log_dir)
+            .map_err(|e| format!("log_to_file: failed to create log dir '{}': {}", log_dir.display(), e))?;
+
+        let log_path = log_dir.join("debug.log");
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .map_err(|e| format!("log_to_file: failed to open '{}': {}", log_path.display(), e))?;
+
+        writeln!(file, "{}", line)
+            .map_err(|e| format!("log_to_file: failed to write '{}': {}", log_path.display(), e))?;
+
+        Ok(())
+    }
+
     /// Execute a shell command and return stdout / stderr / exit_code.
     /// `command` is the program name (e.g. "git", "ls", "sudo").
     /// `args` are the arguments passed to the program.
@@ -100,6 +126,7 @@
                 set_ignore_cursor_events,
                 get_process_memory,
                 open_devtools,
+                log_to_file,
                 execute_shell
             ])
             .setup(|app| {

@@ -66,8 +66,7 @@ export class WindowLifecycleManager {
                                 window_uid: id,
                             });
                         } else {
-                            KernelEngine.updateProcessPayload(spawnProcessUid, {
-                                status: 'running',
+                            KernelEngine.updateProcessStatus(spawnProcessUid, 'running', {
                                 queue_state: 'spawned',
                                 window_uid: spawnedUid,
                                 live_state: 'open',
@@ -325,13 +324,11 @@ export class WindowLifecycleManager {
     closeWindow(window_uid: string, options?: { skipProcessLifecycle?: boolean }) {
         const windowProcessUid = this.activeWindowProcesses.get(window_uid);
         if (windowProcessUid && !options?.skipProcessLifecycle) {
-            KernelEngine.updateProcessPayload(windowProcessUid, {
-                status: 'done',
+            KernelEngine.updateProcessStatus(windowProcessUid, 'done', {
                 live_state: 'closed',
                 ended_window_uid: window_uid,
                 ended_at: Date.now(),
             });
-            KernelEngine.updateProcessStatus(windowProcessUid, 'done');
             this.activeWindowProcesses.delete(window_uid);
         } else if (windowProcessUid && options?.skipProcessLifecycle) {
             this.activeWindowProcesses.delete(window_uid);
