@@ -83,6 +83,7 @@ export interface AIRequestProtocolState {
  */
 export interface AISession {
     sessionId: string;
+    processUid?: string;
     sdk: SDKProvider;
     model: string;
 

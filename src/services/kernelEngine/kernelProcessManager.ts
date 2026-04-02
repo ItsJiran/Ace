@@ -26,6 +26,7 @@ export class KernelProcessManager {
         type: string,
         metadata?: Record<string, any>,
         options?: {
+            process_uid?: string;
             owner_engine?: string;
             process_kind?: ProcessKind;
             payload?: Record<string, any>;
@@ -34,14 +35,17 @@ export class KernelProcessManager {
             origin_widget_uid?: string;
         }
     ): ProcessRecord & { abort_signal: AbortSignal } {
-        const process_uid = 'proc-' + Math.random().toString(36).substring(2, 11);
+        const process_uid = options?.process_uid || 'proc-' + Math.random().toString(36).substring(2, 11);
         const record: ProcessRecord = {
             process_uid,
             type,
             status: 'running' as ProcessStatus,
             lifecycle_state: 'running',
             owner_engine: options?.owner_engine,
-            metadata: metadata || {}
+            metadata: metadata || {},
+            started_at: Date.now(),
+            updated_at: Date.now(),
+            process_generation: 1
         };
         const { abort_signal } = this._registerKernelProcess(record, null);
         KernelTelemetry.logDebug('spawnProcess', { process_uid, type, owner_engine: options?.owner_engine });
@@ -69,7 +73,10 @@ export class KernelProcessManager {
             status: 'running' as ProcessStatus,
             lifecycle_state: 'running',
             owner_engine: options?.owner_engine,
-            metadata: options?.metadata || {}
+            metadata: options?.metadata || {},
+            started_at: Date.now(),
+            updated_at: Date.now(),
+            process_generation: 1
         };
         const { abort_signal } = this._registerKernelProcess(record, parent_process_uid);
         KernelTelemetry.logDebug('spawnSubprocess', { process_uid, parent_process_uid, type, owner_engine: options?.owner_engine });

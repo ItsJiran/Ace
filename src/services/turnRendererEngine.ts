@@ -33,6 +33,7 @@ export interface TurnRendererMemory {
     turn_id: string;
     role: 'user' | 'assistant';
     renderers: TurnRendererEntry[];
+    owner_process_uid?: string;
     updated_at: number;
 }
 
@@ -63,7 +64,7 @@ class TurnRendererEngineSingleton {
     /**
      * Initialize a turn (call once when a new message starts).
      */
-    initTurn(turnId: string, role: 'user' | 'assistant'): void {
+    initTurn(turnId: string, role: 'user' | 'assistant', processUid?: string): void {
         const key = rendererMemoryKey(turnId);
         const existing = KernelEngine.readMemory(key);
         if (existing) return; // Already initialized
@@ -72,10 +73,19 @@ class TurnRendererEngineSingleton {
             turn_id: turnId,
             role,
             renderers: [],
+            owner_process_uid: processUid,
             updated_at: Date.now(),
         };
 
-        KernelEngine.writeMemory(key, payload);
+        if (processUid) {
+            KernelEngine.createRuntimeMemory({
+                owner_process_uid: processUid,
+                memory_uid: key,
+                payload,
+            });
+        } else {
+            KernelEngine.writeMemory(key, payload);
+        }
     }
 
     /**
@@ -93,9 +103,18 @@ class TurnRendererEngineSingleton {
         const renderers = current?.renderers ? [...current.renderers] : [];
         const index = renderers.length;
         const dataKey = rendererDataKey(turnId, index);
+        const ownerProcessUid = current?.owner_process_uid;
 
         // Store renderer data (props) in dedicated memory
-        KernelEngine.writeMemory(dataKey, entry.props ?? {});
+        if (ownerProcessUid) {
+            KernelEngine.createRuntimeMemory({
+                owner_process_uid: ownerProcessUid,
+                memory_uid: dataKey,
+                payload: entry.props ?? {}
+            });
+        } else {
+            KernelEngine.writeMemory(dataKey, entry.props ?? {});
+        }
 
         // Add entry to renderer list
         const newEntry: TurnRendererEntry = {
@@ -112,13 +131,22 @@ class TurnRendererEngineSingleton {
             turn_id: turnId,
             role: current?.role || 'assistant',
             renderers,
+            owner_process_uid: ownerProcessUid,
             updated_at: Date.now(),
         };
 
         if (current) {
-            KernelEngine.updateMemory(memKey, payload);
+            if (ownerProcessUid) {
+                KernelEngine.updateRuntimeMemory({ owner_process_uid: ownerProcessUid, memory_uid: memKey, payload });
+            } else {
+                KernelEngine.updateMemory(memKey, payload);
+            }
         } else {
-            KernelEngine.writeMemory(memKey, payload);
+            if (ownerProcessUid) {
+                KernelEngine.createRuntimeMemory({ owner_process_uid: ownerProcessUid, memory_uid: memKey, payload });
+            } else {
+                KernelEngine.writeMemory(memKey, payload);
+            }
         }
 
         return index;

@@ -40,7 +40,7 @@ import { finalizeRequestProtocolState } from './aiGateway/protocolLifecycle';
 import { AIContextEngine } from './aiContextEngine';
 import { AIContextMemoryEngine } from './aiContextMemoryEngine';
 import { KernelEngine } from './kernelEngine';
-import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
+import { PROCESS_STATUS } from '#/schemas/process';
 import type {
     AIGatewayFetchModelsResult,
     AIGatewayResponseResult,
@@ -207,41 +207,16 @@ class AIGatewayEngineSingleton {
     async createSession(sdk: SDKProvider, model: string, parentProcessUid?: string): Promise<string> {
         const sessionId = await AISessionManager.create(sdk, model);
 
-        const processRecord = parentProcessUid
-            ? KernelEngine.spawnSubprocess(parentProcessUid, AI_GATEWAY_PROCESS_TYPE.SESSION, {
-                metadata: {
-                    session_id: sessionId,
-                    sdk,
-                    model,
-                },
-                process_kind: PROCESS_KIND.CUSTOM,
-                owner_engine: 'aiGatewayEngine',
-                payload: {
-                    status: PROCESS_STATUS.RUNNING,
-                    live_state: 'connected',
-                    session_id: sessionId,
-                    sdk,
-                    model,
-                },
-            })
-            : KernelEngine.spawnProcess(AI_GATEWAY_PROCESS_TYPE.SESSION, {
-                session_id: sessionId,
-                sdk,
-                model,
-            }, {
-                process_kind: PROCESS_KIND.CUSTOM,
-                owner_engine: 'aiGatewayEngine',
-                payload: {
-                    status: PROCESS_STATUS.RUNNING,
-                    live_state: 'connected',
-                    session_id: sessionId,
-                    sdk,
-                    model,
-                },
-            });
+        // AISessionManager.create now safely manages the AI_SESSION kernel process internally
+        const processUid = `process:ai_session:${sessionId}`;
+        
+        if (parentProcessUid) {
+            // Note: Since we use custom predefined process UIDs, we might not cleanly support generic `spawnSubprocess` 
+            // without explicitly modifying process hierarchy in Kernel. But for AI sessions, mapping is enough right now.
+        }
 
-        KernelEngine.updateProcessStatus(processRecord.process_uid, PROCESS_STATUS.RUNNING);
-        this.sessionProcessBySessionId.set(sessionId, processRecord.process_uid);
+        KernelEngine.updateProcessStatus(processUid, PROCESS_STATUS.RUNNING);
+        this.sessionProcessBySessionId.set(sessionId, processUid);
 
         AIContextEngine.attachSession(sessionId);
         AIContextEngine.buildContext(sessionId, '', { sdk, model });
@@ -252,13 +227,11 @@ class AIGatewayEngineSingleton {
     closeSession(sessionId: string, options?: { skipProcessLifecycle?: boolean }): void {
         const sessionProcessUid = this.sessionProcessBySessionId.get(sessionId);
         if (sessionProcessUid && !options?.skipProcessLifecycle) {
-            KernelEngine.updateProcessPayload(sessionProcessUid, {
-                status: PROCESS_STATUS.DONE,
+            KernelEngine.updateProcessStatus(sessionProcessUid, PROCESS_STATUS.DONE, {
                 live_state: 'closed',
                 session_id: sessionId,
                 ended_at: Date.now(),
             });
-            KernelEngine.updateProcessStatus(sessionProcessUid, PROCESS_STATUS.DONE);
             this.sessionProcessBySessionId.delete(sessionId);
         } else if (sessionProcessUid && options?.skipProcessLifecycle) {
             this.sessionProcessBySessionId.delete(sessionId);

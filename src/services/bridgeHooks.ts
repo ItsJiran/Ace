@@ -143,6 +143,7 @@ const bridgeHooksModule: BridgeHooksModule = {
                     payload,
                     memory_scope: options?.memory_scope,
                     retention_policy: options?.retention_policy,
+                    classifications: options?.classifications,
                 }) || null
             );
         } catch (err) {

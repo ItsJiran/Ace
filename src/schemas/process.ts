@@ -12,6 +12,8 @@ export const PROCESS_KIND = {
     PIPELINE_RUN: 'pipeline_run',
     FS_TASK: 'fs_task',
     SHELL_TASK: 'shell_task',
+    AI_SESSION: 'ai_session',
+    AI_SESSION_TURN: 'ai_session_turn',
     CUSTOM: 'custom',
 } as const;
 
@@ -25,6 +27,8 @@ const PROCESS_KIND_VALUES = [
     PROCESS_KIND.PIPELINE_RUN,
     PROCESS_KIND.FS_TASK,
     PROCESS_KIND.SHELL_TASK,
+    PROCESS_KIND.AI_SESSION,
+    PROCESS_KIND.AI_SESSION_TURN,
     PROCESS_KIND.CUSTOM,
 ] as const;
 

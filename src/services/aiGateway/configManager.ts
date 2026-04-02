@@ -139,7 +139,7 @@ class AIConfigManagerSingleton {
         if (!this.config.sdks[sdk]) {
             this.config.sdks[sdk] = { api_key: '', models: [] };
         }
-        this.config.sdks[sdk]!.models = models;
+        this.config.sdks[sdk]!.models = models as any;
         return this.persist();
     }
 

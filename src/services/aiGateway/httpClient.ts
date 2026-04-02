@@ -45,7 +45,8 @@ export async function sendToSession(
     // ── PRE-ALLOCATION: write empty placeholder so subscribers see 'streaming' ──
     const createPayload = {
         original_prompt: metadata?.original_prompt ?? prompt,
-        prompt,
+        prompt: metadata?.original_prompt ?? prompt,
+        composed_prompt: prompt,
         used_contexts: metadata?.used_contexts ?? [],
         prompt_reference: metadata?.prompt_reference,
         response_reference: metadata?.response_reference,
@@ -65,20 +66,6 @@ export async function sendToSession(
     };
 
     const ownerProcessUid = typeof metadata?.process_uid === 'string' ? metadata.process_uid : undefined;
-    const createdByProcess = ownerProcessUid
-        ? KernelEngine.createRuntimeMemory({
-            owner_process_uid: ownerProcessUid,
-            owner_session_id: session.sessionId,
-            memory_uid: replyToRamKey,
-            payload: createPayload,
-            memory_scope: 'process',
-            retention_policy: 'keep_on_done',
-        })
-        : null;
-
-    if (!createdByProcess) {
-        KernelEngine.writeMemory(replyToRamKey, createPayload);
-    }
 
     const updateResponseMemory = (payload: Record<string, unknown>) => {
         const updated = ownerProcessUid
@@ -92,6 +79,9 @@ export async function sendToSession(
             KernelEngine.updateMemory(replyToRamKey, payload);
         }
     };
+
+    // Commit initial payload to the pre-allocated turn memory
+    updateResponseMemory(createPayload);
 
     const sdkConfig = gatewayConfig.sdks[session.sdk];
     if (!sdkConfig?.api_key) {

@@ -308,7 +308,7 @@ export async function executeSessionInteractionLoop(input: {
                 reply_to_ram_key: replyToRamKey,
                 prompt_preview: prompt.slice(0, 200),
             },
-            process_kind: PROCESS_KIND.GATEWAY_TURN,
+            process_kind: PROCESS_KIND.AI_SESSION_TURN,
             owner_engine: 'aiGatewayEngine',
         })
         : KernelEngine.spawnProcess(AI_GATEWAY_PROCESS_TYPE.RESPONSE_TURN, {
@@ -316,7 +316,7 @@ export async function executeSessionInteractionLoop(input: {
             reply_to_ram_key: replyToRamKey,
             prompt_preview: prompt.slice(0, 200),
         }, {
-            process_kind: PROCESS_KIND.GATEWAY_TURN,
+            process_kind: PROCESS_KIND.AI_SESSION_TURN,
             owner_engine: 'aiGatewayEngine',
         });
     KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.RUNNING);
@@ -340,7 +340,8 @@ export async function executeSessionInteractionLoop(input: {
         : [];
 
     const promptTurnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    TurnRendererEngine.initTurn(promptTurnId, 'assistant');
+    const sessionProcessUid = `process:ai_session:${sessionId}`;
+    TurnRendererEngine.initTurn(promptTurnId, 'assistant', sessionProcessUid);
     const currentTurn: ResponseTurnSnapshot = {
         turn_id: promptTurnId,
         original_prompt: prompt,

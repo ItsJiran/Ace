@@ -418,11 +418,12 @@ class AIContextMemoryEngineSingleton {
     }
 
     private syncItem(item: ContextMemoryItem) {
-        KernelEngine.writeMemory(this.itemMemoryUid(item.uid), item);
+        const processUid = item.session_id ? `process:ai_session:${item.session_id}` : undefined;
+        KernelEngine.writeMemory(this.itemMemoryUid(item.uid), item, processUid);
 
         const memory_key = this.extractMemoryKey(item.metadata);
         if (memory_key) {
-            KernelEngine.writeMemory(memory_key, item.payload);
+            KernelEngine.writeMemory(memory_key, item.payload, processUid);
         }
     }
 

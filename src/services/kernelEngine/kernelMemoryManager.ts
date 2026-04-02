@@ -123,7 +123,12 @@ export class KernelMemoryManager {
 
         if (process_uid) {
             const proc = KernelState.proc_sys.get(process_uid);
-            if (proc) proc.memories_ids.add(memory_uid);
+            if (proc) {
+                proc.memories_ids.add(memory_uid);
+                console.log(`[mem_bind] memory=${memory_uid} process=${process_uid}`);
+            } else {
+                console.warn(`[KernelMemoryManager] Attempted to bind memory ${memory_uid} to missing process ${process_uid}`);
+            }
         }
 
         this.notifyMemoryChanged(memory_uid);
@@ -279,6 +284,7 @@ export class KernelMemoryManager {
         owner_session_id?: string;
         memory_scope?: RuntimeMemoryScope;
         retention_policy?: RuntimeMemoryRetentionPolicy;
+        classifications?: string[];
     }): string | null {
         const uid = this.createMemory(input.payload, input.owner_process_uid, input.memory_uid);
         KernelTelemetry.logDebug('createRuntimeMemory', { memory_uid: uid, owner_process_uid: input.owner_process_uid });

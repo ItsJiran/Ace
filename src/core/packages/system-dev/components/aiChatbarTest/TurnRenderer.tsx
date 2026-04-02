@@ -50,22 +50,49 @@ function TurnRendererItem({ entry }: { entry: TurnRendererEntry }) {
 }
 
 /**
- * TurnRenderer — subscribes to a turn's renderer memory and renders all entries in order.
- *
- * Usage:
- *   <TurnRenderer turnId={msg.turnId} />
+ * TurnRenderer — subscribes to a specific Turn's Kernel Memory block
+ * and renders the isolated loop (User Prompt + Assistant Stream)
  */
-export function TurnRenderer({ turnId }: { turnId: string }) {
-    const memoryKey = `system:turn:${turnId}:renderers`;
-    const turnMemory = useAceMemory<TurnRendererMemory>(memoryKey);
+export function TurnRenderer({ turnMemoryUid }: { turnMemoryUid: string }) {
+    // Subscribe directly to the turn block! O(1) isolation.
+    const turn = useAceMemory<any>(turnMemoryUid);
 
-    if (!turnMemory?.renderers?.length) return null;
+    // Optional: hook for extensions (like tools) linked to this turn. 
+    // We assume turn.active_response_turn_id represents the ID for extensions if needed.
+    const parsedTurnId = turn?.active_response_turn_id;
+    const rendererMemoryKey = parsedTurnId ? `system:turn:${parsedTurnId}:renderers` : null;
+    const extensions = useAceMemory<TurnRendererMemory>(rendererMemoryKey);
+
+    if (!turn) return null;
 
     return (
-        <>
-            {turnMemory.renderers.map((entry) => (
-                <TurnRendererItem key={`${turnId}-${entry.index}`} entry={entry} />
+        <div className="w-full space-y-2 mb-4">
+            {/* User Prompt Bubble */}
+            {turn.prompt && (
+                <div className="flex justify-end">
+                    <div className="max-w-[85%] rounded-xl px-3 py-2 border whitespace-pre-wrap text-sm bg-cyan-700/40 border-cyan-500/40 text-cyan-50">
+                        <div className="text-[10px] uppercase tracking-wide mb-1 opacity-70">You</div>
+                        <div>{turn.original_prompt || turn.prompt}</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Assistant Streaming Bubble */}
+            <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-xl px-3 py-2 border whitespace-pre-wrap text-sm bg-zinc-900 border-zinc-700 text-zinc-200">
+                    <div className="text-[10px] uppercase tracking-wide mb-1 opacity-70">Assistant</div>
+                    <div>{turn.text || '...'}</div>
+                    
+                    <div className="mt-2 text-[10px] text-zinc-500">
+                        status: {turn.status || '-'} | batches: {turn.parser_batch_count ?? 0} | events: {turn.events_total ?? 0}
+                    </div>
+                </div>
+            </div>
+
+            {/* Extension Component Renderers (Tool outputs, UI injections) */}
+            {extensions?.renderers?.map((entry) => (
+                <TurnRendererItem key={`${parsedTurnId}-${entry.index}`} entry={entry} />
             ))}
-        </>
+        </div>
     );
 }

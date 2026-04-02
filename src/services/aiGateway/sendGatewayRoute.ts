@@ -27,7 +27,7 @@ export function registerSendGatewayRoute(input: {
                 status: AI_RESPONSE_STATUS.ERROR,
                 error_message: 'Prompt is required for send_gateway.',
                 finished_at: Date.now(),
-            });
+            }, parentProcessUid);
             return;
         }
 
@@ -52,6 +52,32 @@ export function registerSendGatewayRoute(input: {
             typeof preallocated_memory?.session_id === 'string'
                 ? preallocated_memory.session_id
                 : await input.createSession(preferredSdk, preferredModel, parentProcessUid);
+
+        // Pre-allocate the Turn Memory tied securely to the Session Process
+        const sessionProcessUid = `process:ai_session:${sessionId}`;
+        
+        KernelEngine.createRuntimeMemory({
+            owner_process_uid: sessionProcessUid,
+            owner_session_id: sessionId,
+            memory_uid: replyToRamKey,
+            payload: {
+                session_id: sessionId,
+                status: 'pending',
+                prompt,
+                started_at: Date.now(),
+            }
+        });
+
+        // Register this Turn inside the Master Session State array
+        const masterStateKey = `system:ai_session:${sessionId}:state`;
+        const sessionState = KernelEngine.readMemory(masterStateKey) || {};
+        const existingTurns = Array.isArray(sessionState.turn_memory_uids) ? sessionState.turn_memory_uids : [];
+        if (!existingTurns.includes(replyToRamKey)) {
+            KernelEngine.updateMemory(masterStateKey, {
+                ...sessionState,
+                turn_memory_uids: [...existingTurns, replyToRamKey]
+            });
+        }
 
         await input.sendToSession(sessionId, prompt, replyToRamKey, parentProcessUid);
     });
