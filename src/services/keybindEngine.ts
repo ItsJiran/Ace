@@ -298,13 +298,13 @@ class KeybindEngineSingleton {
 
         EventBus.registerProcessRoute('lookup', async (args) => {
             if (args.sub_action === 'toggle_overlay_mode') {
-                const currentMode = GlobalStateManager.readState().focus.overlay_mode;
+                const currentMode = GlobalStateManager.readDesktopState().mode;
                 WindowEngine.setOverlayMode(currentMode === 'ambient' ? 'interactive' : 'ambient');
                 return;
             }
 
             if (args.sub_action === 'set_window_mouse_focus' || args.sub_action === 'toggle_window_mouse_focus') {
-                const currentEnabled = GlobalStateManager.readState().focus.mouse_focus_enabled;
+                const currentEnabled = KernelEngine.readMemory('system:global_state:mouse_focus_enabled') ?? true;
                 const rawEnabled = args.payload?.enabled;
 
                 // Behavior contract:

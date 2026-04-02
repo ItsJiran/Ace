@@ -191,8 +191,7 @@ export class WindowLifecycleManager {
 
         KernelEngine.deleteMemory(this.deps.windowMemoryUid(window_uid));
 
-        const focusedWindowUid = (KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined)
-            ?? ((KernelEngine.readMemory('system:global_state') as any)?.focus?.focused_window_uid ?? null);
+        const focusedWindowUid = KernelEngine.readMemory('system:global_state:focused_window') as string | null | undefined;
         if (focusedWindowUid === window_uid) {
             GlobalStateManager.setFocusedWindow(null);
         }

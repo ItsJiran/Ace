@@ -98,14 +98,14 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     // OPTIMIZATION: Removed global animation subscription (`system:window_animations`).
     // Previously, every AceWindow re-rendered whenever ANY window animated.
     // We now fetch animation state on-demand during interactions, or rely on specific visual keys if needed.
-    const mouseFocusEnabled = useAceMemory<boolean>('system:mouse_focus_enabled') ?? true;
+    const mouseFocusEnabled = useAceMemory<boolean>('system:global_state:mouse_focus_enabled') ?? true;
 
     // Focus selector optimization:
     // Subscribe to focused uid but derive a per-window boolean snapshot.
     // This way, only the previously focused and newly focused windows re-render.
     // Other windows keep false -> false and skip re-render.
     const isFocused = useAceMemorySelector<string | null, boolean>(
-        'system:focused_window_uid',
+        'system:global_state:focused_window',
         (focusedUid) => focusedUid === windowUid
     );
 

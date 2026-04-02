@@ -5,7 +5,7 @@ import { useProcessContext } from '#/hooks/useProcessContext';
 import { ProcessContextProvider } from '#/hooks/useProcessContext';
 import { WindowContextProvider } from '#/hooks/useWindowContext';
 import { initializeBridgeHooks, registerProcessContextHook } from '#/services/bridgeHooks';
-import type { GlobalOverlayState } from '#/schemas/window';
+import type { DesktopState } from '#/schemas/globalState';
 import { useRenderCount } from '#/hooks/useRenderCount';
 import { MemoizedWindowItem } from '#/components/layout/MemoizedWindowItem';
 import type { KernelWindowEntry } from '#/services/kernelEngine/types';
@@ -48,7 +48,7 @@ function App() {
   }, [isBootReady]);
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
-  const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
+  const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
   const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>('system:window_system');
 
   const renderedWindowNodes = useMemo(() => {

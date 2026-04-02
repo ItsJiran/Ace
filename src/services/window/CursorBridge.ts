@@ -1,7 +1,8 @@
 import { KernelEngine } from '../kernelEngine';
 import { GlobalStateManager } from '../globalStateManager';
 import { cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
-import type { WindowConfig, GlobalOverlayState } from '#/schemas/window';
+import type { WindowConfig } from '#/schemas/window';
+import type { DesktopState } from '#/schemas/globalState';
 
 /**
  * Handles the high-frequency polling logic to bridge the gap between
@@ -92,16 +93,17 @@ export class CursorBridge {
         this.rebuildWindowCache();
 
         this.intervalId = window.setInterval(async () => {
-            const state = GlobalStateManager.readState();
+            const cursorState = GlobalStateManager.readCursorState();
 
             // Skip all expensive IPC polling if the user is currently actively interacting/dragging
-            if (state.cursor.is_pointer_down) {
+            if (cursorState.is_pointer_down) {
                 return;
             }
 
             // If mouse-focus behavior is disabled, always enforce ambient pass-through.
-            if (!state.focus.mouse_focus_enabled) {
-                const overlayState = KernelEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+            const mouseFocusEnabled = KernelEngine.readMemory('system:global_state:mouse_focus_enabled') as boolean | undefined ?? true;
+            if (!mouseFocusEnabled) {
+                const overlayState = KernelEngine.readMemory('system:global_state:desktop') as DesktopState | undefined;
                 if (overlayState?.mode !== 'ambient') {
                     this.onOverlayModeChange('ambient');
                 }
@@ -113,7 +115,7 @@ export class CursorBridge {
 
             if (windowList.length === 0) {
                 // If NO windows are open, force ambient mode (click-through)
-                const overlayState = KernelEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                const overlayState = KernelEngine.readMemory('system:global_state:desktop') as DesktopState | undefined;
                 if (overlayState?.mode !== 'ambient') {
                     this.onOverlayModeChange('ambient');
                 }
@@ -159,7 +161,7 @@ export class CursorBridge {
                     return true;
                 });
 
-                const overlayState = KernelEngine.readMemory('system:overlay_state') as GlobalOverlayState | undefined;
+                const overlayState = KernelEngine.readMemory('system:global_state:desktop') as DesktopState | undefined;
 
                 // If overlay is locked, always force interactive mode.
                 if (overlayState?.is_overlay_locked) {
@@ -186,7 +188,8 @@ export class CursorBridge {
                 }
 
                 // Release back to pass-through when cursor leaves windows and user is not dragging.
-                const isDragging = state.cursor.is_pointer_down;
+                const cursorState = GlobalStateManager.readCursorState();
+                const isDragging = cursorState.is_pointer_down;
                 if (!isCursorInsideAnyWindow && !isDragging && currentMode !== 'ambient') {
                     this.onOverlayModeChange('ambient');
                 }

@@ -1,7 +1,6 @@
 import { KernelEngine } from '../kernelEngine';
 import { GlobalStateManager } from '../globalStateManager';
 import type { WindowConfig } from '#/schemas/window';
-import type { GlobalState } from '#/schemas/globalState';
 
 export interface WindowFocusDependencies {
     getHighestZIndex: () => number;
@@ -22,17 +21,15 @@ export class WindowFocusManager {
     }
 
     private getMouseFocusEnabled() {
-        const mouseFocusMemory = KernelEngine.readMemory('system:mouse_focus_enabled');
+        const mouseFocusMemory = KernelEngine.readMemory('system:global_state:mouse_focus_enabled');
         if (typeof mouseFocusMemory === 'boolean') return mouseFocusMemory;
-        const globalState = KernelEngine.readMemory('system:global_state') as GlobalState | undefined;
-        return globalState?.focus.mouse_focus_enabled ?? true;
+        return true;
     }
 
     focusWindow(window_uid: string) {
         if (!this.getMouseFocusEnabled()) return;
 
-        const focusedWindowUid = (KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined)
-            ?? ((KernelEngine.readMemory('system:global_state') as GlobalState | undefined)?.focus.focused_window_uid ?? null);
+        const focusedWindowUid = (KernelEngine.readMemory('system:global_state:focused_window') as string | null | undefined) ?? null;
 
         const targetKey = this.windowMemoryUid(window_uid);
         const targetCfg = KernelEngine.readMemory(targetKey) as WindowConfig | undefined;
@@ -107,7 +104,7 @@ export class WindowFocusManager {
         this.deps.updateWindowConfig(window_uid, { is_minimized: true });
 
         // If the minimized window was focused, clear focus + return to ambient
-        const focusedUid = KernelEngine.readMemory('system:focused_window_uid') as string | null | undefined;
+        const focusedUid = KernelEngine.readMemory('system:global_state:focused_window') as string | null | undefined;
         if (focusedUid === window_uid) {
             GlobalStateManager.setFocusedWindow(null);
             this.deps.setOverlayMode('ambient');

@@ -1,7 +1,7 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge, Flame } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { GlobalOverlayState } from '#/schemas/window';
+import type { DesktopState } from '#/schemas/globalState';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { useAceEvent } from '#/hooks/useAceEvent';
 
@@ -32,7 +32,7 @@ export const registry: AceRegistryType.Component = {
 };
 
 export default function SystemDevConsole() {
-    const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
+    const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
     const registryDomains = useAceMemory<RuntimeRegistryDomains>('system:registry_domains');
 
     // Fallbacks just in case the engine isn't ready

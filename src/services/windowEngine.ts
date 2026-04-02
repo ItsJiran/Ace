@@ -34,7 +34,7 @@ export interface SpawnWindowOptions {
 }
 
 class WindowEngineSingleton {
-    public readonly overlayStateMemoryUid = 'system:overlay_state';
+    public readonly overlayStateMemoryUid = 'system:global_state:desktop';
 
     private highest_z_index = 100;
     private isRouteBound = false;

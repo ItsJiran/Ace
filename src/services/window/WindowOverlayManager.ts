@@ -4,10 +4,10 @@ import { PerformanceObserver } from '../performanceObserver';
 import { KernelEngine } from '../kernelEngine';
 import { CursorBridge } from './CursorBridge';
 import { AlwaysOnTopBridge } from './AlwaysOnTopBridge';
-import type { GlobalOverlayState } from '#/schemas/window';
+import type { DesktopState } from '#/schemas/globalState';
 
 export class WindowOverlayManager {
-    public readonly overlayStateMemoryUid = 'system:overlay_state';
+    public readonly overlayStateMemoryUid = 'system:global_state:desktop';
     
     private cursorBridge: CursorBridge;
     private alwaysOnTopBridge: AlwaysOnTopBridge;
@@ -32,12 +32,14 @@ export class WindowOverlayManager {
     setupKernelSpace() {
         KernelEngine.registerSystemMemory(this.overlayStateMemoryUid, {
             mode: 'ambient',
-            focused_window_uid: null,
             mouse_x: 0,
             mouse_y: 0,
             debug_bg: import.meta.env?.DEV ? false : false,
             is_overlay_locked: false,
-        } satisfies GlobalOverlayState);
+            focused_widget_uid: null,
+            active_element_tag: null,
+            active_element_role: null,
+        } satisfies DesktopState);
 
         // Prewarm the native IPC bridge at boot so the first spawn
         // does not pay the cold-path cost of the first-ever Tauri invoke.
@@ -65,7 +67,7 @@ export class WindowOverlayManager {
     }
 
     setOverlayMode(mode: 'ambient' | 'interactive') {
-        const overlayState = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState | undefined;
+        const overlayState = KernelEngine.readMemory(this.overlayStateMemoryUid) as DesktopState | undefined;
         if (overlayState?.mode === mode) return;
 
         GlobalStateManager.setOverlayMode(mode);
@@ -79,7 +81,7 @@ export class WindowOverlayManager {
     }
 
     toggleDebugBg() {
-        const state = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState;
+        const state = KernelEngine.readMemory(this.overlayStateMemoryUid) as DesktopState;
         if (state) {
             KernelEngine.updateMemory(this.overlayStateMemoryUid, { debug_bg: !state.debug_bg });
         }
@@ -90,7 +92,7 @@ export class WindowOverlayManager {
             this.toggleDebugBg();
         }
         if (payload.action === 'toggle_overlay_lock') {
-             const state = KernelEngine.readMemory(this.overlayStateMemoryUid) as GlobalOverlayState | undefined;
+             const state = KernelEngine.readMemory(this.overlayStateMemoryUid) as DesktopState | undefined;
              if (state) {
                 KernelEngine.updateMemory(this.overlayStateMemoryUid, { is_overlay_locked: !state.is_overlay_locked });
              }

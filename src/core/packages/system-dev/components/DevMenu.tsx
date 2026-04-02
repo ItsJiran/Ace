@@ -1,6 +1,6 @@
 import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench, Workflow, ListTree } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { GlobalOverlayState } from '#/schemas/window';
+import type { DesktopState } from '#/schemas/globalState';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { useAceEvent } from '#/hooks/useAceEvent';
 import type { AceRegistryType } from '#/schemas/registryTypes';
@@ -13,7 +13,7 @@ export const registry: AceRegistryType.Component = {
 };
 
 export default function DevMenu() {
-    const overlayState = useAceMemory<GlobalOverlayState>('system:overlay_state');
+    const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
     const isAmbient = overlayState?.mode === 'ambient';
 
     const { emit: emitDebugAction } = useAceEvent('debug_action');
