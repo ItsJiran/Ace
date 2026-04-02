@@ -263,7 +263,7 @@ export class WindowAnimationController {
 
         const el = slot.element;
         if (el) {
-            el.style.transform = `translate3d(${bounds.x}px, ${bounds.y}px, 0)`;
+            el.style.transform = `translate(${bounds.x}px, ${bounds.y}px)`;
             el.style.width = `${bounds.width}px`;
             el.style.height = `${bounds.height}px`;
         }

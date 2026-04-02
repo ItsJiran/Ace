@@ -3,6 +3,7 @@ import type { ProcessRuntimeMemoryMeta, RuntimeMemoryRetentionPolicy, RuntimeMem
 import { KernelState } from './kernelState';
 import { KernelTelemetry } from './kernelTelemetry';
 import { KernelContextManager } from './kernelContextManager';
+import { PerformanceObserver } from '../performanceObserver';
 
 const generateUid = () => 'mem-' + Math.random().toString(36).substring(2, 11);
 const textEncoder = new TextEncoder();
@@ -103,6 +104,7 @@ export class KernelMemoryManager {
      * Internal mutation handler that establishes equality checks and bounds the memory to its owner process.
      */
     private static writeMemoryInternal(memory_uid: string, payload: any, process_uid?: string): void {
+        PerformanceObserver.trackRamOp();
         const existingPayload = KernelState.kernel_memory.get(memory_uid);
 
         if (isShallowEqual(existingPayload, payload)) return;
@@ -196,6 +198,7 @@ export class KernelMemoryManager {
     }
 
     static readMemory(memory_uid: string): any {
+        PerformanceObserver.trackRamOp();
         return memory_uid ? KernelState.kernel_memory.get(memory_uid) : undefined;
     }
 
@@ -214,6 +217,7 @@ export class KernelMemoryManager {
     }
 
     static deleteMemory(memory_uid: string): boolean {
+        PerformanceObserver.trackRamOp();
         if (!memory_uid || !KernelState.kernel_memory.has(memory_uid)) return false;
         KernelState.kernel_memory.delete(memory_uid);
         this.notifyMemoryChanged(memory_uid);

@@ -374,12 +374,6 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                 if (el) {
                     el.style.transform = `translate(${currentX}px, ${currentY}px)`;
                 }
-                
-                // ARCHITECTURE CHANGE: Update local state (not global!)
-                // This allows motion updates without triggering global subscriptions.
-                // Only this window's component will render, not all 50 windows.
-                setLocalX(currentX);
-                setLocalY(currentY);
 
                 // Continue loop if not settled
                 const settled = Math.abs(vx) < precision && Math.abs(vy) < precision && 

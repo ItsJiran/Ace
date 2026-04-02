@@ -50,6 +50,33 @@ export default function DevMenu() {
         });
     };
 
+    const spawnPerformanceDebug = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'perf-debug-window',
+            title: 'Performance Debug',
+            width: 450,
+            height: 500,
+            x: 200,
+            y: 100
+        });
+    };
+
+    const spawnPerformanceWidget = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'perf-hud-window',
+            title: 'Performance HUD',
+            width: 220,
+            height: 40,
+            x: typeof window !== 'undefined' ? window.innerWidth - 240 : 100,
+            y: 20,
+            chrome_style: 'borderless',
+            always_on_top: true,
+            is_locked: false, // user might want to drag it
+        });
+    };
+
     const spawnStressTest = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system-dev',
@@ -57,18 +84,6 @@ export default function DevMenu() {
             title: 'Stress Test Suite',
             width: 380,
             height: 480,
-            x: 200,
-            y: 100
-        });
-    };
-
-    const spawnAIStressTest = () => {
-        window.ACE.window.spawnWindow({
-            package: 'itsjiran/ace-system-dev',
-            window: 'ai-stress-test-window',
-            title: 'AI Stress Test',
-            width: 600,
-            height: 500,
             x: 200,
             y: 100
         });
@@ -332,14 +347,19 @@ export default function DevMenu() {
                 Open DevTools
             </button>
 
+            <button onClick={spawnPerformanceDebug} className={buttonClass}>
+                <Activity size={14} className="text-pink-400" />
+                Performance Metrics (RAM/FPS)
+            </button>
+
+            <button onClick={spawnPerformanceWidget} className={buttonClass}>
+                <Activity size={14} className="text-amber-400" />
+                Performance Widget (HUD)
+            </button>
+
             <button onClick={spawnStressTest} className={buttonClass}>
                 <Activity size={14} className="text-rose-400" />
                 Spawn Stress Test Widget
-            </button>
-
-            <button onClick={spawnAIStressTest} className={buttonClass}>
-                <Activity size={14} className="text-pink-400" />
-                Spawn AI Stress Test
             </button>
 
             <button onClick={spawnPromptMorphWindow} className={buttonClass}>

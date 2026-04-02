@@ -50,6 +50,7 @@
     "globals": "^16.5.0",
     "jsdom": "^28.1.0",
     "postcss": "^8.5.8",
+    "recharts": "^3.8.1",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
