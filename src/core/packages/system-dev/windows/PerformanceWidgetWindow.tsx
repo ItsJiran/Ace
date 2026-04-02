@@ -10,7 +10,16 @@ export const registry: AceRegistryType.Window = {
     react_behavior: 'window_shell',
 };
 
-type PerfMetrics = { ramOps: number; windowSpawns: number; fpsAverage: number };
+type PerfMetrics = { 
+    ramOps: number; 
+    windowSpawns: number; 
+    fpsAverage: number;
+    domNodes: number;
+    jsHeapMb: number;
+    ipcOps: number;
+    maxFrameTimeMs: number;
+    activeWindows: number;
+};
 
 const MAX_HISTORY = 30;
 
@@ -27,7 +36,13 @@ export default function PerformanceWidgetWindow({ windowUid }: { windowUid: stri
         return () => window.removeEventListener('ace:perf_tick', handler);
     }, []);
 
-    const current = history[history.length - 1] || { ramOps: 0, windowSpawns: 0, fpsAverage: 60 };
+    const current = history[history.length - 1] || { 
+        ramOps: 0, windowSpawns: 0, fpsAverage: 60, 
+        domNodes: 0, jsHeapMb: 0, ipcOps: 0, maxFrameTimeMs: 0, activeWindows: 0 
+    };
+    const avgFps = history.length > 0 ? Math.round(history.reduce((sum, item) => sum + item.fpsAverage, 0) / history.length) : current.fpsAverage;
+    const peakRam = Math.max(0, ...history.map((h) => h.ramOps));
+    const peakJank = Math.max(0, ...history.map((h) => h.maxFrameTimeMs));
 
     const maxRam = Math.max(1, ...history.map(h => h.ramOps));
     const maxFps = 60;
@@ -72,6 +87,20 @@ export default function PerformanceWidgetWindow({ windowUid }: { windowUid: stri
                 {history.length > 0 && maxSpawns > 1 && (
                      <div className="text-[10px] font-mono text-center text-zinc-400 mt-2 pt-2 border-t border-zinc-800/50">
                         Peak Spawns: <span className="text-indigo-400">{maxSpawns}</span>/sec
+                    </div>
+                )}
+
+                {history.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mt-2 border-t border-zinc-800/50 pt-2 text-[10px] font-mono text-zinc-400">
+                        <div className="rounded bg-zinc-900/70 px-2 py-1 text-center">
+                            avg fps <span className="text-emerald-400">{avgFps}</span>
+                        </div>
+                        <div className="rounded bg-zinc-900/70 px-2 py-1 text-center">
+                            peak ops <span className="text-amber-400">{peakRam}</span>
+                        </div>
+                        <div className="rounded bg-zinc-900/70 px-2 py-1 text-center">
+                            jank <span className="text-rose-400">{Math.round(peakJank)}ms</span>
+                        </div>
                     </div>
                 )}
             </div>

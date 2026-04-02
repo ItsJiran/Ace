@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AceWindow } from '#/components/layout/AceWindow';
-import { Activity, Gauge, MonitorCheck, Database } from 'lucide-react';
+import { Activity, Gauge, Cpu, LayoutGrid, Zap, PanelsTopLeft } from 'lucide-react';
 import { 
     ResponsiveContainer, 
     AreaChart, 
     Area, 
-    LineChart, 
-    Line, 
     XAxis, 
     YAxis, 
     CartesianGrid, 
@@ -20,10 +18,66 @@ export const registry: AceRegistryType.Window = {
     react_behavior: 'window_shell',
 };
 
-type PerfMetrics = { ramOps: number; windowSpawns: number; fpsAverage: number };
+type PerfMetrics = {
+    ramOps: number;
+    windowSpawns: number;
+    fpsAverage: number;
+    domNodes: number;
+    jsHeapMb: number;
+    ipcOps: number;
+    maxFrameTimeMs: number;
+    activeWindows: number;
+};
+
+type MetricKey = keyof PerfMetrics;
+
+type MetricStats = {
+    current: number;
+    min: number;
+    avg: number;
+    max: number;
+};
+
+const EMPTY_METRICS: PerfMetrics = {
+    ramOps: 0,
+    windowSpawns: 0,
+    fpsAverage: 60,
+    domNodes: 0,
+    jsHeapMb: 0,
+    ipcOps: 0,
+    maxFrameTimeMs: 0,
+    activeWindows: 0,
+};
+
+const METRIC_CONFIG: Array<{ key: MetricKey; label: string; accentClass: string; chartKey: string }> = [
+    { key: 'fpsAverage', label: 'FPS', accentClass: 'text-emerald-400', chartKey: 'fpsAverage' },
+    { key: 'maxFrameTimeMs', label: 'Peak Frame ms', accentClass: 'text-amber-400', chartKey: 'maxFrameTimeMs' },
+    { key: 'ramOps', label: 'RAM Ops/s', accentClass: 'text-fuchsia-400', chartKey: 'ramOps' },
+    { key: 'windowSpawns', label: 'Window Spawns/s', accentClass: 'text-sky-400', chartKey: 'windowSpawns' },
+    { key: 'domNodes', label: 'DOM Nodes', accentClass: 'text-indigo-400', chartKey: 'domNodes' },
+    { key: 'jsHeapMb', label: 'JS Heap MB', accentClass: 'text-cyan-400', chartKey: 'jsHeapMb' },
+    { key: 'ipcOps', label: 'IPC Ops/s', accentClass: 'text-orange-400', chartKey: 'ipcOps' },
+    { key: 'activeWindows', label: 'Active Windows', accentClass: 'text-teal-400', chartKey: 'activeWindows' },
+];
+
+const formatMetricValue = (key: MetricKey, value: number) => {
+    if (key === 'maxFrameTimeMs') {
+        return `${Math.round(value)}ms`;
+    }
+
+    if (key === 'jsHeapMb') {
+        return value > 0 ? `${Math.round(value)} MB` : 'N/A';
+    }
+
+    if (key === 'fpsAverage') {
+        return Math.round(value).toString();
+    }
+
+    return Math.round(value).toLocaleString();
+};
 
 export default function PerformanceDebugWindow({ windowUid }: { windowUid: string }) {
-    const [metrics, setMetrics] = useState<PerfMetrics>({ ramOps: 0, windowSpawns: 0, fpsAverage: 60 });
+    const [metrics, setMetrics] = useState<PerfMetrics>(EMPTY_METRICS);
     const [history, setHistory] = useState<PerfMetrics[]>([]);
 
     useEffect(() => {
@@ -36,18 +90,40 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
         return () => window.removeEventListener('ace:perf_tick', handler);
     }, []);
 
-    // Format data for Recharts, optionally smoothing or parsing
+    const metricStats = useMemo<Record<MetricKey, MetricStats>>(() => {
+        const source = history.length > 0 ? history : [metrics];
+
+        return METRIC_CONFIG.reduce<Record<MetricKey, MetricStats>>((acc, metric) => {
+            const values = source.map((entry) => entry[metric.key]);
+            const total = values.reduce((sum, value) => sum + value, 0);
+
+            acc[metric.key] = {
+                current: metrics[metric.key],
+                min: Math.min(...values),
+                avg: Number((total / values.length).toFixed(1)),
+                max: Math.max(...values),
+            };
+
+            return acc;
+        }, {} as Record<MetricKey, MetricStats>);
+    }, [history, metrics]);
+
     const data = history.map((h, i) => ({
         time: i,
-        fps: h.fpsAverage,
+        fpsAverage: h.fpsAverage,
         ramOps: h.ramOps,
-        spawns: h.windowSpawns,
+        windowSpawns: h.windowSpawns,
+        domNodes: h.domNodes,
+        jsHeapMb: h.jsHeapMb,
+        ipcOps: h.ipcOps,
+        maxFrameTimeMs: h.maxFrameTimeMs,
+        activeWindows: h.activeWindows,
     }));
 
     return (
         <AceWindow windowUid={windowUid}>
             <div className="w-full h-full bg-zinc-950 text-white p-4 flex flex-col gap-4 overflow-y-auto">
-                <div className="grid grid-cols-2 gap-4 flex-shrink-0">
+                <div className="flex flex-col">
                     <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
                         <Activity className="text-emerald-400 mb-2" size={24} />
                         <div className={`text-4xl font-bold ${metrics.fpsAverage < 30 ? 'text-rose-500' : metrics.fpsAverage < 50 ? 'text-amber-500' : 'text-emerald-400'}`}>
@@ -63,76 +139,100 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                         </div>
                         <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">RAM Ops / sec</div>
                     </div>
+
+                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
+                        <Zap className="text-amber-400 mb-2" size={24} />
+                        <div className="text-2xl font-bold text-amber-400">
+                            {Math.round(metrics.maxFrameTimeMs)}ms
+                        </div>
+                        <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">Peak Frame</div>
+                    </div>
+
+                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
+                        <LayoutGrid className="text-indigo-400 mb-2" size={24} />
+                        <div className="text-2xl font-bold text-indigo-400">
+                            {metrics.domNodes.toLocaleString()}
+                        </div>
+                        <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">DOM Nodes</div>
+                    </div>
+
+                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
+                        <Cpu className="text-cyan-400 mb-2" size={24} />
+                        <div className="text-2xl font-bold text-cyan-400">
+                            {metrics.jsHeapMb > 0 ? `${metrics.jsHeapMb} MB` : 'N/A'}
+                        </div>
+                        <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">JS Heap</div>
+                    </div>
                 </div>
 
-                {/* Recharts Area Chart for RAM Operations */}
-                <div className="flex-1 min-h-[220px] bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col relative w-full">
-                    <div className="flex items-center gap-2 mb-2 text-zinc-400 text-sm font-semibold sticky top-0">
-                        <Database size={16} /> <span>1-Minute History (RAM Ops)</span>
+                <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col gap-3">
+                    <div className="flex items-center gap-2 text-zinc-300 text-sm font-semibold">
+                        <PanelsTopLeft size={16} />
+                        <span>Metric Charts</span>
                     </div>
-                    {history.length === 0 ? (
-                        <div className="text-zinc-600 flex-1 flex items-center justify-center text-sm">Gathering data...</div>
-                    ) : (
-                        <div className="flex-1 w-full min-h-[160px] h-full absolute inset-0 pt-10 pb-4 pr-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={data} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" vertical={false} />
-                                    <XAxis dataKey="time" hide />
-                                    <YAxis stroke="#71717a" fontSize={11} width={35} />
-                                    <Tooltip 
-                                        contentStyle={{ backgroundColor: '#18181b', borderColor: '#3f3f46', borderRadius: '6px', color: '#fff' }}
-                                        itemStyle={{ color: '#d946ef', fontWeight: 'bold' }}
-                                        labelStyle={{ display: 'none' }}
-                                        formatter={(value) => [`${value} operations`, 'RAM Ops']}
-                                    />
-                                    <Area 
-                                        type="monotone" 
-                                        dataKey="ramOps" 
-                                        stroke="#d946ef" 
-                                        fill="#d946ef" 
-                                        fillOpacity={0.2} 
-                                        strokeWidth={2}
-                                        isAnimationActive={false}
-                                    />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
-                </div>
 
-                {/* Recharts Line Chart for FPS */}
-                <div className="flex-1 min-h-[220px] bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col relative w-full">
-                    <div className="flex items-center gap-2 mb-2 text-zinc-400 text-sm font-semibold sticky top-0">
-                        <MonitorCheck size={16} /> <span>FPS Decay History</span>
+                    <div className="flex flex-col gap-4">
+                        {METRIC_CONFIG.map((metric) => {
+                            const stats = metricStats[metric.key];
+
+                            return (
+                                <div key={metric.key} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                                    <div className="flex items-baseline justify-between gap-3">
+                                        <div className={`text-[11px] font-semibold uppercase tracking-widest ${metric.accentClass}`}>
+                                            {metric.label}
+                                        </div>
+                                        <div className={`text-sm font-mono font-bold ${metric.accentClass}`}>
+                                            {formatMetricValue(metric.key, stats.current)}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 h-20 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                                                <XAxis dataKey="time" hide />
+                                                <YAxis hide domain={[0, 'auto']} />
+                                                <Tooltip
+                                                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#3f3f46', borderRadius: '6px', color: '#fff' }}
+                                                    labelStyle={{ display: 'none' }}
+                                                    formatter={(value) => [formatMetricValue(metric.key, Number(value)), metric.label]}
+                                                />
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey={metric.chartKey}
+                                                    stroke="currentColor"
+                                                    className={metric.accentClass}
+                                                    fill="currentColor"
+                                                    fillOpacity={0.18}
+                                                    strokeWidth={2}
+                                                    isAnimationActive={false}
+                                                />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    <div className="mt-3 grid grid-cols-1 gap-2 text-[10px] font-mono text-zinc-300">
+                                        <div className="rounded bg-zinc-900/80 px-2 py-1.5 flex items-center justify-between gap-3">
+                                            <div className="text-zinc-500 uppercase">min</div>
+                                            <div>{formatMetricValue(metric.key, stats.min)}</div>
+                                        </div>
+                                        <div className="rounded bg-zinc-900/80 px-2 py-1.5 flex items-center justify-between gap-3">
+                                            <div className="text-zinc-500 uppercase">avg</div>
+                                            <div>{formatMetricValue(metric.key, stats.avg)}</div>
+                                        </div>
+                                        <div className="rounded bg-zinc-900/80 px-2 py-1.5 flex items-center justify-between gap-3">
+                                            <div className="text-zinc-500 uppercase">max</div>
+                                            <div>{formatMetricValue(metric.key, stats.max)}</div>
+                                        </div>
+                                        <div className="rounded bg-zinc-900/80 px-2 py-1.5 flex items-center justify-between gap-3">
+                                            <div className="text-zinc-500 uppercase">now</div>
+                                            <div>{formatMetricValue(metric.key, stats.current)}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
-                    {history.length === 0 ? (
-                         <div className="text-zinc-600 flex-1 flex items-center justify-center text-sm">Gathering data...</div>
-                    ) : (
-                        <div className="flex-1 w-full min-h-[160px] h-full absolute inset-0 pt-10 pb-4 pr-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={data} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" vertical={false} />
-                                    <XAxis dataKey="time" hide />
-                                    <YAxis domain={['auto', 60]} stroke="#71717a" fontSize={11} width={35} />
-                                    <Tooltip 
-                                        contentStyle={{ backgroundColor: '#18181b', borderColor: '#3f3f46', borderRadius: '6px', color: '#fff' }}
-                                        itemStyle={{ color: '#34d399', fontWeight: 'bold' }}
-                                        labelStyle={{ display: 'none' }}
-                                        formatter={(value) => [`${value} FPS`, 'Framerate']}
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="fps" 
-                                        stroke="#34d399" 
-                                        strokeWidth={2} 
-                                        dot={false}
-                                        activeDot={{ r: 4, fill: '#34d399' }}
-                                        isAnimationActive={false}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
                 </div>
             </div>
         </AceWindow>
