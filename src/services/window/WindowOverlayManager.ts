@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { GlobalStateManager } from '../globalStateManager';
+import { PerformanceObserver } from '../performanceObserver';
 import { KernelEngine } from '../kernelEngine';
 import { CursorBridge } from './CursorBridge';
 import { AlwaysOnTopBridge } from './AlwaysOnTopBridge';
@@ -40,6 +41,7 @@ export class WindowOverlayManager {
 
         // Prewarm the native IPC bridge at boot so the first spawn
         // does not pay the cold-path cost of the first-ever Tauri invoke.
+        if (import.meta.env.DEV) { PerformanceObserver.trackIpcOp(); }
         invoke('set_ignore_cursor_events', { ignore: true })
             .then(() => {
                 this.lastCursorEventsIgnore = true;
@@ -58,6 +60,7 @@ export class WindowOverlayManager {
         }
         this.lastCursorEventsIgnore = ignore;
         this.lastCursorEventsAt = now;
+        if (import.meta.env.DEV) { PerformanceObserver.trackIpcOp(); }
         invoke('set_ignore_cursor_events', { ignore }).catch(console.error);
     }
 
@@ -94,6 +97,7 @@ export class WindowOverlayManager {
          }
          if (payload.action === 'open_devtools') {
             try {
+                if (import.meta.env.DEV) { PerformanceObserver.trackIpcOp(); }
                 await invoke('open_devtools');
             } catch (e) {
                 console.warn('[WindowEngine] Failed to open devtools:', e);
@@ -105,6 +109,7 @@ export class WindowOverlayManager {
                 // (AlwaysOnTopBridge handles re-asserting later)
                 const appWindow = await import('@tauri-apps/api/window').then(m => m.getCurrentWindow());
                 await appWindow.setAlwaysOnTop(false);
+                if (import.meta.env.DEV) { PerformanceObserver.trackIpcOp(); }
                 await invoke('focus_devtools');
             } catch (e) {
                 console.warn('[WindowEngine] Failed to focus devtools:', e);

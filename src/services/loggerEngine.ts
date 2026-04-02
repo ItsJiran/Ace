@@ -1,5 +1,6 @@
 import { KernelEngine } from './kernelEngine';
 import { invoke } from '@tauri-apps/api/core';
+import { PerformanceObserver } from './performanceObserver';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
 export interface LogEntry {
@@ -130,6 +131,7 @@ class LoggerEngineSingleton {
     private writeToDebugLog(level: LogLevel, message: string) {
         const timestamp = new Date().toISOString();
         const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+        if (import.meta.env.DEV) { PerformanceObserver.trackIpcOp(); }
         void invoke('log_to_file', { line: logLine }).catch(() => {
             // Ignore backend logging failures to avoid logging loops.
         });

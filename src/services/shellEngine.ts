@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { LoggerEngine } from './loggerEngine';
+import { PerformanceObserver } from './performanceObserver';
 
 // Late binding to avoid circular dep
 type ProcessTracker = {
@@ -72,12 +73,14 @@ class ShellEngineSingleton {
         LoggerEngine.log('info', `[ShellEngine] run: ${resolvedCommand} ${resolvedArgs.join(' ')}`);
 
         const pe = getProcessEngine();
-        const execute = () =>
-            invoke<ShellResult>('execute_shell', {
+        const execute = () => {
+            if (import.meta.env.DEV) { PerformanceObserver.trackIpcOp(); }
+            return invoke<ShellResult>('execute_shell', {
                 command: resolvedCommand,
                 args: resolvedArgs,
                 cwd: cwd ?? null,
             });
+        };
 
         if (pe) {
             return pe.track(
