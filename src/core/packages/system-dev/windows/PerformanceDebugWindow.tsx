@@ -55,7 +55,7 @@ const METRIC_CONFIG: Array<{ key: MetricKey; label: string; accentClass: string;
     { key: 'ramOps', label: 'RAM Ops/s', accentClass: 'text-fuchsia-400', chartKey: 'ramOps' },
     { key: 'windowSpawns', label: 'Window Spawns/s', accentClass: 'text-sky-400', chartKey: 'windowSpawns' },
     { key: 'domNodes', label: 'DOM Nodes', accentClass: 'text-indigo-400', chartKey: 'domNodes' },
-    { key: 'jsHeapMb', label: 'JS Heap MB', accentClass: 'text-cyan-400', chartKey: 'jsHeapMb' },
+    { key: 'jsHeapMb', label: 'Mem MB', accentClass: 'text-cyan-400', chartKey: 'jsHeapMb' },
     { key: 'ipcOps', label: 'IPC Ops/s', accentClass: 'text-orange-400', chartKey: 'ipcOps' },
     { key: 'activeWindows', label: 'Active Windows', accentClass: 'text-teal-400', chartKey: 'activeWindows' },
 ];
@@ -66,7 +66,7 @@ const formatMetricValue = (key: MetricKey, value: number) => {
     }
 
     if (key === 'jsHeapMb') {
-        return value > 0 ? `${Math.round(value)} MB` : 'N/A';
+        return `${Math.round(value)} MB`;
     }
 
     if (key === 'fpsAverage') {
@@ -159,9 +159,9 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                     <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
                         <Cpu className="text-cyan-400 mb-2" size={24} />
                         <div className="text-2xl font-bold text-cyan-400">
-                            {metrics.jsHeapMb > 0 ? `${metrics.jsHeapMb} MB` : 'N/A'}
+                            {metrics.jsHeapMb} MB
                         </div>
-                        <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">JS Heap</div>
+                        <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">Memory</div>
                     </div>
                 </div>
 

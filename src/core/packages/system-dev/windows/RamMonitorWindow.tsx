@@ -93,14 +93,22 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     const [detailsCache, setDetailsCache] = useState<Record<string, string>>({});
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const refresh = () => setStats(KernelEngine.getRAMStats());
+    const refresh = () => {
+        setStats(KernelEngine.getRAMStats());
+        setDetailsCache(prev => {
+            const next: Record<string, string> = {};
+            for (const key of Object.keys(prev)) {
+                const payload = KernelEngine.readMemory(key);
+                next[key] = payload === undefined
+                    ? '(no payload in global RAM for this key)'
+                    : serializeMemoryPayload(payload);
+            }
+            return next;
+        });
+    };
 
     useEffect(() => {
-        if (isPaused) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            return;
-        }
-        refresh();
+        if (isPaused) return;
         intervalRef.current = setInterval(refresh, 1000);
         return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
     }, [isPaused]);
@@ -217,7 +225,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
 
                     <div className="ml-auto flex items-center gap-2">
                         <button
-                            onClick={() => setIsPaused(p => !p)}
+                            onClick={() => { refresh(); setIsPaused(p => !p); }}
                             className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${
                                 isPaused
                                     ? 'bg-yellow-900/40 border-yellow-700/50 text-yellow-300 hover:bg-yellow-800/50'

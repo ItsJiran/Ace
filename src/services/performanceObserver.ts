@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+
 export class PerformanceObserverSingleton {
     public metrics = {
         ramOps: 0,
@@ -28,8 +30,17 @@ export class PerformanceObserverSingleton {
         if (now >= this.lastTime + 1000) {
             this.metrics.fpsAverage = Math.round((this.frames * 1000) / (now - this.lastTime));
             this.metrics.domNodes = document.getElementsByTagName('*').length;
-            this.metrics.jsHeapMb = (performance as any).memory ? Math.round(((performance as any).memory.usedJSHeapSize) / 1048576) : 0;
             this.metrics.activeWindows = document.querySelectorAll('[id^="window-"]').length;
+
+            const perfMem = (performance as any).memory;
+            if (perfMem) {
+                this.metrics.jsHeapMb = Math.round(perfMem.usedJSHeapSize / 1048576);
+            } else {
+                // Fallback: read process RSS from Rust (works in Tauri WebView on Linux)
+                invoke<[number, number]>('get_process_memory').then(([rss]) => {
+                    this.metrics.jsHeapMb = Math.round(rss / 1048576);
+                }).catch(() => {});
+            }
             
             const detail = { ...this.metrics };
             window.dispatchEvent(new CustomEvent('ace:perf_tick', { detail }));
