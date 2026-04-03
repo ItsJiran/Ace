@@ -29,8 +29,6 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
     // Safety check: if config isn't ready in RAM yet
     if (!resolvedConfig) return null;
 
-    const [isHovered, setIsHovered] = React.useState(false);
-
     const isDraggingFocusedWindow = window.isDragging && window.isFocused;
     const baseTransitionClass = isDraggingFocusedWindow ? 'duration-0' : 'duration-150';
     
@@ -50,18 +48,6 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         return (
             <div
                 {...window.rootProps}
-                onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                    setIsHovered(true);
-                    if (window.rootProps && 'onMouseEnter' in window.rootProps) {
-                        (window.rootProps as any).onMouseEnter(e);
-                    }
-                }}
-                onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                    setIsHovered(false);
-                    if (window.rootProps && 'onMouseLeave' in window.rootProps) {
-                        (window.rootProps as any).onMouseLeave(e);
-                    }
-                }}
                 ref={window.ref}
                 className={`absolute top-0 left-0 flex flex-col ${pointerEventsClass} ${className || ''}`}
                 style={{
@@ -73,7 +59,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             >
                 <RenderCounterBadge componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`} />
                 <div 
-                    className={`${(!window.isFocused && !isHovered) ? 'pointer-events-none' : ''}`}
+                    className={`${(!window.isFocused && !window.isHovered) ? 'pointer-events-none' : ''}`}
                     style={{ contentVisibility: hideContent ? 'hidden' : undefined, contain: hideContent ? 'size layout' : undefined }}
                 >
                     {typeof children === 'function' ? children(window) : children}
@@ -88,18 +74,6 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
     return (
         <div
             {...window.rootProps}
-            onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                setIsHovered(true);
-                if (window.rootProps && 'onMouseEnter' in window.rootProps) {
-                    (window.rootProps as any).onMouseEnter(e);
-                }
-            }}
-            onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                setIsHovered(false);
-                if (window.rootProps && 'onMouseLeave' in window.rootProps) {
-                    (window.rootProps as any).onMouseLeave(e);
-                }
-            }}
             ref={window.ref}
             className={`absolute top-0 left-0 flex flex-col rounded-xl transition-[background-color,opacity,transform] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${window.isDragging ? 'overflow-visible' : 'overflow-hidden'} ${className || ''}`}
             style={{
@@ -175,7 +149,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             )}
 
             <div 
-                className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${(window.isDragging || (!window.isFocused && !isHovered)) ? 'pointer-events-none' : ''}`}
+                className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${(window.isDragging || (!window.isFocused && !window.isHovered)) ? 'pointer-events-none' : ''}`}
                 style={{
                     // PERF: Force Chromium to promote the scrollable inner component to its own GPU layer.
                     // This stops alpha-composition lag when interacting/scrolling within transparent windows.
