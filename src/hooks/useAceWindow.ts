@@ -307,6 +307,9 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
         (e: ReactMouseEvent<HTMLElement>) => {
             if (!config || !canCapturePointer || config.is_locked) return;
             if (e.button !== 0) return;
+            
+            // Prevent multiple concurrent drag initiations which cause RAF loops to clash
+            if (elementRef.current?.dataset.isDragging === 'true') return;
 
             const allAnimations = KernelEngine.readMemory('system:window_animations') as Record<string, AnimationRuntimeState> | undefined;
             const animState = allAnimations?.[config.window_uid];
@@ -329,6 +332,10 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             // Avoid double-firing storage updates during drag initiation
             GlobalStateManager.setPointerDown(true);
 
+            if (elementRef.current) {
+                elementRef.current.dataset.isDragging = 'true';
+            }
+
             const startX = e.clientX;
             const startY = e.clientY;
             // Use current local position, not global config
@@ -343,61 +350,56 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             let targetX = initialX;
             let targetY = initialY;
             
-            // Physics State (Spring Simulation)
-            let vx = 0;
-            let vy = 0;
-            // Configuration for "Organic" feel (Framer-like Spring)
-            const tension = 320; // Stiffness (higher = snappier)
-            const friction = 28; // Damping (higher = less oscillation)
-            const precision = 0.05; // Stop when closer than this
+            let lastRenderedX = -9999;
+            let lastRenderedY = -9999;
             
-            // Time step
-            let lastTime = performance.now();
             const elementId = `window-${config.window_uid}`;
 
-            const updatePhysics = (timestamp: number) => {
-                const dt = Math.min((timestamp - lastTime) / 1000, 0.064); // Cap at ~15fps drop
-                lastTime = timestamp;
+            const updatePosition = () => {
+                // Apply a very fast, lightweight exponential smoothing (lerp) for a buttery response
+                currentX += (targetX - currentX) * 0.6;
+                currentY += (targetY - currentY) * 0.6;
 
-                // Hooke's Law: F = -k*x - c*v
-                const ax = (targetX - currentX) * tension - vx * friction;
-                const ay = (targetY - currentY) * tension - vy * friction;
-
-                vx += ax * dt;
-                vy += ay * dt;
-
-                currentX += vx * dt;
-                currentY += vy * dt;
+                // Determine if we've visually settled at the target after mouse release
+                const isSettled = !isDraggingRef.current && Math.abs(targetX - currentX) < 0.5 && Math.abs(targetY - currentY) < 0.5;
 
                 // OPTIMIZATION: Apply transform directly to DOM (bypasses React)
                 const el = elementRef.current || document.getElementById(elementId);
-                if (el) {
-                    el.style.transform = `translate(${currentX}px, ${currentY}px)`;
+                
+                // Force disable transition instantly to avoid fighting the drag if we just started
+                if (el && isDraggingRef.current && el.style.transition !== 'none') {
+                    el.style.transition = 'none';
                 }
 
-                // Continue loop if not settled
-                const settled = Math.abs(vx) < precision && Math.abs(vy) < precision && 
-                               Math.abs(targetX - currentX) < precision && 
-                               Math.abs(targetY - currentY) < precision;
-                
-                if (!settled || isDraggingRef.current) {
-                    rafId = window.requestAnimationFrame(updatePhysics);
+                if (el && (Math.round(currentX) !== lastRenderedX || Math.round(currentY) !== lastRenderedY || isSettled)) {
+                    lastRenderedX = Math.round(currentX);
+                    lastRenderedY = Math.round(currentY);
+                    el.style.transform = `translate(${lastRenderedX}px, ${lastRenderedY}px)`;
+                }
+
+                if (!isSettled) {
+                    rafId = window.requestAnimationFrame(updatePosition);
                 } else {
-                    // Final snap and cleanup
+                    // Final snap and cleanup once momentum stops
                     rafId = null;
                     if (el) {
-                        el.style.transform = `translate(${targetX}px, ${targetY}px)`;
+                        el.style.transition = ''; // Restore CSS classes for transitions
+                        el.style.transform = `translate(${Math.round(targetX)}px, ${Math.round(targetY)}px)`;
                     }
                     
                     // Update local state to final position
-                    setLocalX(targetX);
-                    setLocalY(targetY);
-                    
+                    setLocalX(Math.round(targetX));
+                    setLocalY(Math.round(targetY));
+
+                    if (el) {
+                        delete el.dataset.isDragging;
+                    }
+
                     // NOW (at drag-end only) commit to global store
                     WindowEngine.updateWindowBounds(
                         config.window_uid,
-                        targetX,
-                        targetY,
+                        Math.round(targetX),
+                        Math.round(targetY),
                         config.width,
                         config.height
                     );
@@ -412,8 +414,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
 
             // Start loop immediately to catch the "click-without-drag" case
             if (rafId === null) {
-                lastTime = performance.now();
-                rafId = window.requestAnimationFrame(updatePhysics);
+                rafId = window.requestAnimationFrame(updatePosition);
             }
 
             const onMouseMove = (moveEvent: MouseEvent) => {
@@ -427,14 +428,11 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                     return;
                 }
                 
-                // Update the TARGET, not the current position directly.
-                // The physics loop will chase this target.
                 targetX = nextTargetX;
                 targetY = nextTargetY;
 
                 if (rafId === null) {
-                    lastTime = performance.now();
-                    rafId = window.requestAnimationFrame(updatePhysics);
+                    rafId = window.requestAnimationFrame(updatePosition);
                 }
 
                 // For `retarget` policy we keep animation alive and move target.
@@ -540,6 +538,10 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
         () => ({
             onMouseDown: (e: ReactMouseEvent<HTMLElement>) => {
                 if (isFullDrag) return;
+
+                const target = e.target as HTMLElement | null;
+                if (target?.closest('[data-window-action="true"]')) return;
+
                 beginDrag(e);
             },
         }),

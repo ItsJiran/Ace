@@ -68,9 +68,19 @@ export class CursorBridge {
         // positions after a window is moved.
         for (const { uid } of rendered) {
             const unsub = KernelEngine.subscribe(`system:window:${uid}`, () => {
-                this.cachedWindowList = KernelEngine.getRenderedWindows()
-                    .map(({ uid: u }) => KernelEngine.readMemory(`system:window:${u}`) as WindowConfig | undefined)
-                    .filter((config): config is WindowConfig => Boolean(config && !config.is_minimized));
+                const newConfig = KernelEngine.readMemory(`system:window:${uid}`) as WindowConfig | undefined;
+                if (!newConfig) return;
+                
+                const idx = this.cachedWindowList.findIndex(c => c.window_uid === uid);
+                if (idx >= 0) {
+                    if (newConfig.is_minimized) {
+                        this.cachedWindowList.splice(idx, 1);
+                    } else {
+                        this.cachedWindowList[idx] = newConfig;
+                    }
+                } else if (!newConfig.is_minimized) {
+                    this.cachedWindowList.push(newConfig);
+                }
             });
             this.windowUnsubs.push(unsub);
         }
@@ -123,10 +133,8 @@ export class CursorBridge {
             }
 
             try {
-                const cursor = await cursorPosition();
-                const now = performance.now();
-
                 // Window position/scale usually changes less frequently than cursor position.
+                const now = performance.now();
                 if (!cachedInnerPos || now - lastMetricsAt > 500) {
                     const innerPos = await appWindow.innerPosition();
                     const scale = await appWindow.scaleFactor();
@@ -135,9 +143,9 @@ export class CursorBridge {
                     lastMetricsAt = now;
                 }
 
-                if (!cachedInnerPos) {
-                    return;
-                }
+                if (!cachedInnerPos) return;
+
+                const cursor = await cursorPosition();
 
                 // Convert global physical cursor to the overlay's logical coordinate space.
                 const logicalCursorX = (cursor.x - cachedInnerPos.x) / cachedScale;

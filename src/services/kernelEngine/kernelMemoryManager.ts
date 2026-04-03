@@ -5,6 +5,13 @@ import { KernelTelemetry } from './kernelTelemetry';
 import { KernelContextManager } from './kernelContextManager';
 import { PerformanceObserver } from '../performanceObserver';
 
+// Attach observer flush hook immediately upon evaluating the import
+if (typeof window !== 'undefined' && import.meta.env.VITE_PERF_LOG === 'true') {
+    PerformanceObserver.flushCallback = (logs) => {
+        KernelMemoryManager.writeMemoryInternal('system:perf_observer:ram', logs, undefined, true);
+    };
+}
+
 const generateUid = () => 'mem-' + Math.random().toString(36).substring(2, 11);
 const textEncoder = new TextEncoder();
 
@@ -103,21 +110,23 @@ export class KernelMemoryManager {
     /**
      * Internal mutation handler that establishes equality checks and bounds the memory to its owner process.
      */
-    private static writeMemoryInternal(memory_uid: string, payload: any, process_uid?: string): void {
-        PerformanceObserver.trackRamOp();
+    private static writeMemoryInternal(memory_uid: string, payload: any, process_uid?: string, skipClone: boolean = false): void {
+        PerformanceObserver.trackRamOp('WRITE', memory_uid, process_uid, payload);
         const existingPayload = KernelState.kernel_memory.get(memory_uid);
 
         if (isShallowEqual(existingPayload, payload)) return;
 
-        const immutablePayload = payload && typeof payload === 'object'
-            ? payload instanceof Map
+        // PERF: Defensive deep-cloning causes massive GC pressure for high-frequency updates.
+        // We now allow callers (like window drag logic or perf monitors) to skip it.
+        const immutablePayload = (skipClone || !payload || typeof payload !== 'object') 
+            ? payload
+            : payload instanceof Map
                 ? new Map(payload)
                 : payload instanceof Set
                     ? new Set(payload)
                     : Array.isArray(payload)
                         ? [...payload]
-                        : { ...payload }
-            : payload;
+                        : { ...payload };
 
         KernelState.kernel_memory.set(memory_uid, immutablePayload);
 
@@ -198,12 +207,14 @@ export class KernelMemoryManager {
 
     static writeMemory(memory_uid: string, payload: any, process_uid?: string): boolean {
         if (!memory_uid) return false;
-        this.writeMemoryInternal(memory_uid, payload, process_uid);
+        // Optimization: Assume callers creating explicit `{}` payloads intend replacement.
+        // If they pass an object, we trust it's a fresh reference (skipClone: true)
+        this.writeMemoryInternal(memory_uid, payload, process_uid, true);
         return true;
     }
 
     static readMemory(memory_uid: string): any {
-        PerformanceObserver.trackRamOp();
+        PerformanceObserver.trackRamOp('READ', memory_uid, 'kernel');
         return memory_uid ? KernelState.kernel_memory.get(memory_uid) : undefined;
     }
 
@@ -216,13 +227,14 @@ export class KernelMemoryManager {
             : payload;
 
         if (!isShallowEqual(existing, merged)) {
-            this.writeMemoryInternal(memory_uid, merged, process_uid);
+            // PERF: merged is already an independent object reference. Skip nested clones.
+            this.writeMemoryInternal(memory_uid, merged, process_uid, true);
         }
         return true;
     }
 
     static deleteMemory(memory_uid: string): boolean {
-        PerformanceObserver.trackRamOp();
+        PerformanceObserver.trackRamOp('DELETE', memory_uid, 'kernel');
         if (!memory_uid || !KernelState.kernel_memory.has(memory_uid)) return false;
         KernelState.kernel_memory.delete(memory_uid);
         this.notifyMemoryChanged(memory_uid);
@@ -230,6 +242,7 @@ export class KernelMemoryManager {
     }
 
     static subscribe(memory_uid: string, callback: (data: any) => void): () => void {
+        PerformanceObserver.trackRamOp('SUBSCRIBE', memory_uid, 'kernel');
         if (!KernelState.change_listeners.has(memory_uid)) {
             KernelState.change_listeners.set(memory_uid, new Set());
         }
@@ -237,6 +250,7 @@ export class KernelMemoryManager {
         KernelState.change_listeners.get(memory_uid)!.add(listener);
         
         return () => {
+            PerformanceObserver.trackRamOp('UNSUBSCRIBE', memory_uid, 'kernel');
             const listeners = KernelState.change_listeners.get(memory_uid);
             if (listeners) {
                 listeners.delete(listener);
@@ -267,6 +281,7 @@ export class KernelMemoryManager {
      */
     static registerSystemMemory(memory_uid: string, payload: any): void {
         if (KernelState.kernel_memory.has(memory_uid)) return;
+        PerformanceObserver.trackRamOp('WRITE', memory_uid, 'kernel', payload);
         const immutablePayload = payload && typeof payload === 'object'
             ? Array.isArray(payload) ? [...payload] : { ...payload }
             : payload;

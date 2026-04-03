@@ -30,7 +30,9 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
 
     const isDraggingFocusedWindow = window.isDragging && window.isFocused;
     const baseTransitionClass = isDraggingFocusedWindow ? 'duration-0' : 'duration-150';
-    const pointerEventsClass = window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none';
+    
+    // NUCLEAR POINTER NUKE: the moment we start dragging, hit-testing is dead for the entire element and its complex children
+    const pointerEventsClass = window.isDragging ? '!pointer-events-none' : (window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none');
 
     // -------------------------------------------------------------------------
     // HEADLESS MODE
@@ -61,13 +63,13 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         <div
             {...window.rootProps}
             ref={window.ref}
-            className={`absolute top-0 left-0 flex flex-col rounded-xl overflow-hidden transition-[background-color,opacity] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${className || ''}`}
+            className={`absolute top-0 left-0 flex flex-col rounded-xl transition-[background-color,opacity,transform] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${window.isDragging ? 'overflow-visible' : 'overflow-hidden'} ${className || ''}`}
             style={{
                 ...window.rootStyle,
                 backgroundColor: window.isBorderless
                     ? 'transparent'
-                    : (window.isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)'),
-                boxShadow: isDraggingFocusedWindow ? 'none' : undefined,
+                    : (window.isDragging ? 'rgba(20, 20, 22, 1)' : (window.isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)')),
+                contain: window.isDragging ? 'layout size' : 'none',
                 ...style,
             }}
         >
@@ -134,7 +136,16 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                 document.body
             )}
 
-            <div className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'}`}>
+            <div 
+                className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : ''}`}
+                style={{
+                    // PERF: Force Chromium to promote the scrollable inner component to its own GPU layer.
+                    // This stops alpha-composition lag when interacting/scrolling within transparent windows.
+                    transform: 'translateZ(0)',
+                    willChange: 'transform, scroll-position',
+                    contain: 'content'
+                }}
+            >
                 {typeof children === 'function' || children ? (typeof children === 'function' ? children(window) : children) : (
                     <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
                         <p>Unregistered Component Schema:</p>

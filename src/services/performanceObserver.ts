@@ -1,5 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
 
+export type PerfRamLogType = 'READ' | 'WRITE' | 'SUBSCRIBE' | 'UNSUBSCRIBE' | 'DELETE';
+
+export type PerfRamLog = {
+    id: number;
+    time: number;
+    type: PerfRamLogType;
+    target: string;
+    source?: string;
+    payload?: any;
+};
+
 export class PerformanceObserverSingleton {
     public metrics = {
         ramOps: 0,
@@ -11,6 +22,10 @@ export class PerformanceObserverSingleton {
         maxFrameTimeMs: 0,
         activeWindows: 0,
     };
+    public ramLogs: PerfRamLog[] = [];
+    public flushCallback: ((logs: PerfRamLog[]) => void) | null = null;
+    private logCounter = 0;
+    
     private lastTime = performance.now();
     private lastFrameTime = performance.now();
     private frames = 0;
@@ -42,6 +57,10 @@ export class PerformanceObserverSingleton {
                 }).catch(() => {});
             }
             
+            if (this.flushCallback && this.ramLogs.length > 0 && import.meta.env.VITE_PERF_LOG === 'true') {
+                this.flushCallback([...this.ramLogs]);
+            }
+
             const detail = { ...this.metrics };
             window.dispatchEvent(new CustomEvent('ace:perf_tick', { detail }));
 
@@ -55,9 +74,44 @@ export class PerformanceObserverSingleton {
         requestAnimationFrame((t) => this.loop(t));
     }
     
-    public trackRamOp() {
+    public trackRamOp(type: PerfRamLogType = 'READ', target: string = 'unknown', source?: string, payload?: any) {
         if (!import.meta.env.DEV) return;
         this.metrics.ramOps++;
+        
+        if (import.meta.env.VITE_PERF_LOG === 'true') {
+            if (target && target.startsWith('system:perf_')) return;
+            
+            // To prevent memory leak when logging payloads, we only store stringified versions or shallow snippets in memory if needed
+            let safePayload: string | undefined = undefined;
+            if (payload !== undefined && payload !== null) {
+                if (typeof payload === 'object') {
+                    try {
+                        let str = JSON.stringify(payload);
+                        if (str.length > 60) str = str.slice(0, 60) + '...';
+                        safePayload = str;
+                    } catch {
+                        safePayload = Array.isArray(payload) ? `Array(${payload.length})` : `Object(${Object.keys(payload).length} keys)`;
+                    }
+                } else {
+                    safePayload = String(payload);
+                    if (safePayload.length > 60) safePayload = safePayload.slice(0, 60) + '...';
+                }
+            }
+
+            // READs are too high-frequency (due to React re-renders) and instantly flush out WRITE history in the UI buffer.
+            // We still count them in `ramOps` metric above, but exclude them from the visual log so developers can see actual mutations.
+            // if (type === 'READ') return;
+
+            this.ramLogs.unshift({
+                id: ++this.logCounter,
+                time: Date.now(),
+                type,
+                target,
+                source,
+                payload: safePayload
+            });
+            if (this.ramLogs.length > 500) this.ramLogs.pop();
+        }
     }
 
     public trackWindowSpawn() {

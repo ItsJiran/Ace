@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AceWindow } from '#/components/layout/AceWindow';
-import { Activity, Gauge, Cpu, LayoutGrid, Zap, PanelsTopLeft } from 'lucide-react';
+import { useAceMemory } from '#/hooks/useAceMemory';
+import { Activity, Gauge, Cpu, LayoutGrid, Zap, PanelsTopLeft, ListFilter, Copy, Check } from 'lucide-react';
 import { 
     ResponsiveContainer, 
     AreaChart, 
@@ -79,6 +80,35 @@ const formatMetricValue = (key: MetricKey, value: number) => {
 export default function PerformanceDebugWindow({ windowUid }: { windowUid: string }) {
     const [metrics, setMetrics] = useState<PerfMetrics>(EMPTY_METRICS);
     const [history, setHistory] = useState<PerfMetrics[]>([]);
+    const [logFilter, setLogFilter] = useState<'ALL' | 'WRITE' | 'READ' | 'SUBSCRIBE' | 'UNSUBSCRIBE'>('ALL');
+    const [copied, setCopied] = useState(false);
+    
+    // RAM events loaded from system memory
+    const _rawRamLogs = useAceMemory<any[]>('system:perf_observer:ram') || [];
+    const [ramLogs, setRamLogs] = useState<any[]>([]);
+
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setRamLogs(_rawRamLogs);
+        }, 300); // 🚀 FIX: Throttle rendering of 500 rows to 3 frames per second to save the entire compositor from crashing!
+        return () => clearTimeout(t);
+    }, [_rawRamLogs]);
+
+    const handleCopyLogs = () => {
+        const filtered = ramLogs.filter((l: any) => logFilter === 'ALL' || l.type === logFilter);
+        const textToCopy = filtered.map((l: any) => {
+            const time = new Date(l.time).toISOString().split('T')[1].slice(0, 12);
+            let logLine = `[${time}] [${l.type}] ${l.target}`;
+            if (l.source) logLine += ` (source: ${l.source})`;
+            if (l.payload !== undefined) logLine += `\n    data: ${String(l.payload)}`;
+            return logLine;
+        }).join('\n\n');
+        
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
 
     useEffect(() => {
         const handler = (e: Event) => {
@@ -234,6 +264,67 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                         })}
                     </div>
                 </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-zinc-300 text-sm font-semibold">
+                            <ListFilter size={16} />
+                            <span>Memory Event Log</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleCopyLogs}
+                                className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded px-1.5 py-0.5 border border-zinc-700 transition-colors"
+                                title="Copy Filtered Logs"
+                            >
+                                {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                            </button>
+                            <select 
+                                className="bg-zinc-800 text-[10px] uppercase font-mono text-zinc-300 rounded px-2 py-0.5 border border-zinc-700 outline-none"
+                                value={logFilter}
+                                onChange={(e) => setLogFilter(e.target.value as any)}
+                            >
+                                <option value="ALL">ALL EVENTS</option>
+                                <option value="WRITE">WRITE ONLY</option>
+                                <option value="READ">READ ONLY</option>
+                                <option value="SUBSCRIBE">SUBSCRIBE ONLY</option>
+                            </select>
+                            <span className="text-[10px] uppercase font-mono text-zinc-500 tracking-wider">
+                                Requires VITE_PERF_LOG=true
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-1 mt-1 bg-zinc-950 rounded-lg p-2 max-h-[300px] overflow-y-auto border border-zinc-800/50">
+                        {ramLogs.length === 0 ? (
+                            <div className="text-center text-zinc-600 text-xs py-4 font-mono">No logs available. Run with {`dev:perf`}</div>
+                        ) : ramLogs.filter((l: any) => logFilter === 'ALL' || l.type === logFilter).map((log: any, index: number) => (
+                            <div key={log.id || index} className="flex items-start gap-3 py-1.5 px-2 hover:bg-zinc-900/50 rounded font-mono text-[10px]">
+                                <div className={`px-1.5 py-0.5 rounded uppercase font-bold shrink-0 ${
+                                    log.type === 'WRITE' ? 'bg-amber-500/20 text-amber-400' :
+                                    log.type === 'READ' ? 'bg-blue-500/20 text-blue-400' :
+                                    log.type === 'SUBSCRIBE' ? 'bg-emerald-500/20 text-emerald-400' :
+                                    log.type === 'UNSUBSCRIBE' ? 'bg-rose-500/20 text-rose-400' :
+                                    'bg-zinc-700/50 text-zinc-400'
+                                }`}>
+                                    {log.type}
+                                </div>
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                    <div className="text-zinc-300 truncate font-semibold">{log.target}</div>
+                                    {log.source && <div className="text-zinc-600 truncate">source: {log.source}</div>}
+                                    {log.payload !== undefined && (
+                                        <div className="text-zinc-500 truncate text-[9px] mt-0.5" title={String(log.payload)}>
+                                            <span className="text-emerald-500/70">data</span>: {String(log.payload)}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="text-zinc-600 ml-auto shrink-0">
+                                    {new Date(log.time).toISOString().split('T')[1].slice(0, 12)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
             </div>
         </AceWindow>
     );

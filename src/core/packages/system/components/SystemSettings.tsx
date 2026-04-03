@@ -71,9 +71,9 @@ function PackageCard({ pkg }: { pkg: RegistryPackage }) {
             {/* Header row — always visible */}
             <button
                 onClick={() => setOpen((p) => !p)}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors group"
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-zinc-800/50  group"
             >
-                <span className="text-slate-400 dark:text-zinc-500 group-hover:text-slate-600 dark:group-hover:text-zinc-300 transition-colors shrink-0">
+                <span className="text-slate-400 dark:text-zinc-500 group-hover:text-slate-600 dark:group-hover:text-zinc-300  shrink-0">
                     {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -118,7 +118,7 @@ function PackageCard({ pkg }: { pkg: RegistryPackage }) {
                                     {/* Domain row */}
                                     <button
                                         onClick={() => setExpandedDomain(isDomainOpen ? null : domain)}
-                                        className="w-full flex items-center gap-2.5 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors text-left"
+                                        className="w-full flex items-center gap-2.5 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-zinc-800/40  text-left"
                                     >
                                         <span className="text-slate-300 dark:text-zinc-600 shrink-0">
                                             {isDomainOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -250,9 +250,10 @@ function KeybindsTab({ keybinds }: { keybinds: any[] }) {
 
     return (
         <div className="rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden">
-            <table className="w-full text-sm">
-                <thead>
-                    <tr className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800">
+            <div className="overflow-y-auto max-h-[80vh]">
+                <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-sm">
+                    <tr>
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-2/5">Command</th>
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-1/4">Shortcut</th>
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-1/4">Scope</th>
@@ -261,7 +262,7 @@ function KeybindsTab({ keybinds }: { keybinds: any[] }) {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
                     {keybinds.map((bind) => (
-                        <tr key={bind.keybind_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors group">
+                        <tr key={bind.keybind_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 group">
                             <td className="px-4 py-3">
                                 <div className="font-medium text-slate-800 dark:text-slate-200 text-sm">
                                     {bind.description || bind.keybind_uid}
@@ -285,6 +286,7 @@ function KeybindsTab({ keybinds }: { keybinds: any[] }) {
                     ))}
                 </tbody>
             </table>
+            </div>
         </div>
     );
 }
@@ -317,7 +319,7 @@ function ToolsTab({ packages }: { packages: RegistryPackage[] }) {
             {allTools.map((tool) => (
                 <div
                     key={`${tool.packageId}:${tool.slug}`}
-                    className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 transition-colors"
+                    className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 "
                 >
                     <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-500 dark:text-amber-400 shrink-0">
                         <Wrench size={13} />
@@ -367,7 +369,7 @@ function GeneralTab({ configItems }: { configItems: ConfigItem[] }) {
                     </div>
                     <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden divide-y divide-slate-100 dark:divide-zinc-800">
                         {items.map((item) => (
-                            <div key={item.key} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors">
+                            <div key={item.key} className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800/40 ">
                                 <div className="min-w-0">
                                     <div className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
                                         {item.key}
@@ -903,7 +905,7 @@ function PerformanceTab() {
                                     ? (entry.approx_bytes / stats.approx_total_bytes) * 100
                                     : 0;
                                 return (
-                                    <tr key={entry.memory_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors">
+                                    <tr key={entry.memory_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 ">
                                         <td className="px-4 py-2.5">
                                             <div className="font-mono text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
                                                 {entry.memory_uid}
@@ -1026,7 +1028,7 @@ function SystemSettingsComponent() {
                             onClick={() => setActiveTab(tab.id)}
                             className={`
                                 flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-medium rounded-t-lg
-                                border-b-2 -mb-px transition-colors select-none
+                                border-b-2 -mb-px select-none
                                 ${isActive
                                     ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-zinc-900'
                                     : 'border-transparent text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300 hover:bg-white/60 dark:hover:bg-zinc-900/40'
