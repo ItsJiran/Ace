@@ -49,7 +49,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             <div
                 {...window.rootProps}
                 ref={window.ref}
-                className={`group absolute top-0 left-0 flex flex-col ${pointerEventsClass} ${className || ''}`}
+                className={`group absolute top-0 left-0 flex flex-col ${window.isDragging ? '[contain:layout_size]' : '[contain:strict] hover:[contain:none]'} ${pointerEventsClass} ${className || ''}`}
                 style={{
                     ...window.rootStyle,
                     ...style,
@@ -59,8 +59,8 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             >
                 <RenderCounterBadge componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`} />
                 <div 
-                    className={window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'}
-                    style={{ contentVisibility: hideContent ? 'hidden' : undefined, contain: hideContent ? 'size layout' : undefined }}
+                    className={`${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'} ${hideContent ? '[contain:strict]' : '[contain:strict] group-hover:[contain:none]'}`}
+                    style={{ contentVisibility: hideContent ? 'hidden' : undefined }}
                 >
                     {typeof children === 'function' ? children(window) : children}
                 </div>
@@ -75,13 +75,12 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         <div
             {...window.rootProps}
             ref={window.ref}
-            className={`group absolute top-0 left-0 flex flex-col rounded-xl transition-[background-color,opacity,transform] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${window.isDragging ? 'overflow-visible' : 'overflow-hidden'} ${className || ''}`}
+            className={`group absolute top-0 left-0 flex flex-col rounded-xl transition-[background-color,opacity,transform] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${window.isDragging ? 'overflow-visible [contain:layout_size]' : 'overflow-hidden [contain:strict] hover:[contain:none]'} ${className || ''}`}
             style={{
                 ...window.rootStyle,
                 backgroundColor: window.isBorderless
                     ? 'transparent'
                     : (window.isDragging ? 'rgba(20, 20, 22, 1)' : (window.isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)')),
-                contain: window.isDragging ? 'layout size' : 'none',
                 ...style,
             }}
         >
@@ -149,13 +148,12 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             )}
 
             <div 
-                className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'}`}
+                className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'} ${hideContent ? '[contain:strict]' : '[contain:strict] group-hover:[contain:content]'}`}
                 style={{
                     // PERF: Force Chromium to promote the scrollable inner component to its own GPU layer.
                     // This stops alpha-composition lag when interacting/scrolling within transparent windows.
                     transform: 'translateZ(0)',
                     willChange: 'transform, scroll-position',
-                    contain: 'content',
                     contentVisibility: hideContent ? 'hidden' : undefined,
                 }}
             >
