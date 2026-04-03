@@ -102,11 +102,13 @@ export class CursorBridge {
         );
         this.rebuildWindowCache();
 
-        this.intervalId = window.setInterval(async () => {
+        const tick = async () => {
             const cursorState = GlobalStateManager.readCursorState();
 
             // Skip all expensive IPC polling if the user is currently actively interacting/dragging
             if (cursorState.is_pointer_down) {
+                // If dragging, we want to immediately schedule the next check without doing the expensive logic
+                this.intervalId = window.setTimeout(tick, 48);
                 return;
             }
 
@@ -117,6 +119,7 @@ export class CursorBridge {
                 if (overlayState?.mode !== 'ambient') {
                     this.onOverlayModeChange('ambient');
                 }
+                this.intervalId = window.setTimeout(tick, 48);
                 return;
             }
 
@@ -129,6 +132,7 @@ export class CursorBridge {
                 if (overlayState?.mode !== 'ambient') {
                     this.onOverlayModeChange('ambient');
                 }
+                this.intervalId = window.setTimeout(tick, 48);
                 return;
             }
 
@@ -143,7 +147,10 @@ export class CursorBridge {
                     lastMetricsAt = now;
                 }
 
-                if (!cachedInnerPos) return;
+                if (!cachedInnerPos) {
+                    this.intervalId = window.setTimeout(tick, 48);
+                    return;
+                }
 
                 const cursor = await cursorPosition();
 
@@ -176,6 +183,7 @@ export class CursorBridge {
                     if (overlayState?.mode !== 'interactive') {
                         this.onOverlayModeChange('interactive');
                     }
+                    this.intervalId = window.setTimeout(tick, 48);
                     return;
                 }
 
@@ -184,6 +192,7 @@ export class CursorBridge {
                     if (overlayState?.mode !== 'interactive') {
                         this.onOverlayModeChange('interactive');
                     }
+                    this.intervalId = window.setTimeout(tick, 48);
                     return;
                 }
 
@@ -192,24 +201,32 @@ export class CursorBridge {
                 // Re-enable interaction when cursor enters any overlay window bounds.
                 if (isCursorInsideAnyWindow && currentMode !== 'interactive') {
                     this.onOverlayModeChange('interactive');
+                    this.intervalId = window.setTimeout(tick, 48);
                     return;
                 }
 
                 // Release back to pass-through when cursor leaves windows and user is not dragging.
-                const cursorState = GlobalStateManager.readCursorState();
-                const isDragging = cursorState.is_pointer_down;
+                // Re-read cursor state just in case it changed during the async awaits above
+                const latestCursorState = GlobalStateManager.readCursorState();
+                const isDragging = latestCursorState.is_pointer_down;
                 if (!isCursorInsideAnyWindow && !isDragging && currentMode !== 'ambient') {
                     this.onOverlayModeChange('ambient');
                 }
             } catch {
                 // Ignore cursor polling failures silently (e.g., unsupported platform edge case).
             }
-        }, 48);
+
+            // Schedule the next tick
+            this.intervalId = window.setTimeout(tick, 48);
+        };
+
+        // Start the polling loop
+        this.intervalId = window.setTimeout(tick, 48);
     }
 
     public stop() {
         if (this.intervalId) {
-            window.clearInterval(this.intervalId);
+            window.clearTimeout(this.intervalId);
             this.intervalId = undefined;
         }
         this.activeWindowsUnsub?.();
@@ -217,5 +234,18 @@ export class CursorBridge {
         for (const unsub of this.windowUnsubs) unsub();
         this.windowUnsubs = [];
         this.cachedWindowList = [];
+    }
+
+    public pause() {
+        if (this.intervalId) {
+            window.clearTimeout(this.intervalId);
+            this.intervalId = undefined;
+        }
+    }
+
+    public resume() {
+        if (!this.intervalId) {
+            this.start();
+        }
     }
 }

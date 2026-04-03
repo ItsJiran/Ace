@@ -2,6 +2,51 @@ import { useSyncExternalStore, useCallback, useRef } from 'react';
 import { KernelEngine } from '../services/kernelEngine';
 
 /**
+ * Global singleton registry to batch and deduplicate subscriptions.
+ * Turns an O(N) listener problem back into O(1) kernel subscriptions.
+ */
+class MemoryDispatcher {
+    private listeners = new Map<string, Set<() => void>>();
+    private unsubscribeHandlers = new Map<string, () => void>();
+
+    subscribe(key: string, listener: () => void): () => void {
+        if (!this.listeners.has(key)) {
+            this.listeners.set(key, new Set());
+            // Register exactly ONE listener to the KernelEngine
+            const unsub = KernelEngine.subscribe(key, () => this.notify(key));
+            this.unsubscribeHandlers.set(key, unsub);
+        }
+
+        const group = this.listeners.get(key)!;
+        group.add(listener);
+
+        return () => {
+            group.delete(listener);
+            if (group.size === 0) {
+                this.listeners.delete(key);
+                const unsub = this.unsubscribeHandlers.get(key);
+                if (unsub) {
+                    unsub();
+                    this.unsubscribeHandlers.delete(key);
+                }
+            }
+        };
+    }
+
+    private notify(key: string) {
+        const group = this.listeners.get(key);
+        if (group) {
+            // Trigger all listeners. React 18+ auto-batches these useSyncExternalStore notifications.
+            for (const listener of group) {
+                listener();
+            }
+        }
+    }
+}
+
+const dispatcher = new MemoryDispatcher();
+
+/**
  * A React Hook connecting Components to the Storage Engine's Socket Bus.
  * It provides O(1) rendering isolation: only components listening to the
  * exact mutated key will re-render when Global RAM updates.
@@ -12,7 +57,7 @@ export function useAceMemory<T = any>(key: string): T | undefined {
     // Global kernel change signal. Subscribers re-read their target memory key.
     const subscribe = useCallback(
         (onStoreChange: () => void) => {
-            return KernelEngine.subscribe(key, onStoreChange);
+            return dispatcher.subscribe(key, onStoreChange);
         },
         [key]
     );
@@ -35,7 +80,7 @@ export function useAceMemorySelector<T = any, S = T>(
 ): S {
     const subscribe = useCallback(
         (onStoreChange: () => void) => {
-            return KernelEngine.subscribe(key, onStoreChange);
+            return dispatcher.subscribe(key, onStoreChange);
         },
         [key]
     );

@@ -4,6 +4,7 @@ import { PerformanceObserver } from '../performanceObserver';
 import { KernelEngine } from '../kernelEngine';
 import { CursorBridge } from './CursorBridge';
 import { AlwaysOnTopBridge } from './AlwaysOnTopBridge';
+import { OcclusionBridge } from './OcclusionBridge';
 import type { DesktopState } from '#/schemas/globalState';
 
 export class WindowOverlayManager {
@@ -11,6 +12,7 @@ export class WindowOverlayManager {
     
     private cursorBridge: CursorBridge;
     private alwaysOnTopBridge: AlwaysOnTopBridge;
+    private occlusionBridge: OcclusionBridge;
 
     private bridgesStarted = false;
     private lastCursorEventsIgnore: boolean | null = null;
@@ -20,6 +22,7 @@ export class WindowOverlayManager {
     constructor() {
         this.cursorBridge = new CursorBridge((mode) => this.setOverlayMode(mode));
         this.alwaysOnTopBridge = new AlwaysOnTopBridge();
+        this.occlusionBridge = new OcclusionBridge();
     }
 
     startBridges() {
@@ -27,6 +30,7 @@ export class WindowOverlayManager {
         this.bridgesStarted = true;
         this.cursorBridge.start();
         this.alwaysOnTopBridge.start();
+        this.occlusionBridge.start();
     }
 
     setupKernelSpace() {

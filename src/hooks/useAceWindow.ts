@@ -6,6 +6,10 @@ import { WindowEngine } from '#/services/windowEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 import { GlobalStateManager } from '#/services/globalStateManager';
 import { useAceMemory, useAceMemorySelector } from '#/hooks/useAceMemory';
+import { WindowOverlayManager } from '#/services/window/WindowOverlayManager';
+
+// Singleton instance for overlay management
+const overlayManager = new WindowOverlayManager();
 
 // -----------------------------------------------------------------------------
 // Hook Contract Types
@@ -331,6 +335,9 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
             // SKIP: focus() already called in rootProps.onMouseDown above this
             // Avoid double-firing storage updates during drag initiation
             GlobalStateManager.setPointerDown(true);
+
+            // Pause CursorBridge polling during drag
+            overlayManager.cursorBridge.pause();
 
             if (elementRef.current) {
                 elementRef.current.dataset.isDragging = 'true';

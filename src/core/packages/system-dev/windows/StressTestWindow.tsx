@@ -220,8 +220,6 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                 package: pattern === 'prompt_bar_morph' ? 'itsjiran/ace-system-dev' : 'itsjiran/ace-system',
                 window: targetWindow,
                 title: pattern === 'prompt_bar_morph' ? `Prompt Surface ${i + 1}` : `Swarm Unit ${i + 1}`,
-                width: pattern === 'prompt_bar_morph' ? 56 : 180,
-                height: pattern === 'prompt_bar_morph' ? 56 : 100,
                 x: startX,
                 y: startY,
                 chrome_style: pattern === 'prompt_bar_morph' ? 'borderless' : 'standard',

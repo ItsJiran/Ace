@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { WindowConfig } from '#/schemas/window';
 import { useAceWindow, type UseAceWindowResult } from '#/hooks/useAceWindow';
+import { useAceMemorySelector } from '#/hooks/useAceMemory';
 import { GripHorizontal, X, Minus, Lock, Unlock, BringToFront, Layers } from 'lucide-react';
 import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 
@@ -34,6 +35,12 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
     // NUCLEAR POINTER NUKE: the moment we start dragging, hit-testing is dead for the entire element and its complex children
     const pointerEventsClass = window.isDragging ? '!pointer-events-none' : (window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none');
 
+    // OCCLUSION CULLING: automatically hide content if fully covered by another opaque window.
+    const hideContent = useAceMemorySelector<Record<string, boolean>, boolean>(
+        'system:window_occlusion',
+        (dict) => dict?.[resolvedConfig.window_uid] ?? false
+    );
+
     // -------------------------------------------------------------------------
     // HEADLESS MODE
     // -------------------------------------------------------------------------
@@ -51,7 +58,9 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                 }}
             >
                 <RenderCounterBadge componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`} />
-                {typeof children === 'function' ? children(window) : children}
+                <div style={{ contentVisibility: hideContent ? 'hidden' : undefined, contain: hideContent ? 'size layout' : undefined }}>
+                    {typeof children === 'function' ? children(window) : children}
+                </div>
             </div>
         );
     }
@@ -143,7 +152,8 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                     // This stops alpha-composition lag when interacting/scrolling within transparent windows.
                     transform: 'translateZ(0)',
                     willChange: 'transform, scroll-position',
-                    contain: 'content'
+                    contain: 'content',
+                    contentVisibility: hideContent ? 'hidden' : undefined,
                 }}
             >
                 {typeof children === 'function' || children ? (typeof children === 'function' ? children(window) : children) : (
