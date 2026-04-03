@@ -1,3 +1,4 @@
+import { DeferredWindowContent } from '#/components/layout/DeferredWindowContent';
 import { SpatialVirtualizer } from "#/components/layout/SpatialVirtualizer";
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { RegistryPackage } from '#/schemas/registry';
@@ -1017,54 +1018,56 @@ function SystemSettingsComponent() {
     };
 
     return (
-        <div className="h-full w-full flex flex-col overflow-hidden text-slate-800 dark:text-slate-200">
-            {/* Tab Bar */}
-            <div className="flex items-center gap-0.5 px-4 pt-3 pb-0 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 shrink-0">
-                {TABS.map((tab) => {
-                    const isActive = activeTab === tab.id;
-                    const count = counts[tab.id];
-                    return (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`
-                                flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-medium rounded-t-lg
-                                border-b-2 -mb-px select-none
-                                ${isActive
-                                    ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-zinc-900'
-                                    : 'border-transparent text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300 hover:bg-white/60 dark:hover:bg-zinc-900/40'
-                                }
-                            `}
-                        >
-                            <span className={isActive ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 dark:text-zinc-500'}>
-                                {tab.icon}
-                            </span>
-                            {tab.label}
-                            {count !== null && count > 0 && (
-                                <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium tabular-nums min-w-[18px] text-center
+        <DeferredWindowContent fallback={<div className="flex h-full w-full items-center justify-center text-slate-400 dark:text-zinc-500 font-mono text-sm leading-relaxed tracking-wider animate-pulse pt-8">Initializing System Settings Framework...</div>}>
+            <div className="h-full w-full flex flex-col overflow-hidden text-slate-800 dark:text-slate-200">
+                {/* Tab Bar */}
+                <div className="flex items-center gap-0.5 px-4 pt-3 pb-0 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 shrink-0">
+                    {TABS.map((tab) => {
+                        const isActive = activeTab === tab.id;
+                        const count = counts[tab.id];
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`
+                                    flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-medium rounded-t-lg
+                                    border-b-2 -mb-px select-none
                                     ${isActive
-                                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300'
-                                        : 'bg-slate-200 dark:bg-zinc-700 text-slate-500 dark:text-zinc-400'
-                                    }`}
-                                >
-                                    {count}
+                                        ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-white dark:bg-zinc-900'
+                                        : 'border-transparent text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300 hover:bg-white/60 dark:hover:bg-zinc-900/40'
+                                    }
+                                `}
+                            >
+                                <span className={isActive ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 dark:text-zinc-500'}>
+                                    {tab.icon}
                                 </span>
-                            )}
-                        </button>
-                    );
-                })}
-            </div>
+                                {tab.label}
+                                {count !== null && count > 0 && (
+                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium tabular-nums min-w-[18px] text-center
+                                        ${isActive
+                                            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300'
+                                            : 'bg-slate-200 dark:bg-zinc-700 text-slate-500 dark:text-zinc-400'
+                                        }`}
+                                    >
+                                        {count}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
 
-            {/* Tab Content */}
-            <div className="flex-1 overflow-y-auto p-5 bg-slate-50 dark:bg-zinc-950">
-                {activeTab === 'packages'    && <PackagesTab packages={packages} />}
-                {activeTab === 'keybinds'    && <KeybindsTab keybinds={keybinds} />}
-                {activeTab === 'tools'       && <ToolsTab packages={packages} />}
-                {activeTab === 'ai_gateway'  && <AIGatewayTab config={gatewayConfig} />}
-                {activeTab === 'general'     && <GeneralTab configItems={configItems} />}
-                {activeTab === 'performance' && <PerformanceTab />}
+                {/* Tab Content */}
+                <div className="flex-1 overflow-y-auto p-5 bg-slate-50 dark:bg-zinc-950">
+                    {activeTab === 'packages'    && <PackagesTab packages={packages} />}
+                    {activeTab === 'keybinds'    && <KeybindsTab keybinds={keybinds} />}
+                    {activeTab === 'tools'       && <ToolsTab packages={packages} />}
+                    {activeTab === 'ai_gateway'  && <AIGatewayTab config={gatewayConfig} />}
+                    {activeTab === 'general'     && <GeneralTab configItems={configItems} />}
+                    {activeTab === 'performance' && <PerformanceTab />}
+                </div>
             </div>
-        </div>
+        </DeferredWindowContent>
     );
 }
 
