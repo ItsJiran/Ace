@@ -59,7 +59,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             >
                 <RenderCounterBadge componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`} />
                 <div 
-                    className={window.isDragging ? 'pointer-events-none' : (window.isFocused ? 'pointer-events-auto' : 'pointer-events-none group-hover:pointer-events-auto')}
+                    className={window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'}
                     style={{ contentVisibility: hideContent ? 'hidden' : undefined, contain: hideContent ? 'size layout' : undefined }}
                 >
                     {typeof children === 'function' ? children(window) : children}
@@ -149,7 +149,7 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             )}
 
             <div 
-                className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : (window.isFocused ? 'pointer-events-auto' : 'pointer-events-none group-hover:pointer-events-auto')}`}
+                className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'}`}
                 style={{
                     // PERF: Force Chromium to promote the scrollable inner component to its own GPU layer.
                     // This stops alpha-composition lag when interacting/scrolling within transparent windows.
