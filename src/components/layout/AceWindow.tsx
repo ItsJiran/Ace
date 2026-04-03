@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import html2canvas from 'html2canvas';
 import type { WindowConfig } from '#/schemas/window';
 import { useAceWindow, type UseAceWindowResult } from '#/hooks/useAceWindow';
 import { useAceMemorySelector } from '#/hooks/useAceMemory';
@@ -29,6 +30,42 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
     // Safety check: if config isn't ready in RAM yet
     if (!resolvedConfig) return null;
 
+    const [isHovered, setIsHovered] = useState(false);
+    const [snapshot, setSnapshot] = useState<string | null>(null);
+    const snapshotTimeoutReq = useRef<NodeJS.Timeout>();
+    const innerContentRef = useRef<HTMLDivElement>(null);
+
+    const handleMouseEnter = () => {
+        setIsHovered(true);
+        if (snapshotTimeoutReq.current) clearTimeout(snapshotTimeoutReq.current);
+        // We no longer clear snapshot here so it acts as a permanent cache to prevent lag
+    };
+
+    const handleMouseLeave = () => {
+        setIsHovered(false);
+        
+        // If we already have a snapshot, skip taking another one to aggressively prevent lag
+        if (snapshot) return;
+
+        // Start taking snapshot buffer via html2canvas since native xcap was reverted
+        if (!window.isDragging && innerContentRef.current) {
+            snapshotTimeoutReq.current = setTimeout(async () => {
+                if (!innerContentRef.current) return;
+                try {
+                    const canvas = await html2canvas(innerContentRef.current, {
+                        backgroundColor: null,
+                        logging: false,
+                        useCORS: true,
+                        allowTaint: true,
+                    });
+                    setSnapshot(canvas.toDataURL('image/png'));
+                } catch (e) {
+                    console.warn("Failed to capture html2canvas buffer:", e);
+                }
+            }, 100);
+        }
+    };
+
     const isDraggingFocusedWindow = window.isDragging && window.isFocused;
     const baseTransitionClass = isDraggingFocusedWindow ? 'duration-0' : 'duration-150';
     
@@ -41,6 +78,36 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         (dict) => dict?.[resolvedConfig.window_uid] ?? false
     );
 
+    // Render contents helper
+    const renderNodeOrSnapshot = () => {
+        const realContent = typeof children === 'function' ? children(window) : children;
+        
+        return (
+            <>
+                {snapshot && !isHovered && (
+                    <img 
+                        src={snapshot} 
+                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-50 rounded-[inherit]" 
+                        alt="Window Snapshot" 
+                    />
+                )}
+                {/* 
+                  When showing the snapshot, we hide the real tree visually so it doesn't incur repaints,
+                  but we don't unmount it, preserving internal React state.
+                 */}
+                <div ref={innerContentRef} className={`w-full h-full ${snapshot && !isHovered ? 'hidden' : ''}`}>
+                    {realContent || (
+                        <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
+                            <p>Unregistered Component Schema:</p>
+                            <span className="text-red-400 font-bold mt-1 text-sm">{resolvedConfig.component}</span>
+                            <p className="mt-4 text-zinc-600">Ensure this component is declared in package registry and loaded by RegistryEngine.</p>
+                        </div>
+                    )}
+                </div>
+            </>
+        );
+    };
+
     // -------------------------------------------------------------------------
     // HEADLESS MODE
     // -------------------------------------------------------------------------
@@ -49,7 +116,9 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             <div
                 {...window.rootProps}
                 ref={window.ref}
-                className={`group absolute top-0 left-0 flex flex-col ${window.isDragging ? '[contain:layout_size]' : '[contain:strict] hover:[contain:none]'} ${pointerEventsClass} ${className || ''}`}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                className={`group absolute top-0 left-0 flex flex-col ${pointerEventsClass} ${className || ''}`}
                 style={{
                     ...window.rootStyle,
                     ...style,
@@ -59,10 +128,10 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             >
                 <RenderCounterBadge componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`} />
                 <div 
-                    className={`${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'} ${hideContent ? '[contain:strict]' : '[contain:strict] group-hover:[contain:none]'}`}
-                    style={{ contentVisibility: hideContent ? 'hidden' : undefined }}
+                    className={`w-full h-full flex-1 overflow-auto relative ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'} ${hideContent ? '[contain:strict]' : '[contain:strict] group-hover:[contain:content]'}`}
+                    style={{ contentVisibility: hideContent ? 'hidden' : undefined, contain: hideContent ? 'size layout' : undefined }}
                 >
-                    {typeof children === 'function' ? children(window) : children}
+                    {renderNodeOrSnapshot()}
                 </div>
             </div>
         );
@@ -75,12 +144,15 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         <div
             {...window.rootProps}
             ref={window.ref}
-            className={`group absolute top-0 left-0 flex flex-col rounded-xl transition-[background-color,opacity,transform] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${window.isDragging ? 'overflow-visible [contain:layout_size]' : 'overflow-hidden [contain:strict] hover:[contain:none]'} ${className || ''}`}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            className={`group absolute top-0 left-0 flex flex-col rounded-xl transition-[background-color,opacity,transform] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${window.isDragging ? 'overflow-visible' : 'overflow-hidden'} ${className || ''}`}
             style={{
                 ...window.rootStyle,
                 backgroundColor: window.isBorderless
                     ? 'transparent'
                     : (window.isDragging ? 'rgba(20, 20, 22, 1)' : (window.isFocused ? 'rgba(20, 20, 22, 0.95)' : 'rgba(20, 20, 22, 0.7)')),
+                contain: window.isDragging ? 'layout size' : 'none',
                 ...style,
             }}
         >
@@ -148,22 +220,17 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             )}
 
             <div 
-                className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'} ${hideContent ? '[contain:strict]' : '[contain:strict] group-hover:[contain:content]'}`}
+                className={`w-full h-full flex-1 overflow-auto relative ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'} ${hideContent ? '[contain:strict]' : '[contain:strict] group-hover:[contain:content]'}`}
                 style={{
                     // PERF: Force Chromium to promote the scrollable inner component to its own GPU layer.
                     // This stops alpha-composition lag when interacting/scrolling within transparent windows.
                     transform: 'translateZ(0)',
                     willChange: 'transform, scroll-position',
                     contentVisibility: hideContent ? 'hidden' : undefined,
+                    contain: hideContent ? 'size layout' : undefined 
                 }}
             >
-                {typeof children === 'function' || children ? (typeof children === 'function' ? children(window) : children) : (
-                    <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
-                        <p>Unregistered Component Schema:</p>
-                        <span className="text-red-400 font-bold mt-1 text-sm">{resolvedConfig.component}</span>
-                        <p className="mt-4 text-zinc-600">Ensure this component is declared in package registry and loaded by RegistryEngine.</p>
-                    </div>
-                )}
+                {renderNodeOrSnapshot()}
             </div>
         </div>
     );
