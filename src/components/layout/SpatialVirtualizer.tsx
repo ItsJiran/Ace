@@ -44,19 +44,13 @@ export function SpatialVirtualizer({ as: Component = "div",
                     }
                     
                     // Aggressive GPU hiding:
-                    // Safe hiding for table rows
-                    if (el.tagName === 'TR') {
-                        el.style.setProperty('visibility', 'hidden', 'important');
-                        el.style.setProperty('opacity', '0', 'important');
-                        el.style.setProperty('pointer-events', 'none', 'important');
-                    } else {
-                        el.style.setProperty('content-visibility', 'hidden', 'important');
-                        el.style.setProperty('visibility', 'hidden', 'important'); 
-                        el.style.setProperty('pointer-events', 'none', 'important');
-                        el.style.setProperty('opacity', '0', 'important');
-                        el.style.setProperty('contain', 'strict', 'important');
-                    }
-                    
+                    // Aggressive GPU hiding:
+                    el.style.setProperty('content-visibility', 'hidden', 'important');
+                    el.style.setProperty('visibility', 'hidden', 'important'); // Very aggressive, skips painting completely
+                    el.style.setProperty('pointer-events', 'none', 'important');
+                    el.style.setProperty('opacity', '0', 'important');
+                    el.style.setProperty('contain', 'strict', 'important'); // Strict containment limits layout scopes
+
                     el.dispatchEvent(new CustomEvent('ace:visibility', { detail: false }));
                 }
             }
@@ -97,6 +91,7 @@ export function SpatialVirtualizer({ as: Component = "div",
                             (target as HTMLElement).style.display = 'inline-block';
                         }
                         
+                        target.setAttribute('data-spatial', 'true');
                         observer.observe(target);
                     }
                 });

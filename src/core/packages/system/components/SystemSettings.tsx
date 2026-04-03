@@ -252,19 +252,19 @@ function KeybindsTab({ keybinds }: { keybinds: any[] }) {
     return (
         <div className="rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden">
             <div className="overflow-y-auto max-h-[80vh]">
-                <table className="w-full text-sm">
-                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-sm">
-                    <tr>
+                <table className="w-full text-sm flex flex-col w-full">
+                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-sm w-full block">
+                        <tr className="flex w-full">
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-2/5">Command</th>
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-1/4">Shortcut</th>
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-1/4">Scope</th>
                         <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 dark:text-zinc-500">Status</th>
                     </tr>
                 </thead>
-                    <SpatialVirtualizer as="tbody" targetSelector="tr" className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+                    <SpatialVirtualizer as="tbody" targetSelector="tr" className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900 flex flex-col w-full">
                     {keybinds.map((bind) => (
-                        <tr key={bind.keybind_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 group">
-                            <td className="px-4 py-3">
+                        <tr key={bind.keybind_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 group flex w-full items-center">
+                            <td className="px-4 py-3 w-2/5 shrink-0 break-all">
                                 <div className="font-medium text-slate-800 dark:text-slate-200 text-sm">
                                     {bind.description || bind.keybind_uid}
                                 </div>
@@ -274,13 +274,13 @@ function KeybindsTab({ keybinds }: { keybinds: any[] }) {
                                     </div>
                                 )}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-3 w-1/4 shrink-0 flex items-center">
                                 <KeyBadge shortcut={bind.shortcut} />
                             </td>
-                            <td className="px-4 py-3 text-xs text-slate-400 dark:text-zinc-500 font-mono">
+                            <td className="px-4 py-3 text-xs text-slate-400 dark:text-zinc-500 font-mono w-1/4 shrink-0 flex items-center">
                                 {bind.scope ?? 'global'}
                             </td>
-                            <td className="px-4 py-3 text-right">
+                            <td className="px-4 py-3 text-right flex-1 flex justify-end items-center">
                                 <StatusPill active={bind.enabled !== false} />
                             </td>
                         </tr>
@@ -890,24 +890,24 @@ function PerformanceTab() {
                     </div>
                 </div>
                 <div className="rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800">
+                    <table className="w-full text-sm flex flex-col w-full">
+                        <thead className="w-full block">
+                            <tr className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 flex w-full">
                                 <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500">Key</th>
                                 <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-20">Type</th>
                                 <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 dark:text-zinc-500 w-24">Size</th>
                                 <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 dark:text-zinc-500 w-16">Listeners</th>
                             </tr>
                         </thead>
-                        <SpatialVirtualizer as="tbody" targetSelector="tr" className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+                        <SpatialVirtualizer as="tbody" targetSelector="tr" className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900 flex flex-col w-full">
                             {topEntries.map((entry: { memory_uid: string; approx_bytes: number; type: string }) => {
                                 const listeners = listenerMap.get(entry.memory_uid) ?? 0;
                                 const pct = stats.approx_total_bytes > 0
                                     ? (entry.approx_bytes / stats.approx_total_bytes) * 100
                                     : 0;
                                 return (
-                                    <tr key={entry.memory_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 ">
-                                        <td className="px-4 py-2.5">
+                                    <tr key={entry.memory_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 flex w-full items-center">
+                                        <td className="px-4 py-2.5 flex-1 shrink-0 min-w-0">
                                             <div className="font-mono text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
                                                 {entry.memory_uid}
                                             </div>
@@ -920,10 +920,10 @@ function PerformanceTab() {
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-4 py-2.5">
+                                        <td className="px-4 py-2.5 w-20 shrink-0">
                                             <span className="text-[11px] font-mono text-slate-400 dark:text-zinc-500">{entry.type}</span>
                                         </td>
-                                        <td className="px-4 py-2.5 text-right">
+                                        <td className="px-4 py-2.5 text-right w-24 shrink-0 font-mono text-xs text-slate-600 dark:text-zinc-300 flex items-center justify-end">
                                             <span className="text-xs font-mono tabular-nums text-slate-600 dark:text-zinc-300">{formatBytes(entry.approx_bytes)}</span>
                                         </td>
                                         <td className="px-4 py-2.5 text-right">
