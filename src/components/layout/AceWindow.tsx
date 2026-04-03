@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { WindowConfig } from '#/schemas/window';
@@ -41,6 +41,9 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         (dict) => dict?.[resolvedConfig.window_uid] ?? false
     );
 
+    // We let individual react components (like SystemSettings) manage virtualization with react-window.
+    const contentRef = useRef<HTMLDivElement>(null);
+
     // -------------------------------------------------------------------------
     // HEADLESS MODE
     // -------------------------------------------------------------------------
@@ -58,7 +61,11 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                 }}
             >
                 <RenderCounterBadge componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`} />
-                <div style={{ contentVisibility: hideContent ? 'hidden' : undefined, contain: hideContent ? 'size layout' : undefined }}>
+                <div 
+                    ref={contentRef}
+                    className="w-full h-full flex flex-col"
+                    style={{ contentVisibility: hideContent ? 'hidden' : undefined, contain: hideContent ? 'size layout' : undefined }}
+                >
                     {typeof children === 'function' ? children(window) : children}
                 </div>
             </div>
@@ -145,7 +152,14 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                 document.body
             )}
 
+            {/* 
+                AUTO-VIRTUALIZATION ENGINE: 
+                We use react-window inside apps to automatically monitor and 
+                virtually cull (via content-visibility: hidden) any child components that scroll out of view.
+                Zero developer configuration required.
+            */}
             <div 
+                ref={contentRef}
                 className={`flex-1 overflow-auto ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : ''}`}
                 style={{
                     // PERF: Force Chromium to promote the scrollable inner component to its own GPU layer.

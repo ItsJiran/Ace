@@ -67,6 +67,7 @@ class WindowEngineSingleton {
             updateWindowConfig: (uid, updates) => this.updateWindowConfig(uid, updates),
             animationController: this.animationController,
             windowMemoryUid: (uid) => this.windowMemoryUid(uid),
+            getRegistry: (pkg, slug) => this.getRegistry({ packageRef: pkg, slug }),
         });
         this.registerTerminationHooks();
     }

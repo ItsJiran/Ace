@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AceWindow } from '#/components/layout/AceWindow';
+import { SpatialVirtualizer } from '#/components/layout/SpatialVirtualizer';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { Activity, Gauge, Cpu, LayoutGrid, Zap, PanelsTopLeft, ListFilter, Copy, Check } from 'lucide-react';
 import { 
@@ -152,9 +153,12 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
 
     return (
         <AceWindow windowUid={windowUid}>
-            <div className="w-full h-full bg-zinc-950 text-white p-4 flex flex-col gap-4 overflow-y-auto">
-                <div className="flex flex-col">
-                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
+            <SpatialVirtualizer 
+                className="w-full h-full bg-zinc-950 text-white p-4 flex flex-col gap-4 overflow-y-auto"
+                targetSelector=".spatial-node"
+            >
+                <div className="flex flex-col gap-4">
+                    <div className="spatial-node bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
                         <Activity className="text-emerald-400 mb-2" size={24} />
                         <div className={`text-4xl font-bold ${metrics.fpsAverage < 30 ? 'text-rose-500' : metrics.fpsAverage < 50 ? 'text-amber-500' : 'text-emerald-400'}`}>
                             {metrics.fpsAverage}
@@ -162,7 +166,7 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                         <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">FPS Average</div>
                     </div>
                     
-                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
+                    <div className="spatial-node bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
                         <Gauge className="text-fuchsia-400 mb-2" size={24} />
                         <div className="text-2xl font-bold text-fuchsia-400">
                             {metrics.ramOps.toLocaleString()}
@@ -170,7 +174,7 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                         <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">RAM Ops / sec</div>
                     </div>
 
-                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
+                    <div className="spatial-node bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
                         <Zap className="text-amber-400 mb-2" size={24} />
                         <div className="text-2xl font-bold text-amber-400">
                             {Math.round(metrics.maxFrameTimeMs)}ms
@@ -178,7 +182,7 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                         <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">Peak Frame</div>
                     </div>
 
-                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
+                    <div className="spatial-node bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
                         <LayoutGrid className="text-indigo-400 mb-2" size={24} />
                         <div className="text-2xl font-bold text-indigo-400">
                             {metrics.domNodes.toLocaleString()}
@@ -186,7 +190,7 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                         <div className="text-zinc-500 text-xs mt-1 uppercase tracking-widest">DOM Nodes</div>
                     </div>
 
-                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
+                    <div className="spatial-node bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col items-center justify-center">
                         <Cpu className="text-cyan-400 mb-2" size={24} />
                         <div className="text-2xl font-bold text-cyan-400">
                             {metrics.jsHeapMb} MB
@@ -206,7 +210,7 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                             const stats = metricStats[metric.key];
 
                             return (
-                                <div key={metric.key} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                                <div key={metric.key} className="spatial-node rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
                                     <div className="flex items-baseline justify-between gap-3">
                                         <div className={`text-[11px] font-semibold uppercase tracking-widest ${metric.accentClass}`}>
                                             {metric.label}
@@ -294,11 +298,11 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                             </span>
                         </div>
                     </div>
-                    <div className="flex flex-col gap-1 mt-1 bg-zinc-950 rounded-lg p-2 max-h-[300px] overflow-y-auto border border-zinc-800/50">
+                    <SpatialVirtualizer className="flex flex-col gap-1 mt-1 bg-zinc-950 rounded-lg p-2 max-h-[300px] overflow-y-auto border border-zinc-800/50">
                         {ramLogs.length === 0 ? (
                             <div className="text-center text-zinc-600 text-xs py-4 font-mono">No logs available. Run with {`dev:perf`}</div>
                         ) : ramLogs.filter((l: any) => logFilter === 'ALL' || l.type === logFilter).map((log: any, index: number) => (
-                            <div key={log.id || index} className="flex items-start gap-3 py-1.5 px-2 hover:bg-zinc-900/50 rounded font-mono text-[10px]">
+                            <div key={log.id || index} className="spatial-node flex items-start gap-3 py-1.5 px-2 hover:bg-zinc-900/50 rounded font-mono text-[10px]">
                                 <div className={`px-1.5 py-0.5 rounded uppercase font-bold shrink-0 ${
                                     log.type === 'WRITE' ? 'bg-amber-500/20 text-amber-400' :
                                     log.type === 'READ' ? 'bg-blue-500/20 text-blue-400' :
@@ -322,10 +326,10 @@ export default function PerformanceDebugWindow({ windowUid }: { windowUid: strin
                                 </div>
                             </div>
                         ))}
-                    </div>
+                    </SpatialVirtualizer>
                 </div>
 
-            </div>
+            </SpatialVirtualizer>
         </AceWindow>
     );
 }

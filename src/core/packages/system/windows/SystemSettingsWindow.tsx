@@ -77,7 +77,7 @@ function SystemSettingsShell({
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 relative overflow-hidden bg-white dark:bg-[#171C27]" style={{ contentVisibility: 'auto' }}>
+            <div className="flex-1 relative overflow-hidden bg-white dark:bg-[#171C27]">
                 <SystemSettings />
             </div>
         </div>

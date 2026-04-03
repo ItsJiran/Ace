@@ -1,3 +1,4 @@
+import { SpatialVirtualizer } from "#/components/layout/SpatialVirtualizer";
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { RegistryPackage } from '#/schemas/registry';
 import type { AceRegistryType } from '#/schemas/registryTypes';
@@ -260,7 +261,7 @@ function KeybindsTab({ keybinds }: { keybinds: any[] }) {
                         <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 dark:text-zinc-500">Status</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+                    <SpatialVirtualizer as="tbody" targetSelector="tr" className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
                     {keybinds.map((bind) => (
                         <tr key={bind.keybind_uid} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 group">
                             <td className="px-4 py-3">
@@ -284,8 +285,8 @@ function KeybindsTab({ keybinds }: { keybinds: any[] }) {
                             </td>
                         </tr>
                     ))}
-                </tbody>
-            </table>
+                </SpatialVirtualizer>
+                </table>
             </div>
         </div>
     );
@@ -898,7 +899,7 @@ function PerformanceTab() {
                                 <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 dark:text-zinc-500 w-16">Listeners</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+                        <SpatialVirtualizer as="tbody" targetSelector="tr" className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
                             {topEntries.map((entry: { memory_uid: string; approx_bytes: number; type: string }) => {
                                 const listeners = listenerMap.get(entry.memory_uid) ?? 0;
                                 const pct = stats.approx_total_bytes > 0
@@ -934,7 +935,7 @@ function PerformanceTab() {
                                     </tr>
                                 );
                             })}
-                        </tbody>
+                        </SpatialVirtualizer>
                     </table>
                 </div>
             </div>

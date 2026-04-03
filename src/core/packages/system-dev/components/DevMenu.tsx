@@ -1,3 +1,4 @@
+import { SpatialVirtualizer } from '#/components/layout/SpatialVirtualizer';
 import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench, Workflow, ListTree } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { DesktopState } from '#/schemas/globalState';
@@ -73,7 +74,7 @@ export default function DevMenu() {
             y: 20,
             chrome_style: 'borderless',
             always_on_top: true,
-            is_locked: false, // user might want to drag it
+            is_locked: false,
         });
     };
 
@@ -97,7 +98,6 @@ export default function DevMenu() {
         const expandedWidth = Math.min(680, Math.max(420, Math.floor(viewportWidth * 0.52)));
         const expandedHeight = 66;
 
-        // Keep it visible across different monitor sizes
         const compactX = Math.round((viewportWidth - compactSize) / 2);
         const compactY = Math.max(24, viewportHeight - 140);
         const expandedX = Math.round((viewportWidth - expandedWidth) / 2);
@@ -220,9 +220,9 @@ export default function DevMenu() {
             package: 'itsjiran/ace-system-dev',
             window: 'ai-session-monitor-window',
             title: 'AI Session Monitor',
-            width: 460,
-            height: 540,
-            x: 760,
+            width: 620,
+            height: 480,
+            x: 420,
             y: 120,
         });
     };
@@ -232,10 +232,10 @@ export default function DevMenu() {
             package: 'itsjiran/ace-system-dev',
             window: 'eventbus-monitor-window',
             title: 'EventBus Monitor',
-            width: 680,
-            height: 500,
-            x: 260,
-            y: 120,
+            width: 720,
+            height: 540,
+            x: 380,
+            y: 140,
         });
     };
 
@@ -244,39 +244,32 @@ export default function DevMenu() {
             package: 'itsjiran/ace-system-dev',
             window: 'process-monitor-dev-window',
             title: 'Process Monitor',
-            width: 620,
-            height: 500,
-            x: 300,
-            y: 140,
+            width: 640,
+            height: 520,
+            x: 400,
+            y: 130,
         });
     };
 
     const spawnPromptChatbarDev = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system-dev',
-            window: 'ai-prompt-chatbar-dev-window',
+            window: 'prompt-chatbar-dev-window',
             title: 'Prompt Chatbar Dev',
-            width: 680,
-            height: 520,
-            x: 380,
-            y: 120,
+            width: 780,
+            height: 580,
+            x: 460,
+            y: 140,
         });
     };
 
     const pushNotificationSample = () => {
-        const notifier = window.ACE.notification;
-        if (!notifier) {
-            console.warn('[DevMenu] Notification API not ready yet.');
-            return;
-        }
-
-        notifier.push({
-            title: 'DevMenu Trigger',
-            message: 'Sample notification pushed from Dev Menu.',
-            level: 'info',
-            target: { type: 'global' },
+        window.ACE.window.pushNotification({
+            title: 'Test Notification',
+            message: 'This is a test notification dispatched from DevMenu.',
+            urgency: 'high',
+            icon: 'bell',
             payload: {
-                source: 'dev-menu',
                 test: true,
                 monitor_width: window.innerWidth,
                 monitor_height: window.innerHeight,
@@ -290,7 +283,6 @@ export default function DevMenu() {
     };
 
     const toggleOverlayMode = () => {
-        // Use direct WindowEngine call for synchronicity
         window.ACE.window.setOverlayMode(isAmbient ? 'interactive' : 'ambient');
     };
 
@@ -313,7 +305,36 @@ export default function DevMenu() {
         });
     };
 
-    const buttonClass = 'flex items-center gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 text-zinc-300';
+    const buttonClass = 'flex items-center justify-start gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 text-zinc-300 w-full mb-2';
+
+    const menuItems = [
+        { label: 'System Settings', icon: <Settings size={14} className="text-blue-400" />, onClick: spawnSystemSettings },
+        { label: 'Mock Settings (Pure Local)', icon: <Settings size={14} className="text-purple-400" />, onClick: spawnMockSettings },
+        { label: 'FPS Counter', icon: <Gauge size={14} className="text-yellow-400" />, onClick: toggleFPS },
+        { label: 'System Console', icon: <Terminal size={14} className="text-indigo-400" />, onClick: spawnSystemConsole },
+        { label: 'Open DevTools', icon: <Bug size={14} className="text-emerald-400" />, onClick: openDevTools },
+        { label: 'Performance Metrics (RAM/FPS)', icon: <Activity size={14} className="text-pink-400" />, onClick: spawnPerformanceDebug },
+        { label: 'Performance Widget (HUD)', icon: <Activity size={14} className="text-amber-400" />, onClick: spawnPerformanceWidget },
+        { label: 'Spawn Stress Test Widget', icon: <Activity size={14} className="text-rose-400" />, onClick: spawnStressTest },
+        { label: 'Spawn Prompt Morph', icon: <Wand2 size={14} className="text-fuchsia-400" />, onClick: spawnPromptMorphWindow },
+        { label: 'RAM Monitor', icon: <MemoryStick size={14} className="text-cyan-400" />, onClick: spawnRamMonitor },
+        { label: 'AI Chatbar Test Window', icon: <MessageSquare size={14} className="text-emerald-300" />, onClick: spawnAIChatbarTest },
+        { label: 'Prompt Chatbar Dev Window', icon: <MessageCircle size={14} className="text-sky-300" />, onClick: spawnPromptChatbarDev },
+        { label: 'AI Session Monitor Window', icon: <Monitor size={14} className="text-lime-300" />, onClick: spawnAISessionMonitor },
+        { label: 'EventBus Monitor', icon: <Workflow size={14} className="text-cyan-300" />, onClick: spawnEventBusMonitor },
+        { label: 'Process Monitor', icon: <Activity size={14} className="text-fuchsia-300" />, onClick: spawnProcessMonitor },
+        { label: 'Tool Runner', icon: <Wrench size={14} className="text-amber-400" />, onClick: spawnToolRunner },
+        { label: 'Parser Block Registry', icon: <ListTree size={14} className="text-violet-300" />, onClick: spawnParserBlockRegistry },
+        { label: 'Parser Block Playground', icon: <ListTree size={14} className="text-cyan-300" />, onClick: spawnParserBlockPlayground },
+        { label: 'Renderer Registry', icon: <ListTree size={14} className="text-emerald-400" />, onClick: spawnRendererRegistry },
+        { label: 'Push Notification', icon: <BellRing size={14} className="text-orange-400" />, onClick: pushNotificationSample },
+        { 
+            label: isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode', 
+            icon: <Share2 size={14} className={isAmbient ? "text-blue-400" : "text-red-300"} />, 
+            onClick: toggleOverlayMode,
+            customClass: `flex items-center justify-start gap-2 px-3 py-2 rounded text-sm transition-colors border w-full mb-2 ${isAmbient ? 'bg-zinc-800/80 border-zinc-700/50 text-zinc-400' : 'bg-red-900/40 border-red-500/50 text-red-100 hover:bg-red-800/50'}`
+        }
+    ];
 
     return (
         <div className="flex flex-col gap-2 w-full h-full p-2 relative">
@@ -322,119 +343,25 @@ export default function DevMenu() {
                 Development Kit
             </div>
 
-            <button onClick={spawnSystemSettings} className={buttonClass}>
-                <Settings size={14} className="text-blue-400" />
-                System Settings
-            </button>
-
-            <button onClick={spawnMockSettings} className={buttonClass}>
-                <Settings size={14} className="text-purple-400" />
-                Mock Settings (Pure Local)
-            </button>
-
-            <button onClick={toggleFPS} className={buttonClass}>
-                <Gauge size={14} className="text-yellow-400" />
-                FPS Counter
-            </button>
-
-            <button onClick={spawnSystemConsole} className={buttonClass}>
-                <Terminal size={14} className="text-indigo-400" />
-                System Console
-            </button>
-
-            <button onClick={openDevTools} className={buttonClass}>
-                <Bug size={14} className="text-emerald-400" />
-                Open DevTools
-            </button>
-
-            <button onClick={spawnPerformanceDebug} className={buttonClass}>
-                <Activity size={14} className="text-pink-400" />
-                Performance Metrics (RAM/FPS)
-            </button>
-
-            <button onClick={spawnPerformanceWidget} className={buttonClass}>
-                <Activity size={14} className="text-amber-400" />
-                Performance Widget (HUD)
-            </button>
-
-            <button onClick={spawnStressTest} className={buttonClass}>
-                <Activity size={14} className="text-rose-400" />
-                Spawn Stress Test Widget
-            </button>
-
-            <button onClick={spawnPromptMorphWindow} className={buttonClass}>
-                <Wand2 size={14} className="text-fuchsia-400" />
-                Spawn Prompt Morph
-            </button>
-
-            <button onClick={spawnRamMonitor} className={buttonClass}>
-                <MemoryStick size={14} className="text-cyan-400" />
-                RAM Monitor
-            </button>
-
-            <button onClick={spawnAIChatbarTest} className={buttonClass}>
-                <MessageSquare size={14} className="text-emerald-300" />
-                AI Chatbar Test Window
-            </button>
-
-            <button onClick={spawnPromptChatbarDev} className={buttonClass}>
-                <MessageCircle size={14} className="text-sky-300" />
-                Prompt Chatbar Dev Window
-            </button>
-
-            <button onClick={spawnAISessionMonitor} className={buttonClass}>
-                <Monitor size={14} className="text-lime-300" />
-                AI Session Monitor Window
-            </button>
-
-            <button onClick={spawnEventBusMonitor} className={buttonClass}>
-                <Workflow size={14} className="text-cyan-300" />
-                EventBus Monitor
-            </button>
-
-            <button onClick={spawnProcessMonitor} className={buttonClass}>
-                <Activity size={14} className="text-fuchsia-300" />
-                Process Monitor
-            </button>
-
-            <button onClick={spawnToolRunner} className={buttonClass}>
-                <Wrench size={14} className="text-amber-400" />
-                Tool Runner
-            </button>
-
-            <button onClick={spawnParserBlockRegistry} className={buttonClass}>
-                <ListTree size={14} className="text-violet-300" />
-                Parser Block Registry
-            </button>
-
-            <button onClick={spawnParserBlockPlayground} className={buttonClass}>
-                <ListTree size={14} className="text-cyan-300" />
-                Parser Block Playground
-            </button>
-
-            <button onClick={spawnRendererRegistry} className={buttonClass}>
-                <ListTree size={14} className="text-emerald-400" />
-                Renderer Registry
-            </button>
-
-            <button onClick={pushNotificationSample} className={buttonClass}>
-                <BellRing size={14} className="text-orange-400" />
-                Push Notification
-            </button>
-
-            <button
-                onClick={toggleOverlayMode}
-                className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors border ${isAmbient ? 'bg-zinc-800/80 border-zinc-700/50 text-zinc-400' : 'bg-red-900/40 border-red-500/50 text-red-100 hover:bg-red-800/50'}`}
-            >
-                <Share2 size={14} className={isAmbient ? "text-blue-400" : "text-red-300"} />
-                {isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode'}
-            </button>
+            <SpatialVirtualizer className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
+                {menuItems.map((item, idx) => (
+                    <button 
+                        
+                        key={idx}
+                        onClick={item.onClick} 
+                        className={item.customClass || buttonClass}
+                    >
+                        {item.icon}
+                        {item.label}
+                    </button>
+                ))}
+            </SpatialVirtualizer>
 
             <div className="mt-auto h-px bg-zinc-800/50 my-2" />
 
             <button
                 onClick={() => getCurrentWindow().close()}
-                className="flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors border bg-red-950/60 border-red-800/50 text-red-300 hover:bg-red-900/80 hover:text-red-100"
+                className="flex items-center gap-2 px-3 py-2 w-full mx-2 rounded text-sm transition-colors border bg-red-950/60 border-red-800/50 text-red-300 hover:bg-red-900/80 hover:text-red-100"
             >
                 <Power size={14} className="text-red-400" />
                 Quit Application

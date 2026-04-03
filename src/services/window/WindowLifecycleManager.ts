@@ -11,6 +11,7 @@ export interface WindowLifecycleDependencies {
     updateWindowConfig: (uid: string, updates: Partial<WindowConfig>) => void;
     animationController: WindowAnimationController;
     windowMemoryUid: (uid: string) => string;
+    getRegistry: (packageRef: string, slug: string) => any;
 }
 
 export class WindowLifecycleManager {
@@ -109,6 +110,14 @@ export class WindowLifecycleManager {
             console.error('[WindowEngine] spawnWindow failed: Missing required package/window identifiers.', options);
             return null;
         }
+        
+        let defaultConfig: Partial<WindowConfig> = {};
+        if (options.package && options.window) {
+            const registryEntry = this.deps.getRegistry(options.package, options.window);
+            if (registryEntry?.default_config) {
+                defaultConfig = registryEntry.default_config;
+            }
+        }
 
         const window_uid = options._reserved_uid ?? ('win-' + Math.random().toString(36).substring(2, 9));
         const z_index = this.deps.bumpZIndex();
@@ -116,17 +125,17 @@ export class WindowLifecycleManager {
         const freshWindow: WindowConfig = {
             window_uid,
             component: entryRef,
-            x: options.x ?? 100,
-            y: options.y ?? 100,
-            width: options.width ?? 400,
-            height: options.height ?? 300,
+            x: options.x ?? defaultConfig.x ?? 100,
+            y: options.y ?? defaultConfig.y ?? 100,
+            width: options.width ?? defaultConfig.width ?? 400,
+            height: options.height ?? defaultConfig.height ?? 300,
             z_index,
-            opacity: options.opacity ?? 1,
-            is_locked: options.is_locked ?? false,
-            always_on_top: options.always_on_top ?? false,
-            chrome_style: options.chrome_style ?? 'standard',
-            drag_surface: options.drag_surface ?? 'header',
-            hide_ring: options.hide_ring ?? false,
+            opacity: options.opacity ?? defaultConfig.opacity ?? 1,
+            is_locked: options.is_locked ?? defaultConfig.is_locked ?? false,
+            always_on_top: options.always_on_top ?? defaultConfig.always_on_top ?? false,
+            chrome_style: options.chrome_style ?? defaultConfig.chrome_style ?? 'standard',
+            drag_surface: options.drag_surface ?? defaultConfig.drag_surface ?? 'header',
+            hide_ring: options.hide_ring ?? defaultConfig.hide_ring ?? false,
             is_focused: false,
             is_minimized: false
         };
