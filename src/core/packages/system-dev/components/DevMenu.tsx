@@ -1,3 +1,4 @@
+import { DeferredWindowContent } from '#/components/layout/DeferredWindowContent';
 import { SpatialVirtualizer } from '#/components/layout/SpatialVirtualizer';
 import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench, Workflow, ListTree } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -337,35 +338,37 @@ export default function DevMenu() {
     ];
 
     return (
-        <div className="flex flex-col gap-2 w-full h-full p-2 relative">
-            <RenderCounterBadge componentName="DevMenu" />
-            <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">
-                Development Kit
+        <DeferredWindowContent fallback={<div className="text-zinc-500 font-mono text-xs">Loading Dev Tools...</div>}>
+            <div className="flex flex-col gap-2 w-full h-full p-2 relative">
+                <RenderCounterBadge componentName="DevMenu" />
+                <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">
+                    Development Kit
+                </div>
+
+                <SpatialVirtualizer className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
+                    {menuItems.map((item, idx) => (
+                        <button 
+                            
+                            key={idx}
+                            onClick={item.onClick} 
+                            className={item.customClass || buttonClass}
+                        >
+                            {item.icon}
+                            {item.label}
+                        </button>
+                    ))}
+                </SpatialVirtualizer>
+
+                <div className="mt-auto h-px bg-zinc-800/50 my-2" />
+
+                <button
+                    onClick={() => getCurrentWindow().close()}
+                    className="flex items-center gap-2 px-3 py-2 w-full mx-2 rounded text-sm transition-colors border bg-red-950/60 border-red-800/50 text-red-300 hover:bg-red-900/80 hover:text-red-100"
+                >
+                    <Power size={14} className="text-red-400" />
+                    Quit Application
+                </button>
             </div>
-
-            <SpatialVirtualizer className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
-                {menuItems.map((item, idx) => (
-                    <button 
-                        
-                        key={idx}
-                        onClick={item.onClick} 
-                        className={item.customClass || buttonClass}
-                    >
-                        {item.icon}
-                        {item.label}
-                    </button>
-                ))}
-            </SpatialVirtualizer>
-
-            <div className="mt-auto h-px bg-zinc-800/50 my-2" />
-
-            <button
-                onClick={() => getCurrentWindow().close()}
-                className="flex items-center gap-2 px-3 py-2 w-full mx-2 rounded text-sm transition-colors border bg-red-950/60 border-red-800/50 text-red-300 hover:bg-red-900/80 hover:text-red-100"
-            >
-                <Power size={14} className="text-red-400" />
-                Quit Application
-            </button>
-        </div>
+        </DeferredWindowContent>
     );
 }
