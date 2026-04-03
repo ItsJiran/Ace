@@ -254,7 +254,7 @@ function KeybindsTab({ keybinds }: { keybinds: any[] }) {
         <div className="rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden">
             <div className="overflow-y-auto max-h-[80vh]">
                 <table className="w-full text-sm flex flex-col w-full">
-                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-sm w-full block">
+                    <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 w-full block">
                         <tr className="flex w-full">
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-2/5">Command</th>
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 dark:text-zinc-500 w-1/4">Shortcut</th>
@@ -954,7 +954,7 @@ function KeyBadge({ shortcut }: { shortcut: string }) {
             {parts.map((p, i) => (
                 <kbd
                     key={i}
-                    className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-300 shadow-[0_1px_0_0_theme(colors.slate.300)] dark:shadow-[0_1px_0_0_theme(colors.zinc.700)]"
+                    className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-300"
                 >
                     {p}
                 </kbd>
