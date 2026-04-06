@@ -121,6 +121,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     const [isDragging, setIsDragging] = useState(false);
     const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
     const elementRef = useRef<HTMLDivElement | null>(null);
+    const [isHoveredState, setIsHoveredState] = useState(false);
     
     // ARCHITECTURE: Window position is LOCAL state, not subscribed from global
     // This completely isolates position updates from global cascades.
@@ -130,7 +131,7 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
     const [localY, setLocalY] = useState<number | null>(null);
 
     // Use ref for hover tracking instead of state to avoid re-renders on hover
-    // Hover state is only used for visual styling, doesn't need React render cycle
+    // Hover state: track in a ref for imperative usage and in state for components
     const isHoveredRef = useRef(false);
 
     // Initialize local position when config first becomes available.
@@ -182,44 +183,16 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
         if (contextMenu) {
             window.addEventListener('click', closeMenu);
         }
-
         return () => window.removeEventListener('click', closeMenu);
     }, [contextMenu]);
-
-    useEffect(() => {
-        const el = elementRef.current;
-        if (!el) return;
-
-        // Skip hover class during drag to avoid CSS recalculations
-        // isDragging tracks actual drag state, separate from hover visual state
-        const onMouseEnter = () => {
-            if (!isDragging) {
-                el.classList.add('is-hovered');
-            }
-        };
-        
-        const onMouseLeave = () => {
-            el.classList.remove('is-hovered');
-        };
-
-        el.addEventListener('mouseenter', onMouseEnter);
-        el.addEventListener('mouseleave', onMouseLeave);
-
-        return () => {
-            el.removeEventListener('mouseenter', onMouseEnter);
-            el.removeEventListener('mouseleave', onMouseLeave);
-            el.classList.remove('is-hovered');
-        };
-    }, [windowUid, isDragging]);
 
     // -------------------------------------------------------------------------
     // Derived Runtime Flags
     // -------------------------------------------------------------------------
     
     // Derive isHovered from live ref state
-    // In practice, this will always be false during renders (ref updates don't trigger renders)
-    // Components should use CSS class "is-hovered" for styling instead
-    const isHovered = isHoveredRef.current;
+    // Keep a renderable `isHovered` derived from state so consumers re-render when hover changes
+    const isHovered = isHoveredState;
     // We no longer have real-time access to animation state via hooks to prevent re-renders.
     // If a component needs to visually react to animation state, it should subscribe to a specific key.
     const animationState: AnimationRuntimeState | undefined = undefined; 
@@ -535,6 +508,16 @@ export function useAceWindow(input: UseAceWindowInput): UseAceWindowResult {
                 e.preventDefault();
                 e.stopPropagation();
                 setContextMenu({ x: e.clientX, y: e.clientY });
+            },
+            onMouseEnter: () => {
+                isHoveredRef.current = true;
+                console.log('Mouse enter - setting hovered true');
+                setIsHoveredState(true);
+            },
+            onMouseLeave: () => {
+                isHoveredRef.current = false;
+                console.log('Mouse leave - setting hovered false');
+                setIsHoveredState(false);
             },
         }),
         [beginDrag, focus, isFullDrag, windowUid]

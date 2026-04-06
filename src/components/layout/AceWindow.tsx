@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import html2canvas from 'html2canvas';
 import type { WindowConfig } from '#/schemas/window';
 import { useAceWindow, type UseAceWindowResult } from '#/hooks/useAceWindow';
 import { useAceMemorySelector } from '#/hooks/useAceMemory';
@@ -17,94 +16,100 @@ type AceWindowProps = {
     children?: ReactNode | ((props: UseAceWindowResult) => ReactNode);
 };
 
-// Accept either windowUid (preferred runtime path) or direct config object
 function AceWindowComponent({ windowUid, config, headless, className, style, children }: AceWindowProps) {
-
-    // Determine source
+    // 1. Initialization & Validations
     const input = windowUid || config;
-    if (!input) return null;
-
     const window = useAceWindow(input);
-    const resolvedConfig = window.config || config;
+    const resolvedConfig = window?.config || config;
+
+    if (!input || !resolvedConfig) return null;
+
+    // 2. Computed States & Classes
+    const isDraggingFocused = window.isDragging && window.isFocused;
+    const baseTransitionClass = isDraggingFocused ? 'duration-0' : 'duration-150';
     
-    // Safety check: if config isn't ready in RAM yet
-    if (!resolvedConfig) return null;
+    // NUCLEAR POINTER NUKE: Disable hit-testing during drag for performance
+    const pointerEventsClass = window.isDragging 
+        ? '!pointer-events-none' 
+        : (window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none');
 
-    const [isHovered, setIsHovered] = useState(false);
-    const [snapshot, setSnapshot] = useState<string | null>(null);
-    const snapshotTimeoutReq = useRef<NodeJS.Timeout>();
-    const innerContentRef = useRef<HTMLDivElement>(null);
+    const pointerEventsContentClass = window.isHovered ? 'pointer-events-auto' : 'pointer-events-none';
 
-    const handleMouseEnter = () => {
-        setIsHovered(true);
-        if (snapshotTimeoutReq.current) clearTimeout(snapshotTimeoutReq.current);
-        // We no longer clear snapshot here so it acts as a permanent cache to prevent lag
-    };
-
-    const handleMouseLeave = () => {
-        setIsHovered(false);
-        
-        // If we already have a snapshot, skip taking another one to aggressively prevent lag
-        if (snapshot) return;
-
-        // Start taking snapshot buffer via html2canvas since native xcap was reverted
-        if (!window.isDragging && innerContentRef.current) {
-            snapshotTimeoutReq.current = setTimeout(async () => {
-                if (!innerContentRef.current) return;
-                try {
-                    const canvas = await html2canvas(innerContentRef.current, {
-                        backgroundColor: null,
-                        logging: false,
-                        useCORS: true,
-                        allowTaint: true,
-                    });
-                    setSnapshot(canvas.toDataURL('image/png'));
-                } catch (e) {
-                    console.warn("Failed to capture html2canvas buffer:", e);
-                }
-            }, 100);
-        }
-    };
-
-    const isDraggingFocusedWindow = window.isDragging && window.isFocused;
-    const baseTransitionClass = isDraggingFocusedWindow ? 'duration-0' : 'duration-150';
-    
-    // NUCLEAR POINTER NUKE: the moment we start dragging, hit-testing is dead for the entire element and its complex children
-    const pointerEventsClass = window.isDragging ? '!pointer-events-none' : (window.canCapturePointer ? 'pointer-events-auto' : 'pointer-events-none');
-
-    // OCCLUSION CULLING: automatically hide content if fully covered by another opaque window.
+    // OCCLUSION CULLING
     const hideContent = useAceMemorySelector<Record<string, boolean>, boolean>(
         'system:window_occlusion',
         (dict) => dict?.[resolvedConfig.window_uid] ?? false
     );
 
-    // Render contents helper
-    const renderNodeOrSnapshot = () => {
-        const realContent = typeof children === 'function' ? children(window) : children;
-        
-        return (
-            <>
-                {snapshot && !isHovered && (
-                    <img 
-                        src={snapshot} 
-                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-50 rounded-[inherit]" 
-                        alt="Window Snapshot" 
-                    />
-                )}
-                {/* 
-                  When showing the snapshot, we hide the real tree visually so it doesn't incur repaints,
-                  but we don't unmount it, preserving internal React state.
-                 */}
-                <div ref={innerContentRef} className={`w-full h-full ${snapshot && !isHovered ? 'hidden' : ''}`}>
-                    {realContent || (
-                        <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
-                            <p>Unregistered Component Schema:</p>
-                            <span className="text-red-400 font-bold mt-1 text-sm">{resolvedConfig.component}</span>
-                            <p className="mt-4 text-zinc-600">Ensure this component is declared in package registry and loaded by RegistryEngine.</p>
-                        </div>
-                    )}
+    const contentVisibilityValue = hideContent ? 'hidden' : (window.isHovered ? 'visible' : 'auto');
+
+    // 3. Content Resolution
+    const realContent = typeof children === 'function' ? children(window) : children;
+    const contentNode = realContent || (
+        <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-xs opacity-50 p-4 text-center border-2 border-dashed border-zinc-800 rounded">
+            <p>Unregistered Component Schema:</p>
+            <span className="text-red-400 font-bold mt-1 text-sm">{resolvedConfig.component}</span>
+            <p className="mt-4 text-zinc-600">Ensure this component is declared in package registry and loaded by RegistryEngine.</p>
+        </div>
+    );
+
+    // Shared inner content wrapper for both Standard and Headless modes
+    const InnerContent = (
+        <div 
+            className={`w-full h-full flex-1 overflow-auto relative transition-opacity duration-150 contain-[strict] ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : ''}`}
+            style={{
+                contentVisibility: contentVisibilityValue,
+                contain: hideContent ? 'size layout' : undefined,
+                // PERF: Promote to GPU layer to prevent alpha-composition lag
+                transform: 'translateZ(0)',
+                willChange: 'transform, scroll-position',
+            }}
+        >
+            {contentNode}
+        </div>
+    );
+
+    const renderContextMenu = () => {
+        if (!window.contextMenu) return null;
+
+        return createPortal(
+            <div
+                className="fixed z-[99999] bg-zinc-900 border border-zinc-700/80 rounded-lg py-1 text-xs w-48 text-zinc-300 flex flex-col pointer-events-auto ring-1 ring-black/50"
+                style={{ top: window.contextMenu.y, left: window.contextMenu.x }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.preventDefault()}
+            >
+                <div className="px-3 py-1.5 text-zinc-500 font-semibold border-b border-zinc-800 mb-1">
+                    {resolvedConfig.title || resolvedConfig.component}
                 </div>
-            </>
+                
+                <button data-window-action="true" onClick={window.toggleLock} className="mx-1 px-2 py-1.5 text-left hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors">
+                    {resolvedConfig.is_locked ? <Unlock size={12} className="text-amber-500" /> : <Lock size={12} />}
+                    {resolvedConfig.is_locked ? 'Unlock Position' : 'Lock Position'}
+                </button>
+                
+                <button data-window-action="true" onClick={window.toggleAlwaysOnTop} className="mx-1 px-2 py-1.5 text-left hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors">
+                    {resolvedConfig.always_on_top ? <Layers size={12} className="text-emerald-500" /> : <BringToFront size={12} />}
+                    {resolvedConfig.always_on_top ? 'Disable Always-On-Top' : 'Always On Top'}
+                </button>
+                
+                <div className="h-px bg-zinc-800 my-1 mx-2" />
+                <div className="px-3 py-1 text-zinc-500 font-medium text-[10px] uppercase tracking-wider">Opacity</div>
+                
+                <div className="flex px-2 gap-1 pb-1">
+                    {[1, 0.9, 0.75, 0.5, 0.25].map(v => (
+                        <button
+                            data-window-action="true"
+                            key={v}
+                            onClick={() => window.setOpacity(v)}
+                            className={`flex-1 h-6 rounded hover:bg-zinc-700 active:bg-zinc-600 flex items-center justify-center text-[10px] border border-zinc-700/50 ${resolvedConfig.opacity === v ? 'bg-zinc-700 text-white border-zinc-500' : 'bg-zinc-800/50'}`}
+                        >
+                            {v * 100}
+                        </button>
+                    ))}
+                </div>
+            </div>,
+            document.body
         );
     };
 
@@ -116,23 +121,15 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
             <div
                 {...window.rootProps}
                 ref={window.ref}
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
                 className={`group absolute top-0 left-0 flex flex-col ${pointerEventsClass} ${className || ''}`}
                 style={{
                     ...window.rootStyle,
                     ...style,
-                    // Enforce 0 duration on transform during drag for performance, unless user overrides via style
                     transitionDuration: window.isDragging ? '0ms' : undefined,
                 }}
             >
                 <RenderCounterBadge componentName={`AceWindow:${windowUid ?? resolvedConfig.component}`} />
-                <div 
-                    className={`w-full h-full flex-1 overflow-auto relative ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'} ${hideContent ? '[contain:strict]' : '[contain:strict] group-hover:[contain:content]'}`}
-                    style={{ contentVisibility: hideContent ? 'hidden' : undefined, contain: hideContent ? 'size layout' : undefined }}
-                >
-                    {renderNodeOrSnapshot()}
-                </div>
+                {InnerContent}
             </div>
         );
     }
@@ -144,8 +141,6 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
         <div
             {...window.rootProps}
             ref={window.ref}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
             className={`group absolute top-0 left-0 flex flex-col rounded-xl transition-[background-color,opacity,transform] ease-out ${baseTransitionClass} ${pointerEventsClass} ${!window.hideRing && (window.isFocused ? 'ring-1 ring-blue-500/50' : 'ring-1 ring-white/10')} ${window.isMounted ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'} ${window.isDragging ? 'overflow-visible' : 'overflow-hidden'} ${className || ''}`}
             style={{
                 ...window.rootStyle,
@@ -156,10 +151,9 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                 ...style,
             }}
         >
-
             {!window.isBorderless && (
                 <div
-                    className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-colors relative ${window.isFocused ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}
+                    className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing select-none transition-all duration-150 relative ${pointerEventsContentClass} ${window.isFocused ? 'bg-white/10 border-b border-white/5' : 'bg-transparent border-b border-transparent'}`}
                     onMouseDown={window.dragHandleProps.onMouseDown}
                 >
                     <div className={`flex items-center gap-2 ${window.isFocused ? 'text-white/60' : 'text-white/30'}`}>
@@ -183,88 +177,39 @@ function AceWindowComponent({ windowUid, config, headless, className, style, chi
                 </div>
             )}
 
-            {window.contextMenu && createPortal(
-                <div
-                    className="fixed z-[99999] bg-zinc-900 border border-zinc-700/80 rounded-lg py-1 text-xs w-48 text-zinc-300 flex flex-col pointer-events-auto ring-1 ring-black/50"
-                    style={{ top: window.contextMenu.y, left: window.contextMenu.x }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onContextMenu={(e) => e.preventDefault()}
-                >
-                    <div className="px-3 py-1.5 text-zinc-500 font-semibold border-b border-zinc-800 mb-1">
-                        {resolvedConfig.title || resolvedConfig.component}
-                    </div>
-                    <button data-window-action="true" onClick={window.toggleLock} className="mx-1 px-2 py-1.5 text-left hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors">
-                        {resolvedConfig.is_locked ? <Unlock size={12} className="text-amber-500" /> : <Lock size={12} />}
-                        {resolvedConfig.is_locked ? 'Unlock Position' : 'Lock Position'}
-                    </button>
-                    <button data-window-action="true" onClick={window.toggleAlwaysOnTop} className="mx-1 px-2 py-1.5 text-left hover:bg-zinc-800 rounded flex items-center gap-2 transition-colors">
-                        {resolvedConfig.always_on_top ? <Layers size={12} className="text-emerald-500" /> : <BringToFront size={12} />}
-                        {resolvedConfig.always_on_top ? 'Disable Always-On-Top' : 'Always On Top'}
-                    </button>
-                    <div className="h-px bg-zinc-800 my-1 mx-2" />
-                    <div className="px-3 py-1 text-zinc-500 font-medium text-[10px] uppercase tracking-wider">Opacity</div>
-                    <div className="flex px-2 gap-1 pb-1">
-                        {[1, 0.9, 0.75, 0.5, 0.25].map(v => (
-                            <button
-                                data-window-action="true"
-                                key={v}
-                                onClick={() => window.setOpacity(v)}
-                                className={`flex-1 h-6 rounded hover:bg-zinc-700 active:bg-zinc-600 flex items-center justify-center text-[10px] border border-zinc-700/50 ${resolvedConfig.opacity === v ? 'bg-zinc-700 text-white border-zinc-500' : 'bg-zinc-800/50'}`}
-                            >
-                                {v * 100}
-                            </button>
-                        ))}
-                    </div>
-                </div>,
-                document.body
-            )}
-
-            <div 
-                className={`w-full h-full flex-1 overflow-auto relative ${window.isBorderless ? '' : 'p-2'} ${window.isDragging ? 'pointer-events-none' : 'pointer-events-none group-hover:pointer-events-auto'} ${hideContent ? '[contain:strict]' : '[contain:strict] group-hover:[contain:content]'}`}
-                style={{
-                    // PERF: Force Chromium to promote the scrollable inner component to its own GPU layer.
-                    // This stops alpha-composition lag when interacting/scrolling within transparent windows.
-                    transform: 'translateZ(0)',
-                    willChange: 'transform, scroll-position',
-                    contentVisibility: hideContent ? 'hidden' : undefined,
-                    contain: hideContent ? 'size layout' : undefined 
-                }}
-            >
-                {renderNodeOrSnapshot()}
-            </div>
+            {renderContextMenu()}
+            {InnerContent}
         </div>
     );
 }
 
+// Shallow equality helper for objects
+const shallowEqual = (objA: any, objB: any) => {
+    if (Object.is(objA, objB)) return true;
+    if (typeof objA !== 'object' || objA === null || typeof objB !== 'object' || objB === null) return false;
+    
+    const keysA = Object.keys(objA);
+    const keysB = Object.keys(objB);
+    
+    if (keysA.length !== keysB.length) return false;
+    for (let i = 0; i < keysA.length; i++) {
+        if (!Object.prototype.hasOwnProperty.call(objB, keysA[i]) || !Object.is(objA[keysA[i]], objB[keysA[i]])) {
+            return false;
+        }
+    }
+    return true;
+};
+
 export const AceWindow = React.memo(AceWindowComponent, (prev, next) => {
-    // Optimistic memo: if uids match, we trust the internal O(1) subscription of useAceWindow to handle updates.
-    // We only re-render the wrapper if the Window Identity changes (which never happens for same key).
-    // EXCEPT when children change, so we must be careful.
+    // 1. If children change, always re-render
+    if (prev.children !== next.children) return false;
+
+    // 2. Trust O(1) subscription if uids match and are provided
     if (prev.windowUid && next.windowUid) {
-        return prev.windowUid === next.windowUid && prev.children === next.children;
+        return prev.windowUid === next.windowUid;
     }
 
-    const a = prev.config;
-    const b = next.config;
-
-    if (!a || !b) return false;
-
-    return (
-        a.window_uid === b.window_uid &&
-        a.component === b.component &&
-        a.payload_memory_uid === b.payload_memory_uid &&
-        a.x === b.x &&
-        a.y === b.y &&
-        a.width === b.width &&
-        a.height === b.height &&
-        a.z_index === b.z_index &&
-        a.opacity === b.opacity &&
-        a.is_locked === b.is_locked &&
-        a.always_on_top === b.always_on_top &&
-        a.chrome_style === b.chrome_style &&
-        a.drag_surface === b.drag_surface &&
-        a.is_minimized === b.is_minimized &&
-        a.title === b.title &&
-        prev.children === next.children
-    );
+    // 3. Fallback: robust shallow config comparison
+    if (!prev.config || !next.config) return false;
+    return shallowEqual(prev.config, next.config);
 });

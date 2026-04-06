@@ -2,9 +2,12 @@ import { DeferredWindowContent } from '#/components/layout/DeferredWindowContent
 import { SpatialVirtualizer } from '#/components/layout/SpatialVirtualizer';
 import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench, Workflow, ListTree } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useRef } from 'react';
 import type { DesktopState } from '#/schemas/globalState';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { useAceEvent } from '#/hooks/useAceEvent';
+import { useWindowContext } from '#/hooks/useWindowContext';
+import { useWindowSnapshot } from '#/hooks/useWindowSnapshot';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
 
@@ -15,6 +18,10 @@ export const registry: AceRegistryType.Component = {
 };
 
 export default function DevMenu() {
+    const windowCtx = useWindowContext();
+    const { markDirty } = useWindowSnapshot(windowCtx?.window_uid || '');
+    const scrollTimeoutRef = useRef<number | undefined>(undefined);
+
     const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
     const isAmbient = overlayState?.mode === 'ambient';
 
