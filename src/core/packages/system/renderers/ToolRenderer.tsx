@@ -72,9 +72,24 @@ export default function ToolRenderer(props: ToolRendererProps) {
             {props.result && typeof props.result === 'object' && Object.keys(props.result).length > 0 && (
                 <div className="ml-6 text-xs text-amber-600 dark:text-amber-400 bg-white dark:bg-zinc-900 rounded p-2 max-h-40 overflow-auto">
                     <div className="font-semibold mb-1">Result:</div>
-                    <pre className="font-mono text-[10px]">
-                        {JSON.stringify(props.result, null, 2)}
-                    </pre>
+                    {toolSlug === 'fs-tool' && (props.result as any).action === 'list_directory' && Array.isArray((props.result as any).items) ? (
+                        <ul className="list-disc pl-4 font-mono text-[10px] space-y-1">
+                            {((props.result as any).items as any[]).map((item, idx) => (
+                                <li key={idx} className={item.is_directory ? 'text-blue-500' : 'text-zinc-400'}>
+                                    {item.is_directory ? '📁 ' : '📄 '}
+                                    {item.name}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : toolSlug === 'fs-tool' && (props.result as any).action === 'read_file' && typeof (props.result as any).content === 'string' ? (
+                        <pre className="font-mono text-[10px] whitespace-pre-wrap text-zinc-300">
+                            {(props.result as any).content}
+                        </pre>
+                    ) : (
+                        <pre className="font-mono text-[10px]">
+                            {JSON.stringify(props.result, null, 2)}
+                        </pre>
+                    )}
                 </div>
             )}
         </div>

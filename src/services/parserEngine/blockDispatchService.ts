@@ -82,6 +82,7 @@ export class ParserBlockDispatchService {
             isComplete,
             result,
             session_id: sessionId,
+            process_uid: processUid,
             block_id: blockId,
             turn_id: turnId,
             emit_result: (payload) => {

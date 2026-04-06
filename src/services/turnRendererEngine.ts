@@ -52,6 +52,18 @@ function rendererDataKey(turnId: string, index: number): string {
 // ── Engine ──────────────────────────────────────────────────────────────────────
 
 class TurnRendererEngineSingleton {
+    private findLatestRendererIndex(turnId: string, rendererSlug: string): number {
+        const current = this.getRenderers(turnId);
+        if (!current?.renderers?.length) return -1;
+
+        for (let index = current.renderers.length - 1; index >= 0; index -= 1) {
+            if (current.renderers[index]?.renderer_slug === rendererSlug) {
+                return current.renderers[index].index;
+            }
+        }
+
+        return -1;
+    }
 
     /**
      * Read the current turn renderer state.
@@ -196,6 +208,16 @@ class TurnRendererEngineSingleton {
             renderers,
             updated_at: Date.now(),
         });
+    }
+
+    updateLatestRenderer(turnId: string, rendererSlug: string, data: Record<string, unknown>, status?: TurnRendererStatus): void {
+        const index = this.findLatestRendererIndex(turnId, rendererSlug);
+        if (index < 0) return;
+
+        this.updateRendererData(turnId, index, data);
+        if (status) {
+            this.updateRendererStatus(turnId, index, status);
+        }
     }
 
     /**

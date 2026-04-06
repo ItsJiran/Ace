@@ -27,6 +27,9 @@ export const DEFAULT_APP_BRIDGE_CONTEXT = [
     '  - <tool>     — list tools, view a tool schema, or execute a tool.',
     '  - <storage>  — read, list, inspect, write, or delete runtime memory.',
     '  - <event>    — fire a UI or system event.',
+    '',
+    '  *** TEMPORARY WORKAROUND ***',
+    '  - When outputting a <tool> block (like fs-tool), you must NOT output any text or prose after the block closes. Stop immediately after the block.',
 ].join('\n');
 
 export function buildDefaultParserContextProtocol(): string {

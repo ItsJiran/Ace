@@ -151,6 +151,7 @@ export interface ParserBlockHandlerContext {
     isComplete: boolean;
     result: AIParseResult;
     session_id?: string;
+    process_uid?: string;
     block_id?: number;
     turn_id?: string;
     emit_result?: (payload: ParserEmitPayload) => void;

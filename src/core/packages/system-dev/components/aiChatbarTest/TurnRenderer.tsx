@@ -60,7 +60,7 @@ export function TurnRenderer({ turnMemoryUid }: { turnMemoryUid: string }) {
     // Optional: hook for extensions (like tools) linked to this turn. 
     // We assume turn.active_response_turn_id represents the ID for extensions if needed.
     const parsedTurnId = turn?.active_response_turn_id;
-    const rendererMemoryKey = parsedTurnId ? `system:turn:${parsedTurnId}:renderers` : null;
+    const rendererMemoryKey = parsedTurnId ? `system:turn:${parsedTurnId}:renderers` : '__missing_turn_renderer__';
     const extensions = useAceMemory<TurnRendererMemory>(rendererMemoryKey);
 
     if (!turn) return null;

@@ -1,7 +1,6 @@
 
 import { KernelEngine } from '../kernelEngine';
 import { ParserEngine } from '../parserEngine';
-import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { TurnRendererEngine } from '../turnRendererEngine';
 import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
 import { AIConfigManager } from './configManager';
@@ -20,6 +19,7 @@ const TOOL_FEEDBACK_WAIT_INTERVAL_MS = 120;
 type ResponseAttemptSnapshot = {
     attempt_index: number;
     prompt: string;
+    composed_prompt?: string;
     started_at: number;
     finished_at?: number;
     status?: string;
@@ -54,6 +54,7 @@ function snapshotResponseAttemptFromMemory(input: {
     return {
         attempt_index: attemptIndex,
         prompt,
+        composed_prompt: typeof memory.composed_prompt === 'string' ? memory.composed_prompt : undefined,
         started_at: typeof memory.started_at === 'number' ? memory.started_at : Date.now(),
         finished_at: typeof memory.finished_at === 'number' ? memory.finished_at : undefined,
         status: typeof memory.status === 'string' ? memory.status : undefined,
@@ -158,139 +159,51 @@ async function waitForActionTerminalEvent(sessionId: string, replyToRamKey: stri
     return getLatestActionTerminalEvent(finalState.mergedResults);
 }
 
-function buildActionContinuationPrompt(input: {
-    composedPrompt: string;
-    sessionId: string;
+function hydrateActionRendererFromTerminalEvent(input: {
+    turnId: string;
     terminalEvent: ParserSessionEmitRecord;
-}): string | null {
-    const { composedPrompt, sessionId, terminalEvent } = input;
+}) {
+    const { turnId, terminalEvent } = input;
     const payload = terminalEvent.payload && typeof terminalEvent.payload === 'object'
-        ? terminalEvent.payload
+        ? terminalEvent.payload as Record<string, unknown>
         : null;
-    if (!payload) return null;
+    if (!payload) return;
 
-    const action = typeof payload.action === 'string' ? payload.action : 'unknown';
-    const blockType = typeof payload.block_slug === 'string'
-        ? payload.block_slug
-        : (typeof terminalEvent.parsed_tag === 'string' ? terminalEvent.parsed_tag : 'tool');
+    const resultMemoryUid = typeof payload.result_memory_uid === 'string'
+        ? payload.result_memory_uid
+        : undefined;
+    const resultMemory = resultMemoryUid
+        ? KernelEngine.readMemory(resultMemoryUid) as Record<string, unknown> | undefined
+        : undefined;
     const eventName = typeof terminalEvent.event_name === 'string'
         ? terminalEvent.event_name
-        : PARSER_RUNTIME_EVENT.HANDLER_RESULT;
-    const resultMemoryUid = typeof payload.result_memory_uid === 'string' ? payload.result_memory_uid : undefined;
-    const packageRef = typeof payload.package_ref === 'string' ? payload.package_ref : undefined;
-    const toolSlug = typeof payload.tool_slug === 'string' ? payload.tool_slug : undefined;
+        : '';
+    const isError = eventName === PARSER_RUNTIME_EVENT.HANDLER_ERROR;
+    const normalizedStatus = isError
+        ? 'error'
+        : 'completed';
+    const resultPayload = resultMemory && typeof resultMemory === 'object'
+        ? resultMemory
+        : payload;
+    const resultField = resultPayload.result;
+    const resultValue = resultField && typeof resultField === 'object' && !Array.isArray(resultField)
+        ? resultField as Record<string, unknown>
+        : resultPayload;
 
-    const feedbackMemoryKey = upsertActionFeedbackContextMemory({
-        sessionId,
-        blockType,
-        action,
-        eventName,
-        packageRef,
-        toolSlug,
-        resultMemoryUid,
-        at: terminalEvent.at,
-    });
-
-    const feedbackPacket = {
-        source: 'system_action_runtime',
-        block_slug: blockType,
-        event_name: eventName,
-        action,
-        package_ref: packageRef,
-        tool_slug: toolSlug,
-        memory_key: typeof payload.memory_key === 'string' ? payload.memory_key : undefined,
+    TurnRendererEngine.updateLatestRenderer(turnId, 'tool-renderer', {
+        tool_slug: typeof payload.tool_slug === 'string' ? payload.tool_slug : undefined,
+        action: typeof payload.action === 'string' ? payload.action : undefined,
+        package_ref: typeof payload.package_ref === 'string' ? payload.package_ref : undefined,
+        memory_uid: typeof payload.memory_uid === 'string' ? payload.memory_uid : undefined,
         result_memory_uid: resultMemoryUid,
-        feedback_context_memory_key: feedbackMemoryKey,
-        at: terminalEvent.at,
-    };
-
-    return [
-        composedPrompt,
-        '',
-        'System feedback: the previous response requested a parser action block and the runtime has completed it.',
-        'IMPORTANT: tool output is stored in memory pointers. Do not inline raw tool payload into prose.',
-        '',
-        'Action feedback envelope:',
-        JSON.stringify(feedbackPacket, null, 2),
-        '',
-        'Instruction:',
-        '- Continue the conversation based on action feedback + memory pointers.',
-        '- Do not paste full tool result JSON/text directly into assistant prose.',
-        '- If another action block is required, emit a valid <tool> or <context> block.',
-        '- If the task is complete, answer the user directly without another action block.',
-    ].join('\n');
-}
-
-function upsertActionFeedbackContextMemory(input: {
-    sessionId: string;
-    blockType: string;
-    action: string;
-    eventName: string;
-    packageRef?: string;
-    toolSlug?: string;
-    resultMemoryUid?: string;
-    at: number;
-}): string {
-    const {
-        sessionId,
-        blockType,
-        action,
-        eventName,
-        packageRef,
-        toolSlug,
-        resultMemoryUid,
-        at,
-    } = input;
-
-    const feedbackMemoryKey = `system:session:${sessionId}:context_feedback:action:${at}`;
-
-    AIContextMemoryEngine.createMemory({
-        memory_key: feedbackMemoryKey,
-        type: 'feedback',
-        session_id: sessionId,
-        status: 'in',
-        priority: 'high',
-        title: `Action feedback ${blockType}:${action}`,
-        summary: `Action ${blockType}:${action} finished with ${eventName}. Use result memory pointer for rendering.`,
-        payload: {
-            payload: {
-                block_slug: blockType,
-                event_name: eventName,
-                action,
-                package_ref: packageRef,
-                tool_slug: toolSlug,
-                result_memory_uid: resultMemoryUid,
-                at,
-            },
-            source: {
-                package_ref: packageRef,
-                handler_ref: `parser:${blockType}:${action}:${packageRef || 'unknown'}:${toolSlug || 'n/a'}`,
-                parsed_tag: blockType,
-                action,
-                event_name: eventName,
-                session_id: sessionId,
-                at,
-            },
-        },
-        metadata: {
-            memory_key: feedbackMemoryKey,
-            result_memory_uid: resultMemoryUid,
-            block_slug: blockType,
-            action,
-            event_name: eventName,
-            schema_ref: 'itsjiran/ace-system:context:feedback:action_result',
-            schema_version: '1.0.0',
-            schema_kind: 'json_schema',
-            validation_status: 'validated',
-            validated_at: at,
-        },
-        source: 'system',
-        source_ref: 'interaction_loop_action_feedback',
-        tags: ['loop_feedback', blockType, action],
-        auto_expire: true,
-    });
-
-    return feedbackMemoryKey;
+        status: normalizedStatus,
+        result: resultValue,
+        error_message: typeof payload.error_message === 'string'
+            ? payload.error_message
+            : typeof resultPayload.error_message === 'string'
+                ? resultPayload.error_message
+                : undefined,
+    }, isError ? 'error' : 'completed');
 }
 
 export async function executeSessionInteractionLoop(input: {
@@ -449,40 +362,25 @@ export async function executeSessionInteractionLoop(input: {
             return;
         }
 
-        const continuationPrompt = buildActionContinuationPrompt({
-            composedPrompt: prepared.composed_prompt,
-            sessionId,
+        hydrateActionRendererFromTerminalEvent({
+            turnId: promptTurnId,
             terminalEvent: terminalActionEvent,
         });
-        if (!continuationPrompt) {
-            currentTurn.finished_at = Date.now();
-            updateResponseMemory({
-                status: 'error',
-                response_turns: [...existingTurns, currentTurn].slice(-20),
-                active_response_turn_id: promptTurnId,
-                active_response_attempt_index: continuationTurns + 1,
-                feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
-                feedback_loop_reason: 'tool_feedback_payload_unavailable',
-                feedback_loop_turn: continuationTurns,
-                last_feedback_at: Date.now(),
-            });
-            KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.FAILED);
-            TurnRendererEngine.finalizeTurn(promptTurnId);
-            return;
-        }
 
-        continuationTurns += 1;
-        activePrompt = continuationPrompt;
-
+        currentTurn.finished_at = Date.now();
         updateResponseMemory({
+            status: 'completed',
             response_turns: [...existingTurns, currentTurn].slice(-20),
             active_response_turn_id: promptTurnId,
             active_response_attempt_index: continuationTurns + 1,
-            feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.ACTIVE,
-            feedback_loop_reason: 'tool_feedback_injected',
+            feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
+            feedback_loop_reason: 'tool_feedback_paused_after_action',
             feedback_loop_turn: continuationTurns,
             last_feedback_at: Date.now(),
+            parser_interrupt_reason: streamOutcome.interruptReason,
         });
-
+        KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.DONE);
+        TurnRendererEngine.finalizeTurn(promptTurnId);
+        return;
     }
 }

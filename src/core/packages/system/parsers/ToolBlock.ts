@@ -1,3 +1,4 @@
+import { EventBus } from '#/services/eventEngine';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { BaseBlock, ParserBlockHandler, ParserBlockValidator } from '#/schemas/parser';
 
@@ -108,7 +109,18 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_error, isComplete, result, emit_result, request_interrupt, push_renderer }) => {
+export const handler: ParserBlockHandler = ({
+    body,
+    payload_json,
+    payload_parse_error,
+    isComplete,
+    result,
+    session_id,
+    process_uid,
+    emit_result,
+    request_interrupt,
+    push_renderer,
+}) => {
     const block: ToolBlock = {
         block_slug: 'tool',
         action: normalizeAction(payload_json?.action),
@@ -141,11 +153,14 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
     // This prevents token waste—handler determines visual directly via push_renderer.
     push_renderer?.({
         renderer_slug: 'tool-renderer',
+        status: 'streaming',
         props: {
             tool_slug: block.tool_slug || 'unknown',
             action: block.action || 'unknown',
             status: block.status || 'pending',
             package_ref: block.package_ref,
+            memory_uid: block.memory_uid,
+            result_memory_uid: block.result_memory_uid,
         },
     });
 
@@ -157,4 +172,22 @@ export const handler: ParserBlockHandler = ({ body, payload_json, payload_parse_
     // 3. Inject feedback prompt + memory pointers back to AI
     // 4. Resume with new continuation prompt containing tool results
     request_interrupt?.('tool_block_action_requires_feedback');
+
+    if (process_uid && block.action) {
+        EventBus.emit({
+            action: 'tool',
+            sub_action: block.action,
+            process_uid,
+            preallocated_memory: {
+                session_id,
+                result_key: block.result_memory_uid,
+            },
+            payload: {
+                package_ref: block.package_ref,
+                tool_slug: block.tool_slug,
+                memory_uid: block.memory_uid,
+                ...(payload_json || {}),
+            },
+        });
+    }
 };
