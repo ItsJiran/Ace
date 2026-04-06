@@ -71,6 +71,7 @@ interface SessionSnapshot {
 interface ResponseMemorySnapshot {
     original_prompt?: string;
     prompt?: string;
+    composed_prompt?: string;
     prompt_reference?: { ref_uid: string; storage_key: string };
     response_reference?: { ref_uid: string; storage_key: string };
     text?: string;
@@ -131,6 +132,7 @@ interface ResponseMemorySnapshot {
         attempts: Array<{
             attempt_index: number;
             prompt: string;
+            composed_prompt?: string;
             started_at: number;
             finished_at?: number;
             status?: string;
@@ -968,9 +970,9 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
                             <div>
                                 <div className="mb-1 flex items-center justify-between gap-2">
                                     <div className="text-[10px] uppercase font-bold text-zinc-500">Composed Prompt</div>
-                                    <CopyTextButton label="composed prompt" value={activeResponseAttempt?.prompt || responseMemory?.prompt} />
+                                    <CopyTextButton label="composed prompt" value={activeResponseAttempt?.composed_prompt || responseMemory?.composed_prompt || activeResponseAttempt?.prompt || responseMemory?.prompt} />
                                 </div>
-                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{activeResponseAttempt?.prompt || responseMemory?.prompt || '-'}</pre>
+                                <pre className="p-3 text-[10px] text-zinc-300 bg-zinc-900/40 border border-zinc-800 rounded overflow-auto max-h-[180px] whitespace-pre-wrap">{activeResponseAttempt?.composed_prompt || responseMemory?.composed_prompt || activeResponseAttempt?.prompt || responseMemory?.prompt || '-'}</pre>
                             </div>
                             <div>
                                 <div className="mb-1 flex items-center justify-between gap-2">

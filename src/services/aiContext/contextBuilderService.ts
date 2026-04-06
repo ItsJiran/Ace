@@ -1,5 +1,6 @@
 import { buildDefaultParserContextProtocol, DEFAULT_APP_BRIDGE_CONTEXT } from './protocolTextService';
 import type { BuildContextOptions, SessionContextRef, SessionContextState } from './types';
+import { PlanningService } from './planningService';
 
 export function buildContextForSession(state: SessionContextState, prompt: string, options: BuildContextOptions = {}) {
     const recentHistorySummaries = state.history_summaries.slice(-8);
@@ -85,6 +86,18 @@ export function buildContextForSession(state: SessionContextState, prompt: strin
     }
 
     const contextTextParts: string[] = [];
+
+    // Inject Planning State Context
+    const planContext = PlanningService.buildPlanContextText(state.session_id);
+    if (planContext) {
+        usedContexts.push({
+            key: 'system:planning:state',
+            label: 'Current AI Plan',
+            kind: 'context',
+            token_estimate: Math.ceil(planContext.length / 4),
+        });
+        contextTextParts.push(planContext);
+    }
     contextTextParts.push(`[APP_BRIDGE_CONTEXT]\n${DEFAULT_APP_BRIDGE_CONTEXT}`);
     contextTextParts.push(`[PARSER_CONTEXT_PROTOCOL]\n${parserContextProtocol}`);
 

@@ -2,6 +2,7 @@
 import { KernelEngine } from '../kernelEngine';
 import { ParserEngine } from '../parserEngine';
 import { TurnRendererEngine } from '../turnRendererEngine';
+import { PlanningService } from '../aiContext/planningService';
 import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
 import { AIConfigManager } from './configManager';
 import { HealthProbe } from './healthProbe';
@@ -368,17 +369,36 @@ export async function executeSessionInteractionLoop(input: {
         });
 
         currentTurn.finished_at = Date.now();
+        
+        const activePlan = PlanningService.getPlan(sessionId);
+        const hasPendingPlans = activePlan.short_plan.some(t => t.status === 'pending');
+        const shouldContinue = !activePlan.yield_to_user && hasPendingPlans;
+
         updateResponseMemory({
             status: 'completed',
             response_turns: [...existingTurns, currentTurn].slice(-20),
             active_response_turn_id: promptTurnId,
             active_response_attempt_index: continuationTurns + 1,
-            feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
-            feedback_loop_reason: 'tool_feedback_paused_after_action',
+            feedback_loop_status: shouldContinue ? AI_FEEDBACK_LOOP_STATUS.RUNNING : AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
+            feedback_loop_reason: shouldContinue ? 'tool_feedback_loop_continue' : 'tool_feedback_paused_after_action',
             feedback_loop_turn: continuationTurns,
             last_feedback_at: Date.now(),
             parser_interrupt_reason: streamOutcome.interruptReason,
         });
+
+        if (shouldContinue) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            activePrompt = `Action completed. Please execute the next 'pending' task in your <plan>. Use the <plan> block to update its status first.`;
+            continuationTurns++;
+            rootProcess = KernelEngine.createProcess({
+                parent_uid: parentProcessUid,
+                kind: PROCESS_KIND.SYSTEM_BACKGROUND,
+                command: AI_GATEWAY_PROCESS_TYPE.TOOL_FEEDBACK_LOOP,
+            });
+            TurnRendererEngine.finalizeTurn(promptTurnId);
+            continue;
+        }
+
         KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.DONE);
         TurnRendererEngine.finalizeTurn(promptTurnId);
         return;
