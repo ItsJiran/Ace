@@ -1,4 +1,5 @@
 import { EventBus } from '../eventEngine';
+import { KernelEngine } from '../kernelEngine';
 
 export interface PlanTask {
     id: string;
@@ -69,6 +70,9 @@ export class PlanningService {
             session_id: sessionId,
             plan,
         });
+
+        // Write to memory for AISessionMonitor UI
+        KernelEngine.writeMemory(`system:session:${sessionId}:planning_state`, plan);
 
         return plan;
     }

@@ -21,17 +21,29 @@ export const registry: ParserBlockRuntime = {
     aliases: ['planning', 'strategy'],
     schema: {
         name: 'plan',
-        purpose: 'Mutates the single source of truth for AI task planning (Grand Plan and Short Plan).',
+        purpose: 'Mutates the single source of truth for AI task planning (Grand Plan and Short Plan). Automatically triggers a continuous loop of execution as long as there are pending tasks.',
+        requiredFields: 'None, but usually you provide "short_plan" or "yield_to_user" or "grand_plan_id".',
+        optionalFields: '"grand_plan_id" (string), "short_plan" (array of objects with "task", "status" [pending/in_progress/completed/failed], "result_summary"), "yield_to_user" (boolean).',
         triggerConditions: [
+            'User asks you to do multiple steps or a complex task that requires using multiple tools (like "create an api", "check files then do X").',
+            'You want the system to AUTOMATICALLY prompt you to continue working without waiting for the user.',
             'Must be used at the START of the turn before any tool block or text response if you need a planned chain of actions.',
-            'Should be emitted to update task statuses incrementally.'
+            'Should be emitted to update task statuses incrementally (e.g. changing a task from "pending" to "completed").',
+            'When you want to stop the auto-loop and ask the user a question, set "yield_to_user": true.',
+        ],
+        promptExamples: [
+            'Create a Vite project then install tailwind',
+            'Read the package.json and tell me what dependencies it has. Do it in one go.',
         ],
         exampleLines: [
             '<plan>',
-            '{"short_plan": [{"task": "Read file /etc/hosts", "status": "pending"}], "yield_to_user": false}',
+            '{"short_plan": [{"task": "Read file /etc/hosts", "status": "pending"}, {"task": "Examine content", "status": "pending"}], "yield_to_user": false}',
+            '</plan>',
+            '',
+            '<plan>',
+            '{"short_plan": [{"id":"task-123","task": "Read file /etc/hosts", "status": "completed"}], "yield_to_user": true}',
             '</plan>'
         ],
-        optionalFields: 'grand_plan_id, short_plan, yield_to_user'
     },
     runtime_behavior: {
         interrupt_mode: 'none',

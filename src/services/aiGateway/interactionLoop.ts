@@ -310,6 +310,36 @@ export async function executeSessionInteractionLoop(input: {
 
         if (!streamOutcome.interrupted) {
             currentTurn.finished_at = Date.now();
+            
+            // Check planning context even if not interrupted by a tool
+            const activePlan = PlanningService.getPlan(sessionId);
+            const hasPendingPlans = activePlan.short_plan.some(t => t.status === 'pending');
+            const shouldContinueOnlyFromPlan = !activePlan.yield_to_user && hasPendingPlans;
+
+            if (shouldContinueOnlyFromPlan && continuationTurns < TOOL_FEEDBACK_LOOP_MAX_TURNS) {
+                updateResponseMemory({
+                    status: 'completed',
+                    response_turns: [...existingTurns, currentTurn].slice(-20),
+                    active_response_turn_id: promptTurnId,
+                    active_response_attempt_index: continuationTurns + 1,
+                    feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.RUNNING,
+                    feedback_loop_reason: 'plan_feedback_loop_continue',
+                    feedback_loop_turn: continuationTurns,
+                    last_feedback_at: Date.now(),
+                });
+
+                await new Promise(resolve => setTimeout(resolve, 50));
+                activePrompt = `Turn completed but plan still has 'pending' tasks. Please execute the next task in the plan. Use the <plan> block to update its status first.`;
+                continuationTurns++;
+                rootProcess = KernelEngine.createProcess({
+                    parent_uid: parentProcessUid,
+                    kind: PROCESS_KIND.SYSTEM_BACKGROUND,
+                    command: AI_GATEWAY_PROCESS_TYPE.TOOL_FEEDBACK_LOOP,
+                });
+                TurnRendererEngine.finalizeTurn(promptTurnId);
+                continue;
+            }
+
             updateResponseMemory({
                 status: 'completed',
                 response_turns: [...existingTurns, currentTurn].slice(-20),

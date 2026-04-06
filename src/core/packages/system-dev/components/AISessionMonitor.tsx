@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { BaseBlock } from '#/schemas/parser';
 import { useAceMemory } from '#/hooks/useAceMemory';
-import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit, Copy, Check, Layers } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, XCircle, Database, History, FileText, Blocks, BrainCircuit, Copy, Check, Layers, ListTodo } from 'lucide-react';
 import { TurnRendererEngine } from '#/services/turnRendererEngine';
 import type { TurnRendererEntry } from '#/services/turnRendererEngine';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
@@ -300,7 +300,7 @@ const statusColor: Record<AISessionStatus, string> = {
 };
 
 function SessionDetailView({ session }: { session: SessionSnapshot }) {
-    const [activeTab, setActiveTab] = useState<'context' | 'history' | 'blocks' | 'response' | 'storage' | 'renderers'>('context');
+    const [activeTab, setActiveTab] = useState<'plan' | 'context' | 'history' | 'blocks' | 'response' | 'storage' | 'renderers'>('plan');
     const [selectedResponseTokenIndex, setSelectedResponseTokenIndex] = useState<number | null>(null);
     const [selectedResponseTurnId, setSelectedResponseTurnId] = useState<string | null>(null);
     const [selectedResponseAttemptIndex, setSelectedResponseAttemptIndex] = useState<number | null>(null);
@@ -314,6 +314,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
     }, [session.activeOutputRamKey]);
     
     const responseMemory = useAceMemory<ResponseMemorySnapshot>(cachedOutputKey || 'system:dev:ai_session_monitor:idle');
+    const planMemory = useAceMemory<any>(`system:session:${session.sessionId}:planning_state`);
 
     const responseTurns = useMemo(
         () => Array.isArray(responseMemory?.response_turns) ? responseMemory.response_turns : [],
@@ -561,6 +562,7 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
         <div className="mt-3 border-t border-zinc-800 pt-3">
             <div className="flex gap-2 mb-3 overflow-x-auto pb-1 no-scrollbar">
                 {useMemo(() => [
+                     { id: 'plan', icon: ListTodo, label: 'Plan' },
                      { id: 'context', icon: BrainCircuit, label: 'Context' },
                      { id: 'history', icon: History, label: 'History' },
                      { id: 'blocks', icon: Blocks, label: 'Blocks' },
@@ -584,6 +586,49 @@ function SessionDetailView({ session }: { session: SessionSnapshot }) {
             </div>
 
             <div className="bg-black/20 rounded border border-zinc-800/50 p-3 max-h-[320px] overflow-auto custom-scrollbar">
+                {activeTab === 'plan' && (
+                    <div className="space-y-4">
+                         <div>
+                            <div className="text-[10px] uppercase text-zinc-500 font-bold mb-2 flex items-center justify-between gap-2">
+                                <span className="flex items-center gap-2"><ListTodo size={12} /> Active Planning State</span>
+                            </div>
+                            <div className="text-[11px] text-zinc-300 leading-relaxed bg-zinc-900 p-3 rounded border border-zinc-800 whitespace-pre-wrap">
+                                {planMemory ? (
+                                    <div className="space-y-3 font-mono">
+                                        <div className="flex gap-4">
+                                            <div><span className="text-zinc-500">Yield to user:</span> <span className={planMemory.yield_to_user ? 'text-amber-400' : 'text-emerald-400'}>{String(planMemory.yield_to_user)}</span></div>
+                                            <div><span className="text-zinc-500">Grand Plan:</span> <span className="text-cyan-300">{planMemory.grand_plan_id || 'none'}</span></div>
+                                        </div>
+                                        <div className="h-px bg-zinc-800" />
+                                        <div className="text-zinc-500 uppercase text-[9px] tracking-widest font-sans">Short Plan Checklists</div>
+                                        {Array.isArray(planMemory.short_plan) && planMemory.short_plan.length > 0 ? (
+                                            <ul className="space-y-2">
+                                                {planMemory.short_plan.map((t: any, idx: number) => (
+                                                    <li key={idx} className={`p-2 rounded border ${t.status === 'completed' ? 'border-emerald-900/50 bg-emerald-950/20' : t.status === 'pending' ? 'border-zinc-700 bg-zinc-800/50' : t.status === 'in_progress' ? 'border-blue-900/50 bg-blue-950/20' : 'border-red-900/50 bg-red-950/20'}`}>
+                                                        <div className="flex justify-between mb-1">
+                                                            <span className="font-semibold text-zinc-200 break-words">{t.task}</span>
+                                                            <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wide shrink-0 ${
+                                                                t.status === 'completed' ? 'bg-emerald-900 text-emerald-300' :
+                                                                t.status === 'in_progress' ? 'bg-blue-900 text-blue-300 animate-pulse' :
+                                                                t.status === 'pending' ? 'bg-zinc-800 text-zinc-300' : 'bg-red-900 text-red-300'
+                                                            }`}>{t.status}</span>
+                                                        </div>
+                                                        {t.result_summary && <div className="text-[10px] text-zinc-500 mt-1 pl-2 border-l border-zinc-700/50 italic">{t.result_summary}</div>}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <div className="text-zinc-500 text-xs italic font-sans py-2">No active tasks in short plan.</div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <span className="text-zinc-600 italic font-sans text-xs">No planning state generated/mutated yet.</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'context' && (
                     <div className="space-y-4">
                          <div>
