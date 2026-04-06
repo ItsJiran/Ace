@@ -175,7 +175,23 @@ export async function sendToSession(
             }
 
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                if (session.activeEventBuffer) {
+                    const finalOutcome = handleSessionStreamChunk(
+                        session,
+                        '',
+                        replyToRamKey,
+                        parserProcessUid ?? ownerProcessUid,
+                        metadata?.prompt_turn_id,
+                        true,
+                    );
+                    if (finalOutcome.interrupted) {
+                        interrupted = true;
+                        interruptReason = finalOutcome.reason;
+                    }
+                }
+                break;
+            }
             if (!value) continue;
 
             if (ignoreLateChunks) {
@@ -191,6 +207,7 @@ export async function sendToSession(
                 replyToRamKey,
                 parserProcessUid ?? ownerProcessUid,
                 metadata?.prompt_turn_id,
+                false,
             );
             if (parseOutcome.interrupted) {
                 interrupted = true;

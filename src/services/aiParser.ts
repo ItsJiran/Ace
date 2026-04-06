@@ -43,6 +43,7 @@ export interface ParseAIStreamOptions {
     rawChunk?: string;
     incomingCarryover?: string;
     turnId?: string;
+    isFinal?: boolean;
 }
 
 const STRUCTURED_TAG_NAME_PATTERN = '[a-z_][a-z0-9_-]*(?::[a-z_][a-z0-9_-]*)?';
@@ -338,7 +339,7 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
                 .filter((value) => value !== -1);
             const partialStart = partialCandidates.length > 0 ? Math.min(...partialCandidates) : -1;
 
-            if (partialStart !== -1) {
+            if (partialStart !== -1 && !options?.isFinal) {
                 const text = chunk.slice(cursor, partialStart);
                 if (text) {
                     pushParagraphBlock(result, text, options?.turnId);
@@ -370,15 +371,16 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
 
             const closeTag = findClosingStructuredTag(chunk, openTag.tag, openTag.openEnd);
             const hasCloseTag = Boolean(closeTag);
+            const isComplete = hasCloseTag || Boolean(options?.isFinal);
             const bodyEnd = hasCloseTag && closeTag ? closeTag.start : chunk.length;
             const body = chunk.slice(openTag.openEnd, bodyEnd);
-            extractStructuredBlock(openTag.tag, body, hasCloseTag, result, options);
+            extractStructuredBlock(openTag.tag, body, isComplete, result, options);
 
             if (result.interrupt_requested) {
                 break;
             }
 
-            if (!hasCloseTag) {
+            if (!hasCloseTag && !options?.isFinal) {
                 result.carryoverBuffer = chunk.slice(tagStart);
                 break;
             }
@@ -399,6 +401,7 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
 
         const closeFence = findClosingFence(chunk, bodyStart);
         const hasCloseFence = closeFence !== -1;
+        const isComplete = hasCloseFence || Boolean(options?.isFinal);
         const bodyEnd = hasCloseFence ? closeFence : chunk.length;
         const body = chunk.slice(bodyStart, bodyEnd);
 // Emit token trace for debugging parser token flow
@@ -423,13 +426,13 @@ export function parseAIStreamChunk(chunk: string, options?: ParseAIStreamOptions
     }
 
     
-        extractStructuredBlock(rawTag, body, hasCloseFence, result, options);
+        extractStructuredBlock(rawTag, body, isComplete, result, options);
 
         if (result.interrupt_requested) {
             break;
         }
 
-        if (!hasCloseFence) {
+        if (!hasCloseFence && !options?.isFinal) {
             result.carryoverBuffer = chunk.slice(structureStart);
             break;
         }

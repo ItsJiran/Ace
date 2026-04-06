@@ -61,7 +61,7 @@ export default function AIPromptChatbarDev() {
 
     useEffect(() => {
         if (!isSending) return;
-        if (responseMemory?.status === 'completed' || responseMemory?.status === 'error') {
+        if (responseMemory?.status === 'completed' || responseMemory?.status === 'error' || responseMemory?.status === 'interrupted') {
             setIsSending(false);
             setActiveMemoryUid(IDLE_MEMORY_KEY);
         }

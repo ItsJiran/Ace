@@ -5,7 +5,6 @@ import { useAIChatSession } from '#/hooks/useAIChatSession';
 import { useChatAutoScroll } from '#/hooks/useChatAutoScroll';
 import { SystemHeader } from './SystemHeader';
 import { ConfigPanel } from './ConfigPanel';
-import { BlockHandlerState } from './BlockHandlerState';
 import { ChatMessages } from './ChatMessages';
 import { ControlPanel } from './ControlPanel';
 

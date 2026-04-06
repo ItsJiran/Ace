@@ -332,12 +332,13 @@ export function handleSessionStreamChunk(
     ramKey: string,
     processUid?: string,
     turnId?: string,
+    isFinal = false,
 ): { interrupted: boolean; reason?: string; mode?: ParserInterruptMode } {
     // Prepend any carryover from an unclosed fenced block in the previous chunk
     const incomingCarryover = session.activeEventBuffer;
     const hadCarryoverBuffer = session.activeEventBuffer.length > 0;
     const fullStream = session.activeEventBuffer + chunk;
-    session.activeEventBuffer = '';
+    session.activeEventBuffer = isFinal ? '' : session.activeEventBuffer;
 
     emitParserSessionResult({
         sessionId: session.sessionId,
@@ -360,6 +361,7 @@ export function handleSessionStreamChunk(
             rawChunk: chunk,
             incomingCarryover,
             turnId,
+            isFinal,
         });
     } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);

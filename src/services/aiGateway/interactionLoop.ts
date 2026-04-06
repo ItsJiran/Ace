@@ -397,6 +397,7 @@ export async function executeSessionInteractionLoop(input: {
         if (!streamOutcome.interrupted) {
             currentTurn.finished_at = Date.now();
             updateResponseMemory({
+                status: 'completed',
                 response_turns: [...existingTurns, currentTurn].slice(-20),
                 active_response_turn_id: promptTurnId,
                 active_response_attempt_index: continuationTurns + 1,
@@ -414,6 +415,7 @@ export async function executeSessionInteractionLoop(input: {
         if (continuationTurns >= TOOL_FEEDBACK_LOOP_MAX_TURNS) {
             currentTurn.finished_at = Date.now();
             updateResponseMemory({
+                status: 'error',
                 response_turns: [...existingTurns, currentTurn].slice(-20),
                 active_response_turn_id: promptTurnId,
                 active_response_attempt_index: continuationTurns + 1,
@@ -432,6 +434,7 @@ export async function executeSessionInteractionLoop(input: {
         if (!terminalActionEvent) {
             currentTurn.finished_at = Date.now();
             updateResponseMemory({
+                status: 'error',
                 response_turns: [...existingTurns, currentTurn].slice(-20),
                 active_response_turn_id: promptTurnId,
                 active_response_attempt_index: continuationTurns + 1,
@@ -454,6 +457,7 @@ export async function executeSessionInteractionLoop(input: {
         if (!continuationPrompt) {
             currentTurn.finished_at = Date.now();
             updateResponseMemory({
+                status: 'error',
                 response_turns: [...existingTurns, currentTurn].slice(-20),
                 active_response_turn_id: promptTurnId,
                 active_response_attempt_index: continuationTurns + 1,
