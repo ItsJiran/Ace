@@ -295,14 +295,19 @@ function writeParserFailureMemory(input: {
     };
 
     if (processUid) {
-        const created = KernelEngine.createRuntimeMemory({
-            owner_process_uid: processUid,
-            owner_session_id: session.sessionId,
-            memory_uid: parserErrorMemoryUid,
-            payload,
-            memory_scope: 'process',
-            retention_policy: 'keep_on_done',
-        });
+        let created = false;
+        try {
+            created = !!KernelEngine.createRuntimeMemory({
+                owner_process_uid: processUid,
+                owner_session_id: session.sessionId,
+                memory_uid: parserErrorMemoryUid,
+                payload,
+                memory_scope: 'process',
+                retention_policy: 'keep_on_done',
+            });
+        } catch (e) {
+            // Memory already exists
+        }
 
         if (!created) {
             KernelEngine.updateRuntimeMemory({

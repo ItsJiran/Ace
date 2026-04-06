@@ -159,11 +159,11 @@ async function waitForActionTerminalEvent(sessionId: string, replyToRamKey: stri
 }
 
 function buildActionContinuationPrompt(input: {
-    originalPrompt: string;
+    composedPrompt: string;
     sessionId: string;
     terminalEvent: ParserSessionEmitRecord;
 }): string | null {
-    const { originalPrompt, sessionId, terminalEvent } = input;
+    const { composedPrompt, sessionId, terminalEvent } = input;
     const payload = terminalEvent.payload && typeof terminalEvent.payload === 'object'
         ? terminalEvent.payload
         : null;
@@ -205,7 +205,7 @@ function buildActionContinuationPrompt(input: {
     };
 
     return [
-        `Original user prompt: ${originalPrompt}`,
+        composedPrompt,
         '',
         'System feedback: the previous response requested a parser action block and the runtime has completed it.',
         'IMPORTANT: tool output is stored in memory pointers. Do not inline raw tool payload into prose.',
@@ -450,7 +450,7 @@ export async function executeSessionInteractionLoop(input: {
         }
 
         const continuationPrompt = buildActionContinuationPrompt({
-            originalPrompt: prompt,
+            composedPrompt: prepared.composed_prompt,
             sessionId,
             terminalEvent: terminalActionEvent,
         });

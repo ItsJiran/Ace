@@ -78,11 +78,19 @@ class TurnRendererEngineSingleton {
         };
 
         if (processUid) {
-            KernelEngine.createRuntimeMemory({
-                owner_process_uid: processUid,
-                memory_uid: key,
-                payload,
-            });
+            try {
+                KernelEngine.createRuntimeMemory({
+                    owner_process_uid: processUid,
+                    memory_uid: key,
+                    payload,
+                });
+            } catch (e) {
+                KernelEngine.updateRuntimeMemory({
+                    owner_process_uid: processUid,
+                    memory_uid: key,
+                    payload,
+                });
+            }
         } else {
             KernelEngine.writeMemory(key, payload);
         }
@@ -107,11 +115,19 @@ class TurnRendererEngineSingleton {
 
         // Store renderer data (props) in dedicated memory
         if (ownerProcessUid) {
-            KernelEngine.createRuntimeMemory({
-                owner_process_uid: ownerProcessUid,
-                memory_uid: dataKey,
-                payload: entry.props ?? {}
-            });
+            try {
+                KernelEngine.createRuntimeMemory({
+                    owner_process_uid: ownerProcessUid,
+                    memory_uid: dataKey,
+                    payload: entry.props ?? {}
+                });
+            } catch (e) {
+                KernelEngine.updateRuntimeMemory({
+                    owner_process_uid: ownerProcessUid,
+                    memory_uid: dataKey,
+                    payload: entry.props ?? {}
+                });
+            }
         } else {
             KernelEngine.writeMemory(dataKey, entry.props ?? {});
         }
@@ -143,7 +159,11 @@ class TurnRendererEngineSingleton {
             }
         } else {
             if (ownerProcessUid) {
-                KernelEngine.createRuntimeMemory({ owner_process_uid: ownerProcessUid, memory_uid: memKey, payload });
+                try {
+                    KernelEngine.createRuntimeMemory({ owner_process_uid: ownerProcessUid, memory_uid: memKey, payload });
+                } catch (e) {
+                    KernelEngine.updateRuntimeMemory({ owner_process_uid: ownerProcessUid, memory_uid: memKey, payload });
+                }
             } else {
                 KernelEngine.writeMemory(memKey, payload);
             }
