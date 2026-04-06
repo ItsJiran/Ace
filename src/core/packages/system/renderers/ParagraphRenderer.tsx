@@ -51,16 +51,18 @@ export default function ParagraphRenderer(props: ParagraphRendererProps) {
 
         // Regular paragraph
         return (
-            <p key={idx} className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed">
-                {trimmed}
+            <p key={idx} className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                {line}
             </p>
         );
     });
 
+    const isStreaming = props.__status === 'streaming';
+
     return (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 min-h-12">
+        <div className={`bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 min-h-12 ${isStreaming ? 'ring-1 ring-cyan-500/50' : ''}`}>
             <div className="flex items-start gap-2">
-                <Type size={14} className="text-zinc-500 dark:text-zinc-400 mt-0.5 flex-shrink-0" />
+                <Type size={14} className={`text-zinc-500 dark:text-zinc-400 mt-0.5 flex-shrink-0 ${isStreaming ? 'animate-pulse text-cyan-400' : ''}`} />
                 <div className="flex-1 min-w-0 space-y-1">
                     {lines}
                 </div>
