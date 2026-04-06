@@ -1,4 +1,5 @@
-import type { ParserBlockRuntime } from '#/schemas/parser';
+import type { ParserBlockRuntime, ParserBlockValidator, ParserBlockHandler } from '#/schemas/parser';
+import type { AceRegistryType } from '#/schemas/registryTypes';
 import { z } from 'zod';
 import { PlanningService } from '#/services/aiContext/planningService';
 
@@ -15,12 +16,34 @@ const PlanBlockPayloadSchema = z.object({
     yield_to_user: z.boolean().optional(),
 });
 
-export const registry: ParserBlockRuntime = {
-    package_name: 'itsjiran/ace-system',
+export const validator: ParserBlockValidator = (context) => {
+    if (!context.isComplete) return undefined;
+    return PlanBlockPayloadSchema.parse(context.payload_json);
+};
+
+export const handler: ParserBlockHandler = (context) => {
+    if (!context.isComplete || !context.payload_json) return;
+    if (!context.session_id) return; // Plan is scoped per-session
+
+    const updatedPlan = PlanningService.updatePlanFromPayload(context.session_id, context.payload_json);
+    
+    // Let the system know the task planning state was updated
+    context.emit_result?.({
+        event_name: 'context:plan:updated',
+        interrupt_hint: false, // Don't interrupt stream for internal state
+        plan_state: updatedPlan
+    });
+};
+
+export const registry: AceRegistryType.Parser = {
+    name: 'plan',
     slug: 'plan',
-    aliases: ['planning', 'strategy'],
-    schema: {
-        name: 'plan',
+    description: 'Mutates the single source of truth for AI task planning (Grand Plan and Short Plan). Automatically triggers a continuous loop of execution as long as there are pending tasks.',
+    runtime_behavior: {
+        interrupt_mode: 'none',
+        interrupt_on_complete: false,
+    },
+    block_schema: {
         purpose: 'Mutates the single source of truth for AI task planning (Grand Plan and Short Plan). Automatically triggers a continuous loop of execution as long as there are pending tasks.',
         requiredFields: 'None, but usually you provide "short_plan" or "yield_to_user" or "grand_plan_id".',
         optionalFields: '"grand_plan_id" (string), "short_plan" (array of objects with "task", "status" [pending/in_progress/completed/failed], "result_summary"), "yield_to_user" (boolean).',
@@ -44,26 +67,5 @@ export const registry: ParserBlockRuntime = {
             '{"short_plan": [{"id":"task-123","task": "Read file /etc/hosts", "status": "completed"}], "yield_to_user": true}',
             '</plan>'
         ],
-    },
-    runtime_behavior: {
-        interrupt_mode: 'none',
-        interrupt_on_complete: false,
-    },
-    validator: (context) => {
-        if (!context.isComplete) return;
-        return PlanBlockPayloadSchema.parse(context.payload_json);
-    },
-    handler: (context) => {
-        if (!context.isComplete || !context.payload_json) return;
-        if (!context.session_id) return; // Plan is scoped per-session
-
-        const updatedPlan = PlanningService.updatePlanFromPayload(context.session_id, context.payload_json);
-        
-        // Let the system know the task planning state was updated
-        context.emit_result?.({
-            event_name: 'context:plan:updated',
-            interrupt_hint: false, // Don't interrupt stream for internal state
-            plan_state: updatedPlan
-        });
-    },
+    }
 };

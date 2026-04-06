@@ -418,7 +418,17 @@ export async function executeSessionInteractionLoop(input: {
 
         if (shouldContinue) {
             await new Promise(resolve => setTimeout(resolve, 50));
-            activePrompt = `Action completed. Please execute the next 'pending' task in your <plan>. Use the <plan> block to update its status first.`;
+            
+            let toolFeedBackStr = "Action completed.";
+            if (terminalActionEvent?.payload && typeof terminalActionEvent.payload === 'object') {
+                let jsonStr = JSON.stringify(terminalActionEvent.payload, null, 2);
+                if (jsonStr.length > 25000) {
+                    jsonStr = jsonStr.substring(0, 25000) + '\n... [RESULT TRUNCATED DUE TO LENGTH]';
+                }
+                toolFeedBackStr = `Action outcome:\n\`\`\`json\n${jsonStr}\n\`\`\``;
+            }
+            
+            activePrompt = `${toolFeedBackStr}\n\nPlease execute the next 'pending' task in your <plan>. Use the <plan> block to update its status first.`;
             continuationTurns++;
             rootProcess = KernelEngine.createProcess({
                 parent_uid: parentProcessUid,
