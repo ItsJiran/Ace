@@ -65,9 +65,12 @@ function isLifecycleEventName(eventName?: string): boolean {
 }
 
 
-export type { SDKProvider, AISession, AISessionSnapshot } from './aiGateway/types';
-import { AI_BLOCK_HANDLER_STATUS, AI_GATEWAY_PROCESS_TYPE, AI_SESSION_STATUS } from './aiGateway/types';
-import type { AIBlockHandlerStatus, SDKProvider, AISessionSnapshot } from './aiGateway/types';
+export type { SDKProvider, AISession } from './aiGateway/types';
+import { AI_BLOCK_HANDLER_STATUS, AI_PROCESS_TYPE, AI_SESSION_STATUS } from './aiGateway/types';
+import type { AIBlockHandlerStatus, SDKProvider } from './aiGateway/types';
+import type { AISession } from './aiGateway/types';
+import { KernelState } from './kernelEngine/kernelState';
+import type { KernelAISessionEntry } from './kernelEngine/types';
 
 class AIGatewayEngineSingleton {
     /**
@@ -75,18 +78,13 @@ class AIGatewayEngineSingleton {
      * can subscribe to the right keys without importing sub-modules directly.
      */
     public readonly memory_uid = 'system:ai_gateway_config';
-    public readonly runtime_memory_uid = 'system:ai_gateway_runtime';
-    public readonly sessions_memory_uid = 'system:ai_gateway_sessions';
 
     private isBooted = false;
     private isRouteBound = false;
-    private readonly sessionProcessBySessionId = new Map<string, string>();
     private isTerminationHookBound = false;
 
     setupKernelSpace() {
-        KernelEngine.registerSystemMemory(this.memory_uid, null);
-        KernelEngine.registerSystemMemory(this.sessions_memory_uid, null);
-        KernelEngine.registerSystemMemory(this.runtime_memory_uid, null);
+        KernelEngine.registerSystemMemory(this.memory_uid, {});
     }
 
     // ── Boot ──────────────────────────────────────────────────────────────────
@@ -129,10 +127,11 @@ class AIGatewayEngineSingleton {
         if (!session) return;
 
         session.termination_requested = true;
-        if (session.activeAbortController) {
-            session.activeAbortController.abort();
-            session.activeAbortController = undefined;
+        if (session.active_abort_controller) {
+            session.active_abort_controller.abort();
+            session.active_abort_controller = undefined;
         }
+
         if (session.status === AI_SESSION_STATUS.STREAMING) {
             session.status = AI_SESSION_STATUS.CONNECTED;
         }
@@ -141,30 +140,38 @@ class AIGatewayEngineSingleton {
     private registerTerminationHooks() {
         if (this.isTerminationHookBound) return;
 
+        // record is a ProcessRecord that contains metadata and payload from the process that is being terminated.
+        // We can use this information to determine if the termination is related to an AI session or interaction
+        // and perform appropriate cleanup (e.g. aborting streams, closing sessions, etc.).
+
+        // Will automatically trigger when a process is terminated (either gracefully or forcefully) and 
+        // allows us to clean up any associated AI session state to prevent orphaned sessions or memory leaks. 
+
+        // This is especially important for long-running sessions that may still have active streams or context in Kernel.
         KernelEngine.registerTerminationHandler('aiGatewayEngine', ({ record }) => {
+
             const metadata = (record.metadata && typeof record.metadata === 'object')
                 ? (record.metadata as Record<string, unknown>)
                 : undefined;
+
             const payload = (record.payload && typeof record.payload === 'object')
                 ? (record.payload as Record<string, unknown>)
                 : undefined;
 
-            const sessionId = typeof metadata?.session_id === 'string'
-                ? metadata.session_id
-                : typeof payload?.session_id === 'string'
-                    ? payload.session_id
+            const sessionUid = typeof metadata?.session_uid === 'string' 
+                ? metadata.session_uid
+                : typeof payload?.session_uid === 'string'
+                    ? payload.session_uid
                     : undefined;
-            if (!sessionId) return;
+            
+            if (!sessionUid) return;
 
-            if (record.type === AI_GATEWAY_PROCESS_TYPE.SESSION) {
-                this.abortSessionStream(sessionId);
-                this.closeSession(sessionId, { skipProcessLifecycle: true });
+            if (record.type === AI_PROCESS_TYPE.AI_SESSION_INSTANCE) {
+                this.abortSessionStream(sessionUid);
+                this.closeSession(sessionUid, { skipProcessLifecycle: true });
                 return;
             }
 
-            if (record.type === AI_GATEWAY_PROCESS_TYPE.RESPONSE_TURN || record.type === AI_GATEWAY_PROCESS_TYPE.PARSER_STREAM) {
-                this.abortSessionStream(sessionId);
-            }
         });
 
         this.isTerminationHookBound = true;
@@ -172,29 +179,13 @@ class AIGatewayEngineSingleton {
 
     // ── EventBus route ────────────────────────────────────────────────────────
 
-    /**
-     * Registers the `send_gateway` process route on the EventBus.
-     *
-     * Expected payload:
-     * ```
-     * { prompt: string, reply_to_ram_key?: string }
-     * ```
-     *
-     * Expected preallocated_memory (all optional overrides):
-     * ```
-     * { reply_to_ram_key?, session_id?, sdk?, model? }
-     * ```
-     *
-     * Resolution order:
-     *  - RAM key:    preallocated_memory.reply_to_ram_key → payload.reply_to_ram_key → auto-generated
-     *  - SDK/model:  preallocated_memory overrides → active config → hardcoded fallback
-     *  - Session ID: preallocated_memory.session_id → auto-create fresh session
-     */
+    // Registers the EventBus route for gateway interactions. This is idempotent and can be safely 
+    // called multiple times.
     registerEventRoutes() {
         if (this.isRouteBound) return;
 
         registerSendGatewayRoute({
-            createSession: (sdk, model, parentProcessUid) => this.createSession(sdk, model, parentProcessUid),
+            createSession: async (sdk, model) => this.createSession(sdk, model),
             sendToSession: (sessionId, prompt, replyToRamKey, parentProcessUid) => this.sendToSession(sessionId, prompt, replyToRamKey, parentProcessUid),
             getActiveSDK: () => AIConfigManager.getActiveSDK(),
             getActiveModel: () => AIConfigManager.getActiveModel(),
@@ -211,138 +202,58 @@ class AIGatewayEngineSingleton {
     createSession(sdk: SDKProvider, model: string, parentProcessUid?: string): string {
         
         // Create session in AISessionManager and spawn a new process for it.
-        const sessionId = AISessionManager.create(sdk, model);
-        const processUid = `process:ai_session:${sessionId}`;
+        const session : AISession = AISessionManager.create(sdk, model);
         
         // Immediately mark the process as running so it's 
         // visible in monitors during the initial prompt processing stages.
-        KernelEngine.updateProcessStatus(processUid, PROCESS_STATUS.RUNNING);
-        this.sessionProcessBySessionId.set(sessionId, processUid);
+        KernelEngine.updateProcessStatus(session.process_uid, PROCESS_STATUS.RUNNING);
 
         // Attach session to context engine and build initial context 
         // (empty prompt, but config + planning state will populate).
-        AIContextEngine.attachSession(sessionId);
-        AIContextEngine.buildContext(sessionId, '', { sdk, model });
+        AIContextEngine.attachSession(session.session_uid);
+        AIContextEngine.buildContext(session.session_uid, '', { sdk, model });
 
-        return sessionId;
+        return session.session_uid;
     }
 
     /** Closes and removes a session from the active session map. */
-    closeSession(sessionId: string, options?: { skipProcessLifecycle?: boolean }): void {
-        const sessionProcessUid = this.sessionProcessBySessionId.get(sessionId);
-        if (sessionProcessUid && !options?.skipProcessLifecycle) {
-            KernelEngine.updateProcessStatus(sessionProcessUid, PROCESS_STATUS.DONE, {
-                live_state: 'closed',
-                session_id: sessionId,
-                ended_at: Date.now(),
-            });
-            this.sessionProcessBySessionId.delete(sessionId);
-        } else if (sessionProcessUid && options?.skipProcessLifecycle) {
-            this.sessionProcessBySessionId.delete(sessionId);
+    closeSession(sessionUid: string, options?: { skipProcessLifecycle?: boolean }): void {
+        
+        // First, attempt to retrieve the session entry from KernelState to 
+        // ensure it exists before proceeding with cleanup.
+        const session_kernel_entry = KernelState.ai_gateway_sessions.get(sessionUid) as KernelAISessionEntry | undefined;
+        const session = KernelEngine.readMemory(session_kernel_entry?.memory_uid as string) as AISession | undefined;
+        
+        if(!session) {
+            console.warn(`[AIGatewayEngine] Attempted to close non-existent session ${sessionUid}`);
+            return;
         }
 
-        AISessionManager.close(sessionId);
-        AIContextEngine.evictContext(sessionId);
-        AIContextMemoryEngine.deleteMemoriesBySession(sessionId, { source_ref: 'ai_context_rag' });
+        if (session.process_uid && !options?.skipProcessLifecycle) {
+            KernelEngine.updateProcessStatus(session.process_uid, PROCESS_STATUS.DONE, {
+                live_state: 'closed',
+                session_id: sessionUid,
+                ended_at: Date.now(),
+            });
+        } 
+
+        AISessionManager.close(sessionUid);
+
+        // Skip below for now since we our ai session still containing as one big memory blob without subprocesses or 
+        // shared memory pieces. But once we start spawning subprocesses for tool calls or using shared memory
+        // for context, etc., we'll want to cascade terminate those child processes and clean up associated memory 
+        // to prevent orphaned state and ensure proper lifecycle management.
+
+        // AIContextEngine.evictContext(sessionUid);
+        // AIContextMemoryEngine.deleteMemoriesBySession(sessionUid, { source_ref: 'ai_context_rag' });
     }
 
     /**
      * Returns read-only snapshots for all active sessions.
      * Intended for Dev Menu monitoring panels — not for runtime logic.
      */
-    listSessions(): AISessionSnapshot[] {
-        return AISessionManager.list().map((snapshot) => {
-            // Group 1: base context and response memory used by monitor panels.
-            const contextState = AIContextEngine.getSessionContext(snapshot.sessionId);
-            const responseMemory = snapshot.activeOutputRamKey
-                ? (KernelEngine.readMemory(snapshot.activeOutputRamKey) as Record<string, unknown> | undefined)
-                : undefined;
-
-            // Group 2: lifecycle timeline extracted from parser runtime records.
-            const parserResults = Array.isArray(responseMemory?.parser_handler_results)
-                ? (responseMemory?.parser_handler_results as Array<Record<string, unknown>>)
-                : [];
-            const lifecycleEvents = parserResults
-                .filter((record) => {
-                    // event_name marks parser lifecycle stages (dispatch/started/result/error/failed).
-                    const eventName = typeof record.event_name === 'string' ? record.event_name : '';
-                    return isLifecycleEventName(eventName);
-                })
-                .sort((a, b) => {
-                    // Keep chronological order so "latest" truly means newest signal.
-                    const atA = typeof a.at === 'number' ? a.at : 0;
-                    const atB = typeof b.at === 'number' ? b.at : 0;
-                    return atA - atB;
-                });
-
-            // Group 3: latest lifecycle signal + normalized metadata for status derivation.
-            const latestLifecycle = lifecycleEvents.length > 0 ? lifecycleEvents[lifecycleEvents.length - 1] : undefined;
-            const latestEventName = typeof latestLifecycle?.event_name === 'string' ? latestLifecycle.event_name : undefined;
-            const latestPayload = latestLifecycle && typeof latestLifecycle.payload === 'object'
-                ? (latestLifecycle.payload as Record<string, unknown>)
-                : undefined;
-            const latestAction = typeof latestPayload?.action === 'string' ? latestPayload.action : undefined;
-            const latestResultMemoryUid = typeof latestPayload?.result_memory_uid === 'string' ? latestPayload.result_memory_uid : undefined;
-            const latestUpdatedAt = typeof latestLifecycle?.at === 'number' ? latestLifecycle.at : undefined;
-            const latestPhase = getLifecyclePhase(latestEventName);
-            const latestBlockSlug = typeof latestPayload?.block_slug === 'string'
-                ? latestPayload.block_slug
-                : typeof latestLifecycle?.parsed_tag === 'string'
-                    ? latestLifecycle.parsed_tag
-                    : undefined;
-
-            // Group 4: boolean flags that explain why a status becomes running/parsing/failed.
-            const isHandlerRunning = latestPhase === 'dispatch' || latestPhase === 'started';
-            const parserRuntimeStatus = typeof responseMemory?.parser_runtime_status === 'string' ? responseMemory.parser_runtime_status : undefined;
-            const isParserFailed =
-                latestPhase === 'failed' ||
-                (latestBlockSlug === 'parser' && latestPhase === 'error') ||
-                parserRuntimeStatus === 'failed';
-            const isParserParsing =
-                snapshot.status === 'streaming' &&
-                !isParserFailed &&
-                ((latestBlockSlug === 'parser' && isHandlerRunning) || (!latestBlockSlug && !isHandlerRunning));
-
-            // Group 5: final derived state used by UI monitors.
-            const derivedStatus: AIBlockHandlerStatus =
-                isParserFailed
-                    ? AI_BLOCK_HANDLER_STATUS.FAILED
-                    : isHandlerRunning
-                        ? (latestBlockSlug === 'parser' ? AI_BLOCK_HANDLER_STATUS.PARSING : AI_BLOCK_HANDLER_STATUS.RUNNING)
-                        : isParserParsing
-                            ? AI_BLOCK_HANDLER_STATUS.PARSING
-                            : AI_BLOCK_HANDLER_STATUS.IDLE;
-
-            // block_slug represents the active runtime focus shown in block_handler_state.
-            const derivedBlockSlug =
-                latestBlockSlug
-                    ? latestBlockSlug
-                    : latestEventName
-                        ? 'handler'
-                    : isParserFailed
-                            ? 'parser'
-                            : undefined;
-
-            // Group 6: merge static session snapshot with derived monitor diagnostics.
-            return {
-                ...snapshot,
-                used_contexts: contextState?.used_contexts ?? [],
-                context_updated_at: contextState?.updated_at,
-                summary: contextState?.summary,
-                turns: contextState?.turns ?? [],
-                history_summaries: contextState?.history_summaries ?? [],
-                context_blocks: contextState?.context_blocks ?? [],
-                protocol_state: snapshot.protocol_state,
-                block_handler_state: {
-                    status: derivedStatus,
-                    block_slug: derivedBlockSlug,
-                    action: latestAction,
-                    event_name: latestEventName,
-                    result_memory_uid: latestResultMemoryUid,
-                    updated_at: latestUpdatedAt,
-                },
-            };
-        });
+    listSessions(): AISession[] {
+        return AISessionManager.list();
     }
 
     /**
@@ -352,13 +263,13 @@ class AIGatewayEngineSingleton {
      * in-flight config changes do not affect the current request.
      */
     async sendToSession(
-        sessionId: string,
+        sessionUid: string,
         prompt: string,
         reply_to_ram_key: string,
         parent_process_uid?: string,
     ): Promise<void> {
-        const session = AISessionManager.get(sessionId);
-        if (!session) throw new Error(`Session ${sessionId} not found.`);
+        const session = AISessionManager.get(sessionUid);
+        if (!session) throw new Error(`Session ${sessionUid} not found.`);
 
         const sessionProcessUid = this.sessionProcessBySessionId.get(sessionId);
         const resolvedParentProcessUid = parent_process_uid ?? sessionProcessUid;

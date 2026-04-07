@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAceEvent } from '#/hooks/useAceEvent';
 import { useAceMemory } from '#/hooks/useAceMemory';
+import { AISession } from '#/services/aiGatewayEngine';
 import type { SDKProvider } from '#/core/packages/system-dev/components/aiChatbarTest/types';
 
 interface AIChatSession {
@@ -11,6 +12,12 @@ interface AIChatSession {
     setSessionId: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
+interface AIChatSessionState {
+    turn_memory_uids: string[];
+}
+
+
+
 export function useAIChatSession(memoryPrefix: string): AIChatSession {
 
     // Event emitter for sending prompts to the gateway
@@ -18,21 +25,19 @@ export function useAIChatSession(memoryPrefix: string): AIChatSession {
 
     // Local state for session and turn tracking
     const [sessionId, setSessionId] = useState<string | null>(null);
-    const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+    const sessionState = useAceMemory<AIChatSessionState>(masterStateKey);
 
     // Create session_uid for the first time in forever
     useEffect(() => {
-        if (!sessionId) {
+        if (!sessionState) {
             const newSessionId = `session_${Date.now()}`;
             setSessionId(newSessionId);
         }
-    }, [sessionId]);
+    }, [sessionState]);
 
-    // Subscribe to the overarching Daemon Session process state
     const masterStateKey = sessionId ? `system:ai_session:${sessionId}:state` : '';
-    const sessionState = useAceMemory<{ turn_memory_uids: string[] }>(masterStateKey);
 
-    // Subscribe to the active turn memory to auto-clear isLoading state
+    const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
     const activeTurnMemory = useAceMemory<{ status?: string }>(activeTurnId || '');
     
     // Effect to monitor active turn status and reset activeTurnId when turn completes or errors

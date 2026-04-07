@@ -7,12 +7,17 @@ export class KernelProcessManager {
 
     private static terminationHandlers = new Map<string, Array<(args: { record: ProcessRecord, reason: string }) => void>>();
 
+    // Note: For simplicity, process records are stored in KernelState's 'system:process_system' memory map.
     static registerTerminationHandler(engine: string, handler: (args: { record: ProcessRecord, reason: string }) => void): () => void {
+        // Allows different engines (e.g. AI Gateway) to register handlers that get called 
+        // when any process terminates.
         let handlers = this.terminationHandlers.get(engine);
         if (!handlers) {
             handlers = [];
             this.terminationHandlers.set(engine, handlers);
         }
+
+        // Add the new handler to the list for the specified engine
         handlers.push(handler);
         return () => {
             const currentHandlers = this.terminationHandlers.get(engine);
@@ -147,6 +152,8 @@ export class KernelProcessManager {
         }));
     }
 
+    // ── Private helpers ──────────────────────────────────────────────────────────
+    // Registers a new process in the kernel process system, associating it with an optional parent process.
     private static _registerKernelProcess(record: ProcessRecord, ppid: string | null): { abort_signal: AbortSignal } {
         const abort_controller = new AbortController();
 
@@ -169,14 +176,20 @@ export class KernelProcessManager {
         return { abort_signal: abort_controller.signal };
     }
 
-    private static _abortKernelProcess(process_uid: string, cascade: boolean, reason: string): void {
+    // Recursively aborts the specified process and optionally all of its subprocesses, 
+    // invoking registered termination handlers and cleaning up associated memory.
+    private static _abortKernelProcess(process_uid: string, cascade: boolean = true, reason: string): void {
         const entry = KernelState.proc_sys.get(process_uid);
         if (!entry) return;
 
+        // Abort the process's main execution and mark it as terminated. 
+        // Note that subprocesses are automatically aborted.
         entry.abort_controller.abort();
         entry.lifecycle_status = 'terminated';
         entry.terminated_at = Date.now();
         
+        // Invoke registered termination handlers for this process, 
+        // allowing engines to perform custom cleanup (e.g. AI Gateway can clean up session state, etc.)
         const record = this.getProcess(process_uid);
         
         // Clean up RAM owned by this process
@@ -184,6 +197,8 @@ export class KernelProcessManager {
             KernelMemoryManager.deleteMemory(memId);
         }
 
+        // Notify registered handlers about the termination, providing the 
+        // process record and reason for termination.
         if (record) {
             for (const engineHandlers of this.terminationHandlers.values()) {
                 for (const handler of engineHandlers) {
@@ -196,11 +211,17 @@ export class KernelProcessManager {
             }
         }
 
+        // If cascade is true, recursively abort all subprocesses. This ensures that when a 
+        // parent process is terminated, all of its child processes are also cleaned up to 
+        // prevent orphaned processes and memory leaks. The reason for termination is passed 
+        // down to provide context to handlers.
         if (cascade) {
             for (const child_uid of entry.children_ids) {
                 this._abortKernelProcess(child_uid, true, reason);
             }
         }
+
+        // Finally, remove the process entry from the process system to complete cleanup.
         KernelState.proc_sys.delete(process_uid);
     }
 }

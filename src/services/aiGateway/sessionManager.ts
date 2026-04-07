@@ -1,103 +1,121 @@
 import { KernelEngine } from '../../services/kernelEngine';
-import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
-import { AI_GATEWAY_PROCESS_TYPE, AI_SESSION_STATUS } from './types';
-import type { AISession, AISessionSnapshot, SDKProvider } from './types';
+import { KernelState } from '../kernelEngine/kernelState';
 
-// Session Lifecycle API
+import { PROCESS_KIND } from '#/schemas/process';
+import { AI_FEEDBACK_LOOP_STATUS, AI_SESSION_STATUS } from './types';
+import type { AISession, SDKProvider } from './types';
+import { AIGatewayEngine } from '../aiGatewayEngine';
+import type { KernelAISessionEntry } from '../kernelEngine/types';
+
+// + ======== Session Management Orchestration ============== +
+
+// NOTE : Future development need for kernel state management and process orchestration 
+// may arise as we expand session capabilities (e.g. subprocesses for tool calls, 
+// shared memory for context, etc.). For now, this manager focuses on session creation 
+// and termination, with direct interactions to KernelEngine for process 
+// management and state persistence.
+
 class AISessionManagerSingleton {
 
-    constructor() {
-        // On initialization, we can scan existing processes to populate sessions if needed.
-        // For simplicity, we'll assume sessions are only created through this manager.
-    }
-
-    // Map list of
-    private sessions = new Map<string, AISession>();
-    
 
     // + ======== Session Management Orchestration ============== +
 
-    get(sessionId: string): AISession | undefined {
-        return this.sessions.get(sessionId);
+    get(sessionUID: string): AISession | undefined {
+        const aiSessionEntry = KernelState.ai_gateway_sessions.get(sessionUID) as KernelAISessionEntry | undefined;
+
+        if (!aiSessionEntry) {
+            console.warn(`[AISessionManager] No session found with ID ${sessionUID}`);
+            return undefined;
+        }
+
+        return KernelEngine.readMemory( aiSessionEntry.memory_uid as string ) as AISession | undefined;
     }
 
-    has(sessionId: string): boolean {
-        return this.sessions.has(sessionId);
+    has(sessionUID: string): boolean {
+        const aiSessionEntry = KernelState.ai_gateway_sessions.get(sessionUID) as KernelAISessionEntry | undefined;
+        return !!aiSessionEntry;
     }
 
-    list(): AISessionSnapshot[] {
-        return Array.from(this.sessions.values()).map((session) => ({
-            sessionId: session.sessionId,
-            sdk: session.sdk,
-            model: session.model,
-            status: session.status,
-            activeOutputRamKey: session.activeOutputRamKey,
-            isInsideEventBlock: session.isInsideEventBlock,
-            activeEventBufferLength: session.activeEventBuffer.length,
-            protocol_state: session.lastProtocolState ?? session.currentProtocolState,
-        }));
+    list(): AISession[] {
+        const sessions: AISession[] = [];
+        for (const aiSessionEntry of KernelState.ai_gateway_sessions.values() as Iterable<KernelAISessionEntry>) {
+            const sessionState = KernelEngine.readMemory( aiSessionEntry.memory_uid as string ) as AISession | undefined;
+            if (sessionState) {
+                sessions.push(sessionState);
+            }
+        }
+        return sessions;
+    }
+
+    list_sessions_id(): string[] {
+        return Object.values(KernelState.ai_gateway_sessions).map(entry => entry.session_uid) as string[];
     }
 
     // + ============== Session Management API ============== +
 
-    create(sdk: SDKProvider, model: string): string {
-        const sessionId = `sess-${crypto.randomUUID()}`;
-        const sessionStateMemory = `system:ai_session:${sessionId}:state`;
-        const processUid = `process:ai_session:${sessionId}`;
+    create(sdk: SDKProvider, model: string): AISession {
+
+        // Generate unique session ID and associated process
+        const sessionUID = `${crypto.randomUUID()}`;
+        const sessionStateMemory = `system:ai_session:${sessionUID}:state`;
+        const processUid = `process:ai_session:${sessionUID}`;
 
         // Note: Since we use custom predefined process UIDs, we might not cleanly support generic `spawnSubprocess`
         // without explicitly modifying process hierarchy in Kernel. But for AI sessions, mapping is enough right now.
-        KernelEngine.spawnProcess(AI_GATEWAY_PROCESS_TYPE.SESSION, {
-            session_id: sessionId,
-            sdk,
-            model,
+        KernelEngine.spawnProcess('ai:session:instance', {
+            session_uid: sessionUID,
+            session_state_memory: sessionStateMemory,
         }, {
             process_uid: processUid,
             process_kind: PROCESS_KIND.AI_SESSION,
             owner_engine: 'aiGatewayEngine',
-            payload: {
-                status: PROCESS_STATUS.RUNNING,
-                live_state: 'connected',
-                session_id: sessionId,
-                sdk,
-                model,
-            },
         });
 
         // Create session in AISessionManager and spawn a new process for it.
         const session: AISession = {
-            sessionId,
+            session_uid: sessionUID,
+            process_uid: processUid,
             sdk,
             model,
-            activeEventBuffer: '',
-            isInsideEventBlock: false,
+
             status: AI_SESSION_STATUS.CONNECTED,
-            processUid,
+            feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.NONE,
+
+            turn_index: 0,
+            turns : [],
+
+            plan: [],
+            context : [],
+
+            history : [],
+            history_start_index: 0,
+            history_end_index: 0,
         };
 
-        this.sessions.set(sessionId, session);
+        // Persist session state in global memory for retrieval and UI subscription.  
+        // This is the source of truth for list session exists.
+        KernelEngine.writeMemory( 'system:ai_gateway_sessions', {
+            session_uid: session.session_uid,
+            process_uid: session.process_uid,
+            memory_uid: sessionStateMemory,
+        } as KernelAISessionEntry, sessionStateMemory);
         
-        KernelEngine.createMemory({
-            session_id: sessionId,
-            sdk,
-            model,
-            status: session.status,
-            turn_memory_uids: [],
-        }, processUid, sessionStateMemory);
+        // Also create a dedicated memory block for session state that UIs can subscribe to for 
+        // real-time updates.
+        KernelEngine.createMemory(session, processUid, sessionStateMemory);
 
-        console.log(`[AIGatewayEngine] Session ${sessionId} created for ${sdk}/${model} under process ${processUid}.`);
-        return sessionId;
+        console.log(`[AIGatewayEngine] Session ${session.session_uid} created for ${sdk}/${model} under process ${processUid}.`);
+        return session;
     }
 
     close(sessionId: string): void {
-        const session = this.sessions.get(sessionId);
-        if (session) {
-            if (session.processUid) {
-                KernelEngine.killProcess(session.processUid);
-            }
-            this.sessions.delete(sessionId);
-            console.log(`[AIGatewayEngine] Session ${sessionId} closed and process terminated.`);
+        const sessionState = KernelEngine.readMemory( `system:ai_session:${sessionId}:state` ) as AISession | undefined;
+        
+        if (sessionState?.process_uid) {
+            KernelEngine.terminateProcess(sessionState.process_uid);
         }
+
+        console.log(`[AIGatewayEngine] Session ${sessionState?.session_uid} closed and process terminated.`);
     }
 }
 

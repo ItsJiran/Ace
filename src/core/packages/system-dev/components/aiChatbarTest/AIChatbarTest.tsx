@@ -37,6 +37,7 @@ export default function AIChatbarTest() {
 
     const bottomRef = useChatAutoScroll<HTMLDivElement>([turnMemoryUids]);
 
+    // Handler for sending a prompt
     const onSendPrompt = () => {
         const modelToUse = ensureSelectedModel();
         sendPrompt(prompt, selectedSdk, modelToUse);

@@ -16,7 +16,7 @@ export type SDKProvider = 'openai' | 'google' | 'anthropic';
 // | TURN | is a single user input and the corresponding assistant response within a session. 
 // Each turn can have multiple entries,
 
-// | ENTRY | is a atomic part of the AI Whole Session, one entry is equal to one prompt chunk or one response chunk, 
+// | ENTRY | is a atomic part of the AI Whole Session, one entry is equal to one prompt chunk and one response chunk, 
 // for now we keep it flexible with the content field but in the future we can make it more 
 // strict with the type of content based on the renderer_slug
 
@@ -36,62 +36,96 @@ export type SDKProvider = 'openai' | 'google' | 'anthropic';
 export interface AISession {
     // Unique session ID, typically generated at session creation time. 
     // This is the primary identifier for the session.
-    sessionId: string;
-    processUid: string;
+    session_uid: string;
+    process_uid: string;
     sdk: SDKProvider;
     model: string;
 
     // Current status of the session, which can be used to track 
     // its lifecycle and handle UI state accordingly.
     status: AISessionStatus;
-    feedbackLoopStatus : AIFeedbackLoopStatus;
+    feedback_loop_status: AIFeedbackLoopStatus;
 
-    // List of RAM keys for each turn's memory block, ordered by turn start time.
+    // Turn is what the user sees as a single prompt/response pair, 
+    // but we track entries within the turn for more granular updates and rendering.
     turn_index: number;
-    turns: Array<AISessionTurnUser | AISessionTurnAgent>;
+    turns : Array<{
+        at: number; // Timestamp for when the turn started, useful for ordering and time-based logic.
+        role: 'user' | 'assistant'; // Role of the turn initiator, which can be used for rendering and logic branching.
+        active_entry_index : number | 0; // Index to track which entry is currently active within the turn, useful for streaming updates and UI focus.
+        renderers : AIRenderer[]; // What displayed in the UI, each entry can have its own renderer for flexible representation. For example, a long user prompt might be split into multiple entries, and an assistant response might also come in multiple entries as it's streamed. Each entry can have its own renderer for flexible UI representation.
+
+        // Entries represent the individual prompt/response chunks within a turn. For example, a 
+        // user prompt might be split into multiple entries if it's long, and an assistant response 
+        // might also come in multiple entries as it's streamed. Each entry can have its own renderer for 
+        // flexible UI representation.
+        entries : Map<number, Array<{
+            prompt : string;
+            composed_prompt : string; // For cases where the original prompt is transformed or augmented before being sent to the model, we can store the final composed prompt here for reference and debugging.
+            response : string;
+            blocks? : unknown; // Parsed blocks from the response, if applicable. The structure can be flexible to accommodate different types of block data depending on the use case and renderer requirements.
+            status: AIResponseStatus;
+        }>>;
+    }>;
+
+    // Contexting information that can be used for building the session context, such as summaries, relevant history, and other contextual data that can be fed back into the model for better responses. 
+    // This is optional and can be populated based on the application's needs.
+    plan: Array<{
+        is_complete: boolean;
+        detail?: string;
+        [key: string]: string | number | boolean | object | unknown;
+    }>;
+    
+    // Context entries that are generated throughout the session, which can include summaries, 
+    // relevant history snippets, and other contextual information that has been deemed relevant at 
+    // different points in the conversation. Each entry can have its own lifecycle and relevance based on 
+    // the turn index at which it was generated, allowing for more dynamic and contextually appropriate 
+    // feeding of information back into the model as the conversation progresses.
+    context : Array<AIContextEntry>;
+    
+    // A more detailed history of the session, which can include parsed information, 
+    // intermediate summaries, and other relevant data that has been generated throughout the session. 
+    // This can be used for more advanced context management strategies, allowing the application to 
+    // determine what information is most relevant to feed back into the model at different points in the 
+    // conversation.
+    history : Array<AIContextEntry>;
+    history_start_index : number; 
+    history_end_index: number;
 
     /** The RAM key currently being streamed into */
-    activeOutputRamKey?: string;
+    active_output_memory_key?: string;
 
     // Protocol state for the current request, if applicable. This is used to track the lifecycle of 
     // prompt/response summaries and other context-building mechanisms.
     termination_requested?: boolean;
-    activeAbortController?: AbortController;
+    active_abort_controller?: AbortController;
 }
 
-export interface AISessionTurnUser {
-    at: number;
-    role: 'user';
-    active_entry_index : number | 0;
-    entries : Array<{
-        renderer?: EntryRenderer;
-        raw_prompt: string;
-        composed_prompt : string | null; 
-    }>;
+export interface AIContextEntry {
+    summary? : string;
+    status : 'active' | 'inactive';
+
+    // For entries that are summaries or truncated content, this flag can indicate whether the full content 
+    // should be loaded when accessed, allowing for more efficient memory usage and on-demand loading of context data.
+    is_load_full_content?: boolean; 
+
+    // The turn index at which this context was generated, 
+    // useful for determining relevance and when to refresh the context
+    lifecycle_turn? : number;
+    payload ?: Record<string, unknown>;
 }
 
-export interface AISessionTurnAgent {
-    at: number;
-    role: 'agent';
-    active_entry_index : number | 0;
-    entries : Array<{
-        renderer?: EntryRenderer;
-        blocks?: unknown; 
-        raw_response: string;
-        status: AIResponseStatus;
-    }>;
-}
-
-export interface EntryRenderer {
+export interface AIRenderer {
     // renderer_slug corresponds to a registered renderer in the ACE registry, typically under the "renderers" or 
     // "components" category of a package.
+
     //  This is how the TurnRendererItem component resolves which React 
     //  component to render for this entry.
-    renderer_slug: string;
+    component_slug: string;
     package_ref?: string;
 
     status?: 'loading' | 'error' | 'completed';
-    content: string | object;
+    payload: string | object | unknown;
 }
 
 // + ========================================================== +
@@ -135,6 +169,12 @@ export const AI_FEEDBACK_LOOP_STATUS = {
 } as const;
 
 export type AIFeedbackLoopStatus = typeof AI_FEEDBACK_LOOP_STATUS[keyof typeof AI_FEEDBACK_LOOP_STATUS];
+
+export const AI_PROCESS_TYPE = {
+    AI_SESSION_INSTANCE: 'ai:session:instance',
+} as const;
+
+export type AIProcessType = typeof AI_PROCESS_TYPE[keyof typeof AI_PROCESS_TYPE];
 
 
 
