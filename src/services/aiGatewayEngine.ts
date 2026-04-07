@@ -66,9 +66,9 @@ function isLifecycleEventName(eventName?: string): boolean {
 
 
 export type { SDKProvider, AISession } from './aiGateway/types';
-import { AI_BLOCK_HANDLER_STATUS, AI_PROCESS_TYPE, AI_SESSION_STATUS } from './aiGateway/types';
-import type { AIBlockHandlerStatus, SDKProvider } from './aiGateway/types';
-import type { AISession } from './aiGateway/types';
+import { AI_PROCESS_TYPE, AI_SESSION_STATUS } from './aiGateway/types';
+import type { SDKProvider, AISession } from './aiGateway/types';
+import type {  } from './aiGateway/types';
 import { KernelState } from './kernelEngine/kernelState';
 import type { KernelAISessionEntry } from './kernelEngine/types';
 
@@ -277,20 +277,6 @@ class AIGatewayEngineSingleton {
             prompt,
             replyToRamKey: reply_to_ram_key,
             parentProcessUid: resolvedParentProcessUid,
-        });
-    }
-
-    finalizeProtocolState(
-        session : AISession,
-        prompt: string,
-        responseText: string,
-        rawResponse: string,
-    ) {
-        return finalizeRequestProtocolState({
-            session,
-            prompt,
-            responseText,
-            rawResponse,
         });
     }
 
