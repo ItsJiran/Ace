@@ -60,15 +60,22 @@ export interface AISession {
         // might also come in multiple entries as it's streamed. Each entry can have its own renderer for 
         // flexible UI representation.
         entries : Map<number, Array<{
-            prompt : string;
-            composed_prompt : string; // For cases where the original prompt is transformed or augmented before being sent to the model, we can store the final composed prompt here for reference and debugging.
             response : string;
-            blocks? : unknown; // Parsed blocks from the response, if applicable. The structure can be flexible to accommodate different types of block data depending on the use case and renderer requirements.
+            
+            // For cases where the original prompt is transformed or augmented before being sent to 
+            // the model, we can store the final composed prompt here for reference and debugging.
+            prompt : string;
+            composed_prompt : string;
+
+            // Parsed blocks from the response, if applicable. The structure can be flexible 
+            // to accommodate different types of block data depending on the use case and renderer requirements.
+            blocks? : unknown; 
             status: AIResponseStatus;
         }>>;
     }>;
 
-    // Contexting information that can be used for building the session context, such as summaries, relevant history, and other contextual data that can be fed back into the model for better responses. 
+    // Contexting information that can be used for building the session context, such as summaries, relevant history, 
+    // and other contextual data that can be fed back into the model for better responses. 
     // This is optional and can be populated based on the application's needs.
     plan: Array<{
         is_complete: boolean;

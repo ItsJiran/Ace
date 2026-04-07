@@ -256,12 +256,10 @@ class AIGatewayEngineSingleton {
         return AISessionManager.list();
     }
 
-    /**
-     * Sends a prompt to an existing session and streams the response into RAM.
-     *
-     * Config is snapshotted at call time (AIConfigManager.get()) so any
-     * in-flight config changes do not affect the current request.
-     */
+    // Sending prompt to session is technically part of the interaction loop logic, but it requires 
+    // direct access to the session's process and memory management, so it lives here in the engine as 
+    // a bridge between the public API and the internal interaction loop implementation.
+
     async sendToSession(
         sessionUid: string,
         prompt: string,
@@ -271,12 +269,11 @@ class AIGatewayEngineSingleton {
         const session = AISessionManager.get(sessionUid);
         if (!session) throw new Error(`Session ${sessionUid} not found.`);
 
-        const sessionProcessUid = this.sessionProcessBySessionId.get(sessionId);
-        const resolvedParentProcessUid = parent_process_uid ?? sessionProcessUid;
+        const resolvedParentProcessUid = parent_process_uid ?? session.process_uid;
 
         await executeSessionInteractionLoop({
             session,
-            sessionId,
+            sessionUid,
             prompt,
             replyToRamKey: reply_to_ram_key,
             parentProcessUid: resolvedParentProcessUid,
@@ -284,7 +281,7 @@ class AIGatewayEngineSingleton {
     }
 
     finalizeProtocolState(
-        session: { sessionId: string; currentProtocolState?: import('./aiGateway/types').AIRequestProtocolState; lastProtocolState?: import('./aiGateway/types').AIRequestProtocolState },
+        session : AISession,
         prompt: string,
         responseText: string,
         rawResponse: string,

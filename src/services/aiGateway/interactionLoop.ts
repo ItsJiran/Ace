@@ -217,18 +217,26 @@ function hydrateActionRendererFromTerminalEvent(input: {
     }, isError ? 'error' : 'completed');
 }
 
+
+// + ============== Session Management API ============== +
+// Note: This is a simplified process management approach for AI sessions. 
+// Each session spawns a main process that owns the session state memory and 
+// handles the interaction loop. Subprocesses can be spawned for individual 
+// turns or tool interactions, but they are not strictly required to be children of the 
+// main session process in the kernel hierarchy.
 export async function executeSessionInteractionLoop(input: {
     session: AISession;
-    sessionId: string;
+    sessionUid: string;
     prompt: string;
     replyToRamKey: string;
     parentProcessUid?: string;
 }): Promise<void> {
-    const { session, sessionId, prompt, replyToRamKey, parentProcessUid } = input;
+    const { session, sessionUid, prompt, replyToRamKey, parentProcessUid } = input;
+
     const rootProcess = parentProcessUid
         ? KernelEngine.spawnSubprocess(parentProcessUid, AI_GATEWAY_PROCESS_TYPE.RESPONSE_TURN, {
             metadata: {
-                session_id: sessionId,
+                session_uid: sessionUid,
                 reply_to_ram_key: replyToRamKey,
                 prompt_preview: prompt.slice(0, 200),
             },
@@ -236,7 +244,7 @@ export async function executeSessionInteractionLoop(input: {
             owner_engine: 'aiGatewayEngine',
         })
         : KernelEngine.spawnProcess(AI_GATEWAY_PROCESS_TYPE.RESPONSE_TURN, {
-            session_id: sessionId,
+            session_uid: sessionUid,
             reply_to_ram_key: replyToRamKey,
             prompt_preview: prompt.slice(0, 200),
         }, {
