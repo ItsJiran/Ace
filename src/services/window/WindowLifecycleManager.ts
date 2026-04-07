@@ -20,7 +20,6 @@ export class WindowLifecycleManager {
     private windowSubscriptions = new Map<string, () => void>();
 
     private deps: WindowLifecycleDependencies;
-
     constructor(deps: WindowLifecycleDependencies) {
         this.deps = deps;
     }

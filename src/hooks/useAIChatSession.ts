@@ -3,11 +3,30 @@ import { useAceEvent } from '#/hooks/useAceEvent';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import type { SDKProvider } from '#/core/packages/system-dev/components/aiChatbarTest/types';
 
-export function useAIChatSession(memoryPrefix: string) {
+interface AIChatSession {
+    turnMemoryUids: string[];
+    sessionId: string | null;
+    activeTurnId: string | null;
+    sendPrompt: (prompt: string, selectedSdk: SDKProvider, selectedModel: string) => Promise<void>;
+    setSessionId: React.Dispatch<React.SetStateAction<string | null>>;
+}
+
+export function useAIChatSession(memoryPrefix: string): AIChatSession {
+
+    // Event emitter for sending prompts to the gateway
     const { emit: emitSendGateway } = useAceEvent('send_gateway');
 
+    // Local state for session and turn tracking
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+
+    // Create session_uid for the first time in forever
+    useEffect(() => {
+        if (!sessionId) {
+            const newSessionId = `session_${Date.now()}`;
+            setSessionId(newSessionId);
+        }
+    }, [sessionId]);
 
     // Subscribe to the overarching Daemon Session process state
     const masterStateKey = sessionId ? `system:ai_session:${sessionId}:state` : '';
@@ -16,6 +35,7 @@ export function useAIChatSession(memoryPrefix: string) {
     // Subscribe to the active turn memory to auto-clear isLoading state
     const activeTurnMemory = useAceMemory<{ status?: string }>(activeTurnId || '');
     
+    // Effect to monitor active turn status and reset activeTurnId when turn completes or errors
     useEffect(() => {
         if (!activeTurnId || !activeTurnMemory?.status) return;
         const status = activeTurnMemory.status;
@@ -24,6 +44,7 @@ export function useAIChatSession(memoryPrefix: string) {
         }
     }, [activeTurnId, activeTurnMemory?.status]);
 
+    // Function to send a prompt to the gateway, creating a new session if needed
     const sendPrompt = async (prompt: string, selectedSdk: SDKProvider, selectedModel: string) => {
         const normalizedPrompt = prompt.trim();
         if (!normalizedPrompt) return;

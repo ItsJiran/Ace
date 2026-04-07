@@ -1,0 +1,234 @@
+function AttemptSection({ turn, attempt, responseMemory }: { turn: NonNullable<ResponseMemorySnapshot['response_turns']>[number], attempt: any, responseMemory: ResponseMemorySnapshot }) {
+    const [selectedTokenIndex, setSelectedTokenIndex] = useState<number | null>(null);
+
+    const parserResults = attempt?.parser_handler_results || [];
+    const tokenTraces = attempt?.parser_token_traces || [];
+
+    const responseViewTokenTraces = useMemo(() => {
+        if (tokenTraces.length > 0) return [...tokenTraces].sort((a: any, b: any) => a.sequenceNumber - b.sequenceNumber);
+        
+        const started = parserResults.filter((r: any) => r.event_name === 1 /* PARSING_STARTED */ || r.event_name === 'PARSING_STARTED').sort((a: any, b: any) => a.at - b.at);
+        const completed = parserResults.filter((r: any) => r.event_name === 2 /* PARSING_COMPLETED */ || r.event_name === 'PARSING_COMPLETED').sort((a: any, b: any) => a.at - b.at);
+        
+        const fallback: any[] = [];
+        const pairedCount = Math.min(started.length, completed.length);
+        for (let i = 0; i < pairedCount; i++) {
+            const sp = started[i].payload || {};
+            const cp = completed[i].payload || {};
+            fallback.push({
+                at: completed[i].at,
+                sequenceNumber: i + 1,
+                inputBytes: typeof sp.chunk_bytes === 'number' ? sp.chunk_bytes : 0,
+                inputPreview: typeof sp.chunk_preview === 'string' ? sp.chunk_preview : '(from parser_parsing_started event)',
+                carryoverInputBytes: typeof sp.carryover_bytes === 'number' ? sp.carryover_bytes : 0,
+                carryoverPreview: typeof sp.carryover_preview === 'string' ? sp.carryover_preview : '(from parser_parsing_started event)',
+                outputBlocks: typeof cp.produced_blocks === 'number' ? cp.produced_blocks : 0,
+                outputEvents: typeof cp.produced_events === 'number' ? cp.produced_events : 0,
+                outputTextBytes: typeof cp.output_text_bytes === 'number' ? cp.output_text_bytes : 0,
+                outputTextPreview: typeof cp.output_text_preview === 'string' ? cp.output_text_preview : '(unavailable from fallback)',
+                outputCarryoverBytes: typeof cp.carryover_bytes === 'number' ? cp.carryover_bytes : 0,
+                outputCarryoverPreview: typeof cp.carryover_preview === 'string' ? cp.carryover_preview : '(from parser_parsing_completed event)',
+                interruptRequested: false
+            });
+        }
+        return fallback;
+    }, [tokenTraces, parserResults]);
+
+    return (
+        <div className="border border-zinc-800/80 rounded bg-black/30 mb-3 overflow-hidden">
+            <div className="bg-zinc-950 px-3 py-1.5 border-b border-zinc-800/50 flex justify-between items-center">
+                <div className="text-[10px] uppercase font-bold text-emerald-400">Attempt {attempt.attempt_index}</div>
+                <div className="text-[9px] text-zinc-500 font-mono">Status: <span className="text-zinc-300 font-semibold">{attempt.status || '-'}</span></div>
+            </div>
+            <div className="p-3 space-y-4">
+                <div className="border border-zinc-800/50 rounded bg-black/20 p-2.5 flex flex-col gap-2">
+                    <div className="grid grid-cols-[100px_1fr] gap-x-2 gap-y-1.5 items-start text-[10px]">
+                        <span className="text-zinc-500">Batches / Events</span>
+                        <span className="text-zinc-300">{attempt?.parser_batch_count ?? 0} / {attempt?.events_total ?? 0}</span>
+                        <span className="text-zinc-500">Prompt Ref</span>
+                        <span className="text-zinc-300 font-mono break-all">{responseMemory?.prompt_reference?.storage_key || '-'}</span>
+                    </div>
+                    {attempt?.error_message && (
+                        <div className="text-red-300 bg-red-950/20 border border-red-900/40 rounded p-1.5 whitespace-pre-wrap text-[10px]">
+                            {attempt.error_message}
+                        </div>
+                    )}
+                </div>
+
+                <div className="pt-1">
+                    <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Quick Copy</div>
+                    <div className="flex flex-wrap gap-2">
+                        <CopyTextButton label="output text" value={attempt?.text} />
+                        <CopyTextButton label="raw response" value={attempt?.raw_response} />
+                        <CopyTextButton label="parsed code" value={attempt?.composed_prompt || attempt?.prompt} />
+                    </div>
+                </div>
+
+                <div className="space-y-3">
+                    <div>
+                        <div className="mb-1 flex items-center gap-2">
+                            <div className="text-[10px] uppercase font-bold text-zinc-500">Raw Response</div>
+                        </div>
+                        <pre className="p-2 text-[10px] text-zinc-300 bg-black/40 border border-zinc-800/50 rounded overflow-auto max-h-[160px] whitespace-pre-wrap">{attempt?.raw_response || '-'}</pre>
+                    </div>
+                </div>
+
+                <div>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                        <div className="text-[10px] uppercase font-bold text-zinc-500">Token Traces ({responseViewTokenTraces.length})</div>
+                    </div>
+                    {responseViewTokenTraces.length > 0 ? (
+                        <div className="border border-zinc-800/50 rounded bg-black/20 overflow-x-auto">
+                            <table className="w-full text-[9px] font-mono border-collapse">
+                                <thead>
+                                    <tr className="border-b border-zinc-800 bg-zinc-900/70">
+                                        <th className="px-1.5 py-1 text-left text-zinc-400 border-r border-zinc-800/50">#</th>
+                                        <th className="px-1.5 py-1 text-left text-zinc-400 border-r border-zinc-800/50">In</th>
+                                        <th className="px-1.5 py-1 text-left text-zinc-400 border-r border-zinc-800/50">Output Text</th>
+                                        <th className="px-1.5 py-1 text-left text-zinc-400">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {responseViewTokenTraces.map((trace: any, traceIndex: number) => (
+                                        <tr
+                                            key={\`trace-\${trace.sequenceNumber}-\${traceIndex}\`}
+                                            onClick={() => setSelectedTokenIndex(traceIndex)}
+                                            className={\`border-b border-zinc-800/30 cursor-pointer transition-colors \${traceIndex % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.02]'} \${selectedTokenIndex === traceIndex ? 'ring-1 ring-cyan-700/60 bg-cyan-950/20' : 'hover:bg-zinc-800/30'}\`}
+                                        >
+                                            <td className="px-1.5 py-1 text-zinc-400 border-r border-zinc-800/30">{trace.sequenceNumber}</td>
+                                            <td className="px-1.5 py-1 text-cyan-400 border-r border-zinc-800/30">{trace.inputBytes}</td>
+                                            <td className="px-1.5 py-1 text-zinc-400 border-r border-zinc-800/30 truncate max-w-[200px]" title={trace.outputTextPreview}>{trace.outputTextPreview.length > 50 ? \`\${trace.outputTextPreview.slice(0, 50)}...\` : trace.outputTextPreview}</td>
+                                            <td className={\`px-1.5 py-1 \${trace.interruptRequested ? 'text-rose-400' : 'text-emerald-400'}\`}>{trace.interruptRequested ? 'STOP' : 'OK'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="text-[10px] text-zinc-600 italic px-1">No token traces recorded.</div>
+                    )}
+                    
+                    {selectedTokenIndex !== null && responseViewTokenTraces[selectedTokenIndex] && (
+                        <div className="mt-2 border border-zinc-800/50 rounded bg-black/40 p-2 space-y-1.5">
+                            <div className="grid grid-cols-[100px_1fr] gap-1 text-[9px] items-start">
+                                <span className="text-zinc-500 uppercase">Input</span>
+                                <pre className="text-zinc-300 whitespace-pre-wrap break-all max-h-[80px] overflow-auto">{responseViewTokenTraces[selectedTokenIndex].inputPreview || '(empty)'}</pre>
+                                <span className="text-zinc-500 uppercase">Output</span>
+                                <pre className="text-zinc-300 whitespace-pre-wrap break-all max-h-[80px] overflow-auto">{responseViewTokenTraces[selectedTokenIndex].outputTextPreview || '(empty)'}</pre>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {attempt?.blocks && attempt.blocks.length > 0 && (
+                    <div>
+                        <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Parsed Blocks ({attempt.blocks.length})</div>
+                        <div className="space-y-1.5">
+                            {attempt.blocks.map((block: any, blockIndex: number) => (
+                                <div key={blockIndex} className="border border-zinc-800/50 rounded bg-black/20 overflow-hidden">
+                                    <div className="px-2 py-1 text-[9px] bg-zinc-900 border-b border-zinc-800/50 text-zinc-400 flex justify-between">
+                                        <span className="font-semibold">{typeof block.block_slug === 'string' ? block.block_slug : '-'}</span>
+                                        {'status' in block && typeof block.status === 'string' ? <span>{block.status}</span> : null}
+                                    </div>
+                                    <pre className="p-2 text-[9px] text-zinc-400 overflow-auto max-h-[120px] whitespace-pre-wrap">{JSON.stringify(block, null, 2)}</pre>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function TurnAccordion({
+    turn,
+    turnIndex,
+    isActive,
+    onToggle,
+    session,
+    responseMemory
+}: {
+    turn: NonNullable<ResponseMemorySnapshot['response_turns']>[number];
+    turnIndex: number;
+    isActive: boolean;
+    onToggle: () => void;
+    session: SessionSnapshot;
+    responseMemory: ResponseMemorySnapshot;
+}) {
+    const displayAttempts = useMemo(() => {
+        const arr = turn.attempts ? [...turn.attempts] : [];
+        if (responseMemory?.active_response_turn_id === turn.turn_id) {
+            const activeIdx = responseMemory.active_response_attempt_index ?? 1;
+            if (!arr.find(a => a.attempt_index === activeIdx)) {
+                arr.push({
+                    attempt_index: activeIdx,
+                    prompt: responseMemory.prompt ?? turn.original_prompt,
+                    composed_prompt: responseMemory.composed_prompt,
+                    started_at: turn.started_at,
+                    status: responseMemory.status ?? 'streaming',
+                    text: responseMemory.text,
+                    raw_response: responseMemory.raw_response,
+                    blocks: responseMemory.blocks,
+                    parser_batch_count: responseMemory.parser_batch_count,
+                    events_total: responseMemory.events_total,
+                    parser_handler_results: responseMemory.parser_handler_results,
+                    parser_token_traces: responseMemory.parser_token_traces,
+                } as any);
+            }
+        }
+        return arr.sort((a, b) => a.attempt_index - b.attempt_index);
+    }, [turn, responseMemory]);
+
+    return (
+        <div className={\`border border-zinc-800 rounded transition-colors overflow-hidden \${isActive ? 'bg-zinc-900/40 ring-1 ring-zinc-700/50 shadow-lg' : 'bg-zinc-900/20 hover:bg-zinc-900/30'}\`}>
+            <button
+                onClick={onToggle}
+                className="w-full px-3 py-2 flex flex-col gap-1 items-start text-left focus:outline-none focus:bg-zinc-900/50"
+            >
+                <div className="flex w-full items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                        {isActive ? <ChevronDown size={14} className="text-zinc-500 shrink-0" /> : <ChevronRight size={14} className="text-zinc-500 shrink-0" />}
+                        <div className="text-[11px] uppercase font-bold text-emerald-400">
+                            Turn {turnIndex}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 font-mono">
+                            {displayAttempts.length} attempt{displayAttempts.length !== 1 ? 's' : ''}
+                        </div>
+                    </div>
+                    <div className="text-[10px] text-zinc-500 font-mono truncate max-w-[200px]" title={turn.turn_id}>
+                        {turn.turn_id.split('-')[0] || turn.turn_id.substring(0, 8)}
+                    </div>
+                </div>
+                <div className="text-[10px] text-zinc-400 pl-5 truncate w-full" title={turn.original_prompt}>
+                    {turn.original_prompt || '-'}
+                </div>
+            </button>
+
+            {isActive && (
+                <div className="px-3 pb-3 pt-3 border-t border-zinc-800/50 animate-in slide-in-from-top-1 duration-200">
+                    <div className="mb-3 border border-zinc-700/50 bg-black/40 rounded p-2">
+                        <div className="text-[10px] uppercase font-bold text-zinc-400 mb-1">Original Prompt</div>
+                        <div className="text-[11px] text-zinc-300 font-serif whitespace-pre-wrap">{turn.original_prompt || '-'}</div>
+                    </div>
+
+                    {!displayAttempts || displayAttempts.length === 0 ? (
+                        <div className="text-zinc-600 italic text-[10px] px-2 py-4">Belum ada response attempt terekam di turn ini.</div>
+                    ) : (
+                        <div className="flex flex-col">
+                            {displayAttempts.map((attempt) => (
+                                <AttemptSection
+                                    key={\`\${turn.turn_id}-\${attempt.attempt_index}\`}
+                                    turn={turn}
+                                    attempt={attempt}
+                                    responseMemory={responseMemory}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+

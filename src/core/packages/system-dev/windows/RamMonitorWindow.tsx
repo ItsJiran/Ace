@@ -89,7 +89,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
     const [sortAsc, setSortAsc] = useState(false);
     const [filter, setFilter] = useState('');
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
-    const [expandedProcesses, setExpandedProcesses] = useState<Set<string>>(new Set());
+    const [expandedProcesses, setExpandedProcesses] = useState<Set<string>>(() => new Set(['(orphan)']));
     const [detailsCache, setDetailsCache] = useState<Record<string, string>>({});
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -163,8 +163,10 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
 
     const allRows = [...rows, ...orphanListeners];
 
-    const filtered = filter
-        ? allRows.filter(r => r.memory_uid.toLowerCase().includes(filter.toLowerCase()) || r.process_uid.toLowerCase().includes(filter.toLowerCase()))
+    const normalizedFilter = filter.trim().toLowerCase();
+
+    const filtered = normalizedFilter
+        ? allRows.filter(r => r.memory_uid.toLowerCase().includes(normalizedFilter) || r.process_uid.toLowerCase().includes(normalizedFilter))
         : allRows;
 
     // Group by process_uid
@@ -280,9 +282,10 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                         </thead>
                         <tbody>
                             {sortedProcesses.map(([processUid, processEntries], processIdx) => {
-                                const isProcessExpanded = expandedProcesses.has(processUid);
+                                const isProcessExpanded = normalizedFilter.length > 0 || expandedProcesses.has(processUid);
                                 const processTotal = processEntries.reduce((sum, e) => sum + e.approx_bytes, 0);
                                 const sortedProcessRows = sortGroupedEntries(processEntries);
+                                const orphanLabel = processUid === '(orphan)' ? 'Unbound / Orphaned Keys' : `${processEntries.length} entries`;
 
                                 return (
                                     <Fragment key={processUid}>
@@ -298,7 +301,7 @@ export default function RamMonitorWindow({ windowUid }: { windowUid: string }) {
                                                 <span className="text-blue-300">{processUid}</span>
                                             </td>
                                             <td className="px-2 py-1.5 font-mono text-zinc-400">
-                                                {processEntries.length} entries
+                                                {orphanLabel}
                                             </td>
                                             <td className="px-2 py-1.5 text-right font-mono text-emerald-400">
                                                 {formatBytes(processTotal)}

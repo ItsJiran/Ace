@@ -44,6 +44,16 @@ type ResponseTurnSnapshot = {
     attempts: ResponseAttemptSnapshot[];
 };
 
+function cloneSnapshotValue<T>(value: T): T {
+    if (value == null) return value;
+
+    if (typeof globalThis.structuredClone === 'function') {
+        return globalThis.structuredClone(value);
+    }
+
+    return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function snapshotResponseAttemptFromMemory(input: {
     replyToRamKey: string;
     attemptIndex: number;
@@ -62,13 +72,13 @@ function snapshotResponseAttemptFromMemory(input: {
         error_message: typeof memory.error_message === 'string' ? memory.error_message : undefined,
         text: typeof memory.text === 'string' ? memory.text : undefined,
         raw_response: typeof memory.raw_response === 'string' ? memory.raw_response : undefined,
-        blocks: Array.isArray(memory.blocks) ? memory.blocks : undefined,
-        parser_batches: Array.isArray(memory.parser_batches) ? memory.parser_batches : undefined,
+        blocks: Array.isArray(memory.blocks) ? cloneSnapshotValue(memory.blocks) : undefined,
+        parser_batches: Array.isArray(memory.parser_batches) ? cloneSnapshotValue(memory.parser_batches) : undefined,
         parser_batch_count: typeof memory.parser_batch_count === 'number' ? memory.parser_batch_count : undefined,
         events_total: typeof memory.events_total === 'number' ? memory.events_total : undefined,
-        parser_handler_results: Array.isArray(memory.parser_handler_results) ? memory.parser_handler_results : undefined,
-        parser_stop_signals: Array.isArray(memory.parser_stop_signals) ? memory.parser_stop_signals : undefined,
-        parser_token_traces: Array.isArray(memory.parser_token_traces) ? memory.parser_token_traces : undefined,
+        parser_handler_results: Array.isArray(memory.parser_handler_results) ? cloneSnapshotValue(memory.parser_handler_results) : undefined,
+        parser_stop_signals: Array.isArray(memory.parser_stop_signals) ? cloneSnapshotValue(memory.parser_stop_signals) : undefined,
+        parser_token_traces: Array.isArray(memory.parser_token_traces) ? cloneSnapshotValue(memory.parser_token_traces) : undefined,
     };
 }
 

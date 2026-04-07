@@ -17,6 +17,7 @@ import { KernelWindowManager } from './kernelEngine/kernelWindowManager';
  * - KernelWindowManager: Base OS window process mappings.
  */
 class KernelEngineSingleton {
+    
     constructor() {
         // KernelState initialises system maps in its own constructor.
     }

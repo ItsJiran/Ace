@@ -20,6 +20,7 @@ class KernelStateSingleton {
         this.kernel_memory.set('system:process_system', new Map<string, KernelProcessEntry>());
         this.kernel_memory.set('system:shared_system',  new Map<string, KernelSharedEntry>());
         this.kernel_memory.set('system:window_system',  new Map<string, KernelWindowEntry>());
+        this.kernel_memory.set('system:ai_sessions',  new Map<string, KernelWindowEntry>());
     }
 
     resetKernelSpace(): void {

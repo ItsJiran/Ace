@@ -76,6 +76,7 @@ class AIGatewayEngineSingleton {
      */
     public readonly memory_uid = 'system:ai_gateway_config';
     public readonly runtime_memory_uid = 'system:ai_gateway_runtime';
+    public readonly sessions_memory_uid = 'system:ai_gateway_sessions';
 
     private isBooted = false;
     private isRouteBound = false;
@@ -84,6 +85,7 @@ class AIGatewayEngineSingleton {
 
     setupKernelSpace() {
         KernelEngine.registerSystemMemory(this.memory_uid, null);
+        KernelEngine.registerSystemMemory(this.sessions_memory_uid, null);
         KernelEngine.registerSystemMemory(this.runtime_memory_uid, null);
     }
 
@@ -204,22 +206,24 @@ class AIGatewayEngineSingleton {
     // ── Session API ───────────────────────────────────────────────────────────
 
     /** Creates a new isolated session bound to a specific SDK + model. */
-    async createSession(sdk: SDKProvider, model: string, parentProcessUid?: string): Promise<string> {
-        const sessionId = await AISessionManager.create(sdk, model);
-
-        // AISessionManager.create now safely manages the AI_SESSION kernel process internally
+    // Future implementation subprocess agnetic using parent process_uid from the send_gateway route call, 
+    // which allows subprocesses to be properly linked in the process tree without needing to know session IDs at the call site.
+    createSession(sdk: SDKProvider, model: string, parentProcessUid?: string): string {
+        
+        // Create session in AISessionManager and spawn a new process for it.
+        const sessionId = AISessionManager.create(sdk, model);
         const processUid = `process:ai_session:${sessionId}`;
         
-        if (parentProcessUid) {
-            // Note: Since we use custom predefined process UIDs, we might not cleanly support generic `spawnSubprocess` 
-            // without explicitly modifying process hierarchy in Kernel. But for AI sessions, mapping is enough right now.
-        }
-
+        // Immediately mark the process as running so it's 
+        // visible in monitors during the initial prompt processing stages.
         KernelEngine.updateProcessStatus(processUid, PROCESS_STATUS.RUNNING);
         this.sessionProcessBySessionId.set(sessionId, processUid);
 
+        // Attach session to context engine and build initial context 
+        // (empty prompt, but config + planning state will populate).
         AIContextEngine.attachSession(sessionId);
         AIContextEngine.buildContext(sessionId, '', { sdk, model });
+
         return sessionId;
     }
 
