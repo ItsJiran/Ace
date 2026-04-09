@@ -1,89 +1,62 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useAceEvent } from '#/hooks/useAceEvent';
 import { useAceMemory } from '#/hooks/useAceMemory';
-import { AISession } from '#/services/aiGatewayEngine';
+import { AIGatewayEngine } from '#/services/aiGatewayEngine';
+import type { AISession } from '#/services/aiGateway/types';
 import type { SDKProvider } from '#/core/packages/system-dev/components/aiChatbarTest/types';
-
-interface AIChatSession {
-    turnMemoryUids: string[];
-    sessionId: string | null;
-    activeTurnId: string | null;
-    sendPrompt: (prompt: string, selectedSdk: SDKProvider, selectedModel: string) => Promise<void>;
-    setSessionId: React.Dispatch<React.SetStateAction<string | null>>;
-}
-
-interface AIChatSessionState {
-    turn_memory_uids: string[];
-}
+import { KernelEngine } from '#/services/kernelEngine';
 
 
 
-export function useAIChatSession(memoryPrefix: string): AIChatSession {
+export function useAIChatSession(session_uid?: string) {
+    const [sessionUid, setSessionUid] = useState<string | null>(session_uid ?? null);
 
-    // Event emitter for sending prompts to the gateway
-    const { emit: emitSendGateway } = useAceEvent('send_gateway');
+    // 2. ALWAYS call hooks, even if the UID is null (use a ternary for the key)
+    // This prevents "Rendered more/fewer hooks than expected" errors.
+    const memoryKey = `system:ai_session:${sessionUid}:state`;
+    const session = useAceMemory<AISession>(memoryKey);
 
-    // Local state for session and turn tracking
-    const [sessionId, setSessionId] = useState<string | null>(null);
-    const sessionState = useAceMemory<AIChatSessionState>(masterStateKey);
-
-    // Create session_uid for the first time in forever
-    useEffect(() => {
-        if (!sessionState) {
-            const newSessionId = `session_${Date.now()}`;
-            setSessionId(newSessionId);
-        }
-    }, [sessionState]);
-
-    const masterStateKey = sessionId ? `system:ai_session:${sessionId}:state` : '';
-
-    const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
-    const activeTurnMemory = useAceMemory<{ status?: string }>(activeTurnId || '');
-    
-    // Effect to monitor active turn status and reset activeTurnId when turn completes or errors
-    useEffect(() => {
-        if (!activeTurnId || !activeTurnMemory?.status) return;
-        const status = activeTurnMemory.status;
-        if (status === 'completed' || status === 'error' || status === 'interrupted') {
-            setActiveTurnId(null);
-        }
-    }, [activeTurnId, activeTurnMemory?.status]);
-
-    // Function to send a prompt to the gateway, creating a new session if needed
     const sendPrompt = async (prompt: string, selectedSdk: SDKProvider, selectedModel: string) => {
         const normalizedPrompt = prompt.trim();
-        if (!normalizedPrompt) return;
+        if(!normalizedPrompt) return;
 
-        const turnMemoryUid = `${memoryPrefix}:turn:${Date.now()}`;
+        // If no session exists, create one before sending the prompt. 
+        // This ensures that we always have a valid session to work with.
+        if(!sessionUid) {
+            // Create a new session if one doesn't exist
+            const newSession = AIGatewayEngine.createSession(selectedSdk, selectedModel);
+            setSessionUid(newSession.session_uid);
+            console.log('Created new session with UID:', newSession.session_uid);
 
-        let sid = sessionId;
-        if (!sid) {
-            sid = await window.ACE.ai_gateway.createSession(selectedSdk, selectedModel);
-            setSessionId(sid);
+            // Update the session config in memory if the 
+            // user changed SDK/Model in the UI
+            KernelEngine.updateMemory(
+                `system:ai_session:${newSession.session_uid}:state`, 
+                {
+                    sdk: selectedSdk, 
+                    model: selectedModel 
+                }
+            );
+
+            return AIGatewayEngine.sendToSession(newSession.session_uid, normalizedPrompt);
+        } else {
+            // Update the session config in memory if the 
+            // user changed SDK/Model in the UI
+            KernelEngine.updateMemory(
+                `system:ai_session:${sessionUid}:state`, 
+                {
+                    sdk: selectedSdk, 
+                    model: selectedModel 
+                }
+            );
+
+            return AIGatewayEngine.sendToSession(sessionUid, normalizedPrompt);
         }
-
-        setActiveTurnId(turnMemoryUid);
-
-        emitSendGateway(
-            { prompt: normalizedPrompt },
-            {
-                preallocated_memory: {
-                    reply_to_ram_key: turnMemoryUid,
-                    session_id: sid,
-                    sdk: selectedSdk,
-                    model: selectedModel,
-                },
-            },
-        );
     };
 
-    const turnMemoryUids = Array.isArray(sessionState?.turn_memory_uids) ? sessionState.turn_memory_uids : [];
-
     return {
-        turnMemoryUids,
-        sessionId,
-        activeTurnId,
-        sendPrompt,
-        setSessionId,
+        session, // This will be undefined until sessionUid is set and memory is fetched
+        sessionUid,
+        sendPrompt
     };
 }

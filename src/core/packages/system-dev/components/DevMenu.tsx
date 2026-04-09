@@ -223,18 +223,6 @@ export default function DevMenu() {
         });
     };
 
-    const spawnAISessionMonitor = () => {
-        window.ACE.window.spawnWindow({
-            package: 'itsjiran/ace-system-dev',
-            window: 'ai-session-monitor-window',
-            title: 'AI Session Monitor',
-            width: 620,
-            height: 480,
-            x: 420,
-            y: 120,
-        });
-    };
-
     const spawnEventBusMonitor = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system-dev',
@@ -328,7 +316,7 @@ export default function DevMenu() {
         { label: 'RAM Monitor', icon: <MemoryStick size={14} className="text-cyan-400" />, onClick: spawnRamMonitor },
         { label: 'AI Chatbar Test Window', icon: <MessageSquare size={14} className="text-emerald-300" />, onClick: spawnAIChatbarTest },
         { label: 'Prompt Chatbar Dev Window', icon: <MessageCircle size={14} className="text-sky-300" />, onClick: spawnPromptChatbarDev },
-        { label: 'AI Session Monitor Window', icon: <Monitor size={14} className="text-lime-300" />, onClick: spawnAISessionMonitor },
+        // { label: 'AI Session Monitor Window', icon: <Monitor size={14} className="text-lime-300" />, onClick: spawnAISessionMonitor },
         { label: 'EventBus Monitor', icon: <Workflow size={14} className="text-cyan-300" />, onClick: spawnEventBusMonitor },
         { label: 'Process Monitor', icon: <Activity size={14} className="text-fuchsia-300" />, onClick: spawnProcessMonitor },
         { label: 'Tool Runner', icon: <Wrench size={14} className="text-amber-400" />, onClick: spawnToolRunner },

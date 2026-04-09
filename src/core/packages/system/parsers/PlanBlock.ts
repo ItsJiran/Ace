@@ -1,7 +1,6 @@
 import type { ParserBlockRuntime, ParserBlockValidator, ParserBlockHandler } from '#/schemas/parser';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { z } from 'zod';
-import { PlanningService } from '#/services/aiContext/planningService';
 
 const PlanBlockPayloadSchema = z.object({
     grand_plan_id: z.string().optional(),
@@ -25,14 +24,14 @@ export const handler: ParserBlockHandler = (context) => {
     if (!context.isComplete || !context.payload_json) return;
     if (!context.session_id) return; // Plan is scoped per-session
 
-    const updatedPlan = PlanningService.updatePlanFromPayload(context.session_id, context.payload_json);
+    // const updatedPlan = PlanningService.updatePlanFromPayload(context.session_id, context.payload_json);
     
     // Let the system know the task planning state was updated
-    context.emit_result?.({
-        event_name: 'context:plan:updated',
-        interrupt_hint: false, // Don't interrupt stream for internal state
-        plan_state: updatedPlan
-    });
+    // context.emit_result?.({
+    //     event_name: 'context:plan:updated',
+    //     interrupt_hint: false, // Don't interrupt stream for internal state
+    //     plan_state: updatedPlan
+    // });
 };
 
 export const registry: AceRegistryType.Parser = {

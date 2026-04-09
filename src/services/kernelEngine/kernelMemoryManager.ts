@@ -8,7 +8,7 @@ import { PerformanceObserver } from '../performanceObserver';
 // Attach observer flush hook immediately upon evaluating the import
 if (typeof window !== 'undefined' && import.meta.env.VITE_PERF_LOG === 'true') {
     PerformanceObserver.flushCallback = (logs) => {
-        KernelMemoryManager.writeMemoryInternal('system:perf_observer:ram', logs, undefined, true);
+        KernelMemoryManager.writeMemory('system:perf_observer:ram', logs);
     };
 }
 
@@ -64,6 +64,18 @@ export class KernelMemoryManager {
     private static isBatching = false;
     private static batchedNotifications = new Set<string>();
 
+    private static cloneForStorage(payload: any, skipClone: boolean = false): any {
+        return (skipClone || !payload || typeof payload !== 'object')
+            ? payload
+            : payload instanceof Map
+                ? new Map(payload)
+                : payload instanceof Set
+                    ? new Set(payload)
+                    : Array.isArray(payload)
+                        ? [...payload]
+                        : { ...payload };
+    }
+
     private static notifyMemoryChanged(memory_uid: string): void {
         if (this.isBatching) {
             this.batchedNotifications.add(memory_uid);
@@ -118,15 +130,7 @@ export class KernelMemoryManager {
 
         // PERF: Defensive deep-cloning causes massive GC pressure for high-frequency updates.
         // We now allow callers (like window drag logic or perf monitors) to skip it.
-        const immutablePayload = (skipClone || !payload || typeof payload !== 'object') 
-            ? payload
-            : payload instanceof Map
-                ? new Map(payload)
-                : payload instanceof Set
-                    ? new Set(payload)
-                    : Array.isArray(payload)
-                        ? [...payload]
-                        : { ...payload };
+        const immutablePayload = this.cloneForStorage(payload, skipClone);
 
         KernelState.kernel_memory.set(memory_uid, immutablePayload);
 
@@ -213,6 +217,24 @@ export class KernelMemoryManager {
         return true;
     }
 
+    static mutateMapMemory<K, V>(
+        memory_uid: string,
+        mutator: (draft: Map<K, V>) => void,
+        process_uid?: string,
+    ): boolean {
+        if (!memory_uid) return false;
+
+        const existing = KernelState.kernel_memory.get(memory_uid);
+        if (existing !== undefined && !(existing instanceof Map)) {
+            throw new Error(`[KernelMemoryManager] mutateMapMemory requires Map payload at uid: ${memory_uid}`);
+        }
+
+        const draft = existing instanceof Map ? new Map(existing) : new Map<K, V>();
+        mutator(draft);
+        this.writeMemoryInternal(memory_uid, draft, process_uid, true);
+        return true;
+    }
+
     static readMemory(memory_uid: string): any {
         PerformanceObserver.trackRamOp('READ', memory_uid, 'kernel');
         return memory_uid ? KernelState.kernel_memory.get(memory_uid) : undefined;
@@ -282,9 +304,7 @@ export class KernelMemoryManager {
     static registerSystemMemory(memory_uid: string, payload: any): void {
         if (KernelState.kernel_memory.has(memory_uid)) return;
         PerformanceObserver.trackRamOp('WRITE', memory_uid, 'kernel', payload);
-        const immutablePayload = payload && typeof payload === 'object'
-            ? Array.isArray(payload) ? [...payload] : { ...payload }
-            : payload;
+        const immutablePayload = this.cloneForStorage(payload);
         KernelState.kernel_memory.set(memory_uid, immutablePayload);
         this.notifyMemoryChanged(memory_uid);
         KernelTelemetry.logDebug('registerSystemMemory', { memory_uid });
@@ -318,11 +338,11 @@ export class KernelMemoryManager {
         return updated;
     }
 
-    static getRuntimeMemoryMeta(memory_uid: string): ProcessRuntimeMemoryMeta | undefined {
+    static getRuntimeMemoryMeta(_memory_uid: string): ProcessRuntimeMemoryMeta | undefined {
         return undefined; // Stubbed for now
     }
 
-    static enforceRuntimeMemoryOwnership(input: { process_uid: string; memory_uid: string }): { allowed: boolean; reason?: string } {
+    static enforceRuntimeMemoryOwnership(_input: { process_uid: string; memory_uid: string }): { allowed: boolean; reason?: string } {
         return { allowed: true }; 
     }
 

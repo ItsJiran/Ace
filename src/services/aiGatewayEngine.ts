@@ -31,16 +31,14 @@
  */
 
 import { AISessionManager } from './aiGateway/sessionManager';
-import { registerSendGatewayRoute } from './aiGateway/sendGatewayRoute';
+// import { registerSendGatewayRoute } from './aiGateway/sendGatewayRoute';
 import { AIConfigManager } from './aiGateway/configManager';
 import { HealthProbe } from './aiGateway/healthProbe';
 import { fetchModels as _fetchModels, testResponse as _testResponse } from './aiGateway/providerClient';
 import { executeSessionInteractionLoop } from './aiGateway/interactionLoop';
-import { finalizeRequestProtocolState } from './aiGateway/protocolLifecycle';
-import { AIContextEngine } from './aiContextEngine';
-import { AIContextMemoryEngine } from './aiContextMemoryEngine';
 import { KernelEngine } from './kernelEngine';
 import { PROCESS_STATUS } from '#/schemas/process';
+
 import type {
     AIGatewayFetchModelsResult,
     AIGatewayResponseResult,
@@ -48,27 +46,9 @@ import type {
     AIGatewayRadarScanResult,
 } from '../schemas/ai_gateway';
 
-function getLifecyclePhase(eventName?: string): 'dispatch' | 'started' | 'result' | 'error' | 'failed' | 'other' {
-    if (!eventName) return 'other';
-    const normalized = eventName.toLowerCase();
-    if (normalized.endsWith('_dispatch')) return 'dispatch';
-    if (normalized.endsWith('_started') || normalized.includes('parsing_started')) return 'started';
-    if (normalized.endsWith('_result') || normalized.includes('parsing_completed')) return 'result';
-    if (normalized.endsWith('_error')) return 'error';
-    if (normalized.endsWith('_failed') || normalized.includes('parse_failed')) return 'failed';
-    return 'other';
-}
-
-function isLifecycleEventName(eventName?: string): boolean {
-    const phase = getLifecyclePhase(eventName);
-    return phase !== 'other';
-}
-
-
-export type { SDKProvider, AISession } from './aiGateway/types';
-import { AI_PROCESS_TYPE, AI_SESSION_STATUS } from './aiGateway/types';
 import type { SDKProvider, AISession } from './aiGateway/types';
-import type {  } from './aiGateway/types';
+import { AIProcessType, AISessionStatus } from './aiGateway/types';
+
 import { KernelState } from './kernelEngine/kernelState';
 import type { KernelAISessionEntry } from './kernelEngine/types';
 
@@ -105,7 +85,7 @@ class AIGatewayEngineSingleton {
 
         this.registerTerminationHooks();
 
-        AIContextEngine.boot();
+        // AIContextEngine.boot();
         await AIConfigManager.load();
 
         const health = await HealthProbe.probe();
@@ -132,8 +112,8 @@ class AIGatewayEngineSingleton {
             session.active_abort_controller = undefined;
         }
 
-        if (session.status === AI_SESSION_STATUS.STREAMING) {
-            session.status = AI_SESSION_STATUS.CONNECTED;
+        if (session.status === AISessionStatus.STREAMING) {
+            session.status = AISessionStatus.CONNECTED;
         }
     }
 
@@ -166,7 +146,7 @@ class AIGatewayEngineSingleton {
             
             if (!sessionUid) return;
 
-            if (record.type === AI_PROCESS_TYPE.AI_SESSION_INSTANCE) {
+            if (record.type === AIProcessType.AI_SESSION_INSTANCE) {
                 this.abortSessionStream(sessionUid);
                 this.closeSession(sessionUid, { skipProcessLifecycle: true });
                 return;
@@ -184,12 +164,12 @@ class AIGatewayEngineSingleton {
     registerEventRoutes() {
         if (this.isRouteBound) return;
 
-        registerSendGatewayRoute({
-            createSession: async (sdk, model) => this.createSession(sdk, model),
-            sendToSession: (sessionId, prompt, replyToRamKey, parentProcessUid) => this.sendToSession(sessionId, prompt, replyToRamKey, parentProcessUid),
-            getActiveSDK: () => AIConfigManager.getActiveSDK(),
-            getActiveModel: () => AIConfigManager.getActiveModel(),
-        });
+        // registerSendGatewayRoute({
+        //     createSession: async (sdk, model) => this.createSession(sdk, model),
+        //     sendToSession: (sessionId, prompt, replyToRamKey, parentProcessUid) => this.sendToSession(sessionId, prompt, replyToRamKey, parentProcessUid),
+        //     getActiveSDK: () => AIConfigManager.getActiveSDK(),
+        //     getActiveModel: () => AIConfigManager.getActiveModel(),
+        // });
 
         this.isRouteBound = true;
     }
@@ -199,21 +179,9 @@ class AIGatewayEngineSingleton {
     /** Creates a new isolated session bound to a specific SDK + model. */
     // Future implementation subprocess agnetic using parent process_uid from the send_gateway route call, 
     // which allows subprocesses to be properly linked in the process tree without needing to know session IDs at the call site.
-    createSession(sdk: SDKProvider, model: string, parentProcessUid?: string): string {
-        
-        // Create session in AISessionManager and spawn a new process for it.
+    createSession(sdk?: SDKProvider | undefined, model?: string | undefined,): AISession {    
         const session : AISession = AISessionManager.create(sdk, model);
-        
-        // Immediately mark the process as running so it's 
-        // visible in monitors during the initial prompt processing stages.
-        KernelEngine.updateProcessStatus(session.process_uid, PROCESS_STATUS.RUNNING);
-
-        // Attach session to context engine and build initial context 
-        // (empty prompt, but config + planning state will populate).
-        AIContextEngine.attachSession(session.session_uid);
-        AIContextEngine.buildContext(session.session_uid, '', { sdk, model });
-
-        return session.session_uid;
+        return session;
     }
 
     /** Closes and removes a session from the active session map. */
@@ -263,20 +231,13 @@ class AIGatewayEngineSingleton {
     async sendToSession(
         sessionUid: string,
         prompt: string,
-        reply_to_ram_key: string,
-        parent_process_uid?: string,
     ): Promise<void> {
         const session = AISessionManager.get(sessionUid);
         if (!session) throw new Error(`Session ${sessionUid} not found.`);
 
-        const resolvedParentProcessUid = parent_process_uid ?? session.process_uid;
-
         await executeSessionInteractionLoop({
             session,
-            sessionUid,
             prompt,
-            replyToRamKey: reply_to_ram_key,
-            parentProcessUid: resolvedParentProcessUid,
         });
     }
 

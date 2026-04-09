@@ -1,6 +1,6 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AceWindow } from '#/components/layout/AceWindow';
-import ParserBlockPlayground from '../components/ParserBlockPlayground';
+// import ParserBlockPlayground from '../components/ParserBlockPlayground';
 
 export const registry: AceRegistryType.Window = {
     name: 'parser_block_playground_window',
@@ -21,7 +21,7 @@ export const registry: AceRegistryType.Window = {
 export default function ParserBlockPlaygroundWindow({ windowUid }: { windowUid: string }) {
     return (
         <AceWindow windowUid={windowUid}>
-            <ParserBlockPlayground />
+            {/* <ParserBlockPlayground /> */}
         </AceWindow>
     );
 }

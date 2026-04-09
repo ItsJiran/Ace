@@ -2,9 +2,8 @@ import { KernelEngine } from '../../services/kernelEngine';
 import { KernelState } from '../kernelEngine/kernelState';
 
 import { PROCESS_KIND } from '#/schemas/process';
-import { AI_FEEDBACK_LOOP_STATUS, AI_SESSION_STATUS } from './types';
+import { AIFeedbackLoopStatus, AISessionStatus } from './types';
 import type { AISession, SDKProvider } from './types';
-import { AIGatewayEngine } from '../aiGatewayEngine';
 import type { KernelAISessionEntry } from '../kernelEngine/types';
 
 // + ======== Session Management Orchestration ============== +
@@ -16,6 +15,7 @@ import type { KernelAISessionEntry } from '../kernelEngine/types';
 // management and state persistence.
 
 class AISessionManagerSingleton {
+    private static readonly SESSION_REGISTRY_KEY = 'system:ai_gateway_sessions';
 
 
     // + ======== Session Management Orchestration ============== +
@@ -48,12 +48,12 @@ class AISessionManagerSingleton {
     }
 
     list_sessions_id(): string[] {
-        return Object.values(KernelState.ai_gateway_sessions).map(entry => entry.session_uid) as string[];
+        return Array.from(KernelState.ai_gateway_sessions.values()).map(entry => entry.session_uid);
     }
 
     // + ============== Session Management API ============== +
 
-    create(sdk: SDKProvider, model: string): AISession {
+    create(sdk?: SDKProvider | undefined, model?: string | undefined): AISession {
 
         // Generate unique session ID and associated process
         const sessionUID = `${crypto.randomUUID()}`;
@@ -75,11 +75,12 @@ class AISessionManagerSingleton {
         const session: AISession = {
             session_uid: sessionUID,
             process_uid: processUid,
+
             sdk,
             model,
 
-            status: AI_SESSION_STATUS.CONNECTED,
-            feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.NONE,
+            status: AISessionStatus.CONNECTED,
+            feedback_loop_status: AIFeedbackLoopStatus.NONE,
 
             turn_index: 0,
             turns : [],
@@ -92,27 +93,46 @@ class AISessionManagerSingleton {
             history_end_index: 0,
         };
 
-        // Persist session state in global memory for retrieval and UI subscription.  
-        // This is the source of truth for list session exists.
-        KernelEngine.writeMemory( 'system:ai_gateway_sessions', {
-            session_uid: session.session_uid,
-            process_uid: session.process_uid,
-            memory_uid: sessionStateMemory,
-        } as KernelAISessionEntry, sessionStateMemory);
-        
-        // Also create a dedicated memory block for session state that UIs can subscribe to for 
-        // real-time updates.
-        KernelEngine.createMemory(session, processUid, sessionStateMemory);
+        // Persist registry metadata separately from the full session state.
+        // The registry is a lightweight index; the entity memory holds the full session payload.
+        KernelEngine.batch(() => {
+            KernelEngine.createMemory(session, processUid, sessionStateMemory);
+            KernelEngine.mutateMapMemory<string, KernelAISessionEntry>(
+                AISessionManagerSingleton.SESSION_REGISTRY_KEY,
+                (draft) => {
+                    draft.set(session.session_uid, {
+                        session_uid: session.session_uid,
+                        process_uid: session.process_uid,
+                        memory_uid: sessionStateMemory,
+                    });
+                },
+            );
+        });
 
         console.log(`[AIGatewayEngine] Session ${session.session_uid} created for ${sdk}/${model} under process ${processUid}.`);
         return session;
     }
 
     close(sessionId: string): void {
-        const sessionState = KernelEngine.readMemory( `system:ai_session:${sessionId}:state` ) as AISession | undefined;
+        const sessionEntry = KernelState.ai_gateway_sessions.get(sessionId) as KernelAISessionEntry | undefined;
+        const sessionStateMemory = sessionEntry?.memory_uid ?? `system:ai_session:${sessionId}:state`;
+        const sessionState = KernelEngine.readMemory(sessionStateMemory) as AISession | undefined;
+
+        // Remove the session from the system registry first so any termination hooks
+        // see a consistent "already detached" registry view.
+        if (sessionEntry) {
+            KernelEngine.mutateMapMemory<string, KernelAISessionEntry>(
+                AISessionManagerSingleton.SESSION_REGISTRY_KEY,
+                (draft) => {
+                    draft.delete(sessionId);
+                },
+            );
+        }
         
         if (sessionState?.process_uid) {
             KernelEngine.terminateProcess(sessionState.process_uid);
+        } else if (sessionEntry?.memory_uid) {
+            KernelEngine.deleteMemory(sessionEntry.memory_uid);
         }
 
         console.log(`[AIGatewayEngine] Session ${sessionState?.session_uid} closed and process terminated.`);

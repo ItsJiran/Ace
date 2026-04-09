@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useCallback, useRef } from 'react';
+import { useSyncExternalStore, useCallback, useRef, useEffect } from 'react';
 import { KernelEngine } from '../services/kernelEngine';
 
 /**

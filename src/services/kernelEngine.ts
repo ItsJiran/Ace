@@ -32,6 +32,7 @@ class KernelEngineSingleton {
     public createOrUpdateMemory = KernelMemoryManager.createOrUpdateMemory.bind(KernelMemoryManager);
     public setMemory = KernelMemoryManager.setMemory.bind(KernelMemoryManager);
     public writeMemory = KernelMemoryManager.writeMemory.bind(KernelMemoryManager);
+    public mutateMapMemory = KernelMemoryManager.mutateMapMemory.bind(KernelMemoryManager);
     public updateMemory = KernelMemoryManager.updateMemory.bind(KernelMemoryManager);
     public deleteMemory = KernelMemoryManager.deleteMemory.bind(KernelMemoryManager);
     public subscribe = KernelMemoryManager.subscribe.bind(KernelMemoryManager);

@@ -38,41 +38,19 @@ export interface AISession {
     // This is the primary identifier for the session.
     session_uid: string;
     process_uid: string;
-    sdk: SDKProvider;
-    model: string;
+    sdk?: SDKProvider | undefined;
+    model?: string | undefined;
 
     // Current status of the session, which can be used to track 
     // its lifecycle and handle UI state accordingly.
     status: AISessionStatus;
     feedback_loop_status: AIFeedbackLoopStatus;
+    error_payload?: Record<string, unknown>;
 
     // Turn is what the user sees as a single prompt/response pair, 
     // but we track entries within the turn for more granular updates and rendering.
     turn_index: number;
-    turns : Array<{
-        at: number; // Timestamp for when the turn started, useful for ordering and time-based logic.
-        role: 'user' | 'assistant'; // Role of the turn initiator, which can be used for rendering and logic branching.
-        active_entry_index : number | 0; // Index to track which entry is currently active within the turn, useful for streaming updates and UI focus.
-        renderers : AIRenderer[]; // What displayed in the UI, each entry can have its own renderer for flexible representation. For example, a long user prompt might be split into multiple entries, and an assistant response might also come in multiple entries as it's streamed. Each entry can have its own renderer for flexible UI representation.
-
-        // Entries represent the individual prompt/response chunks within a turn. For example, a 
-        // user prompt might be split into multiple entries if it's long, and an assistant response 
-        // might also come in multiple entries as it's streamed. Each entry can have its own renderer for 
-        // flexible UI representation.
-        entries : Map<number, Array<{
-            response : string;
-            
-            // For cases where the original prompt is transformed or augmented before being sent to 
-            // the model, we can store the final composed prompt here for reference and debugging.
-            prompt : string;
-            composed_prompt : string;
-
-            // Parsed blocks from the response, if applicable. The structure can be flexible 
-            // to accommodate different types of block data depending on the use case and renderer requirements.
-            blocks? : unknown; 
-            status: AIResponseStatus;
-        }>>;
-    }>;
+    turns : Array<AITurn>; // We can have null entries for turns that haven't started yet or are in the process of being created.
 
     // Contexting information that can be used for building the session context, such as summaries, relevant history, 
     // and other contextual data that can be fed back into the model for better responses. 
@@ -99,13 +77,54 @@ export interface AISession {
     history_start_index : number; 
     history_end_index: number;
 
-    /** The RAM key currently being streamed into */
-    active_output_memory_key?: string;
-
     // Protocol state for the current request, if applicable. This is used to track the lifecycle of 
     // prompt/response summaries and other context-building mechanisms.
     termination_requested?: boolean;
     active_abort_controller?: AbortController;
+}
+
+export interface AITurn{
+    at: number; // Timestamp for when the turn started, useful for ordering and time-based logic.
+
+    // Renderers for the user prompt, allowing for flexible UI representation of the prompt content.
+    // Renderers for the assistant response, allowing for flexible UI representation of the response content.
+    user_renderers: AIRenderer[]; 
+    assistant_renderers: AIRenderer[]; 
+
+    // Entries represent the individual prompt/response chunks within a turn. For example, a 
+    // user prompt might be split into multiple entries if it's long, and an assistant response 
+    // might also come in multiple entries as it's streamed. Each entry can have its own renderer for 
+    // flexible UI representation.
+
+    // Index to track which entry is currently active within the turn, useful for streaming updates and UI focus.
+    active_entry_index : number | null;
+    entries : AIEntry[]; // We can have null entries for entries that haven't started yet or are in the process of being created.
+}
+
+export interface AIEntry {
+    // The type field can be used to differentiate between different kinds of entries, such as 'prompt_chunk', 
+    // 'response_chunk', 'tool_interaction', etc. This allows for more flexible handling and rendering of 
+    // different types of content within the turn.
+    response : string;
+    
+    // For cases where the original prompt is transformed or augmented before being sent to 
+    // the model, we can store the final composed prompt here for reference and debugging.
+    prompt : string;
+    composed_prompt : string;
+    
+    // To track retries of the interaction loop for the current turn, useful for debugging and UI feedback.
+    active_interaction_loop_attempt?: number; 
+
+    // Parsed blocks from the response, if applicable. The structure can be flexible 
+    // to accommodate different types of block data depending on the use case and renderer requirements.
+    blocks? : AIBlock[]; 
+    status: AIResponseStatus;
+}
+
+export interface AIBlock { 
+    block_slug: string; // This can be used to identify the type of block, such as 'tool_call', 'function_execution', 'code_snippet', etc.
+    package_ref?: string; // Optional reference to a specific package that can handle this block, useful for routing to the correct handler or renderer.
+    payload : Record<string, unknown>; // The content of the block, which can be structured data that the renderer can use to display the block appropriately. The structure can be flexible to accommodate different types of blocks and renderer requirements.
 }
 
 export interface AIContextEntry {
@@ -139,25 +158,31 @@ export interface AIRenderer {
 // |                    AI Gateway Constants                    |         
 // + =========================================================== +
 
-export const AI_SESSION_STATUS = {
+// These constants represent the various statuses that an AI session, turn, entry, or block handler can be in.
+export const AISessionStatus = {
     IDLE: 'idle',
     CONNECTED: 'connected',
     STREAMING: 'streaming',
     ERROR: 'error',
 } as const;
 
-export type AISessionStatus = typeof AI_SESSION_STATUS[keyof typeof AI_SESSION_STATUS];
+export type AISessionStatus = typeof AISessionStatus[keyof typeof AISessionStatus];
 
-export const AI_BLOCK_HANDLER_STATUS = {
-    IDLE: 'idle',
-    RUNNING: 'running',
-    PARSING: 'parsing',
-    FAILED: 'failed',
+
+export const AIFeedbackLoopStatus = {
+    NONE: 'none',
+    ACTIVE: 'active',
+    COMPLETED: 'completed',
+    INTERRUPTED: 'interrupted',
 } as const;
 
-export type AIBlockHandlerStatus = typeof AI_BLOCK_HANDLER_STATUS[keyof typeof AI_BLOCK_HANDLER_STATUS];
+export type AIFeedbackLoopStatus = typeof AIFeedbackLoopStatus[keyof typeof AIFeedbackLoopStatus];
 
-export const AI_RESPONSE_STATUS = {
+// These constants can be used to track the status of block handlers that are responsible for processing 
+// specific blocks of content within the AI session, such as tool calls, function executions, or other 
+// interactions that require separate handling logic.
+
+export const AIResponseStatus = {
     STREAMING: 'streaming',
     RUNNING: 'running',
     COMPLETED: 'completed',
@@ -166,22 +191,26 @@ export const AI_RESPONSE_STATUS = {
     FAILED: 'failed',
 } as const;
 
-export type AIResponseStatus = typeof AI_RESPONSE_STATUS[keyof typeof AI_RESPONSE_STATUS];
+export type AIResponseStatus = typeof AIResponseStatus[keyof typeof AIResponseStatus];
 
-export const AI_FEEDBACK_LOOP_STATUS = {
-    NONE: 'none',
-    ACTIVE: 'active',
-    COMPLETED: 'completed',
-    INTERRUPTED: 'interrupted',
+
+// This schema defines the structure of the SDK target configuration for each provider, allowing for flexible
+export const AIBlockHandlerStatus = {
+    IDLE: 'idle',
+    RUNNING: 'running',
+    PARSING: 'parsing',
+    FAILED: 'failed',
 } as const;
 
-export type AIFeedbackLoopStatus = typeof AI_FEEDBACK_LOOP_STATUS[keyof typeof AI_FEEDBACK_LOOP_STATUS];
+export type AIBlockHandlerStatus = typeof AIBlockHandlerStatus[keyof typeof AIBlockHandlerStatus];
 
-export const AI_PROCESS_TYPE = {
+// This constant can be used to identify the type of process that is responsible for managing AI sessions, 
+// allowing for more organized process management and easier debugging.
+export const AIProcessType = {
     AI_SESSION_INSTANCE: 'ai:session:instance',
 } as const;
 
-export type AIProcessType = typeof AI_PROCESS_TYPE[keyof typeof AI_PROCESS_TYPE];
+export type AIProcessType = typeof AIProcessType[keyof typeof AIProcessType];
 
 
 
