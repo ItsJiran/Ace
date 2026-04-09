@@ -130,7 +130,15 @@ export class KernelMemoryManager {
 
         // PERF: Defensive deep-cloning causes massive GC pressure for high-frequency updates.
         // We now allow callers (like window drag logic or perf monitors) to skip it.
-        const immutablePayload = this.cloneForStorage(payload, skipClone);
+        const immutablePayload = (skipClone || !payload || typeof payload !== 'object') 
+            ? payload
+            : payload instanceof Map
+                ? new Map(payload)
+                : payload instanceof Set
+                    ? new Set(payload)
+                    : Array.isArray(payload)
+                        ? [...payload]
+                        : { ...payload };
 
         KernelState.kernel_memory.set(memory_uid, immutablePayload);
 

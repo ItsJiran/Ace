@@ -85,6 +85,7 @@ export interface AISession {
 
 export interface AITurn{
     at: number; // Timestamp for when the turn started, useful for ordering and time-based logic.
+    status: AIResponseStatus;
 
     // Renderers for the user prompt, allowing for flexible UI representation of the prompt content.
     // Renderers for the assistant response, allowing for flexible UI representation of the response content.
@@ -97,7 +98,7 @@ export interface AITurn{
     // flexible UI representation.
 
     // Index to track which entry is currently active within the turn, useful for streaming updates and UI focus.
-    active_entry_index : number | null;
+    active_entry_index : number | undefined;
     entries : AIEntry[]; // We can have null entries for entries that haven't started yet or are in the process of being created.
 }
 
@@ -106,6 +107,7 @@ export interface AIEntry {
     // 'response_chunk', 'tool_interaction', etc. This allows for more flexible handling and rendering of 
     // different types of content within the turn.
     response : string;
+    response_buffer_memory_uid : string | undefined;
     
     // For cases where the original prompt is transformed or augmented before being sent to 
     // the model, we can store the final composed prompt here for reference and debugging.
@@ -118,13 +120,14 @@ export interface AIEntry {
     // Parsed blocks from the response, if applicable. The structure can be flexible 
     // to accommodate different types of block data depending on the use case and renderer requirements.
     blocks? : AIBlock[]; 
-    status: AIResponseStatus;
+    status: 'success' | 'error' | 'streaming' | 'completed' | 'interrupted' | 'failed';
 }
 
 export interface AIBlock { 
     block_slug: string; // This can be used to identify the type of block, such as 'tool_call', 'function_execution', 'code_snippet', etc.
     package_ref?: string; // Optional reference to a specific package that can handle this block, useful for routing to the correct handler or renderer.
     payload : Record<string, unknown>; // The content of the block, which can be structured data that the renderer can use to display the block appropriately. The structure can be flexible to accommodate different types of blocks and renderer requirements.
+    memory_buffer_uid?: string; // Optional RAM key for storing streaming content related to this block, useful for handling long-running operations or streaming responses that are associated with a specific block.
 }
 
 export interface AIContextEntry {
@@ -161,7 +164,6 @@ export interface AIRenderer {
 // These constants represent the various statuses that an AI session, turn, entry, or block handler can be in.
 export const AISessionStatus = {
     IDLE: 'idle',
-    CONNECTED: 'connected',
     STREAMING: 'streaming',
     ERROR: 'error',
 } as const;

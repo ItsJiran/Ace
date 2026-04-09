@@ -79,7 +79,7 @@ class AISessionManagerSingleton {
             sdk,
             model,
 
-            status: AISessionStatus.CONNECTED,
+            status: AISessionStatus.IDLE,
             feedback_loop_status: AIFeedbackLoopStatus.NONE,
 
             turn_index: 0,

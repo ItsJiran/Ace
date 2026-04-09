@@ -44,6 +44,7 @@ import type {
     AIGatewayResponseResult,
     AIGatewaySidecarHealthResult,
     AIGatewayRadarScanResult,
+    AIGatewayConfig,
 } from '../schemas/ai_gateway';
 
 import type { SDKProvider, AISession } from './aiGateway/types';
@@ -113,7 +114,7 @@ class AIGatewayEngineSingleton {
         }
 
         if (session.status === AISessionStatus.STREAMING) {
-            session.status = AISessionStatus.CONNECTED;
+            session.status = AISessionStatus.IDLE;
         }
     }
 
@@ -269,7 +270,7 @@ class AIGatewayEngineSingleton {
 
     // ── Config API ────────────────────────────────────────────────────────────
 
-    getConfig() {
+    getConfig() : AIGatewayConfig {
         return AIConfigManager.get();
     }
 

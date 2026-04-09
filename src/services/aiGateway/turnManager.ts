@@ -3,23 +3,29 @@ import { AIResponseStatus, type AIBlock, type AIEntry, type AITurn } from "./typ
 const initTurn = (prompt: string): AITurn => {
     return {
         at : Date.now(),
-        active_entry_index : null,
+        status : AIResponseStatus.STREAMING,
+        
         user_renderers: [
             buildRenderer('paragraph_renderer', 'system', { text: prompt }),
         ],
         assistant_renderers: [],
+
         entries : [],
+        active_entry_index : undefined,
     }
 }
 
 const buildTurnEntry = (obj: Partial<AIEntry>) : AIEntry => {
     return {
         response : '',
+        response_buffer_memory_uid : undefined,
+
         prompt : obj.prompt ?? '',
         composed_prompt : '',
-        active_interaction_loop_attempt: 0, 
         blocks: [], 
         status: AIResponseStatus.STREAMING,
+
+        active_interaction_loop_attempt: 0, 
     } as AIEntry
 }
 

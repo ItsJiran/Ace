@@ -1,70 +1,12 @@
 
 
-import { AISessionStatus, type AISession, type AITurn } from './types';
-import { PROCESS_KIND, PROCESS_STATUS } from '#/schemas/process';
+import { AISessionStatus, type AIEntry, type AIRenderer, type AISession, type AITurn } from './types';
+import type { AIGatewayConfig } from '#/schemas/ai_gateway';
 
+import { HealthProbe } from './healthProbe';
+import { AIGatewayEngine } from '../aiGatewayEngine';
 import { KernelEngine } from '../kernelEngine';
-// import { ParserEngine } from '../parserEngine';
-
 import * as TurnRenderer from './turnManager';
-
-// import { PlanningService } from '../aiContext/planningService';
-// import { AIConfigManager } from './configManager';
-// import { HealthProbe } from './healthProbe';
-// import { sendToSession as sendStreamRequest } from './httpClient';
-// import { prepareGatewaySessionRequest } from './requestPreparation';
-// import { finalizeGatewaySessionResponse } from './responseFinalization';
-// import { AI_FEEDBACK_LOOP_STATUS, AI_GATEWAY_PROCESS_TYPE } from './types';
-// import type { ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
-// import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
-
-// function snapshotResponseAttemptFromMemory(input: {
-//     replyToRamKey: string;
-//     attemptIndex: number;
-//     prompt: string;
-// }): ResponseAttemptSnapshot {
-//     const { replyToRamKey, attemptIndex, prompt } = input;
-//     const memory = (KernelEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
-
-//     return {
-//         attempt_index: attemptIndex,
-//         prompt,
-//         composed_prompt: typeof memory.composed_prompt === 'string' ? memory.composed_prompt : undefined,
-//         started_at: typeof memory.started_at === 'number' ? memory.started_at : Date.now(),
-//         finished_at: typeof memory.finished_at === 'number' ? memory.finished_at : undefined,
-//         status: typeof memory.status === 'string' ? memory.status : undefined,
-//         error_message: typeof memory.error_message === 'string' ? memory.error_message : undefined,
-//         text: typeof memory.text === 'string' ? memory.text : undefined,
-//         raw_response: typeof memory.raw_response === 'string' ? memory.raw_response : undefined,
-//         blocks: Array.isArray(memory.blocks) ? cloneSnapshotValue(memory.blocks) : undefined,
-//         parser_batches: Array.isArray(memory.parser_batches) ? cloneSnapshotValue(memory.parser_batches) : undefined,
-//         parser_batch_count: typeof memory.parser_batch_count === 'number' ? memory.parser_batch_count : undefined,
-//         events_total: typeof memory.events_total === 'number' ? memory.events_total : undefined,
-//         parser_handler_results: Array.isArray(memory.parser_handler_results) ? cloneSnapshotValue(memory.parser_handler_results) : undefined,
-//         parser_stop_signals: Array.isArray(memory.parser_stop_signals) ? cloneSnapshotValue(memory.parser_stop_signals) : undefined,
-//         parser_token_traces: Array.isArray(memory.parser_token_traces) ? cloneSnapshotValue(memory.parser_token_traces) : undefined,
-//     };
-// }
-
-// function waitMs(ms: number): Promise<void> {
-//     return new Promise((resolve) => {
-//         setTimeout(resolve, ms);
-//     });
-// }
-
-// async function waitForActionTerminalEvent(sessionId: string, replyToRamKey: string): Promise<ParserSessionEmitRecord | null> {
-//     const startedAt = Date.now();
-
-//     while (Date.now() - startedAt < TOOL_FEEDBACK_WAIT_TIMEOUT_MS) {
-//         const runtimeState = drainParserRuntimeToResponseMemory(sessionId, replyToRamKey);
-//         const terminalEvent = getLatestActionTerminalEvent(runtimeState.mergedResults);
-//         if (terminalEvent) return terminalEvent;
-//         await waitMs(TOOL_FEEDBACK_WAIT_INTERVAL_MS);
-//     }
-
-//     const finalState = drainParserRuntimeToResponseMemory(sessionId, replyToRamKey);
-//     return getLatestActionTerminalEvent(finalState.mergedResults);
-// }
 
 // + ============== Session Management API ============== +
 // Note: This is a simplified process management approach for AI sessions. 
@@ -78,292 +20,477 @@ export interface SessionInteractionLoopInput {
     prompt: string;
 }
 
+interface ExtractedSpecialBlock {
+    block_name: string;
+    raw: string;
+    content: string;
+}
+
+interface SpecialBlockBufferState {
+    next_buffer: string;
+    stripped_prefix: string;
+    extracted_blocks: ExtractedSpecialBlock[];
+    has_block_or_fragment: boolean;
+    fragment_block_name?: string;
+}
+
+// This function takes a buffer string that may contain special blocks (e.g. tool calls, parser updates) and 
+// extracts those blocks while also returning the remaining buffer for future processing. It also identifies if there 
+// are any block fragments that need to be completed with future chunks.
+
+function streamParseBuffer(tmp_chunk_buffer: string): SpecialBlockBufferState {
+
+    // The implementation of this function will depend on the specific 
+    // format of the special blocks sent by the gateway.
+    if (!tmp_chunk_buffer) {
+        return {
+            next_buffer: '',
+            extracted_blocks: [],
+            stripped_prefix: '',
+            has_block_or_fragment: false,
+        };
+    }
+
+    // Example implementation for blocks wrapped in <block_name>...</block_name> tags. This is a very basic parser and 
+    // can be enhanced to handle nested blocks, attributes, etc. as needed.
+    const firstTagIndex = tmp_chunk_buffer.indexOf('<');
+    if (firstTagIndex === -1) {
+        return {
+            next_buffer: tmp_chunk_buffer,
+            extracted_blocks: [],
+            stripped_prefix: '',
+            has_block_or_fragment: false,
+        };
+    }
+
+    // We found a potential block start. Now we will try to extract full blocks from the buffer. If we find any incomplete 
+    // block (e.g. missing closing tag), we will keep it in the buffer for future processing.
+
+    const stripped_prefix = tmp_chunk_buffer.slice(0, firstTagIndex);
+    let workingBuffer = tmp_chunk_buffer.slice(firstTagIndex);
+    const extracted_blocks: ExtractedSpecialBlock[] = [];
+
+    while (true) {
+        const fullBlockMatch = workingBuffer.match(/^<([A-Za-z][\w:-]*)>([\s\S]*?)<\/\1>/);
+        if (!fullBlockMatch) break;
+
+        const [raw, block_name, content] = fullBlockMatch;
+        extracted_blocks.push({
+            block_name,
+            raw,
+            content,
+        });
+
+        workingBuffer = workingBuffer.slice(raw.length);
+    }
+
+    // If we extracted any full blocks, we can return them along with the remaining buffer. If we didn't extract any full 
+    // blocks but found a potential block start, we will keep the buffer for future processing and indicate that we 
+    // have a block or fragment in progress.
+
+    if (extracted_blocks.length > 0) {
+        return {
+            next_buffer: workingBuffer,
+            extracted_blocks,
+            stripped_prefix,
+            has_block_or_fragment: true,
+        };
+    }
+
+    // Check if the remaining buffer contains a block fragment (e.g. starts with an opening tag 
+    // but doesn't have a closing tag yet)
+
+    const fragmentMatch = workingBuffer.match(/^<\/?([A-Za-z][\w:-]*)?$/)
+        ?? workingBuffer.match(/^<([A-Za-z][\w:-]*)>?/);
+
+    return {
+        next_buffer: workingBuffer,
+        extracted_blocks: [],
+        stripped_prefix,
+        has_block_or_fragment: true,
+        fragment_block_name: fragmentMatch?.[1],
+    };
+}
+
 // Note : Future improvement since we already passing the session object, we can just directly update the session memory in the interaction loop without 
 // needing to read it again at the beginning of each loop. We just need to make sure to keep the session object updated with the latest state from memory 
 // at the end of each loop iteration. This way we can avoid redundant memory reads and have a more efficient loop.
 
+// Instead of window, use a specific target to avoid polluting the global scope
+export const AISessionBus = new EventTarget();
+
 export async function executeSessionInteractionLoop(input: SessionInteractionLoopInput): Promise<void> {
+
+    console.log(`[AIGatewayEngine] Starting interaction loop for session ${input.session.session_uid} with prompt: ${input.prompt}`);
 
     const { session, prompt } = input;
 
     // -- Check if session status is currently running. If not, we should not proceed with processing the prompt.
     // unless we already implement drifting sessions where a new prompt can be sent to an existing session even after completion, 
     // we should not allow sending prompts to non-running sessions.
-    if (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.status !== AISessionStatus.STREAMING) {
-        console.warn(`Session ${session.session_uid} is not in 'running' status. Current status: ${KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.status}`);
-        return;
+    if(KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.status == AISessionStatus.STREAMING) {
+        console.warn(`
+            Session ${session.session_uid} is already in 'streaming' status. 
+            Current status: ${KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.status}`
+        );
+        return; 
     }
-    
+
     // -- Create the default new turn for User and for Assistant (streaming)
     KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
         status : AISessionStatus.STREAMING,
         turns: [...session.turns, TurnRenderer.initTurn(prompt)],
-        turn_index: session.turns.length, // Point to the newly added turn
+        turn_index: session.turns.length, // Point to the newl y added turn
     } as AISession);
     
     // -- Run the interaction loop for the session, which will handle the entire lifecycle of the prompt 
     // processing, including streaming updates, tool interactions, and feedback loops.
 
-    console.log(`[AIGatewayEngine] Starting interaction loop for session ${session} with prompt: ${prompt}`);
-    return;
-
-    // Interaction loop workflow : 
-    // 1. Send the prompt to the model and start streaming the response using preallocation memory asyncronously
-
-    // try {
+    try {
     
-    //     while(true){
+        while(session.status === AISessionStatus.STREAMING) {
 
-    //         // -- For each turn, we will update the active_entry_index and entries array in 
-    //         // memory as we receive updates from the model.
-    //         KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
-    //             active_interaction_loop_attempt: (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.active_interaction_loop_attempt ?? 0) + 1,
-    //         });
+            // 1. Prepare the listener promise FIRST
+            const loopPromise = new Promise((resolve) => {
+                AISessionBus.addEventListener(`system:ai_session:${session.session_uid}:response`, 
+                    (e: any) => resolve(e.detail), 
+                    { once: true }
+                );
+            });
 
-    //         // -- The actual processing of the prompt, including sending it to the model, 
-    //         // handling streaming responses, tool interactions, etc.
+            // -- For each turn, we will update the active_entry_index and entries array in 
+            // memory as we receive updates from the model.
+            KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
+                active_interaction_loop_attempt: (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.active_interaction_loop_attempt ?? 0) + 1,
+            });
+
+            // -- Send prompt 
+            // For the sake of this example, let's assume we have a function processPrompt 
+            // that handles the entire processing of the prompt and returns when the response is complete.
+            sendPromptToGateway(
+                prompt, 
+                session.session_uid, 
+                session.sdk, 
+                session.model, 
+            );
+
+            // -- Since we fire and forget the processing in the background, we can just wait till all the parse
+            // works are done and the response is finalized. In a real implementation, we would likely have more complex 
+            // logic here to handle streaming updates, tool interactions, and feedback loops in real-time.
+            const loopResponse = await loopPromise;
+
+            // -- Once the processing is complete, we can update the session state 
+            // to reflect the final response and mark it as idle.
+            if (loopResponse == 'stop') {
+                KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
+                    status : AISessionStatus.IDLE,
+                } as AISession);
+                console.log(`[AIGatewayEngine] Interaction loop for session ${session.session_uid} completed and marked as IDLE.`);
+                return; // Exit the loop and end the function since the session is now idle.
+            } else {
+                console.warn(`[AIGatewayEngine] Interaction loop for session ${session.session_uid} received unexpected event data: ${loopResponse}`);
+            }
+        }
+
+    } catch (error) {
+        console.error(`Error in interaction loop for session ${session.session_uid}:`, error);
+        KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
+            status: AISessionStatus.ERROR,
+            error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) } ,
+        } as Partial<AISession>);
+    }
+}
+
+/**
+ * Send a prompt to a targeted gateway URL and store the async response buffer
+ * into a dedicated `memory_uid`. This function returns immediately with the
+ * `memory_uid` that will eventually contain the response object.
+ *
+ * Params:
+ * - `base_url`: full URL of the gateway endpoint (e.g. http://127.0.0.1:8888/v1/generate)
+ * - `prompt`, `sdk`, `model`: request metadata
+ * - `opts.replyToRamKey` optional memory UID to write into; if omitted a new one is created
+ * - `opts.process_uid` optional owner process UID
+ *
+ * The inner request/response handling is left as pseudocode below so you can
+ * implement provider-specific streaming / buffer parsing logic.
+ */
+export async function sendPromptToGateway(
+    prompt: string,
+    session_uid : string,
+    sdk?: string,
+    model?: string,
+): Promise<void> {
+
+    console.log(`[AIGatewayEngine] Sending prompt to gateway for session ${session_uid}. Prompt: ${prompt}, SDK: ${sdk}, Model: ${model}`);
+
+    // --- get base url from ensure 
+    const activeGatewayUrl = await HealthProbe.ensure();
+    if (!activeGatewayUrl) {
+        AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+        throw new Error('No healthy gateway instance available');
+    }
+
+    // --- ensure sdk and model exist 
+    if (!sdk || !model) {
+        AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+        throw new Error('SDK and model must be specified to send prompt to gateway');
+    }
             
+    // -- Get the gateway config to retrieve API keys and other necessary info for sending the request to the gateway.
+    const AIGatewayConfig : AIGatewayConfig = AIGatewayEngine.getConfig();
 
-    //     }
+    // @ts-expect-error -- we can ignore the type error here since we will handle the case where the SDK is not 
+    // configured properly in the code below. We just need to make sure to not proceed with sending the request 
+    // to the gateway if the SDK is not configured, which we will handle in the next step.
+    const sdkConfig = AIGatewayConfig.sdks[sdk];
 
+    // -- If the SDK is not configured properly, we should not proceed with sending the request to the gateway.
+    if (!sdkConfig?.api_key) {
+        AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+        throw new Error(`${sdk} API key not configured in gateway config`);
+    }
 
-    // } catch (error) {
-    //     console.error(`Error in interaction loop for session ${session.session_uid}:`, error);
-    //     KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
-    //         status: AISessionStatus.ERROR,
-    //         error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) } ,
-    //     } as Partial<AISession>);
-    // }
+    // -- At this point, we have all the necessary information to send the request to the gateway. 
+    // We will fire and forget this request since the response will be handled asynchronously through the pre-allocated memory and event listeners.
 
+    (async () => {
+        try {
 
-    
+            // -- Pre-allocate the Turn Memory tied securely to the Session Process
+            const abortController = new AbortController();
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                active_abort_controller: abortController,
+            } as Partial<AISession>);
 
-    // const rootProcess = parentProcessUid
-    //     ? KernelEngine.spawnSubprocess(parentProcessUid, AI_GATEWAY_PROCESS_TYPE.RESPONSE_TURN, {
-    //         metadata: {
-    //             session_uid: sessionUid,
-    //             reply_to_ram_key: replyToRamKey,
-    //             prompt_preview: prompt.slice(0, 200),
-    //         },
-    //         process_kind: PROCESS_KIND.AI_SESSION_TURN,
-    //         owner_engine: 'aiGatewayEngine',
-    //     })
-    //     : KernelEngine.spawnProcess(AI_GATEWAY_PROCESS_TYPE.RESPONSE_TURN, {
-    //         session_uid: sessionUid,
-    //         reply_to_ram_key: replyToRamKey,
-    //         prompt_preview: prompt.slice(0, 200),
-    //     }, {
-    //         process_kind: PROCESS_KIND.AI_SESSION_TURN,
-    //         owner_engine: 'aiGatewayEngine',
-    //     });
-    // KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.RUNNING);
+            // -- Send the prompt to the gateway endpoint. The gateway is responsible for handling the request,
+            // communicating with the model provider, and writing the response to the specified `replyToRamKey` in memory.
 
-    // const updateResponseMemory = (payload: Record<string, unknown>) => {
-    //     const updated = KernelEngine.updateRuntimeMemory({
-    //         owner_process_uid: rootProcess.process_uid,
-    //         memory_uid: replyToRamKey,
-    //         payload,
-    //     });
+            const response = await fetch(`${activeGatewayUrl}/chat/${sdk}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${sdkConfig.api_key}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ model: model, prompt }),
+                signal: abortController.signal,
+            });
 
-    //     if (!updated) {
-    //         // Fallback for memory created before process ownership metadata is attached.
-    //         KernelEngine.updateMemory(replyToRamKey, payload);
-    //     }
-    // };
+            // -- Processing buffer
+            if (!response.ok || !response.body) {
+                throw new Error(`Response failed: ${response.statusText}`);
+            }
 
-    // const memoryBefore = (KernelEngine.readMemory(replyToRamKey) ?? {}) as Record<string, unknown>;
-    // const existingTurns = Array.isArray(memoryBefore.response_turns)
-    //     ? (memoryBefore.response_turns as ResponseTurnSnapshot[])
-    //     : [];
+            // -- Here we would have the logic to read from the response stream, parse the incoming data, and update the session state in memory accordingly.
+            // For example, we might read chunks from the response body, parse them as they come in, and update the current turn's response 
+            // in memory to reflect the streaming response from the model.
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
 
-    // const promptTurnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    // const sessionProcessUid = `process:ai_session:${sessionId}`;
-    // TurnRendererEngine.initTurn(promptTurnId, 'assistant', sessionProcessUid);
-    // const currentTurn: ResponseTurnSnapshot = {
-    //     turn_id: promptTurnId,
-    //     original_prompt: prompt,
-    //     started_at: Date.now(),
-    //     attempts: [],
-    // };
+            // -- Init AIEntry in session state for this turn with empty response and streaming status, so that the frontend 
+            // can start rendering the turn immediately as it receives updates in memory.
 
-    // let activePrompt = prompt;
-    // let continuationTurns = 0;
+            const newAIEntry = TurnRenderer.buildTurnEntry({
+                response : '',
+                
+                prompt : prompt,
+                composed_prompt : prompt,
 
-    // while (true) {
-    //     const prepared = prepareGatewaySessionRequest({
-    //         session,
-    //         sessionId,
-    //         prompt: activePrompt,
-    //     });
+                blocks: [],
+                status: 'streaming',
+            })
 
-    //     const streamOutcome = await sendStreamRequest(
-    //         session,
-    //         prepared.composed_prompt,
-    //         replyToRamKey,
-    //         AIConfigManager.get(),
-    //         () => HealthProbe.ensure(),
-    //         {
-    //             process_uid: rootProcess.process_uid,
-    //             original_prompt: prompt,
-    //             used_contexts: prepared.used_contexts,
-    //             prompt_reference: prepared.prompt_reference,
-    //             response_reference: prepared.response_reference,
-    //             prompt_turn_id: promptTurnId,
-    //             response_attempt_index: continuationTurns + 1,
-    //             response_turns_seed: [...existingTurns, currentTurn].slice(-20),
-    //         },
-    //     );
+            // -- We can update the session state with the new AIEntry for the current turn. The active_entry_index points to the 
+            // current entry being processed, which is useful for the frontend to know which entry to render and update as new data 
+            // comes in. As we receive streaming updates from the gateway, we can update this AIEntry in memory with the latest response text, 
+            // any parsed blocks, and the current status of the response (e.g. streaming, completed, error).
+            const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+            const currentTurn = currentSessionState.turns[currentSessionState.turn_index];
 
-    //     drainParserRuntimeToResponseMemory(sessionId, replyToRamKey);
+            currentTurn.entries.push(newAIEntry);
+            currentTurn.active_entry_index = (currentTurn.active_entry_index ?? -1) + 1; // Point to the new entry
 
-    //     finalizeGatewaySessionResponse({
-    //         session,
-    //         sessionId,
-    //         prompt: activePrompt,
-    //         reply_to_ram_key: replyToRamKey,
-    //         response_reference: prepared.response_reference,
-    //     });
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                turns: [
+                    ...currentSessionState.turns.slice(0, currentSessionState.turn_index),                
+                    { ...currentTurn },
+                ],
+            });
 
-    //     const attemptSnapshot = snapshotResponseAttemptFromMemory({
-    //         replyToRamKey,
-    //         attemptIndex: continuationTurns + 1,
-    //         prompt: activePrompt,
-    //     });
-    //     currentTurn.attempts = [...currentTurn.attempts, attemptSnapshot].slice(-12);
+            // -- We can use a loop to read from the stream until it's done, and 
+            // update the memory with the latest response text as we go.
 
-    //     if (!streamOutcome.interrupted) {
-    //         currentTurn.finished_at = Date.now();
+            // And also handle parser updates and tool interactions if the gateway is 
+            // sending those as part of the stream. if let say the gateway sends specials markers
             
-    //         // Check planning context even if not interrupted by a tool
-    //         const activePlan = PlanningService.getPlan(sessionId);
-    //         const hasPendingPlans = activePlan.short_plan.some(t => t.status === 'pending');
-    //         const shouldContinueOnlyFromPlan = !activePlan.yield_to_user && hasPendingPlans;
+            // like tools parser which has handler where we should delegate the interactionLoop stop
+            // in the parser handler result, we can listen for those markers in the stream and dispatch 
+            // events to control the interaction loop flow accordingly.
 
-    //         if (shouldContinueOnlyFromPlan && continuationTurns < TOOL_FEEDBACK_LOOP_MAX_TURNS) {
-    //             updateResponseMemory({
-    //                 status: 'completed',
-    //                 response_turns: [...existingTurns, currentTurn].slice(-20),
-    //                 active_response_turn_id: promptTurnId,
-    //                 active_response_attempt_index: continuationTurns + 1,
-    //                 feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.RUNNING,
-    //                 feedback_loop_reason: 'plan_feedback_loop_continue',
-    //                 feedback_loop_turn: continuationTurns,
-    //                 last_feedback_at: Date.now(),
-    //             });
+            // This is a simplified example of how we might handle the streaming response. The actual 
+            // implementation would depend on the format of the data sent by the gateway and how we 
+            // want to update the session state in memory.
+            let tmp_chunk_buffer = '';
+            let tmp_paragraph_renderer_index = -1;
 
-    //             await new Promise(resolve => setTimeout(resolve, 50));
-    //             activePrompt = `Turn completed but plan still has 'pending' tasks. Please execute the next task in the plan. Use the <plan> block to update its status first.`;
-    //             continuationTurns++;
-    //             rootProcess = KernelEngine.createProcess({
-    //                 parent_uid: parentProcessUid,
-    //                 kind: PROCESS_KIND.SYSTEM_BACKGROUND,
-    //                 command: AI_GATEWAY_PROCESS_TYPE.TOOL_FEEDBACK_LOOP,
-    //             });
-    //             TurnRendererEngine.finalizeTurn(promptTurnId);
-    //             continue;
-    //         }
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-    //         updateResponseMemory({
-    //             status: 'completed',
-    //             response_turns: [...existingTurns, currentTurn].slice(-20),
-    //             active_response_turn_id: promptTurnId,
-    //             active_response_attempt_index: continuationTurns + 1,
-    //             feedback_loop_status: continuationTurns > 0 ? AI_FEEDBACK_LOOP_STATUS.COMPLETED : AI_FEEDBACK_LOOP_STATUS.NONE,
-    //             feedback_loop_reason: continuationTurns > 0 ? 'tool_feedback_completed' : undefined,
-    //             feedback_loop_turn: continuationTurns,
-    //             last_feedback_at: Date.now(),
-    //         });
+                // Decode the Uint8Array chunk to a string
+                const chunk = decoder.decode(value, { stream: true });
+                tmp_chunk_buffer += chunk;
 
-    //         KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.DONE);
-    //         TurnRendererEngine.finalizeTurn(promptTurnId);
-    //         return;
-    //     }
+                let blockState = streamParseBuffer(tmp_chunk_buffer);
+                tmp_chunk_buffer = blockState.next_buffer;
 
-    //     if (continuationTurns >= TOOL_FEEDBACK_LOOP_MAX_TURNS) {
-    //         currentTurn.finished_at = Date.now();
-    //         updateResponseMemory({
-    //             status: 'error',
-    //             response_turns: [...existingTurns, currentTurn].slice(-20),
-    //             active_response_turn_id: promptTurnId,
-    //             active_response_attempt_index: continuationTurns + 1,
-    //             feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
-    //             feedback_loop_reason: 'tool_feedback_loop_turn_cap_reached',
-    //             feedback_loop_turn: continuationTurns,
-    //             last_feedback_at: Date.now(),
-    //             parser_interrupt_reason: streamOutcome.interruptReason,
-    //         });
-    //         KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.FAILED);
-    //         TurnRendererEngine.finalizeTurn(promptTurnId);
-    //         return;
-    //     }
+                // At this point, we have the stripped prefix which is the new response text that is not part of any special block, 
+                // and we have any extracted blocks that we can process separately. We also know if there is a block or fragment 
+                // in progress which will help us handle future chunks correctly.
+                let currentSessionState : AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+                let currentTurn : AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
+                let currentEntry : AIEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
 
-    //     const terminalActionEvent = await waitForActionTerminalEvent(sessionId, replyToRamKey);
-    //     if (!terminalActionEvent) {
-    //         currentTurn.finished_at = Date.now();
-    //         updateResponseMemory({
-    //             status: 'error',
-    //             response_turns: [...existingTurns, currentTurn].slice(-20),
-    //             active_response_turn_id: promptTurnId,
-    //             active_response_attempt_index: continuationTurns + 1,
-    //             feedback_loop_status: AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
-    //             feedback_loop_reason: 'tool_feedback_result_timeout',
-    //             feedback_loop_turn: continuationTurns,
-    //             last_feedback_at: Date.now(),
-    //             parser_interrupt_reason: streamOutcome.interruptReason,
-    //         });
-    //         KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.FAILED);
-    //         TurnRendererEngine.finalizeTurn(promptTurnId);
-    //         return;
-    //     }
+                // -- Update the current AIEntry's response with the new text from the stripped prefix. 
+                // For Debugging: To record the raw response from the gateway, we can append the new chunk to a `raw_response` field in the AIEntry. 
+                // This way we have a complete record of what was received from the gateway, which can be useful for debugging and analysis.
 
-    //     hydrateActionRendererFromTerminalEvent({
-    //         turnId: promptTurnId,
-    //         terminalEvent: terminalActionEvent,
-    //     });
+                if(currentEntry.response == undefined) currentEntry.response = '';
+                currentEntry.response += chunk;
 
-    //     currentTurn.finished_at = Date.now();
-        
-    //     const activePlan = PlanningService.getPlan(sessionId);
-    //     const hasPendingPlans = activePlan.short_plan.some(t => t.status === 'pending');
-    //     const shouldContinue = !activePlan.yield_to_user && hasPendingPlans;
+                KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                    ...currentSessionState,
+                    turns: [
+                        ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
+                        { ...currentTurn, entries: [
+                            ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
+                            { ...currentEntry },
+                        ] },
+                    ],
+                });
 
-    //     updateResponseMemory({
-    //         status: 'completed',
-    //         response_turns: [...existingTurns, currentTurn].slice(-20),
-    //         active_response_turn_id: promptTurnId,
-    //         active_response_attempt_index: continuationTurns + 1,
-    //         feedback_loop_status: shouldContinue ? AI_FEEDBACK_LOOP_STATUS.RUNNING : AI_FEEDBACK_LOOP_STATUS.INTERRUPTED,
-    //         feedback_loop_reason: shouldContinue ? 'tool_feedback_loop_continue' : 'tool_feedback_paused_after_action',
-    //         feedback_loop_turn: continuationTurns,
-    //         last_feedback_at: Date.now(),
-    //         parser_interrupt_reason: streamOutcome.interruptReason,
-    //     });
+                // -- If there's stripped buffer then it means we have some new response text that is not part of any special block, 
+                // so we can update the current AIEntry's response with this new text.
 
-    //     if (shouldContinue) {
-    //         await new Promise(resolve => setTimeout(resolve, 50));
-            
-    //         let toolFeedBackStr = "Action completed.";
-    //         if (terminalActionEvent?.payload && typeof terminalActionEvent.payload === 'object') {
-    //             let jsonStr = JSON.stringify(terminalActionEvent.payload, null, 2);
-    //             if (jsonStr.length > 25000) {
-    //                 jsonStr = jsonStr.substring(0, 25000) + '\n... [RESULT TRUNCATED DUE TO LENGTH]';
-    //             }
-    //             toolFeedBackStr = `Action outcome:\n\`\`\`json\n${jsonStr}\n\`\`\``;
-    //         }
-            
-    //         activePrompt = `${toolFeedBackStr}\n\nPlease execute the next 'pending' task in your <plan>. Use the <plan> block to update its status first.`;
-    //         continuationTurns++;
-    //         rootProcess = KernelEngine.createProcess({
-    //             parent_uid: parentProcessUid,
-    //             kind: PROCESS_KIND.SYSTEM_BACKGROUND,
-    //             command: AI_GATEWAY_PROCESS_TYPE.TOOL_FEEDBACK_LOOP,
-    //         });
-    //         TurnRendererEngine.finalizeTurn(promptTurnId);
-    //         continue;
-    //     }
+                if (blockState.stripped_prefix != '') {
 
-    //     KernelEngine.updateProcessStatus(rootProcess.process_uid, PROCESS_STATUS.DONE);
-    //     TurnRendererEngine.finalizeTurn(promptTurnId);
-    //     return;
-    // }
+                    if(tmp_paragraph_renderer_index == -1) {
+
+                        let currentSessionState : AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+                        let currentTurn : AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
+
+                        tmp_paragraph_renderer_index = currentTurn.assistant_renderers.length;
+                        currentTurn.assistant_renderers.push(
+                            TurnRenderer.buildRenderer('paragraph_renderer', 'system', { text: blockState.stripped_prefix })
+                        );
+                        
+                        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                            ...currentSessionState,
+                            turns: [
+                                ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
+                                { ...currentTurn },
+                            ],
+                        });
+
+                    } else {
+
+                        let currentSessionState : AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+                        let currentTurn : AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
+                        let currentRenderer : AIRenderer = currentTurn.assistant_renderers[tmp_paragraph_renderer_index];
+
+                        if(currentRenderer.payload == undefined) {
+                            currentRenderer.payload = { text: blockState.stripped_prefix };
+                        } else {
+                            // @ts-expect-error
+                            if(currentRenderer.payload.text == undefined) {
+                                // @ts-expect-error
+                                currentRenderer.payload.text = blockState.stripped_prefix;
+                            } else {
+                                // @ts-expect-error
+                                currentRenderer.payload.text += blockState.stripped_prefix;
+                            }
+                        }
+
+                        currentTurn.assistant_renderers[tmp_paragraph_renderer_index] = currentRenderer;
+                        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                            ...currentSessionState,
+                            turns: [
+                                ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
+                                { ...currentTurn },
+                            ],
+                        });
+
+                        // reset the tmp_paragraph_renderer_index if we have a block or fragment in progress, 
+                        // since the new text after the block might need to be in a new renderer.
+                        tmp_paragraph_renderer_index = -1;
+                    }
+                }
+
+                // -- If we extracted any full blocks, we can process them here. The processing logic 
+                // will depend on the type of blocks and how we want to update the session state based on them.                
+                
+                if (blockState.extracted_blocks.length > 0) {
+                    console.log(`Extracted blocks from buffer:`, blockState.extracted_blocks);
+                };
+
+                // -- Handled next buffer with potential block fragments. If we have a block fragment, we will keep it in the buffer 
+                // and wait for future chunks to complete it.
+
+                if (!blockState.has_block_or_fragment && tmp_chunk_buffer != '') {
+                    if(tmp_paragraph_renderer_index == -1) {
+
+                        let currentSessionState : AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+                        let currentTurn : AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
+
+                        tmp_paragraph_renderer_index = currentTurn.assistant_renderers.length;
+                        currentTurn.assistant_renderers.push(
+                            TurnRenderer.buildRenderer('paragraph_renderer', 'system', { text: tmp_chunk_buffer })
+                        );
+                        
+                        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                            ...currentSessionState,
+                            turns: [
+                                ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
+                                { ...currentTurn },
+                            ],
+                        });
+
+                    } else {
+
+                        let currentSessionState : AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+                        let currentTurn : AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
+                        let currentRenderer = currentTurn.assistant_renderers[tmp_paragraph_renderer_index];
+
+                        currentRenderer.payload = { text : tmp_chunk_buffer };
+                        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                            ...currentSessionState,
+                            turns: [
+                                ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
+                                { ...currentTurn, assistant_renderers: [
+                                    ...currentTurn.assistant_renderers.slice(0, tmp_paragraph_renderer_index),
+                                    currentRenderer,
+                                ] },
+                            ],
+                        });
+
+                    }
+                }
+            }
+
+            // -- Once the stream is done, we can update the memory to reflect that the response is complete.
+            AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+
+        } catch (error) {
+            // -- Dispatch event to stop the loop in case of any error during the request sending or response processing. 
+            // This will allow the interaction loop to exit gracefully and update the session state accordingly.
+            AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+
+            // -- If there is any error during the request or response processing, we should update the session state to 
+            // reflect the error and stop the interaction loop.
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                status: AISessionStatus.ERROR,
+                error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) } ,
+            } as Partial<AISession>);
+        }
+    })();
 }
