@@ -1,5 +1,63 @@
 
 
+/**
+ * Session Interaction Loop — Flow Overview
+ *
+ * Summary:
+ * - `executeSessionInteractionLoop(session, prompt)`
+ *   -> validate and set session state to `STREAMING`
+ *   -> create a new turn and start background processing via `sendPromptToGateway(...)`
+ *   -> main loop waits for `AISessionBus` events (response 'stop') to end
+ *
+ * Background handler (`sendPromptToGateway`):
+ * - posts request to gateway and streams response
+ * - reads chunks, appends to `tmp_chunk_buffer` and uses `streamParseBuffer()`
+ * - updates session state in `KernelEngine` memory as:
+ *     - append `AIEntry` to current `turn.entries`
+ *     - update `currentEntry.response` & `assistant_renderers`
+ *     - append parsed blocks to `currentEntry.blocks`
+ * - for each parsed block:
+ *     - find parser handler via `RegistryEngine.getParserBlock(...)`
+ *     - execute handler (may dispatch events back to `AISessionBus`)
+ * - on stream completion: mark `currentEntry.status = 'completed'` and dispatch 'stop'
+ *
+ * ASCII Diagram:
+ *
+ *   User
+ *    |
+ *    v
+ * executeSessionInteractionLoop()
+ *    |
+ *    v
+ * updateMemory(state -> STREAMING)   <---- kernel memory (frequent reads/writes)
+ *    |
+ *    v
+ * sendPromptToGateway() (background)
+ *    |
+ *    v
+ * Gateway --> streaming chunks --> streamParseBuffer()
+ *    |                                   |
+ *    v                                   v
+ * updateMemory (entries, renderers)   extracted blocks -> RegistryEngine -> handlers
+ *    |                                   |
+ *    v                                   v
+ * AISessionBus events <----------------- handler responses
+ *    |
+ *    v
+ * on 'stop' -> updateMemory(state -> IDLE)
+ *
+ * Notes:
+ * - The implementation performs frequent read/update cycles on `KernelEngine` memory
+ *   to keep a canonical, synchronized session state across components (UI, registry, etc).
+ */
+
+// NOTE: The current implementation intentionally calls `KernelEngine.readMemory` and
+// `KernelEngine.updateMemory` repeatedly for every streaming chunk. This simplifies
+// synchronization across processes and components, but it can increase memory usage
+// and I/O when many AI sessions are active. Consider batching updates, using an
+// in-memory session object with periodic persistence, or sending diffs instead of
+// full session snapshots to reduce overhead.
+
 import { AISessionStatus, type AIEntry, type AIRenderer, type AISession, type AITurn } from '#/schemas/ai';
 import type { AIGatewayConfig } from '#/schemas/ai_gateway';
 
@@ -35,9 +93,53 @@ interface SpecialBlockBufferState {
     fragment_block_name?: string;
 }
 
-// This function takes a buffer string that may contain special blocks (e.g. tool calls, parser updates) and 
-// extracts those blocks while also returning the remaining buffer for future processing. It also identifies if there 
-// are any block fragments that need to be completed with future chunks.
+/**
+ * Parse streaming buffer for special blocks (detailed)
+ *
+ * Purpose:
+ * - Split incoming streaming text into:
+ *    - `stripped_prefix`: plain response text (not part of any block)
+ *    - `extracted_blocks`: fully-formed special blocks like <tool>..</tool>
+ *    - `next_buffer`: tail of the buffer that couldn't be processed yet
+ *    - `has_block_or_fragment`: boolean hint whether there is a block fragment or blocks in progress
+ *    - `fragment_block_name`: name of the partial tag if present (e.g. 'tool')
+ *
+ * High-level flow (ASCII):
+ *
+ *   tmp_chunk_buffer
+ *      |
+ *      v
+ *   find first '<'
+ *    /   \
+ *   no    yes
+ *   |      |
+ * return   stripped_prefix = before '<'
+ * (no     workingBuffer = from '<' onward
+ * blocks)     |
+ *            v
+ *   try to extract full blocks at start of workingBuffer:
+ *     while workingBuffer matches /^<tag>[\s\S]*?<\/tag>/:
+ *       - push full block into extracted_blocks
+ *       - workingBuffer = workingBuffer.slice(raw.length)
+ *   if extracted_blocks.length > 0:
+ *     return { next_buffer: workingBuffer, extracted_blocks, stripped_prefix, has_block_or_fragment: true }
+ *   else:
+ *     check for partial fragment (opening tag without close):
+ *       - if match -> fragment_block_name = tagName, has_block_or_fragment = true
+ *       - else -> has_block_or_fragment = false
+ *
+ * Caller usage notes (how the loop uses returned fields):
+ * - `stripped_prefix` is appended into the current renderer / `currentEntry.response`.
+ * - `extracted_blocks` are turned into block entries and dispatched to RegistryEngine handlers.
+ * - `next_buffer` becomes the new `tmp_chunk_buffer` for the next read iteration.
+ * - `has_block_or_fragment` tells the caller whether it should keep the buffer open for more chunks.
+ *
+ * Contoh singkat (ID):
+ * - chunk1: "Hello <tool>run arg"
+ * - chunk2: "1</tool> World"
+ * => Setelah chunk1: stripped_prefix="Hello ", fragment_block_name='tool', next_buffer='<tool>run arg'
+ * => Setelah chunk2: extracted_blocks=[{block_name:'tool', content:'run arg1'}], stripped_prefix='', next_buffer=' World'
+ */
 
 function streamParseBuffer(tmp_chunk_buffer: string): SpecialBlockBufferState {
 
