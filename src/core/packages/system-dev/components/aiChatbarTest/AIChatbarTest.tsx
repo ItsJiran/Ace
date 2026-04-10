@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useAIGateway } from '#/hooks/useAIGateway';
 import { useAIChatSession } from '#/hooks/useAIChatSession';
 import { SystemHeader } from './SystemHeader';
 import { ControlPanel } from './ControlPanel';
 import { ConfigPanel } from './ConfigPanel';
+import ChatMessages from './ChatMessages';
 import { AISessionStatus } from '#/schemas/ai';
 
 export const registry: AceRegistryType.Component = {
@@ -51,6 +52,18 @@ export default function AIChatbarTest() {
         setPrompt('');
     };
 
+    const bottomRef = useRef<HTMLDivElement | null>(null);
+
+    // Scroll to bottom when user sends a prompt
+    const wrappedSendPrompt = () => {
+        onSendPrompt();
+        try {
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        } catch (e) {
+            // ignore
+        }
+    };
+
     return (
         <div className="w-full h-full flex flex-col bg-zinc-950 text-zinc-200">
             <SystemHeader sessionId={sessionUid} />
@@ -63,13 +76,13 @@ export default function AIChatbarTest() {
             />
 
             <div className="flex-1 overflow-auto px-3 py-3 space-y-2">
-                {/* <ChatMessages turnMemoryUids={turnMemoryUids} bottomRef={bottomRef} /> */}
+                <ChatMessages session={session} sessionUid={sessionUid} bottomRef={bottomRef} />
             </div>
 
             <ControlPanel
                 prompt={prompt}
                 onPromptChange={setPrompt}
-                onSendPrompt={onSendPrompt}
+                onSendPrompt={wrappedSendPrompt}
                 session_status={session?.status || AISessionStatus.IDLE}
             />
         </div>
