@@ -1,4 +1,4 @@
-import { AISessionStatus } from "#/services/aiGateway/types";
+import { AISessionStatus } from "#/schemas/ai";
 
 interface ControlPanelProps {
     prompt: string;

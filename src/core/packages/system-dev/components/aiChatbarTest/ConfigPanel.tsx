@@ -1,4 +1,4 @@
-import type { GatewayConfig, GatewayModel, SDKProvider } from './types';
+import type { GatewayModel, SDKProvider } from '#/schemas/ai_gateway';
 
 interface ConfigPanelProps {
     selectedSdk: SDKProvider;

@@ -5,7 +5,7 @@ import { useAIChatSession } from '#/hooks/useAIChatSession';
 import { SystemHeader } from './SystemHeader';
 import { ControlPanel } from './ControlPanel';
 import { ConfigPanel } from './ConfigPanel';
-import { AISessionStatus } from '#/services/aiGateway/types';
+import { AISessionStatus } from '#/schemas/ai';
 
 export const registry: AceRegistryType.Component = {
     name: 'ai_chatbar_test',

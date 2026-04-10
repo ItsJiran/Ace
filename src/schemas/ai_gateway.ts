@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+
+export type SDKProvider = 'openai' | 'google' | 'anthropic';
+export type GatewayModel = {
+    id: string;
+    name: string;
+    context_window?: number;
+    capabilities?: string[];
+};
+
+// This file defines the data structures and types for the AI Gateway configuration,
+// including SDK targets, models, and various result types for connectivity and operations.
+// It uses Zod for schema validation and type inference.
+
 // Per-SDK gateway target (simplified - endpoints managed by gateway server)
 export const AIGatewaySDKTargetSchema = z.object({
     api_key: z.string().min(0),
