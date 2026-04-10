@@ -47,8 +47,8 @@ import type {
     AIGatewayConfig,
 } from '../schemas/ai_gateway';
 
-import type { SDKProvider, AISession } from './aiGateway/types';
-import { AIProcessType, AISessionStatus } from './aiGateway/types';
+import type { SDKProvider, AISession } from '#/schemas/ai';
+import { AIProcessType, AISessionStatus } from '#/schemas/ai';
 
 import { KernelState } from './kernelEngine/kernelState';
 import type { KernelAISessionEntry } from './kernelEngine/types';
