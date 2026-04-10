@@ -1,4 +1,4 @@
-import { AIResponseStatus, type AIBlock, type AIEntry, type AITurn } from "./types"
+import { AIResponseStatus, type AIBlock, type AIEntry, type AITurn } from "#/schemas/ai"
 
 const initTurn = (prompt: string): AITurn => {
     return {
@@ -29,11 +29,17 @@ const buildTurnEntry = (obj: Partial<AIEntry>) : AIEntry => {
     } as AIEntry
 }
 
-const buildBlockEntry = (block_slug: string, package_ref?: string, payload?: Record<string, unknown>) : AIBlock => {
+const buildBlockEntry = (obj : Partial<AIBlock>) : AIBlock => {
     return {
-        block_slug: block_slug, // This can be used to identify the type of block, such as 'tool_call', 'function_execution', 'code_snippet', etc.
-        package_ref: package_ref, // Optional reference to a specific package that can handle this block, useful for routing to the correct handler or renderer.
-        payload: payload ?? {},
+        session_uid: obj.session_uid ?? '',
+        process_uid: obj.process_uid ?? '',
+        turn_index: obj.turn_index ?? 0,
+        entry_index: obj.entry_index ?? 0,
+        block_index: obj.block_index ?? 0,
+
+        block_slug: obj.block_slug ?? '', // This can be used to identify the type of block, such as 'tool_call', 'function_execution', 'code_snippet', etc.
+        package_ref: obj.package_ref ?? '', // Optional reference to a specific package that can handle this block, useful for routing to the correct handler or renderer.
+        payload: obj.payload ?? {},
     } as AIBlock
 }   
 

@@ -1,7 +1,7 @@
 import { EventBus } from '../eventEngine';
 import { KernelEngine } from '../kernelEngine';
-import { AI_GATEWAY_ROUTE_ACTION, AI_RESPONSE_STATUS } from './types';
-import type { SDKProvider } from './types';
+import { AI_GATEWAY_ROUTE_ACTION, AI_RESPONSE_STATUS } from '#/schemas/ai';
+import type { SDKProvider } from '#/schemas/ai';
 
 export function registerSendGatewayRoute(input: {
     createSession: (sdk: SDKProvider, model: string, parentProcessUid?: string) => Promise<string>;

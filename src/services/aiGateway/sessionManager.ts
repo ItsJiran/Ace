@@ -2,8 +2,8 @@ import { KernelEngine } from '../../services/kernelEngine';
 import { KernelState } from '../kernelEngine/kernelState';
 
 import { PROCESS_KIND } from '#/schemas/process';
-import { AIFeedbackLoopStatus, AISessionStatus } from './types';
-import type { AISession, SDKProvider } from './types';
+import { AIFeedbackLoopStatus, AISessionStatus } from '#/schemas/ai';
+import type { AISession, SDKProvider } from '#/schemas/ai';
 import type { KernelAISessionEntry } from '../kernelEngine/types';
 
 // + ======== Session Management Orchestration ============== +

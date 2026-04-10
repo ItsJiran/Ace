@@ -1,8 +1,8 @@
 import { KernelEngine } from '../kernelEngine';
 import { handleSessionStreamChunk } from './streamHandler';
 import { PROCESS_KIND } from '#/schemas/process';
-import { AI_GATEWAY_PROCESS_TYPE, AI_RESPONSE_STATUS, AI_SESSION_STATUS } from './types';
-import type { AISession } from './types';
+import { AI_GATEWAY_PROCESS_TYPE, AI_RESPONSE_STATUS, AI_SESSION_STATUS } from '#/schemas/ai';
+import type { AISession } from '#/schemas/ai';
 import type { AIGatewayConfig } from '../../schemas/ai_gateway';
 
 export interface SendSessionStreamResult {

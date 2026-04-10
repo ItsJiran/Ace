@@ -7,7 +7,7 @@ import {
     type RegistryDomainEntry,
 } from '../schemas/registry';
 import { LoggerEngine } from './loggerEngine';
-import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime, ParserBlockValidator } from '#/schemas/parser';
+import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime } from '#/schemas/parser';
 
 /**
  * ============================================================================
@@ -410,7 +410,6 @@ class RegistryEngineSingleton {
                 const entry = rawEntry as RegistryDomainEntry;
                 const metadata = (entry.metadata ?? {}) as Record<string, unknown>;
                 const handler = entry.implementation;
-                const validator = (entry as RegistryDomainEntry & { validator?: unknown }).validator;
 
                 if (typeof handler !== 'function') continue;
 
@@ -441,19 +440,6 @@ class RegistryEngineSingleton {
                     slug,
                     aliases,
                     schema,
-                    runtime_behavior: (metadata.runtime_behavior && typeof metadata.runtime_behavior === 'object')
-                        ? {
-                            interrupt_mode: typeof (metadata.runtime_behavior as Record<string, unknown>).interrupt_mode === 'string'
-                                ? (metadata.runtime_behavior as Record<string, unknown>).interrupt_mode as 'none' | 'pause_stream' | 'hard_stop'
-                                : undefined,
-                            interrupt_on_complete: typeof (metadata.runtime_behavior as Record<string, unknown>).interrupt_on_complete === 'boolean'
-                                ? (metadata.runtime_behavior as Record<string, unknown>).interrupt_on_complete as boolean
-                                : undefined,
-                        }
-                        : undefined,
-                    validator: typeof validator === 'function'
-                        ? validator as ParserBlockValidator
-                        : undefined,
                     handler: handler as ParserBlockHandler,
                 };
 

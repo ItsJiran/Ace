@@ -25,7 +25,7 @@ import type {
     AIGatewayModel,
     AIGatewayResponseResult,
 } from '../../schemas/ai_gateway';
-import type { SDKProvider } from './types';
+import type { SDKProvider } from '#/schemas/ai';
 
 const FETCH_TIMEOUT_MS = 9000;
 

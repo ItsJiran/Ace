@@ -25,7 +25,7 @@ import { FSEngine } from '../fsEngine';
 import { KernelEngine } from '../kernelEngine';
 import { AIGatewayConfigSchema, type AIGatewayConfig } from '../../schemas/ai_gateway';
 import type { AIGatewayModel } from '../../schemas/ai_gateway';
-import type { SDKProvider } from './types';
+import type { SDKProvider } from '#/schemas/ai';
 
 const GATEWAY_CONFIG_FILE = 'gateway.json';
 const MEMORY_UID = 'system:ai_gateway_config';

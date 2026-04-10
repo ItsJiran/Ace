@@ -1,5 +1,5 @@
 import { AIContextEngine } from '../aiContextEngine';
-import type { AIRequestProtocolState } from './types';
+import type { AIRequestProtocolState } from '#/schemas/ai';
 
 export const HISTORY_SUMMARY_PARAGRAPH_THRESHOLD = 2;
 

@@ -4,9 +4,9 @@ import { AIContextEngine } from '../aiContextEngine';
 import { AIContextMemoryEngine } from '../aiContextMemoryEngine';
 import { ParserEngine } from '../parserEngine';
 import { parseAIStreamChunk } from '#/services/aiParser';
-import { AI_GATEWAY_ROUTE_ACTION, AI_GATEWAY_ROUTE_SUB_ACTION } from './types';
+import { AI_GATEWAY_ROUTE_ACTION, AI_GATEWAY_ROUTE_SUB_ACTION } from '#/schemas/ai';
 import type { AIMessageBlock } from '#/services/aiParser';
-import type { AISession, ParsedBatchEvent, ParserBatchRecord } from './types';
+import type { AISession, ParsedBatchEvent, ParserBatchRecord } from '#/schemas/ai';
 import type { Interaction } from '../../schemas/events';
 import type { BaseBlock, ParserInterruptMode, ParserSessionEmitRecord, ParserSessionStopSignal } from '#/schemas/parser';
 

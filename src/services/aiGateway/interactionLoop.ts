@@ -7,6 +7,8 @@ import { HealthProbe } from './healthProbe';
 import { AIGatewayEngine } from '../aiGatewayEngine';
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';
+import { RegistryEngine } from '../registryEngine';
+import { promise } from 'zod';
 
 // + ============== Session Management API ============== +
 // Note: This is a simplified process management approach for AI sessions. 
@@ -148,7 +150,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
 
     try {
     
-        while(session.status === AISessionStatus.STREAMING) {
+        while(KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.status === AISessionStatus.STREAMING) {
 
             // 1. Prepare the listener promise FIRST
             const loopPromise = new Promise((resolve) => {
@@ -167,7 +169,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
             // -- Send prompt 
             // For the sake of this example, let's assume we have a function processPrompt 
             // that handles the entire processing of the prompt and returns when the response is complete.
-            sendPromptToGateway(
+            await sendPromptToGateway(
                 prompt, 
                 session.session_uid, 
                 session.sdk, 
@@ -177,6 +179,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
             // -- Since we fire and forget the processing in the background, we can just wait till all the parse
             // works are done and the response is finalized. In a real implementation, we would likely have more complex 
             // logic here to handle streaming updates, tool interactions, and feedback loops in real-time.
+            console.log(`[AIGatewayEngine] Waiting for interaction loop to complete for session ${session.session_uid}...`);
             const loopResponse = await loopPromise;
 
             // -- Once the processing is complete, we can update the session state 
@@ -194,6 +197,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
 
     } catch (error) {
         console.error(`Error in interaction loop for session ${session.session_uid}:`, error);
+
         KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
             status: AISessionStatus.ERROR,
             error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) } ,
@@ -224,25 +228,21 @@ export async function sendPromptToGateway(
 
     console.log(`[AIGatewayEngine] Sending prompt to gateway for session ${session_uid}. Prompt: ${prompt}, SDK: ${sdk}, Model: ${model}`);
 
-    // --- get base url from ensure 
-    const activeGatewayUrl = await HealthProbe.ensure();
+    const activeGatewayUrl = await HealthProbe.getBaseUrl();
+
     if (!activeGatewayUrl) {
         AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
         throw new Error('No healthy gateway instance available');
     }
 
-    // --- ensure sdk and model exist 
     if (!sdk || !model) {
         AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
         throw new Error('SDK and model must be specified to send prompt to gateway');
     }
             
-    // -- Get the gateway config to retrieve API keys and other necessary info for sending the request to the gateway.
-    const AIGatewayConfig : AIGatewayConfig = AIGatewayEngine.getConfig();
 
-    // @ts-expect-error -- we can ignore the type error here since we will handle the case where the SDK is not 
-    // configured properly in the code below. We just need to make sure to not proceed with sending the request 
-    // to the gateway if the SDK is not configured, which we will handle in the next step.
+    const AIGatewayConfig : AIGatewayConfig = AIGatewayEngine.getConfig();
+    // @ts-expect-error 
     const sdkConfig = AIGatewayConfig.sdks[sdk];
 
     // -- If the SDK is not configured properly, we should not proceed with sending the request to the gateway.
@@ -252,7 +252,8 @@ export async function sendPromptToGateway(
     }
 
     // -- At this point, we have all the necessary information to send the request to the gateway. 
-    // We will fire and forget this request since the response will be handled asynchronously through the pre-allocated memory and event listeners.
+    // We will fire and forget this request since the response will be handled asynchronously 
+    // through the pre-allocated memory and event listeners.
 
     (async () => {
         try {
@@ -266,7 +267,7 @@ export async function sendPromptToGateway(
             // -- Send the prompt to the gateway endpoint. The gateway is responsible for handling the request,
             // communicating with the model provider, and writing the response to the specified `replyToRamKey` in memory.
 
-            const response = await fetch(`${activeGatewayUrl}/chat/${sdk}`, {
+            let response = await fetch(`${activeGatewayUrl}/chat/${sdk}`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${sdkConfig.api_key}`,
@@ -284,13 +285,13 @@ export async function sendPromptToGateway(
             // -- Here we would have the logic to read from the response stream, parse the incoming data, and update the session state in memory accordingly.
             // For example, we might read chunks from the response body, parse them as they come in, and update the current turn's response 
             // in memory to reflect the streaming response from the model.
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
+            let reader = response.body.getReader();
+            let decoder = new TextDecoder();
 
             // -- Init AIEntry in session state for this turn with empty response and streaming status, so that the frontend 
             // can start rendering the turn immediately as it receives updates in memory.
 
-            const newAIEntry = TurnRenderer.buildTurnEntry({
+            let newAIEntry = TurnRenderer.buildTurnEntry({
                 response : '',
                 
                 prompt : prompt,
@@ -304,8 +305,8 @@ export async function sendPromptToGateway(
             // current entry being processed, which is useful for the frontend to know which entry to render and update as new data 
             // comes in. As we receive streaming updates from the gateway, we can update this AIEntry in memory with the latest response text, 
             // any parsed blocks, and the current status of the response (e.g. streaming, completed, error).
-            const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
-            const currentTurn = currentSessionState.turns[currentSessionState.turn_index];
+            let currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+            let currentTurn = currentSessionState.turns[currentSessionState.turn_index];
 
             currentTurn.entries.push(newAIEntry);
             currentTurn.active_entry_index = (currentTurn.active_entry_index ?? -1) + 1; // Point to the new entry
@@ -330,6 +331,7 @@ export async function sendPromptToGateway(
             // This is a simplified example of how we might handle the streaming response. The actual 
             // implementation would depend on the format of the data sent by the gateway and how we 
             // want to update the session state in memory.
+
             let tmp_chunk_buffer = '';
             let tmp_paragraph_renderer_index = -1;
 
@@ -401,12 +403,9 @@ export async function sendPromptToGateway(
                         if(currentRenderer.payload == undefined) {
                             currentRenderer.payload = { text: blockState.stripped_prefix };
                         } else {
-                            // @ts-expect-error
                             if(currentRenderer.payload.text == undefined) {
-                                // @ts-expect-error
                                 currentRenderer.payload.text = blockState.stripped_prefix;
                             } else {
-                                // @ts-expect-error
                                 currentRenderer.payload.text += blockState.stripped_prefix;
                             }
                         }
@@ -431,7 +430,95 @@ export async function sendPromptToGateway(
                 
                 if (blockState.extracted_blocks.length > 0) {
                     console.log(`Extracted blocks from buffer:`, blockState.extracted_blocks);
-                };
+
+                    for (const block of blockState.extracted_blocks) {
+                        
+                        // Create promises handler for block handler response so that the block handler can control the flow of the parser loop
+                        // loop based on its result. For example, if the block is a tool call and the handler indicates that we should pause the stream and wait for user input, we can dispatch an event to stop the loop and update the session state accordingly. On the other hand, 
+                        // if the handler indicates that we should continue with the stream, we can just continue with the next iteration of the loop to keep processing the stream.
+                        const parserHandlerPromise = new Promise((resolve) => {
+                            AISessionBus.addEventListener(`system:ai_session:${currentSessionState.session_uid}:block_parsing_response`, 
+                                (e: any) => resolve(e.detail), 
+                                { once: true }
+                            );
+                        });
+
+                        // get the block handler from the registry based on the block_name, and then execute the handler with the block content. 
+                        // The handler can then update the session state in memory as needed, for example to add tool calls, update parsers, etc.
+                        // Append to the kernel memory block entry for the current for debugging for what block we received and what content, 
+                        // we can keep an array of received blocks in the session state memory and append to it whenever we receive a new block from the stream.
+                        const blockHandler = RegistryEngine.getParserBlock(block.block_name)?.handler;
+
+                        let currentSessionState : AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+                        let currentTurn : AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
+                        let currentEntry : AIEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
+                        let currentBlock = TurnRenderer.buildBlockEntry({
+                            session_uid,
+                            process_uid: currentSessionState.process_uid,
+                            turn_index: currentSessionState.turn_index,
+                            entry_index: currentTurn.active_entry_index as number,
+                            block_index: (currentEntry.blocks ? currentEntry.blocks.length : 0),
+                            block_slug: block.block_name,
+                            payload: { content: block.content },
+                        });
+
+                        currentEntry.blocks = [
+                            ...(currentEntry.blocks ? currentEntry.blocks : []),
+                            currentBlock,
+                        ];
+
+                        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                            ...currentSessionState,
+                            turns: [
+                                ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
+                                { ...currentTurn, entries: [
+                                    ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
+                                    { ...currentEntry },
+                                ] },
+                            ],
+                        });
+
+                        if (blockHandler) {
+                            console.log(`Found handler for block ${block.block_name}, executing handler...`);
+                            await blockHandler({
+                                block: block,
+
+                            });
+                        } else {
+                            console.warn(`No handler found for block ${block.block_name}`);
+                        }
+
+                        // Based on the response from the block handler, we can decide whether to stop the interaction loop or not. 
+                        // For example, if the block is a tool call and the handler indicates that we should pause the stream and wait for 
+                        // user input, we can dispatch an event to stop the loop and update the session state accordingly.
+                        
+                        const promiseResponse = await parserHandlerPromise;
+                        console.log(`Received response from block handler for block ${block.block_name}:`, promiseResponse);
+                        
+                        // @ts-expect-error
+                        if(promiseResponse?.action === 'stop') {
+                            console.log(`Block handler for block ${block.block_name} requested to stop the interaction loop.`);
+                            AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+                            break; 
+                        }
+
+                        // @ts-expect-error
+                        if(promiseResponse?.action === 'continue') {
+                            console.log(`Block handler for block ${block.block_name} requested to continue the interaction loop.`);
+                            // We can just continue with the next iteration of the loop to keep processing the stream.
+                        }
+
+                        // @ts-expect-error
+                        if(promiseResponse?.action === 'stop_entry_parser_but_continue_loop') {
+                            // future improvement: we can have more granular control over the interaction loop flow based on the 
+                            // block handler response. For example, in this case, we might want to stop the current entry's parser 
+                            // but continue with the rest of the interaction loop. We can achieve this by updating the session 
+                            // state to mark the current entry's parser as stopped, and then continue with the next 
+                            // iteration of the loop to keep processing the stream for any new entries or turns.
+                        }
+
+                    }
+                }
 
                 // -- Handled next buffer with potential block fragments. If we have a block fragment, we will keep it in the buffer 
                 // and wait for future chunks to complete it.
@@ -477,16 +564,51 @@ export async function sendPromptToGateway(
                 }
             }
 
-            // -- Once the stream is done, we can update the memory to reflect that the response is complete.
+            // Update the AIEntry status to completed once the stream is done
+            currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+            currentTurn = currentSessionState.turns?.[currentSessionState.turn_index];
+
+            let currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
+            currentEntry.status = 'completed';
+
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                ...currentSessionState,
+                turns: [
+                    ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
+                    { ...currentTurn, entries: [
+                        ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
+                        { ...currentEntry },
+                    ] },
+                ],
+            });
+
+            // Since the parsing is finish we can stop the main loop
             AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
 
         } catch (error) {
-            // -- Dispatch event to stop the loop in case of any error during the request sending or response processing. 
-            // This will allow the interaction loop to exit gracefully and update the session state accordingly.
+            // Dispatch event to the main loop to tell to stop the whole interaction loop 
             AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
 
-            // -- If there is any error during the request or response processing, we should update the session state to 
-            // reflect the error and stop the interaction loop.
+            // Update the current AIEntry's status to error if we encounter any error during the processing, 
+            // so that the frontend can render it accordingly.
+            let currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+            let currentTurn = currentSessionState.turns?.[currentSessionState.turn_index];
+            
+            let currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
+            currentEntry.status = 'completed';
+
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                ...currentSessionState,
+                turns: [
+                    ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
+                    { ...currentTurn, entries: [
+                        ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
+                        { ...currentEntry },
+                    ] },
+                ],
+            });
+
+            // Update session state with error information
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
                 status: AISessionStatus.ERROR,
                 error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) } ,

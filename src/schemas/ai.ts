@@ -124,10 +124,18 @@ export interface AIEntry {
 }
 
 export interface AIBlock { 
+    // for reference, the block schema is defined in the ACE registry and can 
+    // be used to determine how to handle and render the block content.
+    session_uid : string;
+    process_uid : string;
+
+    turn_index : number;
+    entry_index : number;
+    block_index : number;
+    
     block_slug: string; // This can be used to identify the type of block, such as 'tool_call', 'function_execution', 'code_snippet', etc.
     package_ref?: string; // Optional reference to a specific package that can handle this block, useful for routing to the correct handler or renderer.
-    payload : Record<string, unknown>; // The content of the block, which can be structured data that the renderer can use to display the block appropriately. The structure can be flexible to accommodate different types of blocks and renderer requirements.
-    memory_buffer_uid?: string; // Optional RAM key for storing streaming content related to this block, useful for handling long-running operations or streaming responses that are associated with a specific block.
+    payload : Record<string, unknown>;
 }
 
 export interface AIContextEntry {
