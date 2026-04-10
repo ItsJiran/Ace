@@ -1,6 +1,6 @@
 
 
-import { AISessionStatus, type AIEntry, type AIRenderer, type AISession, type AITurn } from './types';
+import { AISessionStatus, type AIEntry, type AIRenderer, type AISession, type AITurn } from '#/schemas/ai';
 import type { AIGatewayConfig } from '#/schemas/ai_gateway';
 
 import { HealthProbe } from './healthProbe';
@@ -8,7 +8,6 @@ import { AIGatewayEngine } from '../aiGatewayEngine';
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';
 import { RegistryEngine } from '../registryEngine';
-import { promise } from 'zod';
 
 // + ============== Session Management API ============== +
 // Note: This is a simplified process management approach for AI sessions. 
@@ -403,9 +402,12 @@ export async function sendPromptToGateway(
                         if(currentRenderer.payload == undefined) {
                             currentRenderer.payload = { text: blockState.stripped_prefix };
                         } else {
+                            // @ts-expect-error
                             if(currentRenderer.payload.text == undefined) {
+                                // @ts-expect-error
                                 currentRenderer.payload.text = blockState.stripped_prefix;
                             } else {
+                                // @ts-expect-error
                                 currentRenderer.payload.text += blockState.stripped_prefix;
                             }
                         }
@@ -442,6 +444,10 @@ export async function sendPromptToGateway(
                                 { once: true }
                             );
                         });
+
+                        const parserHandlerDispatch = (detail: any) => {
+                            AISessionBus.dispatchEvent(new CustomEvent(`system:ai_session:${currentSessionState.session_uid}:block_parsing_response`, { detail }));
+                        }
 
                         // get the block handler from the registry based on the block_name, and then execute the handler with the block content. 
                         // The handler can then update the session state in memory as needed, for example to add tool calls, update parsers, etc.
@@ -481,8 +487,8 @@ export async function sendPromptToGateway(
                         if (blockHandler) {
                             console.log(`Found handler for block ${block.block_name}, executing handler...`);
                             await blockHandler({
-                                block: block,
-
+                                block: currentBlock,
+                                dispatchParserResponse: parserHandlerDispatch,
                             });
                         } else {
                             console.warn(`No handler found for block ${block.block_name}`);
@@ -595,7 +601,7 @@ export async function sendPromptToGateway(
             let currentTurn = currentSessionState.turns?.[currentSessionState.turn_index];
             
             let currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
-            currentEntry.status = 'completed';
+            currentEntry.status = 'error';
 
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
                 ...currentSessionState,

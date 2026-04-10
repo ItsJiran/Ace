@@ -28,9 +28,12 @@ export interface BlockProtocolSchema {
     promptExamples?: string[];
 }
 
-export type ParserBlockHandler = (context: {
+export type ParserBlockArgs = {
     block: AIBlock;
-}) => Promise<void>;
+    dispatchParserResponse: (detail: any) => void;
+}
+
+export type ParserBlockHandler = (context:ParserBlockArgs) => Promise<void>;
 
 export interface ParserBlockRuntime {
     package_name: string;

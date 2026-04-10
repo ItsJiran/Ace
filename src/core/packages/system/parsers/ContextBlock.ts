@@ -1,5 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import type { ParserBlockHandler } from '#/schemas/parser';
+import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
 
 export const registry: AceRegistryType.Parser = {
     name: 'context',
@@ -40,6 +40,13 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = async ({ block, stop_response }) => {
+export const handler: ParserBlockHandler = async ({ block, dispatchParserResponse } : ParserBlockArgs) => {
     const body = JSON.parse(block.payload.content);
+    console.log(body);
+
+    // For demonstration, we simply dispatch the parsed body back as the response.
+    // In a real implementation, you would handle the different actions (update, retrieve, store) accordingly.
+    dispatchParserResponse({
+        action: 'continue',
+    });
 };

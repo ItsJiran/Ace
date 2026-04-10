@@ -135,7 +135,10 @@ export interface AIBlock {
     
     block_slug: string; // This can be used to identify the type of block, such as 'tool_call', 'function_execution', 'code_snippet', etc.
     package_ref?: string; // Optional reference to a specific package that can handle this block, useful for routing to the correct handler or renderer.
-    payload : Record<string, unknown>;
+    payload : {
+        content : string; // The raw content of the block, which can be parsed and processed by the appropriate handler based on the block_slug and package_ref.
+        [key: string]: unknown; // Additional fields can be included in the payload as needed for specific block types, allowing for flexible handling of different kinds of blocks.
+    };
 }
 
 export interface AIContextEntry {
