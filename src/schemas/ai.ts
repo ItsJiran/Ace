@@ -33,13 +33,36 @@ export type SDKProvider = 'openai' | 'google' | 'anthropic';
 
 // Updated for a non-linear, self-correcting loop
 export type AISessionState = 
-  | 'Reason'   // High-level "Thinking" about the user's intent
-  | 'Plan'     // Breaking the task into discrete steps
-  | 'Act'      // Executing a tool or block
-  | 'Observe'  // Reading the raw output of the action
-  | 'Reflect'  // Self-critique: "Did that work? Was there an error?"
-  | 'Finalize' // Packaging the result for the user
-  | 'Idle';    // Waiting for the next interaction
+  | 'Reason'   
+  // High-level "Thinking" about the user's intent, at this moment the AI supposed to creating 
+  // reasoning context for the next step, it can be tool selection, question for user, or 
+  // even self-reflection on previous steps. Like getting relevant tools, relevant context, or even asking 
+  // for clarification from the user.
+
+  | 'Plan'     
+  // At this state the AI should be creating a concrete plan of action based on the reasoning step, this can include
+  // which tools to use, what questions to ask, or how to structure the response. The plan should be actionable and specific, 
+  // serving as a blueprint for the next steps in the interaction.
+  
+  | 'Act'     
+  // At this state the AI should be executing the plan created in the previous step, 
+  // this can include calling tools, asking questions to the user, or generating a response.
+  // Update new context or memory based on the result of the action, this can include updating the session state,
+  // adding new information to the context, or even updating the plan based on new information.
+
+  | 'Observe'  
+  // At this state the AI should be observing the latest context after taking the action, this can 
+  // include the result of a tool call, the user's response to a question, or any new information that has been 
+  // generated. The AI should be analyzing this new information and determining how it impacts the overall session, 
+  // including whether the original plan is still valid or if it needs to be updated based on the new context.
+
+  | 'Reflect'  
+  // At this state the AI should be reflecting on the overall session, evaluating the effectiveness of its actions, 
+  // and considering any adjustments needed for future interactions.
+  
+  | 'Finalize' 
+  // Packaging the result for the user, this can include formatting the response, ensuring that all necessary 
+  // information is included, and preparing the final output for delivery to the user.
 
 /**
  * A live session bound to a specific SDK + model combination.
@@ -76,6 +99,14 @@ export interface AISession {
         [key: string]: string | number | boolean | object | unknown;
     }>;
 
+    // Parser block list parser that currently active in the session, this can be used to 
+    // efficiently load block context, schema used cased and etc.
+    active_parser_blocks: Array<{
+        block_slug: string;
+        package_ref?: string;
+        lifecycle_turn? : number;
+    }>;
+
     // Context entries that are generated throughout the session, which can include summaries, 
     // relevant history snippets, and other contextual information that has been deemed relevant at 
     // different points in the conversation. Each entry can have its own lifecycle and relevance based on 
@@ -98,6 +129,10 @@ export interface AISession {
     // prompt/response summaries and other context-building mechanisms.
     termination_requested?: boolean;
     active_abort_controller?: AbortController;
+}
+
+export interface AIParserBlock {
+
 }
 
 export interface AITurn{
@@ -159,6 +194,8 @@ export interface AIBlock {
 }
 
 export interface AIContextEntry {
+    at: number; // Timestamp for when the context entry was created, useful for ordering and time-based logic.
+    title : string; // A brief title or label for the context entry, useful for UI display and the AI's understanding of the context.
     summary? : string;
     status : 'active' | 'inactive';
 
