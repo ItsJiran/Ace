@@ -66,6 +66,7 @@ import { AIGatewayEngine } from '../aiGatewayEngine';
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';
 import { RegistryEngine } from '../registryEngine';
+import { buildPrompt } from './promptBuilder';
 
 // + ============== Session Management API ============== +
 // Note: This is a simplified process management approach for AI sessions. 
@@ -395,8 +396,10 @@ export async function sendPromptToGateway(
             let newAIEntry = TurnRenderer.buildTurnEntry({
                 response : '',
                 
+                // We can use the buildPrompt function to construct the final prompt that will be sent to the model, 
+                // which can include additional context or formatting as needed.
                 prompt : prompt,
-                composed_prompt : prompt,
+                composed_prompt : buildPrompt(prompt, session_uid), 
 
                 blocks: [],
                 status: 'streaming',
@@ -591,6 +594,7 @@ export async function sendPromptToGateway(
                             await blockHandler({
                                 block: currentBlock,
                                 dispatchParserResponse: parserHandlerDispatch,
+                                abortCurrentResponseBuffer : abortController.signal, 
                             });
                         } else {
                             console.warn(`No handler found for block ${block.block_name}`);

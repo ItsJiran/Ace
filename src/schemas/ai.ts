@@ -25,15 +25,28 @@ export type SDKProvider = 'openai' | 'google' | 'anthropic';
 //        in the future volatile memory or high frequency updates might be better to be separated 
 //        into different memory keys to avoid read/write conflicts and optimize performance.
 
+
+
 // + =========================================================== +
 // |                      AI Gateway Types                       |         
 // + =========================================================== +
+
+// Updated for a non-linear, self-correcting loop
+export type AISessionState = 
+  | 'Reason'   // High-level "Thinking" about the user's intent
+  | 'Plan'     // Breaking the task into discrete steps
+  | 'Act'      // Executing a tool or block
+  | 'Observe'  // Reading the raw output of the action
+  | 'Reflect'  // Self-critique: "Did that work? Was there an error?"
+  | 'Finalize' // Packaging the result for the user
+  | 'Idle';    // Waiting for the next interaction
 
 /**
  * A live session bound to a specific SDK + model combination.
  * Multiple sessions can run concurrently, each with independent stream buffers.
  */
 export interface AISession {
+
     // Unique session ID, typically generated at session creation time. 
     // This is the primary identifier for the session.
     session_uid: string;
@@ -43,7 +56,9 @@ export interface AISession {
 
     // Current status of the session, which can be used to track 
     // its lifecycle and handle UI state accordingly.
-    status: AISessionStatus;
+    status : AISessionStatus;
+    state : AISessionState;
+
     feedback_loop_status: AIFeedbackLoopStatus;
     error_payload?: Record<string, unknown>;
 
@@ -60,13 +75,15 @@ export interface AISession {
         detail?: string;
         [key: string]: string | number | boolean | object | unknown;
     }>;
-    
+
     // Context entries that are generated throughout the session, which can include summaries, 
     // relevant history snippets, and other contextual information that has been deemed relevant at 
     // different points in the conversation. Each entry can have its own lifecycle and relevance based on 
     // the turn index at which it was generated, allowing for more dynamic and contextually appropriate 
     // feeding of information back into the model as the conversation progresses.
     context : Array<AIContextEntry>;
+    context_start_index : number; 
+    context_end_index : number;
     
     // A more detailed history of the session, which can include parsed information, 
     // intermediate summaries, and other relevant data that has been generated throughout the session. 

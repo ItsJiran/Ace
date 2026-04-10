@@ -30,7 +30,17 @@ export interface BlockProtocolSchema {
 
 export type ParserBlockArgs = {
     block: AIBlock;
+
+    // Function to send the parsed block response back to the session, 
+    // which will then be rendered by the frontend.
     dispatchParserResponse: (detail: any) => void;
+
+    // For aborting current connected stream response 
+    // if a new prompt is sent let say our block parser need to wait user confirmation 
+    // before executing a tool, but user send another prompt instead of confirming, 
+    // in that case we need to abort the current stream response 
+    // to save resource and tokens.
+    abortCurrentResponseBuffer: AbortSignal;
 }
 
 export type ParserBlockHandler = (context:ParserBlockArgs) => Promise<void>;
