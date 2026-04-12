@@ -1,4 +1,4 @@
-import type { AIBlock } from "./ai";
+import type { AIBlock, AIParserProtocolState } from "./ai";
 
 export interface BlockProtocolSchema {
     /** Canonical runtime block tag. This must match the parser slug. */
@@ -33,7 +33,7 @@ export type ParserBlockArgs = {
 
     // Function to send the parsed block response back to the session, 
     // which will then be rendered by the frontend.
-    dispatchParserResponse: (detail: any) => void;
+    dispatchParserResponse: (detail: AIParserProtocolState) => void;
 
     // For aborting current connected stream response 
     // if a new prompt is sent let say our block parser need to wait user confirmation 

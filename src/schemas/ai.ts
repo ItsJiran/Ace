@@ -21,11 +21,9 @@ export type SDKProvider = 'openai' | 'google' | 'anthropic';
 // strict with the type of content based on the renderer_slug
 
 
-// NOTE : For mvp purpose i manage to put in the nested object for now
-//        in the future volatile memory or high frequency updates might be better to be separated 
-//        into different memory keys to avoid read/write conflicts and optimize performance.
-
-
+// DEV NOTE : For mvp purpose i manage to put in the nested object for now
+//            in the future volatile memory or high frequency updates might be better to be separated 
+//            into different memory keys to avoid read/write conflicts and optimize performance.
 
 // + =========================================================== +
 // |                      AI Gateway Types                       |         
@@ -225,6 +223,52 @@ export interface AIRenderer {
 // + ========================================================== +
 // |                    AI Gateway Constants                    |         
 // + =========================================================== +
+
+// This AI interaction loop is used for the AI to determine whether to continue the interaction 
+// loop or to stop it, this can be used for various reasons such as asking the user for more information,
+export const AIInteractionLoopProtocolState = {
+    
+    // The stop interaction loop state can be used to indicate that the AI has decided to end the current session or turn interaction loop,
+    // when the AI decide to end the sesssion interaction loop due to couple of reasons that he thinks needed
+    // for example : The AI need to ask the user for more information to proceed, 
+    STOP: 'stop',
+
+    // 
+    
+
+
+}
+export type AIInteractionLoopProtocolState = typeof AIInteractionLoopProtocolState[keyof typeof AIInteractionLoopProtocolState];
+
+// Parser protocol state is the control signal emitted by a block handler after a single block is parsed.
+// The parser loop processes one block at a time, then waits for this state before deciding whether the
+// next block may continue, must pause for external feedback, or should stop because of an error or abort.
+export const AIParserProtocolState = {
+    // No parser work is currently active for the current session or entry.
+    IDLE: 'idle',
+
+    // A block is currently being parsed and the handler is still deciding the next parser step.
+    PARSING: 'parsing',
+
+    // The current block is safe and complete enough that the parser loop may continue to the next block.
+    CONTINUE_NEXT_BLOCK: 'continue_next_block',
+
+    // The current block requires an external response before any later block should be parsed.
+    // Typical examples are waiting for user confirmation, waiting for a tool result, or waiting for
+    // another part of the runtime to update session state.
+    WAITING_FOR_FEEDBACK: 'waiting_for_feedback',
+
+    // The current parser flow intentionally stops without treating the block as a failure.
+    INTERRUPTED: 'interrupted',
+
+    // The current block parser finished its own responsibility and has no further parser work to do.
+    COMPLETED: 'completed',
+
+    // The current block parser failed and the surrounding loop should treat the parser phase as failed.
+    ERROR: 'error',
+} as const;
+
+export type AIParserProtocolState = typeof AIParserProtocolState[keyof typeof AIParserProtocolState];
 
 // These constants represent the various statuses that an AI session, turn, entry, or block handler can be in.
 export const AISessionStatus = {

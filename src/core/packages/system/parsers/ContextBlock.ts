@@ -1,3 +1,4 @@
+import { AIParserProtocolState } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
 
@@ -46,7 +47,5 @@ export const handler: ParserBlockHandler = async ({ block, dispatchParserRespons
 
     // For demonstration, we simply dispatch the parsed body back as the response.
     // In a real implementation, you would handle the different actions (update, retrieve, store) accordingly.
-    dispatchParserResponse({
-        action: 'continue',
-    });
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
 };

@@ -41,6 +41,7 @@ export function buildDefaultPrompt(): string {
     // This function can be used to build a default prompt that serves as a starting point for interactions with the AI model. 
     // It can include instructions for the model, default context, or any other information that should be included in every prompt. 
     // The implementation would depend on the specific requirements of the AI Gateway service and the capabilities of the underlying model.
+
     return `[DEFAULT CONTEXT] You're name ACE Assistant, an AI Assistant that will follow this guideline, this paragraph 
     define the general behavior and guidelines for the ACE assistant.
     
@@ -60,7 +61,8 @@ export function buildDefaultPrompt(): string {
     <block_slug>
         content
     </block_slug>
-    \`\`\` or 
+    \`\`\` 
+    or 
     \`\`\`
     <block_slug> content </block_slug>
     \`\`\`
@@ -71,7 +73,7 @@ export function buildDefaultPrompt(): string {
     - For block that not default but currently active will be putted in the [ACTIVE PARSER BLOCK] section in the prompt context, and you can use that 
     information to know how to use the block and passed the correct content block.
 
-    [CONTEXT]
+    [CONTEXT GUIDELINE]
     - The context is the relevant information that you can use to inform your response, this can include relevant facts, result from a previous block parser, tool call
     result, or any other information that can help you to generate a better response.
     - The context will be updated throughout the session, and you should always try to use the 
@@ -118,6 +120,8 @@ export function buildBlockParserPrompt(session : AISession): string {
     // This function can be used to build a prompt that instructs the model to lazily load certain information 
     // or to parse the session history in a specific way. The exact implementation would depend on the 
     // requirements of the AI Gateway service and the capabilities of the underlying model.
+
+
     return '';
 }
 
@@ -126,6 +130,8 @@ export function buildContextPrompt(session : AISession): string {
     // It can retrieve past interactions, user preferences, or any other information that might help the model 
     // generate a more informed response. The implementation would likely involve querying a memory store or 
     // database for the session history and formatting it into a prompt that can be sent to the model.
+
+
     return '';
 }
 
@@ -134,6 +140,8 @@ export function buildMemoryPrompt(session : AISession): string {
     // This could include facts that the user has shared, previous responses from the model, or any other 
     // information that has been stored in memory during the session. The implementation would involve 
     // retrieving this information and formatting it into a prompt that can be sent to the model.
+
+
     return '';
 }
 
@@ -141,6 +149,8 @@ export function buildHistoryPrompt(session : AISession): string {
     // This function can be used to build a prompt that includes the history of the session. 
     // This could include all past interactions, or a summary of them, depending on the requirements of the AI Gateway service. 
     // The implementation would involve retrieving the session history and formatting it into a prompt that can be sent to the model.
+
+
     return '';
 }
 
@@ -149,5 +159,7 @@ export function buildStoragePrompt(session : AISession): string {
     // This could include any files that have been uploaded, any data that has been stored, or any other relevant 
     // information about the session's storage. The implementation would involve retrieving this information and 
     // formatting it into a prompt that can be sent to the model.
+
+
     return '';
 }
