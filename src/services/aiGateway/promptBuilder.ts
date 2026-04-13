@@ -3,20 +3,19 @@
 
 import type { AISession } from "#/schemas/ai";
 import { KernelEngine } from "../kernelEngine";
+import { RegistryEngine } from "../registryEngine";
 
 // It also manages context lifecycle and memory for the AI sessions, ensuring that relevant information 
 // is retained across interactions. 
 
-const defaultContextPrompt = '';
-
 export function buildPrompt(originalPrompt: string, session_uid: string): string {
-    
+
     // Read the current session state from memory using the session UID. 
     // This allows us to access any relevant information
     const session = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`);
 
     // Loaded parser
-    let loaded_default_prompt = defaultContextPrompt;
+    let loaded_default_prompt = buildDefaultPrompt();
     let loaded_constraints_prompt = buildConstraintsStatePrommpt(session);
     let loaded_parser_prompt = buildBlockParserPrompt(session);
     let loaded_context_prompt = buildContextPrompt(session);
@@ -82,33 +81,33 @@ export function buildDefaultPrompt(): string {
     `.trim();
 }
 
-export function buildConstraintsStatePrommpt(session : AISession): string {
+export function buildConstraintsStatePrommpt(session: AISession): string {
     // This function can be used to build a prompt that includes constraints based on the current state of the session.
     // It can retrieve information about the session's state, plan, context, and other relevant data to ensure that
     // the model's response adheres to the specified constraints. The implementation would involve querying the session
     // state and formatting it into a prompt that can be sent to the model.
-    if(session.state == 'Reason')
+    if (session.state == 'Reason')
         return `[REASON MODE] You are currently in Reasoning mode, your response should be focused on understanding the user's intent, \
         gathering relevant information, and preparing for the next steps. Avoid taking any concrete actions or making assumptions 
         about the user's needs at this stage. Instead, ask clarifying questions, identify potential tools or resources that may be needed, 
         and consider any relevant context that could inform your reasoning process.`.trim();
 
-    if(session.state == 'Plan')
+    if (session.state == 'Plan')
         return `[PLAN MODE] You are currently in Planning mode, your response should be focused on creating a concrete plan of action based on the reasoning step. 
         This can include outlining specific steps to take, identifying which tools or resources to use, and determining how to best address the user's needs. 
         Your plan should be clear, actionable, and directly informed by the insights gained during the Reasoning phase.`.trim();
 
-    if(session.state == 'Observe')
+    if (session.state == 'Observe')
         return `[OBSERVE MODE] You are currently in Observing mode, your response should be focused on analyzing new information that has been generated after taking an action. 
         This can include the results of a tool call, the user's response to a question, or any other new information that has come to light. 
         Your analysis should consider how this new information impacts the overall session, including whether the original plan is still valid or if it needs to be updated based on the new context.`.trim();
 
-    if(session.state == 'Reflect')
+    if (session.state == 'Reflect')
         return `[REFLECT MODE] You are currently in Reflecting mode, your response should be focused on evaluating the effectiveness of your actions and considering any adjustments needed for future interactions. 
         This can include self-critique of your previous steps, identifying any errors or areas for improvement, and thinking about how to better meet the user's needs in subsequent interactions. 
         Your reflection should be honest, insightful, and aimed at continuous improvement throughout the session.`.trim();
 
-    if(session.state == 'Finalize')
+    if (session.state == 'Finalize')
         return `[FINALIZE MODE] You are currently in Finalizing mode, your response should be focused on packaging the result for the user. 
         This can include formatting the response in a clear and user-friendly way, ensuring that all necessary information is included, and preparing the final output for delivery to the user. 
         Your goal in this phase is to provide a complete and polished response that effectively addresses the user's needs and concludes the current interaction.`.trim();
@@ -116,26 +115,98 @@ export function buildConstraintsStatePrommpt(session : AISession): string {
     return '';
 }
 
-export function buildBlockParserPrompt(session : AISession): string {
-    // This function can be used to build a prompt that instructs the model to lazily load certain information 
-    // or to parse the session history in a specific way. The exact implementation would depend on the 
-    // requirements of the AI Gateway service and the capabilities of the underlying model.
+export function buildBlockParserPrompt(session: AISession): string {
 
+    const allBlocks = RegistryEngine.listParserBlockSummaries();
+    if (allBlocks.length === 0) return '';
 
-    return '';
+    // Determine which slugs need full detail:
+    // - Parsers with is_default_detail === true (always on)
+    // - Parsers currently in session.active_parser_blocks
+    const activeBlockSlugs = new Set(
+        (session.active_parser_blocks ?? []).map(b => b.block_slug)
+    );
+    const fullDetailSlugs = new Set(
+        allBlocks
+            .filter(b => b.is_default_detail || activeBlockSlugs.has(b.slug))
+            .map(b => b.slug)
+    );
+
+    const lines: string[] = [];
+
+    // --- Tier 1: Compact catalog — one line per block ---
+    lines.push('[AVAILABLE BLOCKS]');
+    lines.push('Block syntax: <block_slug>payload</block_slug>');
+    lines.push('');
+    for (const block of allBlocks) {
+        const marker = fullDetailSlugs.has(block.slug) ? '★' : '○';
+        lines.push(`${marker} <${block.slug}>: ${block.purpose}`);
+    }
+    lines.push('');
+    lines.push('★ = full detail below  ○ = catalog only (ask system to activate if needed)');
+
+    // --- Tier 2: Full detail for default + active blocks ---
+    if (fullDetailSlugs.size > 0) {
+        lines.push('');
+        lines.push('[BLOCK DETAIL]');
+
+        for (const slug of fullDetailSlugs) {
+            const detail = RegistryEngine.renderParserBlockDetail(slug);
+            if (detail) {
+                lines.push('');
+                lines.push(detail);
+            }
+        }
+    }
+
+    return lines.join('\n');
 }
 
-export function buildContextPrompt(session : AISession): string {
-    // This function can be used to build a prompt that includes relevant context from the session history. 
-    // It can retrieve past interactions, user preferences, or any other information that might help the model 
-    // generate a more informed response. The implementation would likely involve querying a memory store or 
-    // database for the session history and formatting it into a prompt that can be sent to the model.
+export function buildContextPrompt(session: AISession): string {
 
+    if (!session.context || session.context.length === 0) return '';
 
-    return '';
+    // Window: context_start_index → context_end_index (inclusive), same pattern as history.
+    const start = session.context_start_index ?? 0;
+    const end = session.context_end_index ?? session.context.length - 1;
+
+    const windowEntries = session.context
+        .slice(start, end + 1)
+        .filter(entry => entry.status === 'active');
+
+    if (windowEntries.length === 0) return '';
+
+    const lines: string[] = ['[ACTIVE CONTEXT]'];
+
+    for (const entry of windowEntries) {
+        // Header: title + optional turn reference
+        const turnRef = entry.lifecycle_turn !== undefined ? ` (turn: ${entry.lifecycle_turn})` : '';
+        lines.push(`- [${entry.title}]${turnRef}`);
+
+        // Summary line if present
+        if (entry.summary) {
+            lines.push(`  ${entry.summary}`);
+        }
+
+        // Payload: any tool result, file content, or arbitrary data
+        if (entry.payload && Object.keys(entry.payload).length > 0) {
+            if (entry.is_load_full_content) {
+                // Content flagged as lazy-loadable but not yet loaded — flag it
+                lines.push(`  [content not loaded — requires full load]`);
+            } else {
+                const payloadStr = JSON.stringify(entry.payload, null, 2)
+                    .split('\n')
+                    .map(l => `  ${l}`)
+                    .join('\n');
+                lines.push(payloadStr);
+            }
+        }
+    }
+
+    return lines.join('\n');
 }
 
-export function buildMemoryPrompt(session : AISession): string {
+export function buildMemoryPrompt(session: AISession): string {
     // This function can be used to build a prompt that includes information from the session's memory. 
     // This could include facts that the user has shared, previous responses from the model, or any other 
     // information that has been stored in memory during the session. The implementation would involve 
@@ -145,16 +216,48 @@ export function buildMemoryPrompt(session : AISession): string {
     return '';
 }
 
-export function buildHistoryPrompt(session : AISession): string {
-    // This function can be used to build a prompt that includes the history of the session. 
-    // This could include all past interactions, or a summary of them, depending on the requirements of the AI Gateway service. 
-    // The implementation would involve retrieving the session history and formatting it into a prompt that can be sent to the model.
+export function buildHistoryPrompt(session: AISession): string {
 
+    if (!session.turns || session.turns.length === 0) return '';
 
-    return '';
+    // Window: from history_start_index up to (but NOT including) the current active turn.
+    // The active turn is the one currently being processed — it must not appear in history.
+    const start = session.history_start_index ?? 0;
+    const end = session.turn_index; // exclusive
+
+    if (end <= start) return '';
+
+    const historyTurns = session.turns.slice(start, end);
+    if (historyTurns.length === 0) return '';
+
+    const lines: string[] = ['[CONVERSATION HISTORY]'];
+
+    historyTurns.forEach((turn, idx) => {
+        const turnNumber = start + idx + 1;
+
+        // User prompt: taken from the first entry's original (unmodified) prompt.
+        const userPrompt = turn.entries?.[0]?.prompt?.trim();
+        if (userPrompt) {
+            lines.push(`[TURN ${turnNumber}] User: ${userPrompt}`);
+        }
+
+        // Assistant response: join all completed entries (multiple entries can exist
+        // when the interaction loop retried or used multi-step reasoning).
+        const assistantResponse = turn.entries
+            ?.filter(e => e.status === 'completed' || e.status === 'success')
+            .map(e => e.response?.trim() ?? '')
+            .filter(Boolean)
+            .join('\n');
+
+        if (assistantResponse) {
+            lines.push(`[TURN ${turnNumber}] Assistant: ${assistantResponse}`);
+        }
+    });
+
+    return lines.join('\n');
 }
 
-export function buildStoragePrompt(session : AISession): string {
+export function buildStoragePrompt(session: AISession): string {
     // This function can be used to build a prompt that includes information about the storage state of the session. 
     // This could include any files that have been uploaded, any data that has been stored, or any other relevant 
     // information about the session's storage. The implementation would involve retrieving this information and 

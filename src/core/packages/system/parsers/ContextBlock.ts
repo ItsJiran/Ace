@@ -3,10 +3,11 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
 
 export const registry: AceRegistryType.Parser = {
-    name: 'context',
-    slug: 'context',
+    name: 'context_update',
+    slug: 'context_update',
     description: 'Session context management block — update summary, retrieve a stored memory, or store new information.',
     block_schema: {
+        is_default_detail: true,
         purpose: 'Manage persistent session context memory. Update the session summary, retrieve a stored memory by key, or store new information for future retrieval.',
         requiredFields: '"action" (update | retrieve | store). For update: one of "summary","context_summary","type":"summary_update". For retrieve: "memory_key". For store: "title","summary","payload".',
         optionalFields: '"result_memory_uid" (key to store retrieval result), "type", "text", "kind"',
@@ -41,7 +42,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = async ({ block, dispatchParserResponse } : ParserBlockArgs) => {
+export const handler: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
     const body = JSON.parse(block.payload.content);
     console.log(body);
 

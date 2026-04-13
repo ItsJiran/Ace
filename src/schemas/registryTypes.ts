@@ -105,6 +105,7 @@ export namespace AceRegistryType {
         };
         /** Protocol metadata shown in parser contract prompt */
         block_schema?: {
+            is_default_detail?: boolean;
             purpose: string;
             requiredFields?: string;
             optionalFields?: string;

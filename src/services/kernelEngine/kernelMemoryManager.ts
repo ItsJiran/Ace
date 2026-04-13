@@ -130,7 +130,7 @@ export class KernelMemoryManager {
 
         // PERF: Defensive deep-cloning causes massive GC pressure for high-frequency updates.
         // We now allow callers (like window drag logic or perf monitors) to skip it.
-        const immutablePayload = (skipClone || !payload || typeof payload !== 'object') 
+        const immutablePayload = (skipClone || !payload || typeof payload !== 'object')
             ? payload
             : payload instanceof Map
                 ? new Map(payload)
@@ -198,10 +198,10 @@ export class KernelMemoryManager {
             return { uid: memory_uid, created: true };
         }
         const existing = KernelState.kernel_memory.get(memory_uid);
-        const merged = (typeof existing === 'object' && existing !== null && typeof payload === 'object' && payload !== null && !Array.isArray(existing) && !Array.isArray(payload)) 
-            ? { ...existing, ...payload } 
+        const merged = (typeof existing === 'object' && existing !== null && typeof payload === 'object' && payload !== null && !Array.isArray(existing) && !Array.isArray(payload))
+            ? { ...existing, ...payload }
             : payload;
-            
+
         if (!isShallowEqual(existing, merged)) {
             this.writeMemoryInternal(memory_uid, merged, process_uid);
         }
@@ -248,12 +248,17 @@ export class KernelMemoryManager {
         return memory_uid ? KernelState.kernel_memory.get(memory_uid) : undefined;
     }
 
+    /** Returns all current memory UIDs in the kernel store. Useful for diagnostic/inspector tooling. */
+    static getAllMemoryKeys(): string[] {
+        return Array.from(KernelState.kernel_memory.keys());
+    }
+
     static updateMemory(memory_uid: string, payload: any, process_uid?: string): boolean {
         if (!memory_uid || !KernelState.kernel_memory.has(memory_uid)) return false;
 
         const existing = KernelState.kernel_memory.get(memory_uid);
-        const merged = (typeof existing === 'object' && existing !== null && typeof payload === 'object' && payload !== null && !Array.isArray(existing) && !Array.isArray(payload)) 
-            ? { ...existing, ...payload } 
+        const merged = (typeof existing === 'object' && existing !== null && typeof payload === 'object' && payload !== null && !Array.isArray(existing) && !Array.isArray(payload))
+            ? { ...existing, ...payload }
             : payload;
 
         if (!isShallowEqual(existing, merged)) {
@@ -278,7 +283,7 @@ export class KernelMemoryManager {
         }
         const listener = () => callback(this.readMemory(memory_uid));
         KernelState.change_listeners.get(memory_uid)!.add(listener);
-        
+
         return () => {
             PerformanceObserver.trackRamOp('UNSUBSCRIBE', memory_uid, 'kernel');
             const listeners = KernelState.change_listeners.get(memory_uid);
@@ -351,7 +356,7 @@ export class KernelMemoryManager {
     }
 
     static enforceRuntimeMemoryOwnership(_input: { process_uid: string; memory_uid: string }): { allowed: boolean; reason?: string } {
-        return { allowed: true }; 
+        return { allowed: true };
     }
 
     static getRAMStats() {
@@ -369,19 +374,19 @@ export class KernelMemoryManager {
             approx_bytes: this.estimatePayloadBytes(v),
             type:
                 v instanceof Map ? 'map'
-                : v instanceof Set ? 'set'
-                : Array.isArray(v) ? 'array'
-                : typeof v,
+                    : v instanceof Set ? 'set'
+                        : Array.isArray(v) ? 'array'
+                            : typeof v,
             child_count:
                 v instanceof Map || v instanceof Set ? v.size
-                : Array.isArray(v) ? v.length
-                : (v && typeof v === 'object') ? Object.keys(v as Record<string, unknown>).length
-                : 0
+                    : Array.isArray(v) ? v.length
+                        : (v && typeof v === 'object') ? Object.keys(v as Record<string, unknown>).length
+                            : 0
         })).sort((a, b) => b.approx_bytes - a.approx_bytes);
 
         const approxTotalBytes = entries.reduce((acc, curr) => acc + curr.approx_bytes, 0);
         let lCount = 0;
-        const listenersByKey: {key: string, listeners: number}[] = [];
+        const listenersByKey: { key: string, listeners: number }[] = [];
         for (const [key, listeners] of KernelState.change_listeners.entries()) {
             lCount += listeners.size;
             if (listeners.size > 0) {

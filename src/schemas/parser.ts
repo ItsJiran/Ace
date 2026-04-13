@@ -8,7 +8,7 @@ export interface BlockProtocolSchema {
     optionalFields?: string;
     payloadNote?: string[];
     exampleLines: string[];
-    
+
     /**
      * Trigger conditions: describes WHEN and WHY this block parser is invoked.
      * Used to inform AI context about appropriate block usage patterns.
@@ -17,7 +17,7 @@ export interface BlockProtocolSchema {
      *   - "Triggered automatically after user confirmation for tool execution"
      */
     triggerConditions?: string[];
-    
+
     /**
      * Prompt context examples: sample user/system prompts that should trigger
      * this block type. Helps AI understand natural language intent patterns.
@@ -26,6 +26,13 @@ export interface BlockProtocolSchema {
      *   - "Show me the parameters for the file-search tool"
      */
     promptExamples?: string[];
+
+    /**
+     * If true, this block's full detail (examples, fields, trigger conditions) is always
+     * injected into every prompt — regardless of whether it appears in session.active_parser_blocks.
+     * Set this for core blocks the AI must always know about (e.g. think, context_update, stop_session).
+     */
+    is_default_detail?: boolean;
 }
 
 export type ParserBlockArgs = {
@@ -43,7 +50,7 @@ export type ParserBlockArgs = {
     abortCurrentResponseBuffer: AbortSignal;
 }
 
-export type ParserBlockHandler = (context:ParserBlockArgs) => Promise<void>;
+export type ParserBlockHandler = (context: ParserBlockArgs) => Promise<void>;
 
 export interface ParserBlockRuntime {
     package_name: string;

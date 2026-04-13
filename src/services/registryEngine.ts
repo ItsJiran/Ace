@@ -120,7 +120,7 @@ class RegistryEngineSingleton {
             this.logRegistryMiss(`domain not found`, { packageRef, domain, slug });
             return null;
         }
-        
+
         const entry = map.get(slug);
         if (entry) {
             return { metadata: pkg.metadata, entry };
@@ -144,7 +144,7 @@ class RegistryEngineSingleton {
         if (!query) return null;
         const parts = query.split(':');
         if (parts.length !== 3) return null;
-        
+
         const [packageRef, domain, target] = parts;
         const found = this.getDomainEntry(packageRef, domain, target);
         return found?.entry?.implementation ?? null;
@@ -168,7 +168,7 @@ class RegistryEngineSingleton {
         if (entry && typeof entry !== 'function' && typeof entry === 'object' && entry !== null) {
             const config = entry as any;
             const componentRef = config.component || config.component_name;
-            
+
             if (componentRef && typeof componentRef === 'string') {
                 // If it's a full reference, resolve it
                 if (componentRef.includes(':')) {
@@ -268,7 +268,7 @@ class RegistryEngineSingleton {
             lines.push(`Purpose: ${schema.purpose}`);
             if (schema.requiredFields) lines.push(`Required payload fields: ${schema.requiredFields}`);
             if (schema.optionalFields) lines.push(`Optional: ${schema.optionalFields}`);
-            
+
             // Include trigger conditions and prompt examples for context awareness
             if (schema.triggerConditions && schema.triggerConditions.length > 0) {
                 lines.push('When to use (Trigger Conditions):');
@@ -276,14 +276,14 @@ class RegistryEngineSingleton {
                     lines.push(`  • ${condition}`);
                 });
             }
-            
+
             if (schema.promptExamples && schema.promptExamples.length > 0) {
                 lines.push('Prompt Examples (what triggers this block):');
                 schema.promptExamples.forEach((example) => {
                     lines.push(`  • "${example}"`);
                 });
             }
-            
+
             if (schema.payloadNote) lines.push(...schema.payloadNote);
             lines.push('Example:');
             lines.push(...schema.exampleLines);
@@ -293,6 +293,68 @@ class RegistryEngineSingleton {
         lines.push('--- UNKNOWN / CUSTOM BLOCKS ---');
         lines.push('Any tag name not listed above is treated as a directive block and forwarded to the runtime.');
         lines.push('Only use these when explicitly instructed by the system.');
+
+        return lines.join('\n');
+    }
+
+    /**
+     * Returns a lightweight summary of all registered parser blocks.
+     * Used by buildBlockParserPrompt() for Tier 1 (catalog-only) rendering.
+     */
+    listParserBlockSummaries(): Array<{
+        slug: string;
+        package_name: string;
+        purpose: string;
+        is_default_detail: boolean;
+    }> {
+        this.ensureParserBlockIndexes();
+        return Array.from(this.parserBlockByNamespace.values()).map((block) => ({
+            slug: block.slug,
+            package_name: block.package_name,
+            purpose: block.schema.purpose,
+            is_default_detail: block.schema.is_default_detail ?? false,
+        }));
+    }
+
+    /**
+     * Renders the full prompt detail string for a single parser block.
+     * Used by buildBlockParserPrompt() for Tier 2 (full detail) rendering.
+     */
+    renderParserBlockDetail(slugOrNamespaceRef: string): string | null {
+        this.ensureParserBlockIndexes();
+
+        const block = slugOrNamespaceRef.includes(':parsers:')
+            ? this.parserBlockByNamespace.get(slugOrNamespaceRef)
+            : (this.parserBlockByTag.get(slugOrNamespaceRef)?.[0] ?? null);
+
+        if (!block) return null;
+
+        const { schema } = block;
+        const lines: string[] = [];
+
+        lines.push(`--- <${schema.name}> ---`);
+        lines.push(`Purpose: ${schema.purpose}`);
+        if (schema.requiredFields) lines.push(`Required fields: ${schema.requiredFields}`);
+        if (schema.optionalFields) lines.push(`Optional fields: ${schema.optionalFields}`);
+
+        if (schema.triggerConditions && schema.triggerConditions.length > 0) {
+            lines.push('When to use:');
+            schema.triggerConditions.forEach(c => lines.push(`  • ${c}`));
+        }
+
+        if (schema.promptExamples && schema.promptExamples.length > 0) {
+            lines.push('Prompt examples:');
+            schema.promptExamples.forEach(e => lines.push(`  • "${e}"`));
+        }
+
+        if (schema.payloadNote && schema.payloadNote.length > 0) {
+            lines.push(...schema.payloadNote);
+        }
+
+        if (schema.exampleLines && schema.exampleLines.length > 0) {
+            lines.push('Example:');
+            lines.push(...schema.exampleLines);
+        }
 
         return lines.join('\n');
     }
@@ -327,10 +389,10 @@ class RegistryEngineSingleton {
         INDEXED_DOMAINS.forEach((domain) => {
             const domainMap = runtimePkg.domains[domain];
             if (!domainMap) return;
-            
+
             domainMap.clear();
             const entries = runtimePkg.package.domains[domain] || {};
-            
+
             Object.entries(entries).forEach(([key, entry]) => {
                 domainMap.set(key, entry);
             });
@@ -462,7 +524,7 @@ class RegistryEngineSingleton {
 
         // 1. Glob ALL manifests to find packages
         const manifests = import.meta.glob('/src/core/packages/*/manifest.json');
-        
+
         // 2. Glob ALL source files across all core packages
         const allModules = import.meta.glob('/src/core/packages/*/**/*.{ts,tsx}');
 
@@ -488,7 +550,7 @@ class RegistryEngineSingleton {
         // Iterate through discovered manifests and register them
         for (const [path, manifestLoader] of Object.entries(manifests)) {
             const pkgDir = getPackageDir(path); // This is the dir name, e.g. "system"
-            
+
             // JSON modules usually export content as 'default'
             const manifestMod = await manifestLoader();
             const manifest = (manifestMod as any).default || manifestMod;
@@ -529,7 +591,7 @@ class RegistryEngineSingleton {
         options?: { coreComponentEntryMode?: boolean },
     ) {
         const runtimePkg = this.runtimeIndex.get(packageName);
-        if (!runtimePkg) {  
+        if (!runtimePkg) {
             console.warn(`[RegistryEngine] Cannot register domains for unknown package: ${packageName}`);
             return;
         }
@@ -551,14 +613,14 @@ class RegistryEngineSingleton {
             if (options?.coreComponentEntryMode && domain === 'components' && !this.isCoreComponentEntryPath(path)) {
                 continue;
             }
-            
+
             // We expect a Module Namespace Object with exports
             if (domain && moduleNamespace && typeof moduleNamespace === 'object') {
                 const exports = moduleNamespace as { default?: any; registry?: any; handler?: any; validator?: any };
-                
+
                 // 1. Detect 'registry' export (Identity/Metadata)
                 const registryData = exports.registry || {};
-                
+
                 // 2. Resolve implementation export.
                 // Parsers are standardized to named export `handler`.
                 // Other domains keep using default export for now.
@@ -599,7 +661,7 @@ class RegistryEngineSingleton {
                     if (schemaMeta.input_schema !== undefined) normalizedMeta.input_schema = schemaMeta.input_schema;
                     if (schemaMeta.output_schema !== undefined) normalizedMeta.output_schema = schemaMeta.output_schema;
                 }
-                
+
                 // 4. Construct Runtime Entry
                 const entry: RegistryDomainEntry = {
                     implementation, // The React Component or Function
@@ -612,7 +674,7 @@ class RegistryEngineSingleton {
                 }
 
                 // Add to aggregated list
-                aggregated[domain][entrySlug] = entry; 
+                aggregated[domain][entrySlug] = entry;
             }
         }
 
@@ -656,7 +718,7 @@ class RegistryEngineSingleton {
         INDEXED_DOMAINS.forEach(domain => {
             // Check if domain exists in source (could be array or object)
             const rawDomain = domainsSrc[domain];
-            
+
             if (Array.isArray(rawDomain)) {
                 // Convert Array to Record
                 normalizedDomains[domain] = rawDomain.reduce((acc, item) => {
@@ -751,9 +813,9 @@ class RegistryEngineSingleton {
 
         // Iterate all domains
         // Object.entries(pkg.domains).forEach(([domain, entries]) => {
-             // In Key-Value registry, the key IS the ID usually.
-             // We can check if keys are namespaced if required.
-             // For now, allow loosely.
+        // In Key-Value registry, the key IS the ID usually.
+        // We can check if keys are namespaced if required.
+        // For now, allow loosely.
         // });
     }
 

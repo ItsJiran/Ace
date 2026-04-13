@@ -17,7 +17,7 @@ import { KernelWindowManager } from './kernelEngine/kernelWindowManager';
  * - KernelWindowManager: Base OS window process mappings.
  */
 class KernelEngineSingleton {
-    
+
     constructor() {
         // KernelState initialises system maps in its own constructor.
     }
@@ -37,6 +37,7 @@ class KernelEngineSingleton {
     public deleteMemory = KernelMemoryManager.deleteMemory.bind(KernelMemoryManager);
     public subscribe = KernelMemoryManager.subscribe.bind(KernelMemoryManager);
     public getRAMStats = KernelMemoryManager.getRAMStats.bind(KernelMemoryManager);
+    public getAllMemoryKeys = KernelMemoryManager.getAllMemoryKeys.bind(KernelMemoryManager);
     public batch = KernelMemoryManager.batch.bind(KernelMemoryManager);
 
     // ── Process lifecycle ────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ class KernelEngineSingleton {
     public isProcessActive = KernelProcessManager.isProcessActive.bind(KernelProcessManager);
     public terminateProcess = KernelProcessManager.terminateProcess.bind(KernelProcessManager);
     public killProcess = KernelProcessManager.killProcess.bind(KernelProcessManager);
-    public terminateSubtree = (process_uid: string, reason?: string) => 
+    public terminateSubtree = (process_uid: string, reason?: string) =>
         KernelProcessManager.terminateProcess(process_uid, { cascade: true, reason });
     public getAllProcesses = KernelProcessManager.getAllProcesses.bind(KernelProcessManager);
 

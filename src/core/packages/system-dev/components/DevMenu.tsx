@@ -70,7 +70,6 @@ export default function DevMenu() {
             y: 100
         });
     };
-
     const spawnPerformanceWidget = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system-dev',
@@ -83,6 +82,18 @@ export default function DevMenu() {
             chrome_style: 'borderless',
             always_on_top: true,
             is_locked: false,
+        });
+    };
+
+    const spawnAISessionInspector = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'ai-session-inspector-window',
+            title: 'AI Session Inspector',
+            always_on_top: true,
+            is_locked: false,
+            width: 620,
+            height: 400,
         });
     };
 
@@ -316,7 +327,7 @@ export default function DevMenu() {
         { label: 'RAM Monitor', icon: <MemoryStick size={14} className="text-cyan-400" />, onClick: spawnRamMonitor },
         { label: 'AI Chatbar Test Window', icon: <MessageSquare size={14} className="text-emerald-300" />, onClick: spawnAIChatbarTest },
         { label: 'Prompt Chatbar Dev Window', icon: <MessageCircle size={14} className="text-sky-300" />, onClick: spawnPromptChatbarDev },
-        // { label: 'AI Session Monitor Window', icon: <Monitor size={14} className="text-lime-300" />, onClick: spawnAISessionMonitor },
+        { label: 'AI Session Inspector', icon: <Monitor size={14} className="text-lime-300" />, onClick: spawnAISessionInspector },
         { label: 'EventBus Monitor', icon: <Workflow size={14} className="text-cyan-300" />, onClick: spawnEventBusMonitor },
         { label: 'Process Monitor', icon: <Activity size={14} className="text-fuchsia-300" />, onClick: spawnProcessMonitor },
         { label: 'Tool Runner', icon: <Wrench size={14} className="text-amber-400" />, onClick: spawnToolRunner },
@@ -324,9 +335,9 @@ export default function DevMenu() {
         { label: 'Parser Block Playground', icon: <ListTree size={14} className="text-cyan-300" />, onClick: spawnParserBlockPlayground },
         { label: 'Renderer Registry', icon: <ListTree size={14} className="text-emerald-400" />, onClick: spawnRendererRegistry },
         { label: 'Push Notification', icon: <BellRing size={14} className="text-orange-400" />, onClick: pushNotificationSample },
-        { 
-            label: isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode', 
-            icon: <Share2 size={14} className={isAmbient ? "text-blue-400" : "text-red-300"} />, 
+        {
+            label: isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode',
+            icon: <Share2 size={14} className={isAmbient ? "text-blue-400" : "text-red-300"} />,
             onClick: toggleOverlayMode,
             customClass: `flex items-center justify-start gap-2 px-3 py-2 rounded text-sm transition-colors border w-full mb-2 ${isAmbient ? 'bg-zinc-800/80 border-zinc-700/50 text-zinc-400' : 'bg-red-900/40 border-red-500/50 text-red-100 hover:bg-red-800/50'}`
         }
@@ -342,10 +353,10 @@ export default function DevMenu() {
 
                 <SpatialVirtualizer className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
                     {menuItems.map((item, idx) => (
-                        <button 
-                            
+                        <button
+
                             key={idx}
-                            onClick={item.onClick} 
+                            onClick={item.onClick}
                             className={item.customClass || buttonClass}
                         >
                             {item.icon}
