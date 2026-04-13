@@ -126,7 +126,7 @@ interface StreamRuntimeState {
  */
 export async function sendPromptToGateway(
     prompt: string,
-    session_uid : string,
+    session_uid: string,
     sdk?: string,
     model?: string,
 ): Promise<void> {
@@ -346,10 +346,12 @@ function appendChunkToCurrentEntry(session_uid: string, chunk: string): void {
         ...currentSessionState,
         turns: [
             ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
-            { ...currentTurn, entries: [
-                ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
-                { ...currentEntry },
-            ] },
+            {
+                ...currentTurn, entries: [
+                    ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
+                    { ...currentEntry },
+                ]
+            },
         ],
     });
 }
@@ -446,6 +448,8 @@ async function processSingleExtractedBlock(
     let hasParserResponse = false;
     let resolveParserState: ((value: AIParserProtocolState | undefined) => void) | undefined;
 
+    console.log(`[AIGatewayEngine] Processing block ${block} for session ${session_uid}`);
+
     const parserHandlerPromise = new Promise<AIParserProtocolState | undefined>((resolve) => {
         resolveParserState = resolve;
         AISessionBlockBus.addEventListener(`system:ai_session:${currentSessionStateForResponse.session_uid}:block_parsing_response`,
@@ -485,10 +489,12 @@ async function processSingleExtractedBlock(
         ...currentSessionState,
         turns: [
             ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
-            { ...currentTurn, entries: [
-                ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
-                { ...currentEntry },
-            ] },
+            {
+                ...currentTurn, entries: [
+                    ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
+                    { ...currentEntry },
+                ]
+            },
         ],
     });
 
@@ -574,10 +580,12 @@ function flushPlainTextBufferToRenderer(session_uid: string, runtimeState: Strea
         ...currentSessionState,
         turns: [
             ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
-            { ...currentTurn, assistant_renderers: [
-                ...currentTurn.assistant_renderers.slice(0, runtimeState.tmp_paragraph_renderer_index),
-                currentRenderer,
-            ] },
+            {
+                ...currentTurn, assistant_renderers: [
+                    ...currentTurn.assistant_renderers.slice(0, runtimeState.tmp_paragraph_renderer_index),
+                    currentRenderer,
+                ]
+            },
         ],
     });
 }
@@ -597,10 +605,12 @@ function finalizeStreamingEntry(session_uid: string): void {
         ...currentSessionState,
         turns: [
             ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
-            { ...currentTurn, entries: [
-                ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
-                { ...currentEntry },
-            ] },
+            {
+                ...currentTurn, entries: [
+                    ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
+                    { ...currentEntry },
+                ]
+            },
         ],
     });
 
@@ -621,10 +631,12 @@ function failStreamingEntry(session_uid: string, error: unknown): void {
         ...currentSessionState,
         turns: [
             ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
-            { ...currentTurn, entries: [
-                ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
-                { ...currentEntry },
-            ] },
+            {
+                ...currentTurn, entries: [
+                    ...currentTurn.entries.slice(0, currentTurn.active_entry_index as number),
+                    { ...currentEntry },
+                ]
+            },
         ],
     });
 
