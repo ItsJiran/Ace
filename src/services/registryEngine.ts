@@ -486,11 +486,22 @@ class RegistryEngineSingleton {
                     ? blockSchemaMetadata.exampleLines.filter((line): line is string => typeof line === 'string')
                     : [];
 
+                const triggerConditions = Array.isArray(blockSchemaMetadata.triggerConditions)
+                    ? blockSchemaMetadata.triggerConditions.filter((line): line is string => typeof line === 'string')
+                    : undefined;
+
+                const promptExamples = Array.isArray(blockSchemaMetadata.promptExamples)
+                    ? blockSchemaMetadata.promptExamples.filter((line): line is string => typeof line === 'string')
+                    : undefined;
+
                 const schema: BlockProtocolSchema = {
                     name: tagName,
+                    is_default_detail: typeof blockSchemaMetadata.is_default_detail === 'boolean' ? blockSchemaMetadata.is_default_detail : false,
                     purpose: typeof blockSchemaMetadata.purpose === 'string' ? blockSchemaMetadata.purpose : (typeof metadata.description === 'string' ? metadata.description : `${tagName} parser block.`),
                     requiredFields: typeof blockSchemaMetadata.requiredFields === 'string' ? blockSchemaMetadata.requiredFields : undefined,
                     optionalFields: typeof blockSchemaMetadata.optionalFields === 'string' ? blockSchemaMetadata.optionalFields : undefined,
+                    triggerConditions,
+                    promptExamples,
                     payloadNote: Array.isArray(blockSchemaMetadata.payloadNote)
                         ? blockSchemaMetadata.payloadNote.filter((line): line is string => typeof line === 'string')
                         : undefined,

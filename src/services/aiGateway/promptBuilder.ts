@@ -134,22 +134,10 @@ export function buildBlockParserPrompt(session: AISession): string {
 
     const lines: string[] = [];
 
-    // --- Tier 1: Compact catalog — one line per block ---
-    lines.push('[AVAILABLE BLOCKS]');
+    lines.push('[AVAILABLE PARSER BLOCKS]');
     lines.push('Block syntax: <block_slug>payload</block_slug>');
-    lines.push('');
-    for (const block of allBlocks) {
-        const marker = fullDetailSlugs.has(block.slug) ? '★' : '○';
-        lines.push(`${marker} <${block.slug}>: ${block.purpose}`);
-    }
-    lines.push('');
-    lines.push('★ = full detail below  ○ = catalog only (ask system to activate if needed)');
 
-    // --- Tier 2: Full detail for default + active blocks ---
     if (fullDetailSlugs.size > 0) {
-        lines.push('');
-        lines.push('[BLOCK DETAIL]');
-
         for (const slug of fullDetailSlugs) {
             const detail = RegistryEngine.renderParserBlockDetail(slug);
             if (detail) {

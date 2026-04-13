@@ -293,6 +293,7 @@ export type AISessionStatus = typeof AISessionStatus[keyof typeof AISessionStatu
 export const AIFeedbackLoopStatus = {
     NONE: 'none',
     ACTIVE: 'active',
+    CONTINUE_REQUESTED: 'continue_requested',
     COMPLETED: 'completed',
     INTERRUPTED: 'interrupted',
 } as const;

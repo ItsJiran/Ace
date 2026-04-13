@@ -152,7 +152,8 @@ async function runGatewayStreamRequest(
     sdk?: string,
     model?: string,
 ): Promise<void> {
-    initializeStreamingEntry(session_uid, prompt);
+    const composed_prompt = buildPrompt(prompt, session_uid);
+    initializeStreamingEntry(session_uid, prompt, composed_prompt);
 
     const { activeGatewayUrl, sdkConfig } = await validateGatewayTarget(session_uid, sdk, model);
     const abortController = attachAbortControllerToSession(session_uid);
@@ -160,7 +161,7 @@ async function runGatewayStreamRequest(
         activeGatewayUrl,
         session_uid,
         sdkConfig,
-        prompt,
+        composed_prompt,
         sdk,
         model,
         abortController,
@@ -222,7 +223,7 @@ async function openGatewayResponseStream(
     activeGatewayUrl: string,
     session_uid: string,
     sdkConfig: AIGatewaySDKTarget,
-    prompt: string,
+    composed_prompt: string,
     sdk?: string,
     model?: string,
     abortController?: AbortController,
@@ -233,7 +234,7 @@ async function openGatewayResponseStream(
             'Authorization': `Bearer ${sdkConfig.api_key}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: model, prompt }),
+        body: JSON.stringify({ model: model, prompt: composed_prompt }),
         signal: abortController?.signal,
     });
 
@@ -249,11 +250,11 @@ async function openGatewayResponseStream(
 // The parser always writes into one active entry. That entry must exist in session memory
 // before plain text or parsed blocks can be appended.
 
-function initializeStreamingEntry(session_uid: string, prompt: string): void {
+function initializeStreamingEntry(session_uid: string, prompt: string, composed_prompt: string): void {
     const newAIEntry = TurnRenderer.buildTurnEntry({
         response: '',
         prompt: prompt,
-        composed_prompt: buildPrompt(prompt, session_uid),
+        composed_prompt: composed_prompt,
         blocks: [],
         status: 'streaming',
     });
@@ -614,7 +615,17 @@ function finalizeStreamingEntry(session_uid: string): void {
         ],
     });
 
-    AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+    // Check if any block requested the session to continue autonomously
+    const updatedState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    if (updatedState.feedback_loop_status === 'continue_requested') {
+        // Reset the loop status for the next entry
+        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+            feedback_loop_status: 'active'
+        } as Partial<AISession>);
+        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'continue' }));
+    } else {
+        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+    }
 }
 
 function failStreamingEntry(session_uid: string, error: unknown): void {
