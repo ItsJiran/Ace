@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useCallback, useRef, useEffect } from 'react';
+import { useSyncExternalStore, useCallback, useRef } from 'react';
 import { KernelEngine } from '../services/kernelEngine';
 
 /**
@@ -53,16 +53,22 @@ const dispatcher = new MemoryDispatcher();
  * 
  * @param key The specific `memory_uid` or classification string to listen to.
  */
-export function useAceMemory<T = any>(key: string): T | undefined {
+export function useAceMemory<T = unknown>(key: string): T | undefined {
     // Global kernel change signal. Subscribers re-read their target memory key.
     const subscribe = useCallback(
         (onStoreChange: () => void) => {
+            if (!key) {
+                return () => undefined;
+            }
             return dispatcher.subscribe(key, onStoreChange);
         },
         [key]
     );
 
     const getSnapshot = useCallback(() => {
+        if (!key) {
+            return undefined;
+        }
         return KernelEngine.readMemory(key) as T | undefined;
     }, [key]);
 
@@ -73,19 +79,25 @@ export function useAceMemory<T = any>(key: string): T | undefined {
  * Selector variant for granular subscriptions.
  * Only re-renders when selected value changes by `isEqual` comparator.
  */
-export function useAceMemorySelector<T = any, S = T>(
+export function useAceMemorySelector<T = unknown, S = T>(
     key: string,
     selector: (value: T | undefined) => S,
     isEqual: (a: S, b: S) => boolean = Object.is
 ): S {
     const subscribe = useCallback(
         (onStoreChange: () => void) => {
+            if (!key) {
+                return () => undefined;
+            }
             return dispatcher.subscribe(key, onStoreChange);
         },
         [key]
     );
 
     const getRawValue = useCallback(() => {
+        if (!key) {
+            return undefined;
+        }
         return KernelEngine.readMemory(key) as T | undefined;
     }, [key]);
 

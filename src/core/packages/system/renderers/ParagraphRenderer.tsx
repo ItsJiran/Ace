@@ -1,4 +1,5 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
+import { useAceMemory } from '#/hooks/useAceMemory';
 import { Type } from 'lucide-react';
 
 export const registry: AceRegistryType.Renderer = {
@@ -11,6 +12,7 @@ export const registry: AceRegistryType.Renderer = {
 };
 
 interface ParagraphRendererProps {
+    memory_uid?: string;
     text?: string;
     content?: string;
     markdown?: string;
@@ -19,7 +21,8 @@ interface ParagraphRendererProps {
 }
 
 export default function ParagraphRenderer(props: ParagraphRendererProps) {
-    const text = props.text || props.content || props.markdown || props.value || '';
+    const streamedText = useAceMemory<string>(typeof props.memory_uid === 'string' ? props.memory_uid : '');
+    const text = streamedText || props.text || props.content || props.markdown || props.value || '';
 
     if (!text || typeof text !== 'string') {
         return (
