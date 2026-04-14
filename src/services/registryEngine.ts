@@ -7,7 +7,7 @@ import {
     type RegistryDomainEntry,
 } from '../schemas/registry';
 import { LoggerEngine } from './loggerEngine';
-import type { BlockProtocolSchema, ParserBlockHandler, ParserBlockRuntime } from '#/schemas/parser';
+import type { BlockProtocolSchema, ParserBlockHandlers, ParserBlockRuntime } from '#/schemas/parser';
 
 /**
  * ============================================================================
@@ -471,9 +471,15 @@ class RegistryEngineSingleton {
             for (const [slug, rawEntry] of Object.entries(parserEntries)) {
                 const entry = rawEntry as RegistryDomainEntry;
                 const metadata = (entry.metadata ?? {}) as Record<string, unknown>;
-                const handler = entry.implementation;
+                const handlerSet = entry.implementation as ParserBlockHandlers;
+                const lifecycleHandlers: ParserBlockHandlers = {
+                    start: handlerSet.start,
+                    chunk: handlerSet.chunk,
+                    complete: handlerSet.complete,
+                    abort: typeof handlerSet.abort === 'function' ? handlerSet.abort : undefined,
+                };
 
-                if (typeof handler !== 'function') continue;
+                if (!lifecycleHandlers.start || !lifecycleHandlers.chunk || !lifecycleHandlers.complete) continue;
 
                 const tagName = slug;
 
@@ -513,7 +519,7 @@ class RegistryEngineSingleton {
                     slug,
                     aliases,
                     schema,
-                    handler: handler as ParserBlockHandler,
+                    handlers: lifecycleHandlers,
                 };
 
                 const namespaceRef = `${packageName}:parsers:${slug}`;
@@ -627,7 +633,15 @@ class RegistryEngineSingleton {
 
             // We expect a Module Namespace Object with exports
             if (domain && moduleNamespace && typeof moduleNamespace === 'object') {
-                const exports = moduleNamespace as { default?: any; registry?: any; handler?: any; validator?: any };
+                const exports = moduleNamespace as {
+                    default?: any;
+                    registry?: any;
+                    handlerStart?: any;
+                    handlerChunk?: any;
+                    handlerComplete?: any;
+                    handlerAbort?: any;
+                    validator?: any;
+                };
 
                 // 1. Detect 'registry' export (Identity/Metadata)
                 const registryData = exports.registry || {};
@@ -635,13 +649,32 @@ class RegistryEngineSingleton {
                 // 2. Resolve implementation export.
                 // Parsers are standardized to named export `handler`.
                 // Other domains keep using default export for now.
-                const implementation = domain === 'parsers' ? exports.handler : exports.default;
+                const implementation = domain === 'parsers'
+                    ? {
+                        start: exports.handlerStart,
+                        chunk: exports.handlerChunk,
+                        complete: exports.handlerComplete,
+                        abort: exports.handlerAbort,
+                    }
+                    : exports.default;
 
                 if (!implementation) {
                     if (domain === 'parsers') {
-                        console.warn(`[RegistryEngine] Parser module missing named export 'handler': ${path}`);
+                        console.warn(`[RegistryEngine] Parser module missing parser lifecycle export: ${path}`);
                     }
                     // Skip files that don't expose expected implementation export.
+                    continue;
+                }
+
+                if (
+                    domain === 'parsers'
+                    && (
+                        typeof implementation.start !== 'function'
+                        || typeof implementation.chunk !== 'function'
+                        || typeof implementation.complete !== 'function'
+                    )
+                ) {
+                    console.warn(`[RegistryEngine] Parser module must export handlerStart, handlerChunk, and handlerComplete: ${path}`);
                     continue;
                 }
 

@@ -1,26 +1,39 @@
-import { AIParserProtocolState, type AISession, type AIContextEntry } from '#/schemas/ai';
+import { AIParserProtocolState, type AISession } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
 import { RegistryEngine } from '#/services/registryEngine';
 import { KernelEngine } from '#/services/kernelEngine';
+import * as TurnRenderer from '#/services/aiGateway/turnManager';
+
+export const handlerStart: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+};
+
+export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+};
 
 export const registry: AceRegistryType.Parser = {
     name: 'parser_registry',
     slug: 'parser_registry',
-    description: 'Interface for AI to discover and read details about available parser blocks within the system.',
+    description: 'Allows dynamically listing available parser blocks or fetching full details (instructions, parameters) of a specific block to inject into the internal Context.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Allows the AI to dynamically explore and active parser blocks. You can list all available blocks to see what is possible, request the full details of a specific block to learn its exact syntax, or "activate" a block so its instructions are permanently included in your system prompt.',
+        purpose: 'Allows the AI to dynamically explore available features and parser blocks. You can list all available blocks to see what is possible, or request the full details of a specific block to learn its exact syntax and parameters. The details will automatically be injected into your active session context.',
         requiredFields: '"action" (must be "list", "detail", "activate", or "deactivate")',
-        optionalFields: '"target_slug" (required if action is NOT "list")',
+        optionalFields: '"target_slug" (required if action is detail, activate, or deactivate)',
         triggerConditions: [
-            'When you want to know what tools or blocks are available to use',
-            'When you see a block in the catalog but don\'t know how to format its payload',
-            'When you want to activate a block so it is always available in your system prompt',
+            'When you want to know what tools and features are available in this ACE instance.',
+            'When you need to call a tool but don\'t know the exact `<block_slug>` or the JSON payload schema.',
+            'When you want to load a specific block\'s instructions into your active context so you can use it in subsequent messages.',
+            'When you want to clean up your prompt by deactivating block instructions you no longer need.'
         ],
         promptExamples: [
             'What tools are available?',
-            'Activate the "search" block so I can use it.',
+            'What features do you have access to?',
+            'How do I use the file search block?',
+            'Let me inspect the details of the `<execute_command>` block so I know the payload schema.',
+            'I\'m done using the `<execute_command>` block. I will deactivate it.',
         ],
         exampleLines: [
             '  <parser_registry>',
@@ -28,13 +41,17 @@ export const registry: AceRegistryType.Parser = {
             '  </parser_registry>',
             '',
             '  <parser_registry>',
-            '  {"action": "activate", "target_slug": "system:context_update"}',
+            '  {"action": "detail", "target_slug": "system:execute_command"}',
+            '  </parser_registry>',
+            '',
+            '  <parser_registry>',
+            '  {"action": "activate", "target_slug": "system:context"}',
             '  </parser_registry>',
         ],
     },
 };
 
-export const handler: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
+export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
     try {
         const payload = JSON.parse(block.payload.content);
         const action = payload.action;
@@ -47,7 +64,8 @@ export const handler: ParserBlockHandler = async ({ block, dispatchParserRespons
         }
 
         const currentTurnIndex = sessionState.turns.length > 0 ? sessionState.turns.length - 1 : 0;
-        const newContextEntries: AIContextEntry[] = [...(sessionState.context || [])];
+        const wm = [...(sessionState.working_memory || [])];
+        const newContextEntries = [...(sessionState.context || [])];
 
         if (action === 'list') {
             const allBlocks = RegistryEngine.listParserBlocks();
@@ -56,15 +74,32 @@ export const handler: ParserBlockHandler = async ({ block, dispatchParserRespons
                 return detail ? detail : `[${b.package_name}:${b.slug}] ${b.schema.purpose}`;
             }).join('\n\n');
 
-            newContextEntries.push({
-                at: Date.now(),
-                title: 'Parser Block Catalog (Full Details)',
-                status: 'active',
+            wm.filter(entry => entry.uid !== 'wm_parser_registry_list');
+            wm.push({
+                uid: 'wm_parser_registry_list',
+                description: 'Full list of valid parser blocks from the registry',
+                content: listContent,
+                created_at: Date.now(),
                 lifecycle_turn: currentTurnIndex,
-                payload: { content: listContent }
             });
 
-            console.log(`[ParserRegistryBlock] Loaded full details of ${allBlocks.length} blocks for session ${session_uid}`);
+            // Push a UI renderer to show what we did
+            const currentTurn = sessionState.turns[currentTurnIndex];
+            currentTurn.assistant_renderers.push(
+                TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: 'list', count: allBlocks.length, data: listContent })
+            );
+
+            console.log(`[ParserRegistryBlock] Loaded full details of ${allBlocks.length} blocks for session ${session_uid} into working memory`);
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                working_memory: wm,
+                feedback_loop_status: 'continue_requested',
+                turns: [
+                    ...sessionState.turns.slice(0, currentTurnIndex),
+                    currentTurn
+                ]
+            } as Partial<AISession>);
+            dispatchParserResponse(AIParserProtocolState.WAITING_FOR_FEEDBACK);
+            return;
         }
         else if (action === 'detail') {
             const target = payload.target_slug;
@@ -75,24 +110,31 @@ export const handler: ParserBlockHandler = async ({ block, dispatchParserRespons
             }
 
             const detail = RegistryEngine.renderParserBlockDetail(target);
-            if (detail) {
-                newContextEntries.push({
-                    at: Date.now(),
-                    title: `Parser Block Details: ${target}`,
-                    status: 'active',
-                    lifecycle_turn: currentTurnIndex,
-                    payload: { content: detail }
-                });
-                console.log(`[ParserRegistryBlock] Loaded details for ${target} into session context.`);
-            } else {
-                newContextEntries.push({
-                    at: Date.now(),
-                    title: `Parser Block Details: ${target}`,
-                    status: 'active',
-                    lifecycle_turn: currentTurnIndex,
-                    payload: { content: `Block with slug "${target}" was not found in the registry.` }
-                });
-            }
+            wm.filter(entry => entry.uid !== `wm_parser_detail_${target}`);
+            wm.push({
+                uid: `wm_parser_detail_${target}`,
+                description: `Parser Block Details: ${target}`,
+                content: detail || `Block with slug "${target}" was not found in the registry.`,
+                created_at: Date.now(),
+                lifecycle_turn: currentTurnIndex,
+            });
+
+            const currentTurn = sessionState.turns[currentTurnIndex];
+            currentTurn.assistant_renderers.push(
+                TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: 'detail', target_slug: target, data: detail || `Block with slug "${target}" was not found in the registry.` })
+            );
+
+            console.log(`[ParserRegistryBlock] Loaded details for ${target} into working memory.`);
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, { 
+                working_memory: wm, 
+                feedback_loop_status: 'continue_requested',
+                turns: [
+                    ...sessionState.turns.slice(0, currentTurnIndex),
+                    currentTurn
+                ]
+            } as Partial<AISession>);
+            dispatchParserResponse(AIParserProtocolState.WAITING_FOR_FEEDBACK);
+            return;
         }
         else if (action === 'activate' || action === 'deactivate') {
             const target = payload.target_slug;
@@ -112,10 +154,6 @@ export const handler: ParserBlockHandler = async ({ block, dispatchParserRespons
                 activeBlocks = activeBlocks.filter(b => b.block_slug !== target);
             }
 
-            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-                active_parser_blocks: activeBlocks
-            } as Partial<AISession>);
-
             newContextEntries.push({
                 at: Date.now(),
                 title: `Parser Block ${action === 'activate' ? 'Activated' : 'Deactivated'}: ${target}`,
@@ -123,20 +161,31 @@ export const handler: ParserBlockHandler = async ({ block, dispatchParserRespons
                 lifecycle_turn: currentTurnIndex,
                 payload: { content: `The block "${target}" has been successfully ${action}d. Its full instructions will ${action === 'activate' ? 'now' : 'no longer'} be included in your system prompt.` }
             });
+
+            const currentTurn = sessionState.turns[currentTurnIndex];
+            currentTurn.assistant_renderers.push(
+                TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: action, target_slug: target })
+            );
+
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                active_parser_blocks: activeBlocks,
+                context: newContextEntries,
+                context_end_index: newContextEntries.length,
+                turns: [
+                    ...sessionState.turns.slice(0, currentTurnIndex),
+                    currentTurn
+                ]
+            } as Partial<AISession>);
+
             console.log(`[ParserRegistryBlock] Block ${target} ${action}d for session ${session_uid}`);
+            dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+            return;
         }
         else {
             console.warn(`[ParserRegistryBlock] Unknown action: ${action}`);
+            dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
         }
 
-        // Write the new context array back to memory
-        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-            context: newContextEntries,
-            // Re-calculate the end index so the dynamic context is picked up immediately
-            context_end_index: newContextEntries.length
-        } as Partial<AISession>);
-
-        dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
     } catch (e) {
         console.error(`[ParserRegistryBlock] Error processing block:`, e);
         dispatchParserResponse(AIParserProtocolState.ERROR);

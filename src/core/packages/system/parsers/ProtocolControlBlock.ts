@@ -3,6 +3,14 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
 import { KernelEngine } from '#/services/kernelEngine';
 
+export const handlerStart: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+};
+
+export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+};
+
 export const registry: AceRegistryType.Parser = {
     name: 'protocol_control',
     slug: 'protocol_control',
@@ -34,7 +42,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
+export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
     try {
         const payload = JSON.parse(block.payload.content);
         const action = payload.action;

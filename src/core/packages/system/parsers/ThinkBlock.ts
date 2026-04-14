@@ -2,6 +2,14 @@ import { AIParserProtocolState } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
 
+export const handlerStart: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+};
+
+export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+};
+
 export const registry: AceRegistryType.Parser = {
     name: 'think',
     slug: 'think',
@@ -26,7 +34,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = async ({ block: _block, dispatchParserResponse }: ParserBlockArgs) => {
+export const handlerComplete: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
     // We just gracefully continue. The text inside <think> is already captured in the session entry blocks payload.
     // console.log(`[ThinkBlock] process=${block.process_uid}: ${block.payload.content?.substring(0, 50)}...`);
     dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);

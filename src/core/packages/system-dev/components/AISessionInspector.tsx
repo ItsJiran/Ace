@@ -77,7 +77,7 @@ function BlockRow({ block, idx }: { block: AIBlock; idx: number }) {
 }
 
 function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isActive: boolean }) {
-    const [open, setOpen] = useState(isActive);
+    const [open, setOpen] = useState(false);
     return (
         <div className={`border rounded mb-2 overflow-hidden ${isActive ? 'border-amber-500/40' : 'border-zinc-700/40'}`}>
             <button
@@ -141,7 +141,7 @@ function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isAct
 }
 
 function TurnRow({ turn, turnIdx, isActive }: { turn: AITurn; turnIdx: number; isActive: boolean }) {
-    const [open, setOpen] = useState(isActive);
+    const [open, setOpen] = useState(false);
     return (
         <div className={`border rounded mb-3 overflow-hidden ${isActive ? 'border-sky-500/50' : 'border-zinc-700/40'}`}>
             <button

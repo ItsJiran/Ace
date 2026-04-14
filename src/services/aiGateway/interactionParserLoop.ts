@@ -12,16 +12,20 @@
  * 2. `runGatewayStreamRequest(...)` initializes the entry, validates the gateway target,
  *    opens the stream, and hands the reader to the chunk loop.
  * 3. `processGatewayStream(...)` reads one chunk at a time.
- * 4. `processGatewayChunk(...)` splits the incoming buffer into plain text and extracted blocks.
- * 5. Plain text is appended to the current entry and mirrored into paragraph renderers.
- * 6. Each extracted block is parsed one-by-one through `processSingleExtractedBlock(...)`.
- * 7. The block handler emits an `AIParserProtocolState` through `AISessionBlockBus`.
- * 8. That protocol state decides whether parsing continues, pauses for feedback, or stops.
- * 9. When the stream ends, the current entry is finalized or marked as error.
+ * 4. `processGatewayChunk(...)` appends raw text into the current entry and advances the incremental parser state.
+ * 5. Plain text outside parser tags is mirrored into paragraph renderers.
+ * 6. When an opening tag is found, an `AIBlock` is created immediately with empty content.
+ * 7. While the block is open, incoming text is appended into the same block and delegated through
+ *    `handlerChunk(...)` so the parser can react before the block is complete.
+ * 8. When the closing tag is found, the block is finalized and `handlerComplete(...)` decides whether
+ *    parsing continues, pauses for feedback, or stops.
+ * 9. If the stream dies while a block is still open, the same block instance is marked aborted and
+ *    `handlerAbort(...)` gets a cleanup opportunity.
+ * 10. When the stream ends cleanly, the current entry is finalized.
  *
  * Runtime invariant:
  * - only one parsed block is allowed to decide the next parser step at a time.
- * - this means one block handler can halt the next block parsing until feedback is available.
+ * - this means one active block instance owns parser control until it completes or aborts.
  * - plain streamed text may continue to accumulate before and after blocks, but parser control
  *   always remains block-scoped and sequential.
  *
@@ -39,13 +43,22 @@
  * sendPromptToGateway() (background)
  *    |
  *    v
- * Gateway --> streaming chunks --> streamParseBuffer()
+ * Gateway --> streaming chunks --> processGatewayChunk()
  *    |                                   |
  *    v                                   v
- * updateMemory (entries, renderers)   extracted blocks -> RegistryEngine -> handlers
- *    |                                   |
- *    v                                   v
- * AISessionBus events <----------------- handler responses
+ * updateMemory (raw entry text)      detect <tag>
+ *                                        |
+ *                                        v
+ *                                   create AIBlock at start
+ *                                        |
+ *                           chunk text --> handlerChunk()
+ *                                        |
+ *                          closing tag --> handlerComplete()
+ *                                        |
+ *                             abort/error --> handlerAbort()
+ *                                        |
+ *                                        v
+ * AISessionBus events <---------------- parser protocol response
  *    |
  *    v
  * on 'stop' -> updateMemory(state -> IDLE)
@@ -62,8 +75,9 @@
 // in-memory session object with periodic persistence, or sending diffs instead of
 // full session snapshots to reduce overhead.
 
-import { AIParserProtocolState, AISessionStatus, type AIEntry, type AIRenderer, type AISession, type AITurn } from '#/schemas/ai';
+import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIBlock, type AIEntry, type AIRenderer, type AISession, type AITurn } from '#/schemas/ai';
 import type { AIGatewayConfig, AIGatewaySDKTarget } from '#/schemas/ai_gateway';
+import type { ParserBlockLifecycle } from '#/schemas/parser';
 
 import { HealthProbe } from './healthProbe';
 import { AIGatewayEngine } from '../aiGatewayEngine';
@@ -83,28 +97,21 @@ export interface SessionInteractionLoopInput {
     prompt: string;
 }
 
-interface ExtractedSpecialBlock {
-    block_name: string;
-    raw: string;
-    content: string;
-}
-
-interface SpecialBlockBufferState {
-    next_buffer: string;
-    stripped_prefix: string;
-    extracted_blocks: ExtractedSpecialBlock[];
-    has_block_or_fragment: boolean;
-    fragment_block_name?: string;
-}
-
 interface GatewayTargetConfig {
     activeGatewayUrl: string;
     sdkConfig: AIGatewaySDKTarget;
 }
 
+interface ActiveStreamBlock {
+    block_slug: string;
+    block_index: number;
+    closing_tag: string;
+}
+
 interface StreamRuntimeState {
-    tmp_chunk_buffer: string;
+    pending_buffer: string;
     tmp_paragraph_renderer_index: number;
+    active_block?: ActiveStreamBlock;
 }
 
 // + ============== Runtime Stage 1: Entry Point ============== +
@@ -137,7 +144,7 @@ export async function sendPromptToGateway(
         try {
             await runGatewayStreamRequest(prompt, session_uid, sdk, model);
         } catch (error) {
-            failStreamingEntry(session_uid, error);
+            await failStreamingEntry(session_uid, error);
         }
     })();
 }
@@ -285,7 +292,7 @@ async function processGatewayStream(
 ): Promise<void> {
     const decoder = new TextDecoder();
     const runtimeState: StreamRuntimeState = {
-        tmp_chunk_buffer: '',
+        pending_buffer: '',
         tmp_paragraph_renderer_index: -1,
     };
 
@@ -300,11 +307,26 @@ async function processGatewayStream(
             break;
         }
     }
+
+    if (runtimeState.active_block) {
+        await abortActiveBlock(session_uid, runtimeState, abortController, 'Stream ended before block closing tag');
+    }
+
+    if (runtimeState.pending_buffer !== '') {
+        flushPlainTextBufferToRenderer(session_uid, runtimeState);
+        runtimeState.pending_buffer = '';
+    }
 }
 
 // + ============== Runtime Stage 6: Process One Chunk ============== +
 // For each decoded chunk, the runtime parses the mixed buffer, appends plain text, runs block
 // handlers sequentially, and flushes any safe trailing plain text into renderers.
+//
+// Important detail:
+// - a block is instantiated as soon as `<block_slug>` is seen.
+// - from that point on, every following character belongs either to the active block content
+//   or to the block closing tag.
+// - the same AIBlock object is updated in-place through start -> chunk -> complete or abort.
 
 async function processGatewayChunk(
     session_uid: string,
@@ -312,21 +334,116 @@ async function processGatewayChunk(
     runtimeState: StreamRuntimeState,
     abortController: AbortController,
 ): Promise<boolean> {
-    runtimeState.tmp_chunk_buffer += chunk;
-
-    const blockState = streamParseBuffer(runtimeState.tmp_chunk_buffer);
-    runtimeState.tmp_chunk_buffer = blockState.next_buffer;
-
     appendChunkToCurrentEntry(session_uid, chunk);
-    renderStrippedPrefix(session_uid, blockState.stripped_prefix, runtimeState);
 
-    const shouldStop = await processExtractedBlocks(session_uid, blockState.extracted_blocks, abortController);
-    if (shouldStop) {
-        return true;
-    }
+    runtimeState.pending_buffer += chunk;
 
-    if (!blockState.has_block_or_fragment && runtimeState.tmp_chunk_buffer != '') {
-        flushPlainTextBufferToRenderer(session_uid, runtimeState);
+    while (runtimeState.pending_buffer !== '') {
+        if (runtimeState.active_block) {
+            // Once a block has started, the parser is no longer searching for new opening tags.
+            // It only looks for the matching closing tag of the active block.
+            const activeBlock = getActiveBlockFromRuntime(session_uid, runtimeState);
+            if (!activeBlock) {
+                runtimeState.active_block = undefined;
+                continue;
+            }
+
+            const closingIndex = runtimeState.pending_buffer.indexOf(runtimeState.active_block.closing_tag);
+            if (closingIndex === -1) {
+                // No closing tag yet. Everything currently buffered belongs to the active block,
+                // so we append it and delegate the delta through handlerChunk.
+                const chunkText = runtimeState.pending_buffer;
+                runtimeState.pending_buffer = '';
+
+                if (chunkText !== '') {
+                    appendContentToBlock(session_uid, activeBlock, chunkText);
+                    const protocolState = await invokeBlockLifecycleHandler(session_uid, activeBlock, 'chunk', abortController, chunkText);
+                    if (shouldStopForParserProtocol(protocolState)) {
+                        await abortActiveBlock(session_uid, runtimeState, abortController, 'Parser halted during chunk lifecycle');
+                        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+                        return true;
+                    }
+                }
+
+                break;
+            }
+
+            const chunkText = runtimeState.pending_buffer.slice(0, closingIndex);
+            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(closingIndex + runtimeState.active_block.closing_tag.length);
+
+            if (chunkText !== '') {
+                // The closing tag was found in this chunk, so we first flush the remaining content
+                // into the active block before finalizing it.
+                appendContentToBlock(session_uid, activeBlock, chunkText);
+                const chunkState = await invokeBlockLifecycleHandler(session_uid, activeBlock, 'chunk', abortController, chunkText);
+                if (shouldStopForParserProtocol(chunkState)) {
+                    await abortActiveBlock(session_uid, runtimeState, abortController, 'Parser halted during chunk lifecycle');
+                    AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+                    return true;
+                }
+            }
+
+            // At this point the active block is complete and no longer receives chunk updates.
+            const completedBlock = markBlockCompleted(session_uid, activeBlock);
+            const completeState = await invokeBlockLifecycleHandler(session_uid, completedBlock, 'complete', abortController);
+            runtimeState.active_block = undefined;
+
+            if (completeState === AIParserProtocolState.WAITING_FOR_FEEDBACK) {
+                AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+                return true;
+            }
+
+            if (shouldStopForParserProtocol(completeState)) {
+                AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+                return true;
+            }
+
+            continue;
+        }
+
+        const firstTagIndex = runtimeState.pending_buffer.indexOf('<');
+        if (firstTagIndex === -1) {
+            flushPlainTextBufferToRenderer(session_uid, runtimeState);
+            runtimeState.pending_buffer = '';
+            break;
+        }
+
+        if (firstTagIndex > 0) {
+            const plainText = runtimeState.pending_buffer.slice(0, firstTagIndex);
+            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(firstTagIndex);
+            renderStrippedPrefix(session_uid, plainText, runtimeState);
+            continue;
+        }
+
+        const openingTagMatch = runtimeState.pending_buffer.match(/^<([A-Za-z][\w:-]*)>/);
+        if (!openingTagMatch) {
+            if (isPotentialOpeningTagFragment(runtimeState.pending_buffer)) {
+                break;
+            }
+
+            renderStrippedPrefix(session_uid, runtimeState.pending_buffer.slice(0, 1), runtimeState);
+            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(1);
+            continue;
+        }
+
+        const [openingTag, blockSlug] = openingTagMatch;
+        runtimeState.pending_buffer = runtimeState.pending_buffer.slice(openingTag.length);
+
+        // Opening tag found: create the block immediately even though its content is still empty.
+        // This gives handlers a stable block reference that survives across future chunks.
+        const startedBlock = createStreamingBlock(session_uid, blockSlug);
+        runtimeState.active_block = {
+            block_slug: blockSlug,
+            block_index: startedBlock.block_index,
+            closing_tag: `</${blockSlug}>`,
+        };
+
+        const startState = await invokeBlockLifecycleHandler(session_uid, startedBlock, 'start', abortController);
+        if (shouldStopForParserProtocol(startState)) {
+            await abortActiveBlock(session_uid, runtimeState, abortController, 'Parser halted during start lifecycle');
+            AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
+            return true;
+        }
     }
 
     return false;
@@ -415,45 +532,127 @@ function renderStrippedPrefix(
     runtimeState.tmp_paragraph_renderer_index = -1;
 }
 
-// + ============== Runtime Stage 8: Parse Blocks Sequentially ============== +
-// Complete blocks are processed one-by-one. After each block, the block handler emits an
-// `AIParserProtocolState` that decides whether the parser may continue or must halt.
+// + ============== Runtime Stage 8: Parse Blocks Incrementally ============== +
+// Blocks are now created as soon as an opening tag is found, then fed chunk-by-chunk until
+// a closing tag finalizes the same block instance.
 
-async function processExtractedBlocks(
-    session_uid: string,
-    extracted_blocks: ExtractedSpecialBlock[],
-    abortController: AbortController,
-): Promise<boolean> {
-    if (extracted_blocks.length === 0) {
-        return false;
-    }
+function createStreamingBlock(session_uid: string, blockSlug: string): AIBlock {
+    // This is the canonical runtime reference for one in-flight block instance.
+    // The object starts empty, then accumulates content and runtime context until completion.
+    const runtimeBlock = RegistryEngine.getParserBlock(blockSlug);
+    const { currentSessionState, currentTurn, currentEntry } = getCurrentEntryRefs(session_uid);
+    const now = Date.now();
 
-    console.log(`Extracted blocks from buffer:`, extracted_blocks);
+    const currentBlock = TurnRenderer.buildBlockEntry({
+        session_uid,
+        process_uid: currentSessionState.process_uid,
+        turn_index: currentSessionState.turn_index,
+        entry_index: currentTurn.active_entry_index as number,
+        block_index: currentEntry.blocks ? currentEntry.blocks.length : 0,
+        block_slug: blockSlug,
+        package_ref: runtimeBlock?.package_name,
+        lifecycle_status: AIBlockLifecycleStatus.STARTED,
+        opened_at: now,
+        updated_at: now,
+        chunk_count: 0,
+        runtime_context: {},
+        payload: { content: '' },
+    });
 
-    for (const block of extracted_blocks) {
-        const shouldStop = await processSingleExtractedBlock(session_uid, block, abortController);
-        if (shouldStop) {
-            return true;
-        }
-    }
+    currentEntry.blocks = [
+        ...(currentEntry.blocks ? currentEntry.blocks : []),
+        currentBlock,
+    ];
 
-    return false;
+    persistCurrentEntry(session_uid, currentSessionState, currentTurn, currentEntry);
+    return currentBlock;
 }
 
-async function processSingleExtractedBlock(
+function getActiveBlockFromRuntime(session_uid: string, runtimeState: StreamRuntimeState): AIBlock | null {
+    if (!runtimeState.active_block) return null;
+
+    const { currentEntry } = getCurrentEntryRefs(session_uid);
+    const block = currentEntry.blocks?.[runtimeState.active_block.block_index] ?? null;
+    return block ?? null;
+}
+
+function appendContentToBlock(session_uid: string, block: AIBlock, chunkText: string): AIBlock {
+    // Chunk accumulation is intentionally simple: append the delta and let the parser-specific
+    // handler decide whether it needs to inspect partial content or store extra runtime context.
+    const now = Date.now();
+    block.lifecycle_status = AIBlockLifecycleStatus.STREAMING;
+    block.updated_at = now;
+    block.chunk_count = (block.chunk_count ?? 0) + 1;
+    block.payload.content = `${block.payload.content ?? ''}${chunkText}`;
+
+    persistBlock(session_uid, block);
+    return block;
+}
+
+function markBlockCompleted(session_uid: string, block: AIBlock): AIBlock {
+    const now = Date.now();
+    block.lifecycle_status = AIBlockLifecycleStatus.COMPLETED;
+    block.completed_at = now;
+    block.updated_at = now;
+
+    persistBlock(session_uid, block);
+    return block;
+}
+
+async function abortActiveBlock(
     session_uid: string,
-    block: ExtractedSpecialBlock,
+    runtimeState: StreamRuntimeState,
     abortController: AbortController,
-): Promise<boolean> {
-    const currentSessionStateForResponse = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    reason: string,
+): Promise<void> {
+    const activeBlock = getActiveBlockFromRuntime(session_uid, runtimeState);
+    if (!activeBlock) {
+        runtimeState.active_block = undefined;
+        return;
+    }
+
+    activeBlock.lifecycle_status = AIBlockLifecycleStatus.ABORTED;
+    activeBlock.aborted_at = Date.now();
+    activeBlock.updated_at = activeBlock.aborted_at;
+    activeBlock.runtime_context = {
+        ...(activeBlock.runtime_context ?? {}),
+        abort_reason: reason,
+    };
+
+    persistBlock(session_uid, activeBlock);
+    await invokeBlockLifecycleHandler(session_uid, activeBlock, 'abort', abortController);
+    runtimeState.active_block = undefined;
+}
+
+async function invokeBlockLifecycleHandler(
+    session_uid: string,
+    block: AIBlock,
+    lifecycle: ParserBlockLifecycle,
+    abortController: AbortController,
+    chunkText?: string,
+): Promise<AIParserProtocolState> {
+    // Lifecycle dispatch stays protocol-driven: handlers can still gate the outer parser flow
+    // by emitting AIParserProtocolState through dispatchParserResponse.
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const runtimeBlock = RegistryEngine.getParserBlock(block.block_slug);
+    const lifecycleHandler = lifecycle === 'start'
+        ? runtimeBlock?.handlers.start
+        : lifecycle === 'chunk'
+            ? runtimeBlock?.handlers.chunk
+            : lifecycle === 'complete'
+                ? runtimeBlock?.handlers.complete
+                : runtimeBlock?.handlers.abort;
+
+    if (!lifecycleHandler) {
+        return lifecycle === 'complete' ? AIParserProtocolState.COMPLETED : AIParserProtocolState.CONTINUE_NEXT_BLOCK;
+    }
+
     let hasParserResponse = false;
     let resolveParserState: ((value: AIParserProtocolState | undefined) => void) | undefined;
-
-    console.log(`[AIGatewayEngine] Processing block ${block} for session ${session_uid}`);
-
     const parserHandlerPromise = new Promise<AIParserProtocolState | undefined>((resolve) => {
         resolveParserState = resolve;
-        AISessionBlockBus.addEventListener(`system:ai_session:${currentSessionStateForResponse.session_uid}:block_parsing_response`,
+        AISessionBlockBus.addEventListener(
+            `system:ai_session:${currentSessionState.session_uid}:block_parsing_response`,
             (e: Event) => {
                 hasParserResponse = true;
                 resolve((e as CustomEvent<AIParserProtocolState>).detail);
@@ -463,29 +662,49 @@ async function processSingleExtractedBlock(
     });
 
     const parserHandlerDispatch = (detail: AIParserProtocolState) => {
-        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${currentSessionStateForResponse.session_uid}:block_parsing_response`, { detail }));
+        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${currentSessionState.session_uid}:block_parsing_response`, { detail }));
     };
 
-    const blockHandler = RegistryEngine.getParserBlock(block.block_name)?.handler;
-
-    const currentSessionState: AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
-    const currentTurn: AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
-    const currentEntry: AIEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
-    const currentBlock = TurnRenderer.buildBlockEntry({
-        session_uid,
-        process_uid: currentSessionState.process_uid,
-        turn_index: currentSessionState.turn_index,
-        entry_index: currentTurn.active_entry_index as number,
-        block_index: (currentEntry.blocks ? currentEntry.blocks.length : 0),
-        block_slug: block.block_name,
-        payload: { content: block.content },
+    await lifecycleHandler({
+        block,
+        lifecycle,
+        chunk_text: chunkText,
+        dispatchParserResponse: parserHandlerDispatch,
+        abortCurrentResponseBuffer: abortController.signal,
     });
 
-    currentEntry.blocks = [
-        ...(currentEntry.blocks ? currentEntry.blocks : []),
-        currentBlock,
-    ];
+    persistBlock(session_uid, block);
 
+    if (!hasParserResponse) {
+        resolveParserState?.(lifecycle === 'complete' ? AIParserProtocolState.COMPLETED : AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+    }
+
+    return (await parserHandlerPromise) ?? AIParserProtocolState.CONTINUE_NEXT_BLOCK;
+}
+
+function shouldStopForParserProtocol(protocolState: AIParserProtocolState): boolean {
+    return protocolState === AIParserProtocolState.WAITING_FOR_FEEDBACK
+        || protocolState === AIParserProtocolState.INTERRUPTED
+        || protocolState === AIParserProtocolState.ERROR;
+}
+
+function getCurrentEntryRefs(session_uid: string): {
+    currentSessionState: AISession;
+    currentTurn: AITurn;
+    currentEntry: AIEntry;
+} {
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index] as AITurn;
+    const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
+
+    if (!currentEntry.blocks) {
+        currentEntry.blocks = [];
+    }
+
+    return { currentSessionState, currentTurn, currentEntry };
+}
+
+function persistCurrentEntry(session_uid: string, currentSessionState: AISession, currentTurn: AITurn, currentEntry: AIEntry): void {
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         ...currentSessionState,
         turns: [
@@ -498,49 +717,17 @@ async function processSingleExtractedBlock(
             },
         ],
     });
+}
 
-    if (blockHandler) {
-        console.log(`Found handler for block ${block.block_name}, executing handler...`);
-        await blockHandler({
-            block: currentBlock,
-            dispatchParserResponse: parserHandlerDispatch,
-            abortCurrentResponseBuffer: abortController.signal,
-        });
+function persistBlock(session_uid: string, block: AIBlock): void {
+    const { currentSessionState, currentTurn, currentEntry } = getCurrentEntryRefs(session_uid);
+    currentEntry.blocks = [
+        ...(currentEntry.blocks ?? []).slice(0, block.block_index),
+        block,
+        ...(currentEntry.blocks ?? []).slice(block.block_index + 1),
+    ];
 
-        if (!hasParserResponse) {
-            resolveParserState?.(AIParserProtocolState.COMPLETED);
-        }
-    } else {
-        console.warn(`No handler found for block ${block.block_name}`);
-        resolveParserState?.(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
-    }
-
-    const promiseResponse = await parserHandlerPromise;
-    console.log(`Received response from block handler for block ${block.block_name}:`, promiseResponse);
-
-    if (promiseResponse === AIParserProtocolState.WAITING_FOR_FEEDBACK) {
-        console.log(`Block handler for block ${block.block_name} requested to stop the interaction loop.`);
-        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
-        return true;
-    }
-
-    if (
-        promiseResponse === AIParserProtocolState.CONTINUE_NEXT_BLOCK
-        || promiseResponse === AIParserProtocolState.COMPLETED
-    ) {
-        console.log(`Block handler for block ${block.block_name} requested to continue the interaction loop.`);
-    }
-
-    if (
-        promiseResponse === AIParserProtocolState.INTERRUPTED
-        || promiseResponse === AIParserProtocolState.ERROR
-    ) {
-        console.log(`Block handler for block ${block.block_name} requested to halt parser progression.`);
-        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
-        return true;
-    }
-
-    return false;
+    persistCurrentEntry(session_uid, currentSessionState, currentTurn, currentEntry);
 }
 
 // + ============== Runtime Stage 9: Flush Trailing Plain Text ============== +
@@ -548,7 +735,7 @@ async function processSingleExtractedBlock(
 // the assistant renderer before the next read cycle so rendering stays aligned with memory.
 
 function flushPlainTextBufferToRenderer(session_uid: string, runtimeState: StreamRuntimeState): void {
-    if (runtimeState.tmp_chunk_buffer == '') {
+    if (runtimeState.pending_buffer == '') {
         return;
     }
 
@@ -558,7 +745,7 @@ function flushPlainTextBufferToRenderer(session_uid: string, runtimeState: Strea
 
         runtimeState.tmp_paragraph_renderer_index = currentTurn.assistant_renderers.length;
         currentTurn.assistant_renderers.push(
-            TurnRenderer.buildRenderer('paragraph_renderer', 'system', { text: runtimeState.tmp_chunk_buffer })
+            TurnRenderer.buildRenderer('paragraph_renderer', 'system', { text: runtimeState.pending_buffer })
         );
 
         KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
@@ -576,7 +763,7 @@ function flushPlainTextBufferToRenderer(session_uid: string, runtimeState: Strea
     const currentTurn: AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
     const currentRenderer = currentTurn.assistant_renderers[runtimeState.tmp_paragraph_renderer_index];
 
-    currentRenderer.payload = { text: runtimeState.tmp_chunk_buffer };
+    currentRenderer.payload = { text: runtimeState.pending_buffer };
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         ...currentSessionState,
         turns: [
@@ -628,12 +815,29 @@ function finalizeStreamingEntry(session_uid: string): void {
     }
 }
 
-function failStreamingEntry(session_uid: string, error: unknown): void {
+async function failStreamingEntry(session_uid: string, error: unknown): Promise<void> {
     AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
 
     const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index];
     const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
+
+    const unfinishedBlock = [...(currentEntry.blocks ?? [])].reverse().find((block) => (
+        block.lifecycle_status === AIBlockLifecycleStatus.STARTED
+        || block.lifecycle_status === AIBlockLifecycleStatus.STREAMING
+    ));
+
+    if (unfinishedBlock && currentSessionState.active_abort_controller) {
+        unfinishedBlock.lifecycle_status = AIBlockLifecycleStatus.ABORTED;
+        unfinishedBlock.aborted_at = Date.now();
+        unfinishedBlock.updated_at = unfinishedBlock.aborted_at;
+        unfinishedBlock.runtime_context = {
+            ...(unfinishedBlock.runtime_context ?? {}),
+            abort_reason: error instanceof Error ? error.message : String(error),
+        };
+        persistBlock(session_uid, unfinishedBlock);
+        await invokeBlockLifecycleHandler(session_uid, unfinishedBlock, 'abort', currentSessionState.active_abort_controller);
+    }
 
     console.log(currentSessionState);
     currentEntry.status = 'error';
@@ -657,128 +861,6 @@ function failStreamingEntry(session_uid: string, error: unknown): void {
     } as Partial<AISession>);
 }
 
-// + ============== Runtime Stage 11: Parse Incoming Buffer ============== +
-// This is the lowest-level parsing detail. By the time execution reaches here, the runtime is
-// already inside one active chunk step and only needs to split text from complete block markup.
-
-/**
- * Parse streaming buffer for special blocks (detailed)
- *
- * Purpose:
- * - Split incoming streaming text into:
- *    - `stripped_prefix`: plain response text (not part of any block)
- *    - `extracted_blocks`: fully-formed special blocks like <tool>..</tool>
- *    - `next_buffer`: tail of the buffer that couldn't be processed yet
- *    - `has_block_or_fragment`: boolean hint whether there is a block fragment or blocks in progress
- *    - `fragment_block_name`: name of the partial tag if present (e.g. 'tool')
- *
- * High-level flow (ASCII):
- *
- *   tmp_chunk_buffer
- *      |
- *      v
- *   find first '<'
- *    /   \
- *   no    yes
- *   |      |
- * return   stripped_prefix = before '<'
- * (no     workingBuffer = from '<' onward
- * blocks)     |
- *            v
- *   try to extract full blocks at start of workingBuffer:
- *     while workingBuffer matches /^<tag>[\s\S]*?<\/tag>/:
- *       - push full block into extracted_blocks
- *       - workingBuffer = workingBuffer.slice(raw.length)
- *   if extracted_blocks.length > 0:
- *     return { next_buffer: workingBuffer, extracted_blocks, stripped_prefix, has_block_or_fragment: true }
- *   else:
- *     check for partial fragment (opening tag without close):
- *       - if match -> fragment_block_name = tagName, has_block_or_fragment = true
- *       - else -> has_block_or_fragment = false
- *
- * Caller usage notes (how the loop uses returned fields):
- * - `stripped_prefix` is appended into the current renderer / `currentEntry.response`.
- * - `extracted_blocks` are turned into block entries and dispatched to RegistryEngine handlers.
- * - `next_buffer` becomes the new `tmp_chunk_buffer` for the next read iteration.
- * - `has_block_or_fragment` tells the caller whether it should keep the buffer open for more chunks.
- *
- * Contoh singkat (ID):
- * - chunk1: "Hello <tool>run arg"
- * - chunk2: "1</tool> World"
- * => Setelah chunk1: stripped_prefix="Hello ", fragment_block_name='tool', next_buffer='<tool>run arg'
- * => Setelah chunk2: extracted_blocks=[{block_name:'tool', content:'run arg1'}], stripped_prefix='', next_buffer=' World'
- */
-
-function streamParseBuffer(tmp_chunk_buffer: string): SpecialBlockBufferState {
-
-    // The implementation of this function will depend on the specific 
-    // format of the special blocks sent by the gateway.
-    if (!tmp_chunk_buffer) {
-        return {
-            next_buffer: '',
-            extracted_blocks: [],
-            stripped_prefix: '',
-            has_block_or_fragment: false,
-        };
-    }
-
-    // Example implementation for blocks wrapped in <block_name>...</block_name> tags. This is a very basic parser and 
-    // can be enhanced to handle nested blocks, attributes, etc. as needed.
-    const firstTagIndex = tmp_chunk_buffer.indexOf('<');
-    if (firstTagIndex === -1) {
-        return {
-            next_buffer: tmp_chunk_buffer,
-            extracted_blocks: [],
-            stripped_prefix: '',
-            has_block_or_fragment: false,
-        };
-    }
-
-    // We found a potential block start. Now we will try to extract full blocks from the buffer. If we find any incomplete 
-    // block (e.g. missing closing tag), we will keep it in the buffer for future processing.
-
-    const stripped_prefix = tmp_chunk_buffer.slice(0, firstTagIndex);
-    let workingBuffer = tmp_chunk_buffer.slice(firstTagIndex);
-    const extracted_blocks: ExtractedSpecialBlock[] = [];
-
-    while (true) {
-        const fullBlockMatch = workingBuffer.match(/^<([A-Za-z][\w:-]*)>([\s\S]*?)<\/\1>/);
-        if (!fullBlockMatch) break;
-
-        const [raw, block_name, content] = fullBlockMatch;
-        extracted_blocks.push({
-            block_name,
-            raw,
-            content,
-        });
-
-        workingBuffer = workingBuffer.slice(raw.length);
-    }
-
-    // If we extracted any full blocks, we can return them along with the remaining buffer. If we didn't extract any full 
-    // blocks but found a potential block start, we will keep the buffer for future processing and indicate that we 
-    // have a block or fragment in progress.
-
-    if (extracted_blocks.length > 0) {
-        return {
-            next_buffer: workingBuffer,
-            extracted_blocks,
-            stripped_prefix,
-            has_block_or_fragment: true,
-        };
-    }
-
-    // Check if the remaining buffer contains a block fragment (e.g. starts with an opening tag 
-    // but doesn't have a closing tag yet)
-
-    const fragmentMatch = workingBuffer.match(/^<\/?([A-Za-z][\w:-]*)?$/)
-        ?? workingBuffer.match(/^<([A-Za-z][\w:-]*)>?/);
-
-    return {
-        next_buffer: workingBuffer,
-        extracted_blocks: [],
-        stripped_prefix,
-        has_block_or_fragment: true,
-        fragment_block_name: fragmentMatch?.[1],
-    };
+function isPotentialOpeningTagFragment(buffer: string): boolean {
+    return /^<([A-Za-z][\w:-]*)?$/.test(buffer);
 }

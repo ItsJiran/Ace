@@ -108,13 +108,17 @@ export interface AISession {
     // Context entries that are generated throughout the session, which can include summaries, 
     // relevant history snippets, and other contextual information that has been deemed relevant at 
     // different points in the conversation. Each entry can have its own lifecycle and relevance based on 
-    // the turn index at which it was generated, allowing for more dynamic and contextually appropriate 
-    // feeding of information back into the model as the conversation progresses.
+    // Context entries that are generated throughout the session...
     context: Array<AIContextEntry>;
     context_start_index: number;
     context_end_index: number;
 
-    // A more detailed history of the session, which can include parsed information, 
+    // Working memory ("The Workbench") stores massive raw payloads (like entire files or tool results)
+    // without polluting the conversational thread. Items here are explicitly added and removed by the AI
+    // via blocks like <working_memory> to conserve tokens.
+    working_memory: Array<AIWorkingMemoryEntry>;
+
+    // A more detailed history of the session... 
     // intermediate summaries, and other relevant data that has been generated throughout the session. 
     // This can be used for more advanced context management strategies, allowing the application to 
     // determine what information is most relevant to feed back into the model at different points in the 
@@ -185,6 +189,13 @@ export interface AIBlock {
 
     block_slug: string; // This can be used to identify the type of block, such as 'tool_call', 'function_execution', 'code_snippet', etc.
     package_ref?: string; // Optional reference to a specific package that can handle this block, useful for routing to the correct handler or renderer.
+    lifecycle_status?: AIBlockLifecycleStatus;
+    opened_at?: number;
+    updated_at?: number;
+    completed_at?: number;
+    aborted_at?: number;
+    chunk_count?: number;
+    runtime_context?: Record<string, unknown>;
     payload: {
         content: string; // The raw content of the block, which can be parsed and processed by the appropriate handler based on the block_slug and package_ref.
         [key: string]: unknown; // Additional fields can be included in the payload as needed for specific block types, allowing for flexible handling of different kinds of blocks.
@@ -205,6 +216,14 @@ export interface AIContextEntry {
     // useful for determining relevance and when to refresh the context
     lifecycle_turn?: number;
     payload?: Record<string, unknown>;
+}
+
+export interface AIWorkingMemoryEntry {
+    uid: string; // E.g., 'wm_search_result_1', 'wm_file_user_ts'
+    description: string; // Brief description of what this working memory holds
+    content: string; // The potentially massive payload
+    created_at: number;
+    lifecycle_turn?: number;
 }
 
 export interface AIRenderer {
@@ -279,6 +298,16 @@ export const AIParserProtocolState = {
 } as const;
 
 export type AIParserProtocolState = typeof AIParserProtocolState[keyof typeof AIParserProtocolState];
+
+export const AIBlockLifecycleStatus = {
+    STARTED: 'started',
+    STREAMING: 'streaming',
+    COMPLETED: 'completed',
+    ABORTED: 'aborted',
+    FAILED: 'failed',
+} as const;
+
+export type AIBlockLifecycleStatus = typeof AIBlockLifecycleStatus[keyof typeof AIBlockLifecycleStatus];
 
 // These constants represent the various statuses that an AI session, turn, entry, or block handler can be in.
 export const AISessionStatus = {

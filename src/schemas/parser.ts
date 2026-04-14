@@ -37,6 +37,10 @@ export interface BlockProtocolSchema {
 
 export type ParserBlockArgs = {
     block: AIBlock;
+    lifecycle: ParserBlockLifecycle;
+
+    // Incremental content for the current chunk lifecycle callback.
+    chunk_text?: string;
 
     // Function to send the parsed block response back to the session, 
     // which will then be rendered by the frontend.
@@ -50,12 +54,21 @@ export type ParserBlockArgs = {
     abortCurrentResponseBuffer: AbortSignal;
 }
 
+export type ParserBlockLifecycle = 'start' | 'chunk' | 'complete' | 'abort';
+
 export type ParserBlockHandler = (context: ParserBlockArgs) => Promise<void>;
+
+export interface ParserBlockHandlers {
+    start: ParserBlockHandler;
+    chunk: ParserBlockHandler;
+    complete: ParserBlockHandler;
+    abort?: ParserBlockHandler;
+}
 
 export interface ParserBlockRuntime {
     package_name: string;
     slug: string;
     aliases: string[];
     schema: BlockProtocolSchema;
-    handler: ParserBlockHandler;
+    handlers: ParserBlockHandlers;
 }

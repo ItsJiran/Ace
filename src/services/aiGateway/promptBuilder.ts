@@ -51,6 +51,7 @@ export function buildDefaultPrompt(): string {
     - You should always consider the user's intent and try to understand it as much as possible before taking any action.
     - You should always try to use the most relevant information from the session history, context, and memory to inform your response.
     - You should always try to be concise and clear in your response, and avoid unnecessary information or verbosity.
+    - IMPORTANT RULE: DO NOT display or restate raw data, search results, or tool outputs in your text response. The system uses dedicated UI renderers to show data and block executions automatically to the user. Your text response should focus only on making decisions, evaluating results, and conversing naturally.
 
     [PARSER]
     - The parser mechanism is a way for you to instruct the system to do something specific, this can be calling a tool, executing a code snippet, or any other action that need to be done by the system. 
@@ -77,7 +78,8 @@ export function buildDefaultPrompt(): string {
     result, or any other information that can help you to generate a better response.
     - The context will be updated throughout the session, and you should always try to use the 
     most relevant information from the context to inform your response.
-    - You can always added, update or remove the context by using provided block parser.  
+    - You can always added, update or remove the context by using provided block parser.
+    - CRITICAL RULE: When using <protocol_control>, <context>, or <working_memory> blocks, ALWAYS place them at the VERY TOP of your response before any other text or blocks. This ensures your intentions and memory state are processed before any further generation.
     `.trim();
 }
 
@@ -195,13 +197,23 @@ export function buildContextPrompt(session: AISession): string {
 }
 
 export function buildMemoryPrompt(session: AISession): string {
-    // This function can be used to build a prompt that includes information from the session's memory. 
-    // This could include facts that the user has shared, previous responses from the model, or any other 
-    // information that has been stored in memory during the session. The implementation would involve 
-    // retrieving this information and formatting it into a prompt that can be sent to the model.
+    if (!session.working_memory || session.working_memory.length === 0) return '';
 
+    const lines: string[] = ['[WORKING MEMORY (WORKBENCH)]'];
+    lines.push('Items placed here are kept available for reference. Use <working_memory> to drop items you no longer need.');
 
-    return '';
+    for (const entry of session.working_memory) {
+        lines.push('');
+        lines.push(`--- ID: ${entry.uid} ---`);
+        lines.push(`Description: ${entry.description}`);
+        if (entry.lifecycle_turn !== undefined) {
+             lines.push(`Added at turn: ${entry.lifecycle_turn}`);
+        }
+        lines.push(`Content:\n${entry.content}`);
+        lines.push(`-----------------------`);
+    }
+
+    return lines.join('\n');
 }
 
 export function buildHistoryPrompt(session: AISession): string {

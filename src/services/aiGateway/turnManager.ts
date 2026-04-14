@@ -1,4 +1,4 @@
-import { AIResponseStatus, type AIBlock, type AIEntry, type AITurn } from "#/schemas/ai"
+import { AIBlockLifecycleStatus, AIResponseStatus, type AIBlock, type AIEntry, type AITurn } from "#/schemas/ai"
 
 const initTurn = (prompt: string): AITurn => {
     return {
@@ -39,6 +39,13 @@ const buildBlockEntry = (obj: Partial<AIBlock>): AIBlock => {
 
         block_slug: obj.block_slug ?? '', // This can be used to identify the type of block, such as 'tool_call', 'function_execution', 'code_snippet', etc.
         package_ref: obj.package_ref ?? '', // Optional reference to a specific package that can handle this block, useful for routing to the correct handler or renderer.
+        lifecycle_status: obj.lifecycle_status ?? AIBlockLifecycleStatus.STARTED,
+        opened_at: obj.opened_at,
+        updated_at: obj.updated_at,
+        completed_at: obj.completed_at,
+        aborted_at: obj.aborted_at,
+        chunk_count: obj.chunk_count ?? 0,
+        runtime_context: obj.runtime_context ?? {},
         payload: obj.payload ?? {},
     } as AIBlock
 }

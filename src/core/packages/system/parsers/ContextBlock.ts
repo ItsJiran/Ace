@@ -1,10 +1,19 @@
-import { AIParserProtocolState } from '#/schemas/ai';
+import { AIParserProtocolState, type AISession } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
+import { KernelEngine } from '#/services/kernelEngine';
+
+export const handlerStart: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+};
+
+export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
+    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+};
 
 export const registry: AceRegistryType.Parser = {
-    name: 'context_update',
-    slug: 'context_update',
+    name: 'context',
+    slug: 'context',
     description: 'Session context management block — update summary, retrieve a stored memory, or store new information.',
     block_schema: {
         is_default_detail: true,
@@ -42,11 +51,43 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handler: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
-    const body = JSON.parse(block.payload.content);
-    console.log(body);
+export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
+    try {
+        const payload = JSON.parse(block.payload.content);
+        const action = payload.action;
+        const session_uid = block.session_uid;
 
-    // For demonstration, we simply dispatch the parsed body back as the response.
-    // In a real implementation, you would handle the different actions (update, retrieve, store) accordingly.
-    dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+        const sessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+        if (!sessionState) {
+            dispatchParserResponse(AIParserProtocolState.ERROR);
+            return;
+        }
+
+        const currentTurnIndex = sessionState.turns.length > 0 ? sessionState.turns.length - 1 : 0;
+        const newContext = [...(sessionState.context || [])];
+
+        if (action === 'store' || action === 'update') {
+            newContext.push({
+                at: Date.now(),
+                title: payload.title || payload.type || 'Context Update',
+                summary: payload.summary || payload.text,
+                status: 'active',
+                lifecycle_turn: currentTurnIndex,
+                payload: payload.payload
+            });
+            console.log(`[ContextBlock] Added context entry for session ${session_uid}`);
+        } else if (action === 'retrieve') {
+            console.log(`[ContextBlock] Retrieval requested for ${payload.memory_key}`);
+            // Logic for retrieval implementation can be expanded here depending on how RAG/memory stores are structured.
+        }
+
+        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+            context: newContext,
+        } as Partial<AISession>);
+
+        dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+    } catch (e) {
+        console.error(`[ContextBlock] Error processing block:`, e);
+        dispatchParserResponse(AIParserProtocolState.ERROR);
+    }
 };
