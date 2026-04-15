@@ -29,13 +29,13 @@ export const registry: AceRegistryType.Parser = {
             'Let me save this raw API response into working memory so I can analyze it in the next step.'
         ],
         exampleLines: [
-            '  <working_memory>',
+            '  @@ace:start working_memory',
             '  {"action": "drop", "uid": "wm_search_result_1"}',
-            '  </working_memory>',
+            '  @@ace:end',
             '',
-            '  <working_memory>',
+            '  @@ace:start working_memory',
             '  {"action": "add", "uid": "wm_temp_data", "description": "Raw JSON config", "content": "{...}"}',
-            '  </working_memory>',
+            '  @@ace:end',
         ],
     },
 };

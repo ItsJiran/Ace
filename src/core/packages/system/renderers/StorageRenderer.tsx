@@ -5,9 +5,6 @@ export const registry: AceRegistryType.Renderer = {
     name: 'Storage Block Renderer',
     slug: 'storage-renderer',
     description: 'Renders storage/memory operations with action and result details',
-    react_behavior: 'storage_renderer',
-    input_types: ['storage', 'storage_result', 'memory_operation'],
-    supported_formats: ['card', 'list'],
 };
 
 interface StorageRendererProps {

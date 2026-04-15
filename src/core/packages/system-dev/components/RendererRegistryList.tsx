@@ -27,10 +27,6 @@ export default function RendererRegistryList() {
 
             <div className="space-y-2">
                 {renderers.map((item) => {
-                    const meta = item.metadata as Record<string, unknown>;
-                    const formats = Array.isArray(meta.supported_formats) ? (meta.supported_formats as string[]) : [];
-                    const inputTypes = Array.isArray(meta.input_types) ? (meta.input_types as string[]) : [];
-
                     return (
                         <div
                             key={`${item.package_name}:${item.slug}`}
@@ -48,25 +44,6 @@ export default function RendererRegistryList() {
                             {item.description && (
                                 <div className="mt-0.5 text-[11px] text-zinc-400">{item.description}</div>
                             )}
-
-                            <div className="mt-2 flex flex-wrap gap-1">
-                                {formats.map((f) => (
-                                    <span
-                                        key={f}
-                                        className="text-[10px] rounded bg-indigo-900/50 border border-indigo-700/40 px-1.5 py-0.5 text-indigo-300"
-                                    >
-                                        {f}
-                                    </span>
-                                ))}
-                                {inputTypes.map((t) => (
-                                    <span
-                                        key={t}
-                                        className="text-[10px] rounded bg-zinc-800 border border-zinc-700/50 px-1.5 py-0.5 text-zinc-400"
-                                    >
-                                        {t}
-                                    </span>
-                                ))}
-                            </div>
                         </div>
                     );
                 })}

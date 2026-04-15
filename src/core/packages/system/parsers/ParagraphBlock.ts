@@ -12,19 +12,23 @@ export const registry: AceRegistryType.Parser = {
         is_default_detail: true,
         purpose: 'Use this block when you want visible prose to stream through a dedicated paragraph renderer instance instead of relying on plain text outside parser tags.',
         requiredFields: 'None. The content is the raw paragraph text inside the block.',
-        optionalFields: 'None.',
+        optionalFields: 'If you need to mention ACE control markers literally, escape or rewrite them as plain explanation text.',
         triggerConditions: [
+            'FOR EVERY PARAGRAPH, TEXT WRAP USING THIS BLOCK',
             'When you want a dedicated renderer-backed paragraph block with its own streaming lifecycle.',
             'When prose should be emitted through block mechanics so chunk updates can be observed independently from the raw assistant response.',
+            'Do not put another parser block inside paragraph content. Close the paragraph first, then emit the next parser block.',
         ],
         promptExamples: [
             'Render this explanation as a dedicated paragraph block.',
-            'Stream the visible answer through a paragraph renderer instance.'
+            'Stream the visible answer through a paragraph renderer instance.',
+            'If you need another parser block, end the paragraph first and open the next block on a new line.'
         ],
         exampleLines: [
-            '  <paragraph>',
+            '  @@ace:start paragraph',
             '  This paragraph is streamed through kernel memory and rendered progressively.',
-            '  </paragraph>',
+            '  @@ace:end',
+            `Do not write nested control blocks inside paragraph. If you need to mention them literally, write text like "[at][at]ace:start tool_call" instead of opening a real block.`
         ],
     },
 };
@@ -51,7 +55,7 @@ export const handlerStart: ParserBlockHandler = async ({ block, dispatchParserRe
 
         const currentTurn = sessionState.turns[block.turn_index];
         currentTurn.assistant_renderers.push(
-            TurnRenderer.buildRenderer('paragraph-renderer', 'system', { memory_uid })
+            TurnRenderer.buildRenderer('paragraph_renderer', { memory_uid })
         );
 
         KernelEngine.updateMemory(`system:ai_session:${block.session_uid}:state`, {

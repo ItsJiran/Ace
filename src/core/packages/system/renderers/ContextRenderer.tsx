@@ -5,9 +5,6 @@ export const registry: AceRegistryType.Renderer = {
     name: 'Context Block Renderer',
     slug: 'context-renderer',
     description: 'Renders context memory operations and metadata',
-    react_behavior: 'context_renderer',
-    input_types: ['context', 'context_memory'],
-    supported_formats: ['card', 'list'],
 };
 
 interface ContextRendererProps {

@@ -5,9 +5,6 @@ export const registry: AceRegistryType.Renderer = {
     name: 'History Summary Prompt Renderer',
     slug: 'history-summary-prompt-renderer',
     description: 'Renders AI prompt history summaries with context and stats',
-    react_behavior: 'history_summary_prompt_renderer',
-    input_types: ['history_summary', 'history_summary_ai_prompt'],
-    supported_formats: ['card', 'list'],
 };
 
 interface HistorySummaryPromptRendererProps {

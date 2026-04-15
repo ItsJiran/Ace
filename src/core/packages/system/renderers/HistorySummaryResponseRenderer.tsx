@@ -5,9 +5,6 @@ export const registry: AceRegistryType.Renderer = {
     name: 'History Summary Response Renderer',
     slug: 'history-summary-response-renderer',
     description: 'Renders AI response history summaries with context and stats',
-    react_behavior: 'history_summary_response_renderer',
-    input_types: ['history_summary', 'history_summary_ai_response'],
-    supported_formats: ['card', 'list'],
 };
 
 interface HistorySummaryResponseRendererProps {

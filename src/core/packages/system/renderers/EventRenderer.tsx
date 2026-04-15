@@ -5,9 +5,6 @@ export const registry: AceRegistryType.Renderer = {
     name: 'Event Block Renderer',
     slug: 'event-renderer',
     description: 'Renders event/action block data with status and action details',
-    react_behavior: 'event_renderer',
-    input_types: ['event'],
-    supported_formats: ['list', 'table', 'card'],
 };
 
 interface EventRendererProps {

@@ -27,15 +27,15 @@ export const registry: AceRegistryType.Parser = {
         ],
         promptExamples: [],
         exampleLines: [
-            '  <think>',
+            '  @@ace:start think',
             '  The user wants to list all sessions. I should use the registry to find the session inspector window.',
-            '  </think>',
+            '  @@ace:end',
         ],
     },
 };
 
 export const handlerComplete: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
-    // We just gracefully continue. The text inside <think> is already captured in the session entry blocks payload.
+    // We just gracefully continue. The text inside the think block is already captured in the session entry blocks payload.
     // console.log(`[ThinkBlock] process=${block.process_uid}: ${block.payload.content?.substring(0, 50)}...`);
     dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
 };

@@ -7,10 +7,6 @@ export const registry: AceRegistryType.Renderer = {
     name: 'Process Tree Renderer',
     slug: 'process-tree-renderer',
     description: 'Renders nested process lineage for runtime observability',
-    react_behavior: 'process_tree_renderer',
-    input_types: ['process', 'process_tree', 'runtime_trace'],
-    supported_formats: ['list', 'card'],
-    supports_partial: true,
 };
 
 interface ProcessTreeRendererProps {

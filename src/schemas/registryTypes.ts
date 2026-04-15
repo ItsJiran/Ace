@@ -153,14 +153,5 @@ export namespace AceRegistryType {
     // Resolved by presentation parser blocks via RegistryEngine 'renderers' domain.
     // Default export: React component function
     // -----------------------------------------------------------------------
-    export interface Renderer extends BaseIdentity {
-        /** Semantic label for what this renderer displays */
-        react_behavior: string;
-        /** Data type(s) this renderer is designed to handle (e.g. 'tool_result', 'file_list') */
-        input_types?: string[];
-        /** Presentation format hints this renderer supports (e.g. 'list', 'table', 'card', 'markdown') */
-        supported_formats?: ('list' | 'table' | 'card' | 'markdown' | string)[];
-        /** Whether this renderer can render partial / streaming data */
-        supports_partial?: boolean;
-    }
+    export interface Renderer extends BaseIdentity {}
 }

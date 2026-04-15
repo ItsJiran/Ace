@@ -13,11 +13,11 @@
  *    opens the stream, and hands the reader to the chunk loop.
  * 3. `processGatewayStream(...)` reads one chunk at a time.
  * 4. `processGatewayChunk(...)` appends raw text into the current entry and advances the incremental parser state.
- * 5. Plain text outside parser tags is mirrored into paragraph renderers.
- * 6. When an opening tag is found, an `AIBlock` is created immediately with empty content.
+ * 5. Plain text outside parser blocks is mirrored into paragraph renderers.
+ * 6. When a valid `@@ace:start block_slug` line is found, an `AIBlock` is created immediately with empty content.
  * 7. While the block is open, incoming text is appended into the same block and delegated through
  *    `handlerChunk(...)` so the parser can react before the block is complete.
- * 8. When the closing tag is found, the block is finalized and `handlerComplete(...)` decides whether
+ * 8. When the `@@ace:end` line is found, the block is finalized and `handlerComplete(...)` decides whether
  *    parsing continues, pauses for feedback, or stops.
  * 9. If the stream dies while a block is still open, the same block instance is marked aborted and
  *    `handlerAbort(...)` gets a cleanup opportunity.
@@ -46,14 +46,14 @@
  * Gateway --> streaming chunks --> processGatewayChunk()
  *    |                                   |
  *    v                                   v
- * updateMemory (raw entry text)      detect <tag>
+ * updateMemory (raw entry text)      detect @@ace:start
  *                                        |
  *                                        v
  *                                   create AIBlock at start
  *                                        |
  *                           chunk text --> handlerChunk()
  *                                        |
- *                          closing tag --> handlerComplete()
+ *                           @@ace:end --> handlerComplete()
  *                                        |
  *                             abort/error --> handlerAbort()
  *                                        |
@@ -105,7 +105,6 @@ interface GatewayTargetConfig {
 interface ActiveStreamBlock {
     block_slug: string;
     block_index: number;
-    closing_tag: string;
 }
 
 interface StreamRuntimeState {
@@ -114,6 +113,9 @@ interface StreamRuntimeState {
     tmp_paragraph_memory_uid?: string;
     active_block?: ActiveStreamBlock;
 }
+
+const ACE_BLOCK_START_PREFIX = '@@ace:start';
+const ACE_BLOCK_END_LINE = '@@ace:end';
 
 // + ============== Runtime Stage 1: Entry Point ============== +
 // Callers start here. This function spins up the background parser workflow for one session prompt.
@@ -311,7 +313,7 @@ async function processGatewayStream(
     }
 
     if (runtimeState.active_block) {
-        await abortActiveBlock(session_uid, runtimeState, abortController, 'Stream ended before block closing tag');
+        await abortActiveBlock(session_uid, runtimeState, abortController, 'Stream ended before block end marker');
     }
 
     if (runtimeState.pending_buffer !== '') {
@@ -325,9 +327,9 @@ async function processGatewayStream(
 // handlers sequentially, and flushes any safe trailing plain text into renderers.
 //
 // Important detail:
-// - a block is instantiated as soon as `<block_slug>` is seen.
+// - a block is instantiated as soon as a valid `@@ace:start block_slug` line is seen.
 // - from that point on, every following character belongs either to the active block content
-//   or to the block closing tag.
+//   or to the closing `@@ace:end` line.
 // - the same AIBlock object is updated in-place through start -> chunk -> complete or abort.
 
 async function processGatewayChunk(
@@ -342,20 +344,21 @@ async function processGatewayChunk(
 
     while (runtimeState.pending_buffer !== '') {
         if (runtimeState.active_block) {
-            // Once a block has started, the parser is no longer searching for new opening tags.
-            // It only looks for the matching closing tag of the active block.
+            // Once a block has started, the parser is no longer searching for new start lines.
+            // It only looks for the matching end marker of the active block.
             const activeBlock = getActiveBlockFromRuntime(session_uid, runtimeState);
             if (!activeBlock) {
                 runtimeState.active_block = undefined;
                 continue;
             }
 
-            const closingIndex = runtimeState.pending_buffer.indexOf(runtimeState.active_block.closing_tag);
-            if (closingIndex === -1) {
-                // No closing tag yet. Everything currently buffered belongs to the active block,
-                // so we append it and delegate the delta through handlerChunk.
-                const chunkText = runtimeState.pending_buffer;
-                runtimeState.pending_buffer = '';
+            const closingMatch = findAceEndLine(runtimeState.pending_buffer);
+            if (!closingMatch) {
+                // No end marker yet. Everything currently buffered belongs to the active block,
+                // except a trailing line fragment that might become @@ace:end in the next chunk.
+                const { flushableText, retainedCandidate } = splitTrailingAceEndCandidate(runtimeState.pending_buffer);
+                const chunkText = flushableText;
+                runtimeState.pending_buffer = retainedCandidate;
 
                 if (chunkText !== '') {
                     appendContentToBlock(session_uid, activeBlock, chunkText);
@@ -370,11 +373,11 @@ async function processGatewayChunk(
                 break;
             }
 
-            const chunkText = runtimeState.pending_buffer.slice(0, closingIndex);
-            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(closingIndex + runtimeState.active_block.closing_tag.length);
+            const chunkText = runtimeState.pending_buffer.slice(0, closingMatch.startIndex);
+            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(closingMatch.startIndex + closingMatch.consumedLength);
 
             if (chunkText !== '') {
-                // The closing tag was found in this chunk, so we first flush the remaining content
+                // The closing marker was found in this chunk, so we first flush the remaining content
                 // into the active block before finalizing it.
                 appendContentToBlock(session_uid, activeBlock, chunkText);
                 const chunkState = await invokeBlockLifecycleHandler(session_uid, activeBlock, 'chunk', abortController, chunkText);
@@ -403,46 +406,50 @@ async function processGatewayChunk(
             continue;
         }
 
-        const firstTagIndex = runtimeState.pending_buffer.indexOf('<');
-        if (firstTagIndex === -1) {
-            flushPlainTextBufferToRenderer(session_uid, runtimeState);
-            runtimeState.pending_buffer = '';
+        const firstStartIndex = findFirstAceStartSentinelIndex(runtimeState.pending_buffer);
+        if (firstStartIndex === -1) {
+            const { flushableText, retainedCandidate } = splitTrailingAceStartCandidate(runtimeState.pending_buffer);
+            if (flushableText !== '') {
+                renderStrippedPrefix(session_uid, flushableText, runtimeState);
+            }
+
+            runtimeState.pending_buffer = retainedCandidate;
             break;
         }
 
-        if (firstTagIndex > 0) {
-            const plainText = runtimeState.pending_buffer.slice(0, firstTagIndex);
-            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(firstTagIndex);
+        if (firstStartIndex > 0) {
+            const plainText = runtimeState.pending_buffer.slice(0, firstStartIndex);
+            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(firstStartIndex);
             renderStrippedPrefix(session_uid, plainText, runtimeState);
             continue;
         }
 
-        const openingTagMatch = runtimeState.pending_buffer.match(/^<([A-Za-z][\w:-]*)>/);
-        if (!openingTagMatch) {
-            if (isPotentialOpeningTagFragment(runtimeState.pending_buffer)) {
-                break;
-            }
+        const startHeader = parseAceStartHeader(runtimeState.pending_buffer);
+        if (startHeader.state === 'partial') {
+            break;
+        }
 
-            renderStrippedPrefix(session_uid, runtimeState.pending_buffer.slice(0, 1), runtimeState);
-            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(1);
+        if (startHeader.state === 'invalid' || !startHeader.blockSlug || !RegistryEngine.getParserBlock(startHeader.blockSlug)) {
+            const plainText = runtimeState.pending_buffer.slice(0, startHeader.consumedLength);
+            runtimeState.pending_buffer = runtimeState.pending_buffer.slice(startHeader.consumedLength);
+            renderStrippedPrefix(session_uid, plainText, runtimeState);
             continue;
         }
 
-        const [openingTag, blockSlug] = openingTagMatch;
-        runtimeState.pending_buffer = runtimeState.pending_buffer.slice(openingTag.length);
+        const blockSlug = startHeader.blockSlug;
+        runtimeState.pending_buffer = runtimeState.pending_buffer.slice(startHeader.consumedLength);
 
         // Plain prose outside blocks is streamed through a default paragraph renderer.
         // Once a real parser block starts, we close that default paragraph lane so any later
         // prose resumes in a fresh renderer instance.
         resetStreamingParagraphRuntime(runtimeState);
 
-        // Opening tag found: create the block immediately even though its content is still empty.
+        // Start marker found: create the block immediately even though its content is still empty.
         // This gives handlers a stable block reference that survives across future chunks.
         const startedBlock = createStreamingBlock(session_uid, blockSlug);
         runtimeState.active_block = {
             block_slug: blockSlug,
             block_index: startedBlock.block_index,
-            closing_tag: `</${blockSlug}>`,
         };
 
         const startState = await invokeBlockLifecycleHandler(session_uid, startedBlock, 'start', abortController);
@@ -494,8 +501,8 @@ function renderStrippedPrefix(
 }
 
 // + ============== Runtime Stage 8: Parse Blocks Incrementally ============== +
-// Blocks are now created as soon as an opening tag is found, then fed chunk-by-chunk until
-// a closing tag finalizes the same block instance.
+// Blocks are now created as soon as a valid start marker is found, then fed chunk-by-chunk
+// until an end marker finalizes the same block instance.
 
 function createStreamingBlock(session_uid: string, blockSlug: string): AIBlock {
     // This is the canonical runtime reference for one in-flight block instance.
@@ -841,6 +848,149 @@ async function failStreamingEntry(session_uid: string, error: unknown): Promise<
     } as Partial<AISession>);
 }
 
-function isPotentialOpeningTagFragment(buffer: string): boolean {
-    return /^<([A-Za-z][\w:-]*)?$/.test(buffer);
+function findFirstAceStartSentinelIndex(buffer: string): number {
+    const match = /(^|\n)@@ace:start(?=[ \t]|$)/.exec(buffer);
+    if (!match) return -1;
+
+    return match.index + (match[1]?.length ?? 0);
+}
+
+function parseAceStartHeader(buffer: string): {
+    state: 'matched' | 'partial' | 'invalid';
+    consumedLength: number;
+    blockSlug?: string;
+} {
+    if (ACE_BLOCK_START_PREFIX.startsWith(buffer) && buffer.length < ACE_BLOCK_START_PREFIX.length) {
+        return { state: 'partial', consumedLength: 0 };
+    }
+
+    if (!buffer.startsWith(ACE_BLOCK_START_PREFIX)) {
+        return { state: 'invalid', consumedLength: consumeSingleLine(buffer) };
+    }
+
+    let cursor = ACE_BLOCK_START_PREFIX.length;
+    if (cursor === buffer.length) {
+        return { state: 'partial', consumedLength: 0 };
+    }
+
+    if (buffer[cursor] !== ' ' && buffer[cursor] !== '\t') {
+        return { state: 'invalid', consumedLength: consumeSingleLine(buffer) };
+    }
+
+    while (cursor < buffer.length && (buffer[cursor] === ' ' || buffer[cursor] === '\t')) {
+        cursor += 1;
+    }
+
+    if (cursor === buffer.length) {
+        return { state: 'partial', consumedLength: 0 };
+    }
+
+    const slugMatch = /^([A-Za-z][\w:-]*)/.exec(buffer.slice(cursor));
+    if (!slugMatch) {
+        return { state: 'invalid', consumedLength: consumeSingleLine(buffer) };
+    }
+
+    const blockSlug = slugMatch[1];
+    cursor += blockSlug.length;
+
+    while (cursor < buffer.length && (buffer[cursor] === ' ' || buffer[cursor] === '\t')) {
+        cursor += 1;
+    }
+
+    if (cursor === buffer.length) {
+        return { state: 'partial', consumedLength: 0 };
+    }
+
+    if (buffer.startsWith('\r\n', cursor)) {
+        return { state: 'matched', consumedLength: cursor + 2, blockSlug };
+    }
+
+    if (buffer[cursor] === '\n') {
+        return { state: 'matched', consumedLength: cursor + 1, blockSlug };
+    }
+
+    return { state: 'invalid', consumedLength: consumeSingleLine(buffer), blockSlug };
+}
+
+function splitTrailingAceStartCandidate(buffer: string): { flushableText: string; retainedCandidate: string } {
+    const lastLineStart = Math.max(buffer.lastIndexOf('\n') + 1, 0);
+    const trailingLine = buffer.slice(lastLineStart);
+
+    if (!isPotentialAceStartLineFragment(trailingLine)) {
+        return { flushableText: buffer, retainedCandidate: '' };
+    }
+
+    return {
+        flushableText: buffer.slice(0, lastLineStart),
+        retainedCandidate: trailingLine,
+    };
+}
+
+function isPotentialAceStartLineFragment(line: string): boolean {
+    if (line === '') return false;
+    if (ACE_BLOCK_START_PREFIX.startsWith(line)) return true;
+    if (!line.startsWith(ACE_BLOCK_START_PREFIX)) return false;
+
+    const rest = line.slice(ACE_BLOCK_START_PREFIX.length);
+    return /^[ \t]+[A-Za-z]?[\w:-]*[ \t]*$/.test(rest);
+}
+
+function findAceEndLine(buffer: string): { startIndex: number; consumedLength: number } | null {
+    let lineStart = 0;
+
+    while (lineStart <= buffer.length) {
+        if (buffer.startsWith(ACE_BLOCK_END_LINE, lineStart)) {
+            let cursor = lineStart + ACE_BLOCK_END_LINE.length;
+
+            while (cursor < buffer.length && (buffer[cursor] === ' ' || buffer[cursor] === '\t')) {
+                cursor += 1;
+            }
+
+            if (cursor === buffer.length) {
+                return { startIndex: lineStart, consumedLength: cursor - lineStart };
+            }
+
+            if (buffer.startsWith('\r\n', cursor)) {
+                return { startIndex: lineStart, consumedLength: cursor + 2 - lineStart };
+            }
+
+            if (buffer[cursor] === '\n') {
+                return { startIndex: lineStart, consumedLength: cursor + 1 - lineStart };
+            }
+        }
+
+        const nextNewline = buffer.indexOf('\n', lineStart);
+        if (nextNewline === -1) break;
+        lineStart = nextNewline + 1;
+    }
+
+    return null;
+}
+
+function splitTrailingAceEndCandidate(buffer: string): { flushableText: string; retainedCandidate: string } {
+    const lastLineStart = Math.max(buffer.lastIndexOf('\n') + 1, 0);
+    const trailingLine = buffer.slice(lastLineStart);
+
+    if (!isPotentialAceEndLineFragment(trailingLine)) {
+        return { flushableText: buffer, retainedCandidate: '' };
+    }
+
+    return {
+        flushableText: buffer.slice(0, lastLineStart),
+        retainedCandidate: trailingLine,
+    };
+}
+
+function isPotentialAceEndLineFragment(line: string): boolean {
+    if (line === '') return false;
+    if (ACE_BLOCK_END_LINE.startsWith(line)) return true;
+    if (!line.startsWith(ACE_BLOCK_END_LINE)) return false;
+
+    const rest = line.slice(ACE_BLOCK_END_LINE.length);
+    return /^[ \t]*$/.test(rest);
+}
+
+function consumeSingleLine(buffer: string): number {
+    const newlineIndex = buffer.indexOf('\n');
+    return newlineIndex === -1 ? buffer.length : newlineIndex + 1;
 }

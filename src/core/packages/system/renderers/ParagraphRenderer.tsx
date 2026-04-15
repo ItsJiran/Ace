@@ -6,9 +6,6 @@ export const registry: AceRegistryType.Renderer = {
     name: 'Paragraph Renderer',
     slug: 'paragraph_renderer',
     description: 'Renders plain text and prose content with markdown-like formatting',
-    react_behavior: 'paragraph_renderer',
-    input_types: ['paragraph', 'text', 'prose'],
-    supported_formats: ['markdown', 'card', 'list'],
 };
 
 interface ParagraphRendererProps {

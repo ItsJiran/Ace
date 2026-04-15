@@ -5,9 +5,6 @@ export const registry: AceRegistryType.Renderer = {
     name: 'Tool Block Renderer',
     slug: 'tool-renderer',
     description: 'Renders tool execution data with status, action, and result details',
-    react_behavior: 'tool_renderer',
-    input_types: ['tool', 'tool_result'],
-    supported_formats: ['card', 'list'],
 };
 
 interface ToolRendererProps {

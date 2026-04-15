@@ -51,23 +51,24 @@ export function buildDefaultPrompt(): string {
     - You should always consider the user's intent and try to understand it as much as possible before taking any action.
     - You should always try to use the most relevant information from the session history, context, and memory to inform your response.
     - You should always try to be concise and clear in your response, and avoid unnecessary information or verbosity.
-    - IMPORTANT RULE: DO NOT display or restate raw data, search results, or tool outputs in your text response. The system uses dedicated UI renderers to show data and block executions automatically to the user. Your text response should focus only on making decisions, evaluating results, and conversing naturally.
 
     [PARSER]
     - The parser mechanism is a way for you to instruct the system to do something specific, this can be calling a tool, executing a code snippet, or any other action that need to be done by the system. 
-    - our parser mechanism works based on the block structure, where you can define a block structure in your response, and the system will parse that block and execute the corresponding action.
+    - our parser mechanism works based on sentinel block lines, where you define a start line and a closing line, and the system will parse that block and execute the corresponding action.
+    - NEVER nest one parser block inside another parser block unless a block explicitly says it supports nested blocks. By default, assume nested blocks are invalid.
     - For block structure always follow in this format : 
     \`\`\`
-    <block_slug>
+    @@ace:start block_slug
         content
-    </block_slug>
+    @@ace:end
     \`\`\` 
-    or 
-    \`\`\`
-    <block_slug> content </block_slug>
-    \`\`\`
-    the content can be text, payload, json or anything but it will be passed to the corresponding block handler as the input, and the system 
+    - The @@ace:start line must be followed by a line break before the payload starts.
+    - @@ace:start and @@ace:end are only treated as parser control markers when they appear at the beginning of a line.
+    - If @@ace:start is followed by a block name that is not registered, it will be treated as plain visible text instead of a real parser block.
+    - the content can be text, payload, json or anything but it will be passed to the corresponding block handler as the input, and the system 
     will execute the block handler and return the result back to you, which you can use in your next response.
+    - Treat paragraph content as plain visible prose only. Do not call another block inside a paragraph block.
+    - If you need to mention control markers literally inside visible prose, write them as escaped or explanatory text, not as an actual executable nested block.
     - There're default provided block parser for u to interact with the system, the details of the default block parser can be found in the the [DEFAULT BLOCK]. 
     - For the other custom block parser, you can use the default block provided if there'is to list, and find block parser that match with ur needs.
     - For block that not default but currently active will be putted in the [ACTIVE PARSER BLOCK] section in the prompt context, and you can use that 
@@ -79,7 +80,7 @@ export function buildDefaultPrompt(): string {
     - The context will be updated throughout the session, and you should always try to use the 
     most relevant information from the context to inform your response.
     - You can always added, update or remove the context by using provided block parser.
-    - CRITICAL RULE: When using <protocol_control>, <context>, or <working_memory> blocks, ALWAYS place them at the VERY TOP of your response before any other text or blocks. This ensures your intentions and memory state are processed before any further generation.
+    - CRITICAL RULE: When using protocol_control, context, or working_memory parser blocks, ALWAYS place them at the VERY TOP of your response before any other text or blocks. This ensures your intentions and memory state are processed before any further generation.
     `.trim();
 }
 
@@ -137,7 +138,8 @@ export function buildBlockParserPrompt(session: AISession): string {
     const lines: string[] = [];
 
     lines.push('[AVAILABLE PARSER BLOCKS]');
-    lines.push('Block syntax: <block_slug>payload</block_slug>');
+    lines.push('Block syntax: @@ace:start block_slug\\n...payload...\\n@@ace:end');
+    lines.push('Global rule: do not nest parser blocks inside other parser blocks unless a block explicitly documents that nested usage is allowed.');
 
     if (fullDetailSlugs.size > 0) {
         for (const slug of fullDetailSlugs) {
@@ -200,7 +202,7 @@ export function buildMemoryPrompt(session: AISession): string {
     if (!session.working_memory || session.working_memory.length === 0) return '';
 
     const lines: string[] = ['[WORKING MEMORY (WORKBENCH)]'];
-    lines.push('Items placed here are kept available for reference. Use <working_memory> to drop items you no longer need.');
+    lines.push('Items placed here are kept available for reference. Use the working_memory parser block to drop items you no longer need.');
 
     for (const entry of session.working_memory) {
         lines.push('');

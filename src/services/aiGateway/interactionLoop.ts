@@ -59,7 +59,6 @@
 // full session snapshots to reduce overhead.
 
 import { AIFeedbackLoopStatus, AISessionStatus, type AIEntry, type AIRenderer, type AISession, type AITurn } from '#/schemas/ai';
-import type { AIGatewayConfig } from '#/schemas/ai_gateway';
 
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';

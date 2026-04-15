@@ -31,13 +31,13 @@ export const registry: AceRegistryType.Parser = {
             'Awaiting further instructions.'
         ],
         exampleLines: [
-            '  <protocol_control>',
+            '  @@ace:start protocol_control',
             '  {"action": "continue_loop"}',
-            '  </protocol_control>',
+            '  @@ace:end',
             '',
-            '  <protocol_control>',
+            '  @@ace:start protocol_control',
             '  {"action": "wait_feedback"}',
-            '  </protocol_control>',
+            '  @@ace:end',
         ],
     },
 };
