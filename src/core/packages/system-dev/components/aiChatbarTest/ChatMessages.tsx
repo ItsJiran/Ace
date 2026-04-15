@@ -52,6 +52,9 @@ export default function ChatMessages({ session, sessionUid, className, bottomRef
 }
 
 function Renderer({ renderer }: { renderer: AIRenderer }) {
+
+    console.log(renderer);
+
     const Comp = useMemo(() => {
         if (!renderer) return null;
 
@@ -66,20 +69,25 @@ function Renderer({ renderer }: { renderer: AIRenderer }) {
             found = RegistryEngine.resolveEntry(`${(renderer as any).package_ref}:renderers:${renderer.component_slug}`);
         }
 
+
+        console.group(RegistryEngine.listRenderers().map(r => r.slug).join(', '));
+
         return (found as React.ComponentType<any>) ?? null;
     }, [renderer?.component_slug, (renderer as any)?.package_ref]);
 
     if (Comp) {
         const C = Comp as any;
+        console.log(`Rendering component for slug: ${renderer.component_slug}, package_ref: ${(renderer as any)?.package_ref} with payload:`, renderer.payload);
         return <C payload={renderer.payload} status={renderer.status} />;
     }
+
+    console.log(`No renderer found for component_slug: ${renderer.component_slug}, package_ref: ${(renderer as any)?.package_ref}`);
 
     // Fallback: render text payloads or JSON preview
     const payload = renderer.payload;
     if (typeof payload === 'string') return <div className="p-2 text-sm">{payload}</div>;
     if (payload && typeof payload === 'object') {
         // prefer `.text` if present
-        // @ts-expect-error
         const text = (payload as any).text ?? JSON.stringify(payload);
         return <div className="p-2 text-sm">{text}</div>;
     }

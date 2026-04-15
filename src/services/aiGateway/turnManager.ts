@@ -50,11 +50,20 @@ const buildBlockEntry = (obj: Partial<AIBlock>): AIBlock => {
     } as AIBlock
 }
 
-const buildRenderer = (componentSlug: string, packageRef: string, rendererData: Record<string, unknown>) => {
+const buildRenderer = (
+    componentSlug: string,
+    packageRefOrRendererData: string | Record<string, unknown>,
+    rendererData?: Record<string, unknown>,
+) => {
+    const packageRef = typeof packageRefOrRendererData === 'string' ? packageRefOrRendererData : undefined
+    const payload = typeof packageRefOrRendererData === 'string'
+        ? (rendererData ?? {})
+        : packageRefOrRendererData
+
     return {
         component_slug: componentSlug,
         package_ref: packageRef,
-        payload: rendererData,
+        payload,
     }
 }
 

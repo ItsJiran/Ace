@@ -51,7 +51,7 @@ export const handlerStart: ParserBlockHandler = async ({ block, dispatchParserRe
 
         const currentTurn = sessionState.turns[block.turn_index];
         currentTurn.assistant_renderers.push(
-            TurnRenderer.buildRenderer('paragraph_renderer', 'system', { memory_uid })
+            TurnRenderer.buildRenderer('paragraph-renderer', 'system', { memory_uid })
         );
 
         KernelEngine.updateMemory(`system:ai_session:${block.session_uid}:state`, {

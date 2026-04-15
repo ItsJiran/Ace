@@ -75,7 +75,7 @@
 // in-memory session object with periodic persistence, or sending diffs instead of
 // full session snapshots to reduce overhead.
 
-import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIBlock, type AIEntry, type AIRenderer, type AISession, type AITurn } from '#/schemas/ai';
+import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIBlock, type AIEntry, type AISession, type AITurn } from '#/schemas/ai';
 import type { AIGatewayConfig, AIGatewaySDKTarget } from '#/schemas/ai_gateway';
 import type { ParserBlockLifecycle } from '#/schemas/parser';
 
@@ -111,6 +111,7 @@ interface ActiveStreamBlock {
 interface StreamRuntimeState {
     pending_buffer: string;
     tmp_paragraph_renderer_index: number;
+    tmp_paragraph_memory_uid?: string;
     active_block?: ActiveStreamBlock;
 }
 
@@ -294,6 +295,7 @@ async function processGatewayStream(
     const runtimeState: StreamRuntimeState = {
         pending_buffer: '',
         tmp_paragraph_renderer_index: -1,
+        tmp_paragraph_memory_uid: undefined,
     };
 
     while (true) {
@@ -429,6 +431,11 @@ async function processGatewayChunk(
         const [openingTag, blockSlug] = openingTagMatch;
         runtimeState.pending_buffer = runtimeState.pending_buffer.slice(openingTag.length);
 
+        // Plain prose outside blocks is streamed through a default paragraph renderer.
+        // Once a real parser block starts, we close that default paragraph lane so any later
+        // prose resumes in a fresh renderer instance.
+        resetStreamingParagraphRuntime(runtimeState);
+
         // Opening tag found: create the block immediately even though its content is still empty.
         // This gives handlers a stable block reference that survives across future chunks.
         const startedBlock = createStreamingBlock(session_uid, blockSlug);
@@ -483,53 +490,7 @@ function renderStrippedPrefix(
         return;
     }
 
-    if (runtimeState.tmp_paragraph_renderer_index == -1) {
-        const currentSessionState: AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
-        const currentTurn: AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
-
-        runtimeState.tmp_paragraph_renderer_index = currentTurn.assistant_renderers.length;
-        currentTurn.assistant_renderers.push(
-            TurnRenderer.buildRenderer('paragraph_renderer', 'system', { text: stripped_prefix })
-        );
-
-        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-            ...currentSessionState,
-            turns: [
-                ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
-                { ...currentTurn },
-            ],
-        });
-
-        return;
-    }
-
-    const currentSessionState: AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
-    const currentTurn: AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
-    const currentRenderer: AIRenderer = currentTurn.assistant_renderers[runtimeState.tmp_paragraph_renderer_index];
-
-    if (currentRenderer.payload == undefined) {
-        currentRenderer.payload = { text: stripped_prefix };
-    } else {
-        // @ts-expect-error
-        if (currentRenderer.payload.text == undefined) {
-            // @ts-expect-error
-            currentRenderer.payload.text = stripped_prefix;
-        } else {
-            // @ts-expect-error
-            currentRenderer.payload.text += stripped_prefix;
-        }
-    }
-
-    currentTurn.assistant_renderers[runtimeState.tmp_paragraph_renderer_index] = currentRenderer;
-    KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-        ...currentSessionState,
-        turns: [
-            ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
-            { ...currentTurn },
-        ],
-    });
-
-    runtimeState.tmp_paragraph_renderer_index = -1;
+    appendToStreamingParagraph(session_uid, stripped_prefix, runtimeState);
 }
 
 // + ============== Runtime Stage 8: Parse Blocks Incrementally ============== +
@@ -539,7 +500,6 @@ function renderStrippedPrefix(
 function createStreamingBlock(session_uid: string, blockSlug: string): AIBlock {
     // This is the canonical runtime reference for one in-flight block instance.
     // The object starts empty, then accumulates content and runtime context until completion.
-    const runtimeBlock = RegistryEngine.getParserBlock(blockSlug);
     const { currentSessionState, currentTurn, currentEntry } = getCurrentEntryRefs(session_uid);
     const now = Date.now();
 
@@ -550,7 +510,6 @@ function createStreamingBlock(session_uid: string, blockSlug: string): AIBlock {
         entry_index: currentTurn.active_entry_index as number,
         block_index: currentEntry.blocks ? currentEntry.blocks.length : 0,
         block_slug: blockSlug,
-        package_ref: runtimeBlock?.package_name,
         lifecycle_status: AIBlockLifecycleStatus.STARTED,
         opened_at: now,
         updated_at: now,
@@ -739,13 +698,44 @@ function flushPlainTextBufferToRenderer(session_uid: string, runtimeState: Strea
         return;
     }
 
-    if (runtimeState.tmp_paragraph_renderer_index == -1) {
-        const currentSessionState: AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
-        const currentTurn: AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
+    appendToStreamingParagraph(session_uid, runtimeState.pending_buffer, runtimeState);
+}
 
-        runtimeState.tmp_paragraph_renderer_index = currentTurn.assistant_renderers.length;
+function appendToStreamingParagraph(
+    session_uid: string,
+    text: string,
+    runtimeState: StreamRuntimeState,
+): void {
+    if (text === '') {
+        return;
+    }
+
+    const { memory_uid } = ensureStreamingParagraphRenderer(session_uid, runtimeState);
+    const currentText = (KernelEngine.readMemory(memory_uid) as string | undefined) ?? '';
+    KernelEngine.writeMemory(memory_uid, `${currentText}${text}`);
+}
+
+function ensureStreamingParagraphRenderer(
+    session_uid: string,
+    runtimeState: StreamRuntimeState,
+): { memory_uid: string; renderer_index: number } {
+    if (runtimeState.tmp_paragraph_renderer_index !== -1 && runtimeState.tmp_paragraph_memory_uid) {
+        return {
+            memory_uid: runtimeState.tmp_paragraph_memory_uid,
+            renderer_index: runtimeState.tmp_paragraph_renderer_index,
+        };
+    }
+
+    const currentSessionState: AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentTurn: AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
+    const currentEntryIndex = currentTurn.active_entry_index as number;
+    const rendererIndex = currentTurn.assistant_renderers.length;
+    const memory_uid = `system:ai_session:${session_uid}:turn:${currentSessionState.turn_index}:entry:${currentEntryIndex}:renderer:${rendererIndex}:paragraph`;
+
+    KernelEngine.batch(() => {
+        KernelEngine.createMemoryIfNotExist(memory_uid, '', currentSessionState.process_uid);
         currentTurn.assistant_renderers.push(
-            TurnRenderer.buildRenderer('paragraph_renderer', 'system', { text: runtimeState.pending_buffer })
+            TurnRenderer.buildRenderer('paragraph_renderer', { memory_uid })
         );
 
         KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
@@ -755,27 +745,17 @@ function flushPlainTextBufferToRenderer(session_uid: string, runtimeState: Strea
                 { ...currentTurn },
             ],
         });
-
-        return;
-    }
-
-    const currentSessionState: AISession = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
-    const currentTurn: AITurn = currentSessionState.turns?.[currentSessionState.turn_index];
-    const currentRenderer = currentTurn.assistant_renderers[runtimeState.tmp_paragraph_renderer_index];
-
-    currentRenderer.payload = { text: runtimeState.pending_buffer };
-    KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-        ...currentSessionState,
-        turns: [
-            ...currentSessionState.turns.slice(0, currentSessionState.turn_index),
-            {
-                ...currentTurn, assistant_renderers: [
-                    ...currentTurn.assistant_renderers.slice(0, runtimeState.tmp_paragraph_renderer_index),
-                    currentRenderer,
-                ]
-            },
-        ],
     });
+
+    runtimeState.tmp_paragraph_renderer_index = rendererIndex;
+    runtimeState.tmp_paragraph_memory_uid = memory_uid;
+
+    return { memory_uid, renderer_index: rendererIndex };
+}
+
+function resetStreamingParagraphRuntime(runtimeState: StreamRuntimeState): void {
+    runtimeState.tmp_paragraph_renderer_index = -1;
+    runtimeState.tmp_paragraph_memory_uid = undefined;
 }
 
 // + ============== Runtime Stage 10: Finalize Or Fail Entry ============== +

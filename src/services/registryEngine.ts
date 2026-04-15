@@ -143,11 +143,68 @@ class RegistryEngineSingleton {
     resolveEntry(query: string) {
         if (!query) return null;
         const parts = query.split(':');
-        if (parts.length !== 3) return null;
 
-        const [packageRef, domain, target] = parts;
-        const found = this.getDomainEntry(packageRef, domain, target);
-        return found?.entry?.implementation ?? null;
+        // Fully-qualified lookup: package:domain:slug
+        if (parts.length === 3) {
+            const [packageRef, domain, target] = parts;
+            const found = this.getDomainEntry(packageRef, domain, target);
+            return found?.entry?.implementation ?? null;
+        }
+
+        // Slug-only lookup: scan known domains in deterministic priority order.
+        // This is mainly used by renderer/component callers that only know the slug
+        // and want the registry to find the best matching implementation.
+        if (parts.length === 1) {
+            const target = parts[0]?.trim();
+            if (!target) return null;
+
+            const domainPriority = ['renderers', 'components', 'windows', 'widgets', 'tools', 'features', 'processes', 'pipelines', 'registries', 'parsers'] as const;
+            const ownerScopePriority = (ownerScope?: string) => {
+                if (ownerScope === 'core') return 1;
+                if (ownerScope === 'default') return 2;
+                if (ownerScope === 'user') return 3;
+                return 4;
+            };
+
+            const matches: Array<{
+                implementation: unknown;
+                domain: string;
+                package_name: string;
+                owner_scope?: string;
+            }> = [];
+
+            for (const runtimePkg of this.runtimeIndex.values()) {
+                for (const domain of domainPriority) {
+                    const entry = runtimePkg.domains[domain]?.get(target);
+                    const implementation = (entry as RegistryDomainEntry | undefined)?.implementation;
+                    if (!implementation) continue;
+
+                    matches.push({
+                        implementation,
+                        domain,
+                        package_name: runtimePkg.metadata.package_name,
+                        owner_scope: runtimePkg.metadata.owner_scope,
+                    });
+                }
+            }
+
+            if (matches.length === 0) return null;
+
+            matches.sort((a, b) => {
+                const domainScore = domainPriority.indexOf(a.domain as (typeof domainPriority)[number])
+                    - domainPriority.indexOf(b.domain as (typeof domainPriority)[number]);
+                if (domainScore !== 0) return domainScore;
+
+                const scopeScore = ownerScopePriority(a.owner_scope) - ownerScopePriority(b.owner_scope);
+                if (scopeScore !== 0) return scopeScore;
+
+                return a.package_name.localeCompare(b.package_name);
+            });
+
+            return matches[0]?.implementation ?? null;
+        }
+
+        return null;
     }
 
     /**
