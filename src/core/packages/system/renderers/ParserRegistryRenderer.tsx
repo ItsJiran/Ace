@@ -9,20 +9,22 @@ export const registry: AceRegistryType.Renderer = {
 };
 
 interface ParserRegistryRendererPayload {
-    action?: 'list' | 'detail' | 'activate' | 'deactivate';
+    action?: 'list' | 'list_names' | 'list_hydrated' | 'detail' | 'activate' | 'deactivate';
     count?: number;
     target_slug?: string;
     data?: string;
+    names?: string[];
     [key: string]: unknown;
 }
 
 interface ParserRegistryRendererProps {
     payload?: ParserRegistryRendererPayload;
     status?: 'streaming' | 'completed';
-    action?: 'list' | 'detail' | 'activate' | 'deactivate';
+    action?: 'list' | 'list_names' | 'list_hydrated' | 'detail' | 'activate' | 'deactivate';
     count?: number;
     target_slug?: string;
     data?: string;
+    names?: string[];
     __status?: 'streaming' | 'completed';
 }
 
@@ -134,6 +136,9 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
     const count = payload.count;
     const target_slug = payload.target_slug;
     const data = payload.data;
+    const names = Array.isArray(payload.names)
+        ? payload.names.filter((item: unknown): item is string => typeof item === 'string')
+        : [];
     const isStreaming = (props.status ?? props.__status) === 'streaming';
     const [expanded, setExpanded] = useState(false);
     const sections = parseRegistryData(data);
@@ -141,9 +146,12 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
     let icon = <DatabaseZap size={14} className="text-zinc-500" />;
     let message = "Loading parser registry data...";
 
-    if (action === 'list') {
+    if (action === 'list' || action === 'list_names') {
         icon = <Search size={14} className="text-blue-500" />;
-        message = `Loaded details of ${count || 0} available parser blocks to Working Memory.`;
+        message = `Loaded ${count || names.length || 0} registered parser block names from the registry.`;
+    } else if (action === 'list_hydrated') {
+        icon = <Blocks size={14} className="text-cyan-500" />;
+        message = `Loaded ${count || names.length || 0} hydrated parser block names currently injected into the prompt.`;
     } else if (action === 'detail') {
         icon = <Search size={14} className="text-purple-500" />;
         message = `Inspected details of block \`${target_slug}\` into Working Memory.`;
@@ -155,7 +163,7 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
         message = `Deactivated block \`${target_slug}\` from the prompt.`;
     }
 
-    const visibleCount = count || sections.length;
+    const visibleCount = count || names.length || sections.length;
 
     return (
         <div className={`rounded-2xl border border-zinc-200 bg-gradient-to-br from-white via-zinc-50 to-slate-100 p-4 shadow-sm dark:border-zinc-700 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-800 ${isStreaming ? 'animate-pulse' : ''} flex flex-col gap-3`}>
@@ -227,6 +235,16 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
                                 )}
                             </div>
                         </div>
+                    ))}
+                </div>
+            )}
+
+            {names.length > 0 && sections.length === 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {names.map((name: string) => (
+                        <span key={name} className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
+                            {name}
+                        </span>
                     ))}
                 </div>
             )}

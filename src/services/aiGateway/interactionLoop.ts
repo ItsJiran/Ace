@@ -58,7 +58,7 @@
 // in-memory session object with periodic persistence, or sending diffs instead of
 // full session snapshots to reduce overhead.
 
-import { AIFeedbackLoopStatus, AISessionStatus, type AIEntry, type AIRenderer, type AISession, type AITurn } from '#/schemas/ai';
+import { AIFeedbackLoopStatus, AISessionStatus, type AISession } from '#/schemas/ai';
 
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';
@@ -104,9 +104,9 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
         context_start_index: Math.max(0, KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.context?.length - 15),
         context_end_index: (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.context?.length ?? 0) - 1 + 1,
 
-        // we always set refresh context index for every turn from newest to latest
-        history_start_index: Math.max(0, KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.history?.length - 15),
-        history_end_index: (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.history?.length ?? 0) - 1 + 1,
+        // history window is tracked by turn index because history summaries are keyed by turn
+        history_start_index: Math.max(0, session.turns.length - 15),
+        history_end_index: session.turns.length,
 
         turns: [...session.turns, TurnRenderer.initTurn(prompt)],
         turn_index: session.turns.length, // Point to the newl y added turn

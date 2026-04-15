@@ -105,6 +105,7 @@ interface GatewayTargetConfig {
 interface ActiveStreamBlock {
     block_slug: string;
     block_index: number;
+    inside_fenced_literal: boolean;
 }
 
 interface StreamRuntimeState {
@@ -352,13 +353,18 @@ async function processGatewayChunk(
                 continue;
             }
 
-            const closingMatch = findAceEndLine(runtimeState.pending_buffer);
+            const scanResult = scanActiveBlockBuffer(
+                runtimeState.pending_buffer,
+                runtimeState.active_block.inside_fenced_literal,
+            );
+            runtimeState.active_block.inside_fenced_literal = scanResult.endingInsideFencedLiteral;
+
+            const closingMatch = scanResult.closingMatch;
             if (!closingMatch) {
                 // No end marker yet. Everything currently buffered belongs to the active block,
-                // except a trailing line fragment that might become @@ace:end in the next chunk.
-                const { flushableText, retainedCandidate } = splitTrailingAceEndCandidate(runtimeState.pending_buffer);
-                const chunkText = flushableText;
-                runtimeState.pending_buffer = retainedCandidate;
+                // except a trailing fragment that may still resolve into a control line in the next chunk.
+                const chunkText = scanResult.flushableText;
+                runtimeState.pending_buffer = scanResult.retainedCandidate;
 
                 if (chunkText !== '') {
                     appendContentToBlock(session_uid, activeBlock, chunkText);
@@ -450,6 +456,7 @@ async function processGatewayChunk(
         runtimeState.active_block = {
             block_slug: blockSlug,
             block_index: startedBlock.block_index,
+            inside_fenced_literal: false,
         };
 
         const startState = await invokeBlockLifecycleHandler(session_uid, startedBlock, 'start', abortController);
@@ -717,6 +724,12 @@ function appendToStreamingParagraph(
         return;
     }
 
+    // Skip whitespace-only gaps between blocks so the stream does not create
+    // empty paragraph renderers from stray separators like "\n\n".
+    if (runtimeState.tmp_paragraph_renderer_index === -1 && text.trim() === '') {
+        return;
+    }
+
     const { memory_uid } = ensureStreamingParagraphRenderer(session_uid, runtimeState);
     const currentText = (KernelEngine.readMemory(memory_uid) as string | undefined) ?? '';
     KernelEngine.writeMemory(memory_uid, `${currentText}${text}`);
@@ -935,50 +948,77 @@ function isPotentialAceStartLineFragment(line: string): boolean {
     return /^[ \t]+[A-Za-z]?[\w:-]*[ \t]*$/.test(rest);
 }
 
-function findAceEndLine(buffer: string): { startIndex: number; consumedLength: number } | null {
-    let lineStart = 0;
+function scanActiveBlockBuffer(
+    buffer: string,
+    initialInsideFencedLiteral: boolean,
+): {
+    closingMatch: { startIndex: number; consumedLength: number } | null;
+    flushableText: string;
+    retainedCandidate: string;
+    endingInsideFencedLiteral: boolean;
+} {
+    let insideFencedLiteral = initialInsideFencedLiteral;
+    let cursor = 0;
 
-    while (lineStart <= buffer.length) {
-        if (buffer.startsWith(ACE_BLOCK_END_LINE, lineStart)) {
-            let cursor = lineStart + ACE_BLOCK_END_LINE.length;
+    while (cursor < buffer.length) {
+        const lineEndIndex = buffer.indexOf('\n', cursor);
+        const lineHasNewline = lineEndIndex !== -1;
+        const contentEnd = lineHasNewline ? lineEndIndex : buffer.length;
+        const lineContent = buffer.slice(cursor, contentEnd).replace(/\r$/, '');
+        const lineLength = contentEnd - cursor;
+        const lineBreakLength = lineHasNewline ? 1 : 0;
 
-            while (cursor < buffer.length && (buffer[cursor] === ' ' || buffer[cursor] === '\t')) {
-                cursor += 1;
-            }
-
-            if (cursor === buffer.length) {
-                return { startIndex: lineStart, consumedLength: cursor - lineStart };
-            }
-
-            if (buffer.startsWith('\r\n', cursor)) {
-                return { startIndex: lineStart, consumedLength: cursor + 2 - lineStart };
-            }
-
-            if (buffer[cursor] === '\n') {
-                return { startIndex: lineStart, consumedLength: cursor + 1 - lineStart };
-            }
+        if (!insideFencedLiteral && isAceEndLine(lineContent)) {
+            return {
+                closingMatch: {
+                    startIndex: cursor,
+                    consumedLength: lineLength + lineBreakLength,
+                },
+                flushableText: buffer.slice(0, cursor),
+                retainedCandidate: '',
+                endingInsideFencedLiteral: insideFencedLiteral,
+            };
         }
 
-        const nextNewline = buffer.indexOf('\n', lineStart);
-        if (nextNewline === -1) break;
-        lineStart = nextNewline + 1;
-    }
+        if (isFenceLine(lineContent)) {
+            insideFencedLiteral = !insideFencedLiteral;
+        }
 
-    return null;
-}
+        if (!lineHasNewline) {
+            const trailingLine = buffer.slice(cursor);
+            const shouldRetain = insideFencedLiteral
+                ? isPotentialFenceLineFragment(trailingLine)
+                : isPotentialFenceLineFragment(trailingLine) || isPotentialAceEndLineFragment(trailingLine);
 
-function splitTrailingAceEndCandidate(buffer: string): { flushableText: string; retainedCandidate: string } {
-    const lastLineStart = Math.max(buffer.lastIndexOf('\n') + 1, 0);
-    const trailingLine = buffer.slice(lastLineStart);
+            return {
+                closingMatch: null,
+                flushableText: shouldRetain ? buffer.slice(0, cursor) : buffer,
+                retainedCandidate: shouldRetain ? trailingLine : '',
+                endingInsideFencedLiteral: insideFencedLiteral,
+            };
+        }
 
-    if (!isPotentialAceEndLineFragment(trailingLine)) {
-        return { flushableText: buffer, retainedCandidate: '' };
+        cursor = contentEnd + lineBreakLength;
     }
 
     return {
-        flushableText: buffer.slice(0, lastLineStart),
-        retainedCandidate: trailingLine,
+        closingMatch: null,
+        flushableText: buffer,
+        retainedCandidate: '',
+        endingInsideFencedLiteral: insideFencedLiteral,
     };
+}
+
+function isAceEndLine(line: string): boolean {
+    return /^@@ace:end[ \t]*$/.test(line);
+}
+
+function isFenceLine(line: string): boolean {
+    return /^[ \t]*```[^\n\r]*$/.test(line);
+}
+
+function isPotentialFenceLineFragment(line: string): boolean {
+    return /^[ \t]*`{1,2}$/.test(line);
 }
 
 function isPotentialAceEndLineFragment(line: string): boolean {

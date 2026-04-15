@@ -105,10 +105,8 @@ export interface AISession {
         lifecycle_turn?: number;
     }>;
 
-    // Context entries that are generated throughout the session, which can include summaries, 
-    // relevant history snippets, and other contextual information that has been deemed relevant at 
-    // different points in the conversation. Each entry can have its own lifecycle and relevance based on 
-    // Context entries that are generated throughout the session...
+    // Context entries are lightweight chaining-knowledge notes produced during the turn,
+    // such as user intent, observed results, next plan, or other short-lived reasoning anchors.
     context: Array<AIContextEntry>;
     context_start_index: number;
     context_end_index: number;
@@ -118,12 +116,9 @@ export interface AISession {
     // via blocks like <working_memory> to conserve tokens.
     working_memory: Array<AIWorkingMemoryEntry>;
 
-    // A more detailed history of the session... 
-    // intermediate summaries, and other relevant data that has been generated throughout the session. 
-    // This can be used for more advanced context management strategies, allowing the application to 
-    // determine what information is most relevant to feed back into the model at different points in the 
-    // conversation.
-    history: Array<AIContextEntry>;
+    // Turn-level history summaries keyed by turn index. When present, these replace raw
+    // prompt/response replay in the prompt builder for the matching turn window.
+    history: Record<number, AIHistoryEntry>;
     history_start_index: number;
     history_end_index: number;
 
@@ -205,16 +200,22 @@ export interface AIBlock {
 export interface AIContextEntry {
     at: number; // Timestamp for when the context entry was created, useful for ordering and time-based logic.
     title: string; // A brief title or label for the context entry, useful for UI display and the AI's understanding of the context.
-    summary?: string;
+    content: string;
     status: 'active' | 'inactive';
-
-    // For entries that are summaries or truncated content, this flag can indicate whether the full content 
-    // should be loaded when accessed, allowing for more efficient memory usage and on-demand loading of context data.
-    is_load_full_content?: boolean;
 
     // The turn index at which this context was generated, 
     // useful for determining relevance and when to refresh the context
     lifecycle_turn?: number;
+    payload?: Record<string, unknown>;
+}
+
+export interface AIHistoryEntry {
+    at: number;
+    turn_index: number;
+    status: 'active' | 'inactive';
+    lifecycle_turn?: number;
+    prompt?: string;
+    response?: string;
     payload?: Record<string, unknown>;
 }
 

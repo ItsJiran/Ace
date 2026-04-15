@@ -19,25 +19,30 @@ export const registry: AceRegistryType.Parser = {
     description: 'Allows dynamically listing available parser blocks or fetching full details (instructions, parameters) of a specific block to inject into the internal Context.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Allows the AI to dynamically explore available features and parser blocks. You can list all available blocks to see what is possible, or request the full details of a specific block to learn its exact syntax and parameters. The details will automatically be injected into your active session context.',
-        requiredFields: '"action" (must be "list", "detail", "activate", or "deactivate")',
+        purpose: 'Allows the AI to explore the full parser registry separately from the smaller subset of block details currently hydrated into the prompt.',
+        requiredFields: '"action" (must be "list_names", "list_hydrated", "detail", "activate", or "deactivate")',
         optionalFields: '"target_slug" (required if action is detail, activate, or deactivate)',
         triggerConditions: [
             'When you want to know what tools and features are available in this ACE instance.',
             'When you need to call a tool but don\'t know the exact block slug or the JSON payload schema.',
+            'When you want to know which block details are currently hydrated into the prompt versus merely registered in the registry.',
             'When you want to load a specific block\'s instructions into your active context so you can use it in subsequent messages.',
             'When you want to clean up your prompt by deactivating block instructions you no longer need.'
         ],
         promptExamples: [
-            'What tools are available?',
-            'What features do you have access to?',
+            'List all registered parser block names.',
+            'Show me which parser blocks are currently hydrated into the prompt.',
             'How do I use the file search block?',
             'Let me inspect the details of the execute_command block so I know the payload schema.',
             'I\'m done using the execute_command block. I will deactivate it.',
         ],
         exampleLines: [
             '  @@ace:start parser_registry',
-            '  {"action": "list"}',
+            '  {"action": "list_names"}',
+            '  @@ace:end',
+            '',
+            '  @@ace:start parser_registry',
+            '  {"action": "list_hydrated"}',
             '  @@ace:end',
             '',
             '  @@ace:start parser_registry',
@@ -63,35 +68,67 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             return;
         }
 
-        const currentTurnIndex = sessionState.turns.length > 0 ? sessionState.turns.length - 1 : 0;
+        const currentTurnIndex = sessionState.turn_index;
         const wm = [...(sessionState.working_memory || [])];
         const newContextEntries = [...(sessionState.context || [])];
 
-        if (action === 'list') {
-            const allBlocks = RegistryEngine.listParserBlocks();
-            const listContent = allBlocks.map(b => {
-                const detail = RegistryEngine.renderParserBlockDetail(b.slug);
-                return detail ? detail : `[${b.package_name}:${b.slug}] ${b.schema.purpose}`;
-            }).join('\n\n');
+        if (action === 'list_names' || action === 'list') {
+            const allBlocks = RegistryEngine.listParserBlockSummaries();
+            const names = allBlocks.map((block) => block.slug).sort((a, b) => a.localeCompare(b));
+            const listContent = names.join('\n');
 
-            wm.filter(entry => entry.uid !== 'wm_parser_registry_list');
-            wm.push({
-                uid: 'wm_parser_registry_list',
-                description: 'Full list of valid parser blocks from the registry',
+            const nextWorkingMemory = wm.filter(entry => entry.uid !== 'wm_parser_registry_names');
+            nextWorkingMemory.push({
+                uid: 'wm_parser_registry_names',
+                description: 'Registered parser block names from the registry',
                 content: listContent,
                 created_at: Date.now(),
                 lifecycle_turn: currentTurnIndex,
             });
 
-            // Push a UI renderer to show what we did
             const currentTurn = sessionState.turns[currentTurnIndex];
             currentTurn.assistant_renderers.push(
-                TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: 'list', count: allBlocks.length, data: listContent })
+                TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: 'list_names', count: names.length, names })
             );
 
-            console.log(`[ParserRegistryBlock] Loaded full details of ${allBlocks.length} blocks for session ${session_uid} into working memory`);
+            console.log(`[ParserRegistryBlock] Loaded ${names.length} registered parser block names for session ${session_uid}`);
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-                working_memory: wm,
+                working_memory: nextWorkingMemory,
+                feedback_loop_status: 'continue_requested',
+                turns: [
+                    ...sessionState.turns.slice(0, currentTurnIndex),
+                    currentTurn
+                ]
+            } as Partial<AISession>);
+            dispatchParserResponse(AIParserProtocolState.WAITING_FOR_FEEDBACK);
+            return;
+        }
+        else if (action === 'list_hydrated') {
+            const allBlocks = RegistryEngine.listParserBlockSummaries();
+            const activeBlockSlugs = new Set((sessionState.active_parser_blocks ?? []).map((entry) => entry.block_slug));
+            const hydratedBlocks = allBlocks
+                .filter((block) => block.is_default_detail || activeBlockSlugs.has(block.slug))
+                .map((block) => block.slug)
+                .sort((a, b) => a.localeCompare(b));
+            const listContent = hydratedBlocks.join('\n');
+
+            const nextWorkingMemory = wm.filter(entry => entry.uid !== 'wm_parser_registry_hydrated');
+            nextWorkingMemory.push({
+                uid: 'wm_parser_registry_hydrated',
+                description: 'Parser block names whose details are currently hydrated into the prompt',
+                content: listContent,
+                created_at: Date.now(),
+                lifecycle_turn: currentTurnIndex,
+            });
+
+            const currentTurn = sessionState.turns[currentTurnIndex];
+            currentTurn.assistant_renderers.push(
+                TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: 'list_hydrated', count: hydratedBlocks.length, names: hydratedBlocks })
+            );
+
+            console.log(`[ParserRegistryBlock] Loaded ${hydratedBlocks.length} hydrated parser block names for session ${session_uid}`);
+            KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+                working_memory: nextWorkingMemory,
                 feedback_loop_status: 'continue_requested',
                 turns: [
                     ...sessionState.turns.slice(0, currentTurnIndex),
@@ -110,8 +147,8 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             }
 
             const detail = RegistryEngine.renderParserBlockDetail(target);
-            wm.filter(entry => entry.uid !== `wm_parser_detail_${target}`);
-            wm.push({
+            const nextWorkingMemory = wm.filter(entry => entry.uid !== `wm_parser_detail_${target}`);
+            nextWorkingMemory.push({
                 uid: `wm_parser_detail_${target}`,
                 description: `Parser Block Details: ${target}`,
                 content: detail || `Block with slug "${target}" was not found in the registry.`,
@@ -126,7 +163,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
 
             console.log(`[ParserRegistryBlock] Loaded details for ${target} into working memory.`);
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, { 
-                working_memory: wm, 
+                working_memory: nextWorkingMemory, 
                 feedback_loop_status: 'continue_requested',
                 turns: [
                     ...sessionState.turns.slice(0, currentTurnIndex),
@@ -157,9 +194,10 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             newContextEntries.push({
                 at: Date.now(),
                 title: `Parser Block ${action === 'activate' ? 'Activated' : 'Deactivated'}: ${target}`,
+                content: `The block "${target}" has been successfully ${action}d. Its full instructions will ${action === 'activate' ? 'now' : 'no longer'} be included in your system prompt.`,
                 status: 'active',
                 lifecycle_turn: currentTurnIndex,
-                payload: { content: `The block "${target}" has been successfully ${action}d. Its full instructions will ${action === 'activate' ? 'now' : 'no longer'} be included in your system prompt.` }
+                payload: { block_slug: target, action }
             });
 
             const currentTurn = sessionState.turns[currentTurnIndex];

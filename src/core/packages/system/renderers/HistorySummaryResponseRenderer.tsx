@@ -3,24 +3,29 @@ import { MessageCircle } from 'lucide-react';
 
 export const registry: AceRegistryType.Renderer = {
     name: 'History Summary Response Renderer',
-    slug: 'history-summary-response-renderer',
+    slug: 'history_summary_response_renderer',
     description: 'Renders AI response history summaries with context and stats',
 };
 
 interface HistorySummaryResponseRendererProps {
+    payload?: Record<string, unknown>;
+    status?: 'streaming' | 'completed';
     summary?: string;
     response_count?: number;
     token_count?: number;
     source?: string;
+    turn_index?: number;
     timestamp?: string | number;
     [key: string]: unknown;
 }
 
 export default function HistorySummaryResponseRenderer(props: HistorySummaryResponseRendererProps) {
-    const summary = props.summary || 'No summary available';
-    const responseCount = props.response_count || 0;
-    const tokenCount = props.token_count || 0;
-    const source = props.source || 'unknown';
+    const payload = (props.payload && typeof props.payload === 'object') ? props.payload : props;
+    const summary = typeof payload.summary === 'string' ? payload.summary : 'No summary available';
+    const responseCount = typeof payload.response_count === 'number' ? payload.response_count : 0;
+    const tokenCount = typeof payload.token_count === 'number' ? payload.token_count : 0;
+    const source = typeof payload.source === 'string' ? payload.source : 'unknown';
+    const turnIndex = typeof payload.turn_index === 'number' ? payload.turn_index : undefined;
 
     return (
         <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-lg p-3 space-y-2">
@@ -32,6 +37,7 @@ export default function HistorySummaryResponseRenderer(props: HistorySummaryResp
                     </div>
                     <div className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
                         Source: <span className="font-mono">{source}</span>
+                        {turnIndex !== undefined && <> · Turn <span className="font-mono">{turnIndex}</span></>}
                     </div>
                 </div>
             </div>

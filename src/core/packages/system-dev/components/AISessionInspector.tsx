@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AISession, AITurn, AIEntry, AIBlock, AIContextEntry } from '#/schemas/ai';
+import type { AISession, AITurn, AIEntry, AIBlock, AIContextEntry, AIHistoryEntry } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 
 // ============================================================
@@ -265,8 +265,8 @@ function ContextSection({ entries, label, startIdx, endIdx }: {
                                         <span className="ml-auto text-zinc-600">{ts(entry.at)}</span>
                                         {!inWindow && <span className="text-zinc-600 italic">outside window</span>}
                                     </div>
-                                    {entry.summary && (
-                                        <div className="text-zinc-400 mb-1">{entry.summary}</div>
+                                    {entry.content && (
+                                        <div className="text-zinc-400 mb-1">{entry.content}</div>
                                     )}
                                     {entry.payload && Object.keys(entry.payload).length > 0 && (
                                         <pre className="text-zinc-300 bg-zinc-950 rounded p-1 overflow-x-auto whitespace-pre-wrap break-all max-h-20">
@@ -277,6 +277,71 @@ function ContextSection({ entries, label, startIdx, endIdx }: {
                             );
                         })
                     }
+                </div>
+            )}
+        </div>
+    );
+}
+
+function HistorySection({ entriesByTurn, startIdx, endIdx }: {
+    entriesByTurn: Record<number, AIHistoryEntry>;
+    startIdx: number;
+    endIdx: number;
+}) {
+    const [open, setOpen] = useState(false);
+    const entries = Object.values(entriesByTurn).sort((a, b) => a.turn_index - b.turn_index);
+    const windowCount = entries.filter((entry) => entry.turn_index >= startIdx && entry.turn_index <= endIdx).length;
+
+    return (
+        <div className="mb-4">
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                className="flex items-center gap-2 text-[11px] text-zinc-400 font-semibold uppercase tracking-wide mb-1 hover:text-zinc-200"
+            >
+                <span>{open ? '▾' : '▸'}</span>
+                History
+                <span className="text-zinc-600 font-normal normal-case tracking-normal">
+                    {entries.length === 0
+                        ? '(empty)'
+                        : `(${entries.length} total · window [${startIdx}–${endIdx}] = ${windowCount} active)`
+                    }
+                </span>
+            </button>
+            {open && (
+                <div className="space-y-1 pl-2">
+                    {entries.length === 0
+                        ? <div className="text-[10px] text-zinc-600 italic">no history summaries yet</div>
+                        : entries.map((entry) => {
+                            const inWindow = entry.turn_index >= startIdx && entry.turn_index <= endIdx;
+                            return (
+                                <div key={entry.turn_index} className={`border rounded px-2 py-1.5 text-[10px] ${entry.status === 'active' ? 'border-sky-600/40 bg-sky-950/20' : 'border-zinc-700/30 bg-zinc-900/30'} ${!inWindow ? 'opacity-40' : ''}`}>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-zinc-500">turn:{entry.turn_index}</span>
+                                        <StatusBadge status={entry.status} />
+                                        <span className="ml-auto text-zinc-600">{ts(entry.at)}</span>
+                                        {!inWindow && <span className="text-zinc-600 italic">outside window</span>}
+                                    </div>
+                                    {entry.prompt && (
+                                        <div className="mb-1">
+                                            <div className="text-zinc-500 uppercase tracking-wide">Prompt</div>
+                                            <div className="text-zinc-300 whitespace-pre-wrap">{entry.prompt}</div>
+                                        </div>
+                                    )}
+                                    {entry.response && (
+                                        <div className="mb-1">
+                                            <div className="text-zinc-500 uppercase tracking-wide">Response</div>
+                                            <div className="text-zinc-300 whitespace-pre-wrap">{entry.response}</div>
+                                        </div>
+                                    )}
+                                    {entry.payload && Object.keys(entry.payload).length > 0 && (
+                                        <pre className="text-zinc-300 bg-zinc-950 rounded p-1 overflow-x-auto whitespace-pre-wrap break-all max-h-20">
+                                            {JSON.stringify(entry.payload, null, 2)}
+                                        </pre>
+                                    )}
+                                </div>
+                            );
+                        })}
                 </div>
             )}
         </div>
@@ -432,9 +497,8 @@ function SessionCard({ session }: { session: AISession }) {
                     />
 
                     {/* History */}
-                    <ContextSection
-                        entries={session.history}
-                        label="History"
+                    <HistorySection
+                        entriesByTurn={session.history}
                         startIdx={session.history_start_index}
                         endIdx={session.history_end_index}
                     />

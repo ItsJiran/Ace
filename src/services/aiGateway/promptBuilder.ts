@@ -135,13 +135,26 @@ export function buildBlockParserPrompt(session: AISession): string {
             .map(b => b.slug)
     );
 
+    const registeredNames = [...allBlocks].map((block) => block.slug).sort((a, b) => a.localeCompare(b));
     const lines: string[] = [];
 
-    lines.push('[AVAILABLE PARSER BLOCKS]');
+    lines.push('[PARSER REGISTRY OVERVIEW]');
     lines.push('Block syntax: @@ace:start block_slug\\n...payload...\\n@@ace:end');
+    lines.push('Registered parser block names below represent the full registry, not the subset of block details currently hydrated into this prompt.');
+    lines.push('If you only know a block name but need its schema or usage details, call parser_registry with action "detail".');
+    lines.push('If you want the full registry names again, call parser_registry with action "list_names".');
+    lines.push('If you want to know which block details are currently hydrated in this prompt, call parser_registry with action "list_hydrated".');
     lines.push('Global rule: do not nest parser blocks inside other parser blocks unless a block explicitly documents that nested usage is allowed.');
 
+    lines.push('');
+    lines.push('[REGISTERED PARSER BLOCK NAMES]');
+    registeredNames.forEach((name) => lines.push(`- ${name}`));
+
     if (fullDetailSlugs.size > 0) {
+        lines.push('');
+        lines.push('[HYDRATED PARSER BLOCK DETAILS]');
+        lines.push('Only the blocks below have full details injected into this prompt right now. This is a working subset, not the full registry.');
+
         for (const slug of fullDetailSlugs) {
             const detail = RegistryEngine.renderParserBlockDetail(slug);
             if (detail) {
@@ -175,23 +188,17 @@ export function buildContextPrompt(session: AISession): string {
         const turnRef = entry.lifecycle_turn !== undefined ? ` (turn: ${entry.lifecycle_turn})` : '';
         lines.push(`- [${entry.title}]${turnRef}`);
 
-        // Summary line if present
-        if (entry.summary) {
-            lines.push(`  ${entry.summary}`);
+        if (entry.content) {
+            lines.push(`  ${entry.content}`);
         }
 
         // Payload: any tool result, file content, or arbitrary data
         if (entry.payload && Object.keys(entry.payload).length > 0) {
-            if (entry.is_load_full_content) {
-                // Content flagged as lazy-loadable but not yet loaded — flag it
-                lines.push(`  [content not loaded — requires full load]`);
-            } else {
-                const payloadStr = JSON.stringify(entry.payload, null, 2)
-                    .split('\n')
-                    .map(l => `  ${l}`)
-                    .join('\n');
-                lines.push(payloadStr);
-            }
+            const payloadStr = JSON.stringify(entry.payload, null, 2)
+                .split('\n')
+                .map(l => `  ${l}`)
+                .join('\n');
+            lines.push(payloadStr);
         }
     }
 
@@ -235,16 +242,27 @@ export function buildHistoryPrompt(session: AISession): string {
     const lines: string[] = ['[CONVERSATION HISTORY]'];
 
     historyTurns.forEach((turn, idx) => {
-        const turnNumber = start + idx + 1;
+        const turnIndex = start + idx;
+        const turnNumber = turnIndex + 1;
+        const historyEntry = session.history?.[turnIndex];
 
-        // User prompt: taken from the first entry's original (unmodified) prompt.
+        if (historyEntry?.status === 'active') {
+            if (historyEntry.prompt?.trim()) {
+                lines.push(`[TURN ${turnNumber}] User Summary: ${historyEntry.prompt.trim()}`);
+            }
+
+            if (historyEntry.response?.trim()) {
+                lines.push(`[TURN ${turnNumber}] Assistant Summary: ${historyEntry.response.trim()}`);
+            }
+
+            return;
+        }
+
         const userPrompt = turn.entries?.[0]?.prompt?.trim();
         if (userPrompt) {
             lines.push(`[TURN ${turnNumber}] User: ${userPrompt}`);
         }
 
-        // Assistant response: join all completed entries (multiple entries can exist
-        // when the interaction loop retried or used multi-step reasoning).
         const assistantResponse = turn.entries
             ?.filter(e => e.status === 'completed' || e.status === 'success')
             .map(e => e.response?.trim() ?? '')
@@ -259,7 +277,7 @@ export function buildHistoryPrompt(session: AISession): string {
     return lines.join('\n');
 }
 
-export function buildStoragePrompt(session: AISession): string {
+export function buildStoragePrompt(_session: AISession): string {
     // This function can be used to build a prompt that includes information about the storage state of the session. 
     // This could include any files that have been uploaded, any data that has been stored, or any other relevant 
     // information about the session's storage. The implementation would involve retrieving this information and 

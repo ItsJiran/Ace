@@ -88,7 +88,7 @@ class AISessionManagerSingleton {
             plan: [],
             context : [],
 
-            history : [],
+            history : {},
             history_start_index: 0,
             history_end_index: 0,
         };
