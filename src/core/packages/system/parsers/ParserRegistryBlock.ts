@@ -1,8 +1,9 @@
-import { AIParserProtocolState, type AISession } from '#/schemas/ai';
+import { AIParserProtocolState, type AISession, type AIWorkingMemoryEntry } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
 import { RegistryEngine } from '#/services/registryEngine';
 import { KernelEngine } from '#/services/kernelEngine';
+import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';
 
 export const handlerStart: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
@@ -23,14 +24,19 @@ export const registry: AceRegistryType.Parser = {
         requiredFields: '"action" (must be "list_names", "list_hydrated", "detail", "activate", or "deactivate")',
         optionalFields: '"target_slug" (required if action is detail, activate, or deactivate)',
         triggerConditions: [
+            'This is the required block whenever you need to know, inspect, verify, or discover parser blocks. Do not answer those questions from memory or from the hydrated subset alone.',
             'When you want to know what tools and features are available in this ACE instance.',
             'When you need to call a tool but don\'t know the exact block slug or the JSON payload schema.',
             'When you want to know which block details are currently hydrated into the prompt versus merely registered in the registry.',
             'When you want to load a specific block\'s instructions into your active context so you can use it in subsequent messages.',
-            'When you want to clean up your prompt by deactivating block instructions you no longer need.'
+            'When you want to clean up your prompt by deactivating block instructions you no longer need.',
+            'If the task says list parser blocks, available parser blocks, all parser blocks, or what parser blocks exist, use action "list_names" and not "list_hydrated".',
+            'Use action "list_hydrated" only when the task explicitly asks about which block details are currently injected into the prompt.',
         ],
         promptExamples: [
             'List all registered parser block names.',
+            'What parser blocks exist in this ACE instance?',
+            'Show me all available parser blocks, not just the hydrated ones.',
             'Show me which parser blocks are currently hydrated into the prompt.',
             'How do I use the file search block?',
             'Let me inspect the details of the execute_command block so I know the payload schema.',
@@ -69,7 +75,6 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         const currentTurnIndex = sessionState.turn_index;
-        const wm = [...(sessionState.working_memory || [])];
         const newContextEntries = [...(sessionState.context || [])];
 
         if (action === 'list_names' || action === 'list') {
@@ -77,16 +82,21 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             const names = allBlocks.map((block) => block.slug).sort((a, b) => a.localeCompare(b));
             const listContent = names.join('\n');
 
-            const nextWorkingMemory = wm.filter(entry => entry.uid !== 'wm_parser_registry_names');
-            nextWorkingMemory.push({
+            const nextWorkingMemory = AIGatewayEngine.upsertWorkingMemoryEntry(sessionState, {
                 uid: 'wm_parser_registry_names',
                 description: 'Registered parser block names from the registry',
                 content: listContent,
                 created_at: Date.now(),
                 lifecycle_turn: currentTurnIndex,
-            });
+            } as AIWorkingMemoryEntry);
 
             const currentTurn = sessionState.turns[currentTurnIndex];
+            const history = AIGatewayEngine.appendHistoryResponseSummary(
+                sessionState,
+                currentTurnIndex,
+                `Parser registry names were loaded and stored in working memory entry wm_parser_registry_names.`,
+                { working_memory_uid: 'wm_parser_registry_names', action: 'list_names' },
+            );
             currentTurn.assistant_renderers.push(
                 TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: 'list_names', count: names.length, names })
             );
@@ -94,13 +104,14 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             console.log(`[ParserRegistryBlock] Loaded ${names.length} registered parser block names for session ${session_uid}`);
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
                 working_memory: nextWorkingMemory,
-                feedback_loop_status: 'continue_requested',
+                history,
+                history_end_index: Math.max(sessionState.history_end_index ?? 0, currentTurnIndex + 1),
                 turns: [
                     ...sessionState.turns.slice(0, currentTurnIndex),
                     currentTurn
                 ]
             } as Partial<AISession>);
-            dispatchParserResponse(AIParserProtocolState.WAITING_FOR_FEEDBACK);
+            dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
             return;
         }
         else if (action === 'list_hydrated') {
@@ -112,16 +123,21 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 .sort((a, b) => a.localeCompare(b));
             const listContent = hydratedBlocks.join('\n');
 
-            const nextWorkingMemory = wm.filter(entry => entry.uid !== 'wm_parser_registry_hydrated');
-            nextWorkingMemory.push({
+            const nextWorkingMemory = AIGatewayEngine.upsertWorkingMemoryEntry(sessionState, {
                 uid: 'wm_parser_registry_hydrated',
                 description: 'Parser block names whose details are currently hydrated into the prompt',
                 content: listContent,
                 created_at: Date.now(),
                 lifecycle_turn: currentTurnIndex,
-            });
+            } as AIWorkingMemoryEntry);
 
             const currentTurn = sessionState.turns[currentTurnIndex];
+            const history = AIGatewayEngine.appendHistoryResponseSummary(
+                sessionState,
+                currentTurnIndex,
+                `Hydrated parser block names were loaded and stored in working memory entry wm_parser_registry_hydrated.`,
+                { working_memory_uid: 'wm_parser_registry_hydrated', action: 'list_hydrated' },
+            );
             currentTurn.assistant_renderers.push(
                 TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: 'list_hydrated', count: hydratedBlocks.length, names: hydratedBlocks })
             );
@@ -129,13 +145,14 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             console.log(`[ParserRegistryBlock] Loaded ${hydratedBlocks.length} hydrated parser block names for session ${session_uid}`);
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
                 working_memory: nextWorkingMemory,
-                feedback_loop_status: 'continue_requested',
+                history,
+                history_end_index: Math.max(sessionState.history_end_index ?? 0, currentTurnIndex + 1),
                 turns: [
                     ...sessionState.turns.slice(0, currentTurnIndex),
                     currentTurn
                 ]
             } as Partial<AISession>);
-            dispatchParserResponse(AIParserProtocolState.WAITING_FOR_FEEDBACK);
+            dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
             return;
         }
         else if (action === 'detail') {
@@ -147,16 +164,21 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             }
 
             const detail = RegistryEngine.renderParserBlockDetail(target);
-            const nextWorkingMemory = wm.filter(entry => entry.uid !== `wm_parser_detail_${target}`);
-            nextWorkingMemory.push({
+            const nextWorkingMemory = AIGatewayEngine.upsertWorkingMemoryEntry(sessionState, {
                 uid: `wm_parser_detail_${target}`,
                 description: `Parser Block Details: ${target}`,
                 content: detail || `Block with slug "${target}" was not found in the registry.`,
                 created_at: Date.now(),
                 lifecycle_turn: currentTurnIndex,
-            });
+            } as AIWorkingMemoryEntry);
 
             const currentTurn = sessionState.turns[currentTurnIndex];
+            const history = AIGatewayEngine.appendHistoryResponseSummary(
+                sessionState,
+                currentTurnIndex,
+                `Parser block detail for ${target} was stored in working memory entry wm_parser_detail_${target}.`,
+                { working_memory_uid: `wm_parser_detail_${target}`, action: 'detail', target_slug: target },
+            );
             currentTurn.assistant_renderers.push(
                 TurnRenderer.buildRenderer('parser_registry_renderer', 'system', { action: 'detail', target_slug: target, data: detail || `Block with slug "${target}" was not found in the registry.` })
             );
@@ -164,13 +186,14 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             console.log(`[ParserRegistryBlock] Loaded details for ${target} into working memory.`);
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, { 
                 working_memory: nextWorkingMemory, 
-                feedback_loop_status: 'continue_requested',
+                history,
+                history_end_index: Math.max(sessionState.history_end_index ?? 0, currentTurnIndex + 1),
                 turns: [
                     ...sessionState.turns.slice(0, currentTurnIndex),
                     currentTurn
                 ]
             } as Partial<AISession>);
-            dispatchParserResponse(AIParserProtocolState.WAITING_FOR_FEEDBACK);
+            dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
             return;
         }
         else if (action === 'activate' || action === 'deactivate') {

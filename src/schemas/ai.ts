@@ -80,7 +80,8 @@ export interface AISession {
     status: AISessionStatus;
     state: AISessionState;
 
-    feedback_loop_status: AIFeedbackLoopStatus;
+    // Tracks autonomous follow-up loop state for multi-pass reasoning and result consumption.
+    autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus;
     error_payload?: Record<string, unknown>;
 
     // Turn is what the user sees as a single prompt/response pair, 
@@ -272,7 +273,8 @@ export type AIInteractionLoopProtocolState = typeof AIInteractionLoopProtocolSta
 // =========================================================================
 // Parser protocol state is the control signal emitted by a block handler after a single block is parsed.
 // The parser loop processes one block at a time, then waits for this state before deciding whether the
-// next block may continue, must pause for external feedback, or should stop because of an error or abort.
+// next block may continue, whether the current response should stop, or whether the loop should stop
+// and immediately begin a fresh follow-up pass with updated session memory.
 export const AIParserProtocolState = {
     // No parser work is currently active for the current session or entry.
     IDLE: 'idle',
@@ -283,10 +285,13 @@ export const AIParserProtocolState = {
     // The current block is safe and complete enough that the parser loop may continue to the next block.
     CONTINUE_NEXT_BLOCK: 'continue_next_block',
 
-    // The current block requires an external response before any later block should be parsed.
-    // Typical examples are waiting for user confirmation, waiting for a tool result, or waiting for
-    // another part of the runtime to update session state.
-    WAITING_FOR_FEEDBACK: 'waiting_for_feedback',
+    // The current block completed and the current response should stop after this block.
+    // The outer interaction loop may still decide whether to finalize or continue based on session state.
+    STOP_CURRENT_RESPONSE: 'stop_current_response',
+
+    // The current block completed, the current response should stop now, and the outer interaction loop
+    // should immediately start the next pass after this entry is finalized.
+    STOP_AND_CONTINUE_LOOP: 'stop_and_continue_loop',
 
     // The current parser flow intentionally stops without treating the block as a failure.
     INTERRUPTED: 'interrupted',
@@ -320,15 +325,14 @@ export const AISessionStatus = {
 export type AISessionStatus = typeof AISessionStatus[keyof typeof AISessionStatus];
 
 
-export const AIFeedbackLoopStatus = {
+export const AIAutonomousFollowUpLoopStatus = {
     NONE: 'none',
     ACTIVE: 'active',
-    CONTINUE_REQUESTED: 'continue_requested',
     COMPLETED: 'completed',
     INTERRUPTED: 'interrupted',
 } as const;
 
-export type AIFeedbackLoopStatus = typeof AIFeedbackLoopStatus[keyof typeof AIFeedbackLoopStatus];
+export type AIAutonomousFollowUpLoopStatus = typeof AIAutonomousFollowUpLoopStatus[keyof typeof AIAutonomousFollowUpLoopStatus];
 
 // These constants can be used to track the status of block handlers that are responsible for processing 
 // specific blocks of content within the AI session, such as tool calls, function executions, or other 

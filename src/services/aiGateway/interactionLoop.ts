@@ -58,11 +58,12 @@
 // in-memory session object with periodic persistence, or sending diffs instead of
 // full session snapshots to reduce overhead.
 
-import { AIFeedbackLoopStatus, AISessionStatus, type AISession } from '#/schemas/ai';
+import { AIAutonomousFollowUpLoopStatus, AISessionStatus, type AISession } from '#/schemas/ai';
 
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';
 import { sendPromptToGateway, AISessionBlockBus } from './interactionParserLoop';
+import type { AIPromptKind } from './promptBuilder';
 
 // + ============== Session Management API ============== +
 // Note: This is a simplified process management approach for AI sessions. 
@@ -76,6 +77,10 @@ export interface SessionInteractionLoopInput {
     prompt: string;
 }
 
+function buildAutonomousFollowUpPrompt(): string {
+    return 'This is an autonomous follow-up pass for the same user request. Continue from the latest session state, context, working memory, history summaries, and runtime results. Do not replay or reinterpret the original user prompt unless a clarification gap still exists.';
+}
+
 // Note : Future improvement since we already passing the session object, we can just directly update the session memory in the interaction loop without 
 // needing to read it again at the beginning of each loop. We just need to make sure to keep the session object updated with the latest state from memory 
 // at the end of each loop iteration. This way we can avoid redundant memory reads and have a more efficient loop.
@@ -85,6 +90,8 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
     console.log(`[AIGatewayEngine] Starting interaction loop for session ${input.session.session_uid} with prompt: ${input.prompt}`);
 
     const { session, prompt } = input;
+    let nextPrompt = prompt;
+    let nextPromptKind: AIPromptKind = 'user_prompt';
 
     // -- Check if session status is currently running. If not, we should not proceed with processing the prompt.
     // unless we already implement drifting sessions where a new prompt can be sent to an existing session even after completion, 
@@ -100,6 +107,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
     // -- Create the default new turn for User and for Assistant (streaming)
     KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
         status: AISessionStatus.STREAMING,
+        state: 'Reason',
         // we always set refresh context index for every turn from newest to latest
         context_start_index: Math.max(0, KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.context?.length - 15),
         context_end_index: (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.context?.length ?? 0) - 1 + 1,
@@ -110,11 +118,11 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
 
         turns: [...session.turns, TurnRenderer.initTurn(prompt)],
         turn_index: session.turns.length, // Point to the newl y added turn
-        feedback_loop_status: AIFeedbackLoopStatus.ACTIVE,
+        autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.ACTIVE,
     } as AISession);
 
     // -- Run the interaction loop for the session, which will handle the entire lifecycle of the prompt 
-    // processing, including streaming updates, tool interactions, and feedback loops.
+    // processing, including streaming updates, tool interactions, and autonomous follow-up loops.
 
     try {
 
@@ -138,19 +146,20 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
             // For the sake of this example, let's assume we have a function processPrompt 
             // that handles the entire processing of the prompt and returns when the response is complete.
             await sendPromptToGateway(
-                prompt,
+                nextPrompt,
                 session.session_uid,
+                nextPromptKind,
                 session.sdk,
                 session.model,
             );
 
             // -- Since we fire and forget the processing in the background, we can just wait till all the parse
             // works are done and the response is finalized. In a real implementation, we would likely have more complex 
-            // logic here to handle streaming updates, tool interactions, and feedback loops in real-time.
+            // logic here to handle streaming updates, tool interactions, and autonomous follow-up loops in real-time.
             console.log(`[AIGatewayEngine] Waiting for interaction loop to complete for session ${session.session_uid}...`);
             const loopResponse = await loopPromise;
 
-            if (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.feedback_loop_status === AIFeedbackLoopStatus.INTERRUPTED) {
+            if (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.autonomous_follow_up_loop_status === AIAutonomousFollowUpLoopStatus.INTERRUPTED) {
                 KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
                     status: AISessionStatus.IDLE,
                 } as AISession);
@@ -163,11 +172,13 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
             if (loopResponse === 'stop') {
                 KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
                     status: AISessionStatus.IDLE,
-                    feedback_loop_status: AIFeedbackLoopStatus.COMPLETED,
+                    autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.COMPLETED,
                 } as AISession);
                 console.log(`[AIGatewayEngine] Interaction loop for session ${session.session_uid} completed and marked as IDLE.`);
                 return; // Exit the loop and end the function since the session is now idle.
             } else if (loopResponse === 'continue') {
+                nextPrompt = buildAutonomousFollowUpPrompt();
+                nextPromptKind = 'autonomous_follow_up';
                 console.log(`[AIGatewayEngine] Interaction loop requested to CONTINUE for session ${session.session_uid}. Initiating new entry.`);
             } else {
                 console.warn(`[AIGatewayEngine] Interaction loop for session ${session.session_uid} received unexpected event data: ${loopResponse}`);
@@ -179,7 +190,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
 
         KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
             status: AISessionStatus.ERROR,
-            feedback_loop_status: AIFeedbackLoopStatus.COMPLETED,
+            autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.COMPLETED,
             error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) },
         } as Partial<AISession>);
     }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AISession, AITurn, AIEntry, AIBlock, AIContextEntry, AIHistoryEntry } from '#/schemas/ai';
+import type { AISession, AITurn, AIEntry, AIBlock, AIContextEntry, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 
 // ============================================================
@@ -348,6 +348,50 @@ function HistorySection({ entriesByTurn, startIdx, endIdx }: {
     );
 }
 
+function WorkingMemorySection({ entries }: {
+    entries: AIWorkingMemoryEntry[];
+}) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div className="mb-4">
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                className="flex items-center gap-2 text-[11px] text-zinc-400 font-semibold uppercase tracking-wide mb-1 hover:text-zinc-200"
+            >
+                <span>{open ? '▾' : '▸'}</span>
+                Working Memory
+                <span className="text-zinc-600 font-normal normal-case tracking-normal">
+                    {entries.length === 0 ? '(empty)' : `(${entries.length} total)`}
+                </span>
+            </button>
+            {open && (
+                <div className="space-y-1 pl-2">
+                    {entries.length === 0
+                        ? <div className="text-[10px] text-zinc-600 italic">no working memory entries yet</div>
+                        : entries.map((entry, idx) => (
+                            <div key={`${entry.uid}-${idx}`} className="border border-fuchsia-700/30 bg-fuchsia-950/10 rounded px-2 py-1.5 text-[10px]">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-zinc-500">#{idx}</span>
+                                    <span className="text-fuchsia-300 font-semibold">{entry.uid}</span>
+                                    {entry.lifecycle_turn !== undefined && (
+                                        <span className="text-zinc-600">turn:{entry.lifecycle_turn}</span>
+                                    )}
+                                    <span className="ml-auto text-zinc-600">{ts(entry.created_at)}</span>
+                                </div>
+                                <div className="text-zinc-400 mb-1">{entry.description}</div>
+                                <pre className="text-zinc-300 bg-zinc-950 rounded p-1 overflow-x-auto whitespace-pre-wrap break-all max-h-28 overflow-y-auto">
+                                    {entry.content}
+                                </pre>
+                            </div>
+                        ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // Flat panel: all parsed blocks across every turn/entry in linear order
 function AllBlocksPanel({ session }: { session: AISession }) {
     const [open, setOpen] = useState(false);
@@ -444,7 +488,7 @@ function SessionCard({ session }: { session: AISession }) {
                         <div className="bg-zinc-900 rounded p-2 space-y-1">
                             <div className="text-zinc-500 uppercase tracking-wide mb-1">Session Meta</div>
                             <div><span className="text-zinc-500">process:</span> <span className="text-zinc-300 font-mono">{session.process_uid}</span></div>
-                            <div><span className="text-zinc-500">feedback_loop:</span> <StatusBadge status={session.feedback_loop_status} /></div>
+                            <div><span className="text-zinc-500">autonomous_loop:</span> <StatusBadge status={session.autonomous_follow_up_loop_status} /></div>
                             <div><span className="text-zinc-500">active_parser_blocks:</span> <span className="text-zinc-300">{session.active_parser_blocks?.length ?? 0}</span></div>
                             <div><span className="text-zinc-500">ctx window:</span> <span className="text-zinc-300">[{session.context_start_index}–{session.context_end_index}]</span></div>
                             <div><span className="text-zinc-500">hist window:</span> <span className="text-zinc-300">[{session.history_start_index}–{session.history_end_index}]</span></div>
@@ -495,6 +539,8 @@ function SessionCard({ session }: { session: AISession }) {
                         startIdx={session.context_start_index}
                         endIdx={session.context_end_index}
                     />
+
+                    <WorkingMemorySection entries={session.working_memory} />
 
                     {/* History */}
                     <HistorySection

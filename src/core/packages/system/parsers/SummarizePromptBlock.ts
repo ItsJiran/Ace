@@ -13,31 +13,27 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 };
 
 export const registry: AceRegistryType.Parser = {
-    name: 'history',
-    slug: 'history',
-    description: 'Stores turn-level prompt or response summaries so future prompts can use compact history instead of replaying the full turn.',
+    name: 'summarize_prompt',
+    slug: 'summarize_prompt',
+    description: 'Stores a compact summary of a user prompt so future turns can remember the prompt meaning without replaying the full raw input.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Use this block to store a compact prompt or response summary for a turn. Once a history summary exists for that turn, the prompt builder can inject the summary instead of replaying the full raw prompt/response.',
-        requiredFields: '"action" (store), "target" (prompt | response), and "content".',
+        purpose: 'Use this block to compress a long user prompt into a durable turn-level prompt summary. Once stored, the prompt builder can inject that compact summary for the matching turn instead of replaying the full raw prompt.',
+        requiredFields: '"action" (store) and "content".',
         optionalFields: '"turn_index" (defaults to current turn) and "payload".',
         triggerConditions: [
-            'When the original user prompt is too large and should be compressed into a short prompt summary.',
-            'When the assistant response or chain of thought for a turn is long and should be summarized before the turn ends.',
-            'When you want future turns to remember the outcome of a turn without replaying the whole raw conversation.',
+            'When the original user prompt is too large and should be compressed into a short durable summary.',
+            'When future turns need to remember the meaning of a long user request without replaying the full raw prompt.',
+            'When you want to preserve the user request semantically before the turn history becomes noisy or expensive.',
         ],
         promptExamples: [
             'Store a short summary of this user prompt for turn history.',
-            'Summarize the long response of this turn before ending it.',
-            'Compress this completed turn into prompt/response history entries.',
+            'Compress the user request into a durable prompt summary before the turn gets too large.',
+            'Summarize the current user request so future turns can remember it efficiently.',
         ],
         exampleLines: [
-            '  @@ace:start history',
-            '  {"action":"store","target":"prompt","content":"User meminta audit parser streaming dan migrasi delimiter block ke @@ace:start/@@ace:end."}',
-            '  @@ace:end',
-            '',
-            '  @@ace:start history',
-            '  {"action":"store","target":"response","content":"AI memigrasikan parser ke sentinel @@ace, memperbarui prompt builder, dan menormalkan renderer registry."}',
+            '  @@ace:start summarize_prompt',
+            '  {"action":"store","content":"User meminta audit parser streaming dan migrasi delimiter block ke @@ace:start/@@ace:end."}',
             '  @@ace:end',
         ],
     },
@@ -47,7 +43,6 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
     try {
         const payload = JSON.parse(block.payload.content);
         const action = payload.action;
-        const target = payload.target;
         const content = payload.content;
         const session_uid = block.session_uid;
 
@@ -58,19 +53,13 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         if (action !== 'store') {
-            console.warn(`[HistoryBlock] Unknown action: ${action}`);
-            dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
-            return;
-        }
-
-        if (target !== 'prompt' && target !== 'response') {
-            console.warn(`[HistoryBlock] 'store' requires target to be 'prompt' or 'response'`);
+            console.warn(`[SummarizePromptBlock] Unknown action: ${action}`);
             dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
             return;
         }
 
         if (typeof content !== 'string' || content.trim() === '') {
-            console.warn(`[HistoryBlock] 'store' requires non-empty string 'content'`);
+            console.warn(`[SummarizePromptBlock] 'store' requires non-empty string 'content'`);
             dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
             return;
         }
@@ -87,7 +76,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             turn_index: targetTurnIndex,
             status: 'active',
             lifecycle_turn: currentTurnIndex,
-            prompt: existingEntry?.prompt,
+            prompt: content.trim(),
             response: existingEntry?.response,
             payload: {
                 ...(existingEntry?.payload ?? {}),
@@ -95,24 +84,17 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             },
         };
 
-        if (target === 'prompt') {
-            nextEntry.prompt = content.trim();
-        } else {
-            nextEntry.response = content.trim();
-        }
-
         history[targetTurnIndex] = nextEntry;
 
         const currentTurn = sessionState.turns[currentTurnIndex];
         currentTurn.assistant_renderers.push(
             TurnRenderer.buildRenderer(
-                target === 'prompt' ? 'history_summary_prompt_renderer' : 'history_summary_response_renderer',
+                'history_summary_prompt_renderer',
                 {
                     summary: content.trim(),
                     source: `turn:${targetTurnIndex}`,
                     turn_index: targetTurnIndex,
-                    prompt_count: target === 'prompt' ? 1 : undefined,
-                    response_count: target === 'response' ? 1 : undefined,
+                    prompt_count: 1,
                 },
             )
         );
@@ -120,7 +102,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
             history,
             history_start_index: Math.max(0, targetTurnIndex - 15),
-            history_end_index: Math.max(sessionState.history_end_index ?? 0, targetTurnIndex),
+            history_end_index: Math.max(sessionState.history_end_index ?? 0, targetTurnIndex + 1),
             turns: [
                 ...sessionState.turns.slice(0, currentTurnIndex),
                 currentTurn,
@@ -129,7 +111,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
 
         dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
     } catch (e) {
-        console.error(`[HistoryBlock] Error processing block:`, e);
+        console.error(`[SummarizePromptBlock] Error processing block:`, e);
         dispatchParserResponse(AIParserProtocolState.ERROR);
     }
 };

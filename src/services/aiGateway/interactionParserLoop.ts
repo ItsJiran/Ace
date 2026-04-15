@@ -75,7 +75,7 @@
 // in-memory session object with periodic persistence, or sending diffs instead of
 // full session snapshots to reduce overhead.
 
-import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIBlock, type AIEntry, type AISession, type AITurn } from '#/schemas/ai';
+import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIBlock, type AIEntry, type AISession, type AISessionState, type AITurn } from '#/schemas/ai';
 import type { AIGatewayConfig, AIGatewaySDKTarget } from '#/schemas/ai_gateway';
 import type { ParserBlockLifecycle } from '#/schemas/parser';
 
@@ -84,7 +84,7 @@ import { AIGatewayEngine } from '../aiGatewayEngine';
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';
 import { RegistryEngine } from '../registryEngine';
-import { buildPrompt } from './promptBuilder';
+import { buildPrompt, type AIPromptKind } from './promptBuilder';
 
 export const AISessionBlockBus = new EventTarget();
 
@@ -138,15 +138,16 @@ const ACE_BLOCK_END_LINE = '@@ace:end';
 export async function sendPromptToGateway(
     prompt: string,
     session_uid: string,
+    promptKind: AIPromptKind = 'user_prompt',
     sdk?: string,
     model?: string,
 ): Promise<void> {
 
-    console.log(`[AIGatewayEngine] Sending prompt to gateway for session ${session_uid}. Prompt: ${prompt}, SDK: ${sdk}, Model: ${model}`);
+    console.log(`[AIGatewayEngine] Sending ${promptKind} to gateway for session ${session_uid}. Prompt: ${prompt}, SDK: ${sdk}, Model: ${model}`);
 
     (async () => {
         try {
-            await runGatewayStreamRequest(prompt, session_uid, sdk, model);
+            await runGatewayStreamRequest(prompt, session_uid, promptKind, sdk, model);
         } catch (error) {
             await failStreamingEntry(session_uid, error);
         }
@@ -160,10 +161,11 @@ export async function sendPromptToGateway(
 async function runGatewayStreamRequest(
     prompt: string,
     session_uid: string,
+    promptKind: AIPromptKind,
     sdk?: string,
     model?: string,
 ): Promise<void> {
-    const composed_prompt = buildPrompt(prompt, session_uid);
+    const composed_prompt = buildPrompt(prompt, session_uid, promptKind);
     initializeStreamingEntry(session_uid, prompt, composed_prompt);
 
     const { activeGatewayUrl, sdkConfig } = await validateGatewayTarget(session_uid, sdk, model);
@@ -178,8 +180,8 @@ async function runGatewayStreamRequest(
         abortController,
     );
 
-    await processGatewayStream(session_uid, response.body!.getReader(), abortController);
-    finalizeStreamingEntry(session_uid);
+    const terminalProtocolState = await processGatewayStream(session_uid, response.body!.getReader(), abortController);
+    finalizeStreamingEntry(session_uid, terminalProtocolState);
 }
 
 // + ============== Runtime Stage 3: Prepare Gateway Request ============== +
@@ -293,22 +295,44 @@ async function processGatewayStream(
     session_uid: string,
     reader: ReadableStreamDefaultReader<Uint8Array>,
     abortController: AbortController,
-): Promise<void> {
+): Promise<AIParserProtocolState | undefined> {
     const decoder = new TextDecoder();
     const runtimeState: StreamRuntimeState = {
         pending_buffer: '',
         tmp_paragraph_renderer_index: -1,
         tmp_paragraph_memory_uid: undefined,
     };
+    let terminalProtocolState: AIParserProtocolState | undefined;
 
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        const shouldStop = await processGatewayChunk(session_uid, chunk, runtimeState, abortController);
+        const protocolState = await processGatewayChunk(session_uid, chunk, runtimeState, abortController);
 
-        if (shouldStop) {
+        if (protocolState === AIParserProtocolState.ERROR) {
+            throw new Error(`Parser protocol entered error state while streaming session ${session_uid}`);
+        }
+
+        if (
+            protocolState === AIParserProtocolState.STOP_CURRENT_RESPONSE
+            || protocolState === AIParserProtocolState.STOP_AND_CONTINUE_LOOP
+            || protocolState === AIParserProtocolState.INTERRUPTED
+        ) {
+            terminalProtocolState = protocolState;
+            runtimeState.pending_buffer = '';
+
+            try {
+                await reader.cancel(`Parser requested ${protocolState}`);
+            } catch (error) {
+                console.warn(`[AIGatewayEngine] Failed to cancel gateway reader for session ${session_uid}:`, error);
+            }
+
+            if (!abortController.signal.aborted) {
+                abortController.abort();
+            }
+
             break;
         }
     }
@@ -321,6 +345,8 @@ async function processGatewayStream(
         flushPlainTextBufferToRenderer(session_uid, runtimeState);
         runtimeState.pending_buffer = '';
     }
+
+    return terminalProtocolState;
 }
 
 // + ============== Runtime Stage 6: Process One Chunk ============== +
@@ -338,7 +364,7 @@ async function processGatewayChunk(
     chunk: string,
     runtimeState: StreamRuntimeState,
     abortController: AbortController,
-): Promise<boolean> {
+): Promise<AIParserProtocolState> {
     appendChunkToCurrentEntry(session_uid, chunk);
 
     runtimeState.pending_buffer += chunk;
@@ -371,8 +397,7 @@ async function processGatewayChunk(
                     const protocolState = await invokeBlockLifecycleHandler(session_uid, activeBlock, 'chunk', abortController, chunkText);
                     if (shouldStopForParserProtocol(protocolState)) {
                         await abortActiveBlock(session_uid, runtimeState, abortController, 'Parser halted during chunk lifecycle');
-                        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
-                        return true;
+                        return protocolState;
                     }
                 }
 
@@ -389,8 +414,7 @@ async function processGatewayChunk(
                 const chunkState = await invokeBlockLifecycleHandler(session_uid, activeBlock, 'chunk', abortController, chunkText);
                 if (shouldStopForParserProtocol(chunkState)) {
                     await abortActiveBlock(session_uid, runtimeState, abortController, 'Parser halted during chunk lifecycle');
-                    AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
-                    return true;
+                    return chunkState;
                 }
             }
 
@@ -399,14 +423,8 @@ async function processGatewayChunk(
             const completeState = await invokeBlockLifecycleHandler(session_uid, completedBlock, 'complete', abortController);
             runtimeState.active_block = undefined;
 
-            if (completeState === AIParserProtocolState.WAITING_FOR_FEEDBACK) {
-                AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
-                return true;
-            }
-
             if (shouldStopForParserProtocol(completeState)) {
-                AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
-                return true;
+                return completeState;
             }
 
             continue;
@@ -462,12 +480,11 @@ async function processGatewayChunk(
         const startState = await invokeBlockLifecycleHandler(session_uid, startedBlock, 'start', abortController);
         if (shouldStopForParserProtocol(startState)) {
             await abortActiveBlock(session_uid, runtimeState, abortController, 'Parser halted during start lifecycle');
-            AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
-            return true;
+            return startState;
         }
     }
 
-    return false;
+    return AIParserProtocolState.CONTINUE_NEXT_BLOCK;
 }
 
 // + ============== Runtime Stage 7: Apply Plain Text Output ============== +
@@ -656,7 +673,8 @@ async function invokeBlockLifecycleHandler(
 }
 
 function shouldStopForParserProtocol(protocolState: AIParserProtocolState): boolean {
-    return protocolState === AIParserProtocolState.WAITING_FOR_FEEDBACK
+    return protocolState === AIParserProtocolState.STOP_CURRENT_RESPONSE
+        || protocolState === AIParserProtocolState.STOP_AND_CONTINUE_LOOP
         || protocolState === AIParserProtocolState.INTERRUPTED
         || protocolState === AIParserProtocolState.ERROR;
 }
@@ -778,11 +796,29 @@ function resetStreamingParagraphRuntime(runtimeState: StreamRuntimeState): void 
     runtimeState.tmp_paragraph_memory_uid = undefined;
 }
 
+export function shouldContinueAutonomousLoop(
+    sessionState: AISessionState,
+    terminalProtocolState?: AIParserProtocolState,
+): boolean {
+    if (terminalProtocolState === AIParserProtocolState.STOP_AND_CONTINUE_LOOP) {
+        return true;
+    }
+
+    if (
+        terminalProtocolState === AIParserProtocolState.STOP_CURRENT_RESPONSE
+        || terminalProtocolState === AIParserProtocolState.INTERRUPTED
+    ) {
+        return false;
+    }
+
+    return sessionState !== 'Finalize';
+}
+
 // + ============== Runtime Stage 10: Finalize Or Fail Entry ============== +
 // When the stream is finished, or when the parser runtime fails, this stage closes the active
 // entry and notifies the rest of the session runtime through the block bus.
 
-function finalizeStreamingEntry(session_uid: string): void {
+function finalizeStreamingEntry(session_uid: string, terminalProtocolState?: AIParserProtocolState): void {
     const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index];
     const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
@@ -802,15 +838,18 @@ function finalizeStreamingEntry(session_uid: string): void {
         ],
     });
 
-    // Check if any block requested the session to continue autonomously
     const updatedState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
-    if (updatedState.feedback_loop_status === 'continue_requested') {
-        // Reset the loop status for the next entry
+    const shouldContinue = shouldContinueAutonomousLoop(updatedState.state, terminalProtocolState);
+
+    if (shouldContinue) {
         KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-            feedback_loop_status: 'active'
+            autonomous_follow_up_loop_status: 'active'
         } as Partial<AISession>);
         AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'continue' }));
     } else {
+        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+            autonomous_follow_up_loop_status: terminalProtocolState === AIParserProtocolState.INTERRUPTED ? 'interrupted' : 'completed'
+        } as Partial<AISession>);
         AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
     }
 }

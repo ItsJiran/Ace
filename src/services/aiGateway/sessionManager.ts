@@ -2,7 +2,7 @@ import { KernelEngine } from '../../services/kernelEngine';
 import { KernelState } from '../kernelEngine/kernelState';
 
 import { PROCESS_KIND } from '#/schemas/process';
-import { AIFeedbackLoopStatus, AISessionStatus } from '#/schemas/ai';
+import { AIAutonomousFollowUpLoopStatus, AISessionStatus } from '#/schemas/ai';
 import type { AISession, SDKProvider } from '#/schemas/ai';
 import type { KernelAISessionEntry } from '../kernelEngine/types';
 
@@ -80,13 +80,18 @@ class AISessionManagerSingleton {
             model,
 
             status: AISessionStatus.IDLE,
-            feedback_loop_status: AIFeedbackLoopStatus.NONE,
+            state: 'Reason',
+            autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.NONE,
 
             turn_index: 0,
             turns : [],
 
             plan: [],
+            active_parser_blocks: [],
             context : [],
+            context_start_index: 0,
+            context_end_index: 0,
+            working_memory: [],
 
             history : {},
             history_start_index: 0,

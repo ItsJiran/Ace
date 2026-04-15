@@ -1,6 +1,7 @@
 import { AIParserProtocolState, type AISession, type AIWorkingMemoryEntry } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
+import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 
 export const handlerStart: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
@@ -62,9 +63,6 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 return;
             }
 
-            // Remove existing if any with same uid
-            wm = wm.filter(entry => entry.uid !== payload.uid);
-
             const newEntry: AIWorkingMemoryEntry = {
                 uid: payload.uid,
                 description: payload.description,
@@ -72,7 +70,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 created_at: Date.now(),
                 lifecycle_turn: currentTurnIndex,
             };
-            wm.push(newEntry);
+            wm = AIGatewayEngine.upsertWorkingMemoryEntry(sessionState, newEntry);
             console.log(`[WorkingMemoryBlock] Added ${payload.uid} to session ${session_uid}`);
 
         } else if (action === 'drop') {
@@ -82,7 +80,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 return;
             }
 
-            wm = wm.filter(entry => entry.uid !== payload.uid);
+            wm = AIGatewayEngine.dropWorkingMemoryEntry(sessionState, payload.uid);
             console.log(`[WorkingMemoryBlock] Dropped ${payload.uid} from session ${session_uid}`);
         } else {
             console.warn(`[WorkingMemoryBlock] Unknown action: ${action}`);

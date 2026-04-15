@@ -47,7 +47,7 @@ import type {
     AIGatewayConfig,
 } from '../schemas/ai_gateway';
 
-import type { SDKProvider, AISession } from '#/schemas/ai';
+import type { SDKProvider, AISession, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
 import { AIProcessType, AISessionStatus } from '#/schemas/ai';
 
 import { KernelState } from './kernelEngine/kernelState';
@@ -315,6 +315,52 @@ class AIGatewayEngineSingleton {
      */
     async testResponse(sdk: SDKProvider, model: string, prompt: string): Promise<AIGatewayResponseResult> {
         return _testResponse(sdk, model, prompt, AIConfigManager.get(), () => HealthProbe.ensure());
+    }
+
+    appendHistoryResponseSummary(
+        sessionState: AISession,
+        turnIndex: number,
+        summary: string,
+        payload?: Record<string, unknown>,
+    ): Record<number, AIHistoryEntry> {
+        const history = { ...(sessionState.history ?? {}) };
+        const existingEntry = history[turnIndex];
+        const nextSummary = existingEntry?.response
+            ? `${existingEntry.response} ${summary}`.trim()
+            : summary.trim();
+
+        history[turnIndex] = {
+            at: Date.now(),
+            turn_index: turnIndex,
+            status: 'active',
+            lifecycle_turn: sessionState.turn_index,
+            prompt: existingEntry?.prompt,
+            response: nextSummary,
+            payload: {
+                ...(existingEntry?.payload ?? {}),
+                ...(payload ?? {}),
+            },
+        };
+
+        return history;
+    }
+
+    upsertWorkingMemoryEntry(
+        sessionState: AISession,
+        entry: AIWorkingMemoryEntry,
+    ): AIWorkingMemoryEntry[] {
+        const workingMemory = [...(sessionState.working_memory ?? [])]
+            .filter((existingEntry) => existingEntry.uid !== entry.uid);
+        workingMemory.push(entry);
+        return workingMemory;
+    }
+
+    dropWorkingMemoryEntry(
+        sessionState: AISession,
+        uid: string,
+    ): AIWorkingMemoryEntry[] {
+        return [...(sessionState.working_memory ?? [])]
+            .filter((entry) => entry.uid !== uid);
     }
 }
 

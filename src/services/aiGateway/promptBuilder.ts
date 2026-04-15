@@ -5,10 +5,12 @@ import type { AISession } from "#/schemas/ai";
 import { KernelEngine } from "../kernelEngine";
 import { RegistryEngine } from "../registryEngine";
 
+export type AIPromptKind = 'user_prompt' | 'autonomous_follow_up';
+
 // It also manages context lifecycle and memory for the AI sessions, ensuring that relevant information 
 // is retained across interactions. 
 
-export function buildPrompt(originalPrompt: string, session_uid: string): string {
+export function buildPrompt(prompt: string, session_uid: string, promptKind: AIPromptKind = 'user_prompt'): string {
 
     // Read the current session state from memory using the session UID. 
     // This allows us to access any relevant information
@@ -31,57 +33,61 @@ export function buildPrompt(originalPrompt: string, session_uid: string): string
         ${loaded_memory_prompt}
         ${loaded_storage_prompt}
         ${loaded_history_prompt}
-        [ORIGINAL USER PROMPT]
-        ${originalPrompt}
+        ${buildPromptInputSection(prompt, promptKind)}
     `;
 }
 
+function buildPromptInputSection(prompt: string, promptKind: AIPromptKind): string {
+    if (promptKind === 'autonomous_follow_up') {
+        return `[AUTONOMOUS FOLLOW-UP PROMPT]
+        ${prompt}`;
+    }
+
+    return `[ORIGINAL USER PROMPT]
+    ${prompt}`;
+}
+
 export function buildDefaultPrompt(): string {
-    // This function can be used to build a default prompt that serves as a starting point for interactions with the AI model. 
-    // It can include instructions for the model, default context, or any other information that should be included in every prompt. 
-    // The implementation would depend on the specific requirements of the AI Gateway service and the capabilities of the underlying model.
+    return [
+        buildAssistantIdentityPrompt(),
+        buildGeneralConstraintsPrompt(),
+        buildStateMachinePrompt(),
+    ].filter(Boolean).join('\n\n');
+}
 
-    return `[DEFAULT CONTEXT] You're name ACE Assistant, an AI Assistant that will follow this guideline, this paragraph 
-    define the general behavior and guidelines for the ACE assistant.
-    
-    [CONSTRAINTS]
-    - You should always think by the how u state currently in the session, and your response should always align with that.
-    - You should always follow block mechnaism the further explanation for block mechanism can be found in the [PARSER] section, but in general you should use block when you want to do something that need to be executed or done by the system, for example if you want to call a tool you should use tool_call block, if you want to execute a code snippet you should use code_snippet block, and so on.
-    - You should not make any assumption about the user's needs, instead you should ask for clarification if needed, and try to gather as much information as possible before taking any action.
-    - You should always consider the user's intent and try to understand it as much as possible before taking any action.
-    - You should always try to use the most relevant information from the session history, context, and memory to inform your response.
-    - You should always try to be concise and clear in your response, and avoid unnecessary information or verbosity.
+function buildAssistantIdentityPrompt(): string {
+    return `[DEFAULT CONTEXT] You are ACE Assistant. Follow the system guidance, stay aligned with the current session state, and produce the next valid response for the runtime.`;
+}
 
-    [PARSER]
-    - The parser mechanism is a way for you to instruct the system to do something specific, this can be calling a tool, executing a code snippet, or any other action that need to be done by the system. 
-    - our parser mechanism works based on sentinel block lines, where you define a start line and a closing line, and the system will parse that block and execute the corresponding action.
-    - NEVER nest one parser block inside another parser block unless a block explicitly says it supports nested blocks. By default, assume nested blocks are invalid.
-    - For block structure always follow in this format : 
-    \`\`\`
-    @@ace:start block_slug
-        content
-    @@ace:end
-    \`\`\` 
-    - The @@ace:start line must be followed by a line break before the payload starts.
-    - @@ace:start and @@ace:end are only treated as parser control markers when they appear at the beginning of a line.
-    - If @@ace:start is followed by a block name that is not registered, it will be treated as plain visible text instead of a real parser block.
-    - the content can be text, payload, json or anything but it will be passed to the corresponding block handler as the input, and the system 
-    will execute the block handler and return the result back to you, which you can use in your next response.
-    - Treat paragraph content as plain visible prose only. Do not call another block inside a paragraph block.
-    - If you need to mention control markers literally inside visible prose, write them as escaped or explanatory text, not as an actual executable nested block.
-    - There're default provided block parser for u to interact with the system, the details of the default block parser can be found in the the [DEFAULT BLOCK]. 
-    - For the other custom block parser, you can use the default block provided if there'is to list, and find block parser that match with ur needs.
-    - For block that not default but currently active will be putted in the [ACTIVE PARSER BLOCK] section in the prompt context, and you can use that 
-    information to know how to use the block and passed the correct content block.
+function buildGeneralConstraintsPrompt(): string {
+    return `[GENERAL CONSTRAINTS]
+    - Always reason from the current session state.
+    - Do not assume missing user intent when clarification is required.
+    - Prefer the most relevant information from session history, active context, and working memory.
+    - Keep the response concise, clear, and operational.
+    - Use parser blocks for system actions. Use visible prose only for user-facing explanation.`.trim();
+}
 
-    [CONTEXT GUIDELINE]
-    - The context is the relevant information that you can use to inform your response, this can include relevant facts, result from a previous block parser, tool call
-    result, or any other information that can help you to generate a better response.
-    - The context will be updated throughout the session, and you should always try to use the 
-    most relevant information from the context to inform your response.
-    - You can always added, update or remove the context by using provided block parser.
-    - CRITICAL RULE: When using protocol_control, context, or working_memory parser blocks, ALWAYS place them at the VERY TOP of your response before any other text or blocks. This ensures your intentions and memory state are processed before any further generation.
-    `.trim();
+function buildStateMachinePrompt(): string {
+    return `[STATE MACHINE]
+    - The session has an operational state. The current state tells you what this response should focus on.
+    - When you decide the next operational phase explicitly, use the state_transition block to update the session state.
+    - The state machine is the main semantic control plane for the autonomous loop. Do not use a separate protocol block.
+    - State transition is constrained, not free-form. Use only valid next states.
+    - For the current MVP, do not transition into Plan. Treat Plan as reserved and inactive for now.
+    - Preferred transition graph for this MVP:
+        Reason -> Act | Finalize
+        Act -> Observe
+        Observe -> Reason | Reflect | Finalize
+        Reflect -> Reason | Finalize
+        Finalize -> Finalize
+    - Use Reason when understanding intent, selecting the next move, or deciding what information is still missing.
+    - Use Act when executing a concrete action or emitting the next external/runtime operation.
+    - Use Observe when analyzing fresh results that arrived after an action.
+    - Use Reflect when evaluating whether the previous action or observation changed the plan or exposed an error.
+    - Use Finalize when the task is ready to be packaged back to the user.
+    - Normal completion behavior follows the session state: Finalize ends the turn and returns control to the user; non-Finalize states continue the autonomous loop.
+    - Parser stop states still exist as technical runtime overrides: stop_current_response ends now, and stop_and_continue_loop ends now then immediately starts the next pass.`.trim();
 }
 
 export function buildConstraintsStatePrommpt(session: AISession): string {
@@ -96,9 +102,12 @@ export function buildConstraintsStatePrommpt(session: AISession): string {
         and consider any relevant context that could inform your reasoning process.`.trim();
 
     if (session.state == 'Plan')
-        return `[PLAN MODE] You are currently in Planning mode, your response should be focused on creating a concrete plan of action based on the reasoning step. 
-        This can include outlining specific steps to take, identifying which tools or resources to use, and determining how to best address the user's needs. 
-        Your plan should be clear, actionable, and directly informed by the insights gained during the Reasoning phase.`.trim();
+        return `[PLAN MODE] Planning mode is currently reserved and should generally not be used in this MVP. Prefer Reason for choosing the next move and Act for executing it.`.trim();
+
+    if (session.state == 'Act')
+        return `[ACT MODE] You are currently in Acting mode, your response should be focused on executing a concrete next step. 
+        This can include emitting the correct parser block, triggering a runtime action, or preparing the exact operational output for the next system step. 
+        Avoid broad re-analysis here unless the action is blocked or invalid.`.trim();
 
     if (session.state == 'Observe')
         return `[OBSERVE MODE] You are currently in Observing mode, your response should be focused on analyzing new information that has been generated after taking an action. 
@@ -139,12 +148,23 @@ export function buildBlockParserPrompt(session: AISession): string {
     const lines: string[] = [];
 
     lines.push('[PARSER REGISTRY OVERVIEW]');
+    lines.push('A block is a structured response region wrapped by @@ace:start and @@ace:end. It is parsed by the runtime and is not ordinary visible prose.');
+    lines.push('A parser is the runtime handler that owns a block slug. It reads the block payload, performs the corresponding system behavior, and returns control back into the interaction loop.');
+    lines.push('Use parser blocks for system actions. Use visible prose blocks such as paragraph only for user-facing explanation.');
     lines.push('Block syntax: @@ace:start block_slug\\n...payload...\\n@@ace:end');
+    lines.push('The @@ace:start line must be followed by a line break before the payload starts.');
+    lines.push('@@ace:start and @@ace:end are only treated as parser markers when they appear at the beginning of a line.');
+    lines.push('If @@ace:start is followed by a block name that is not registered, it is treated as visible text instead of a real parser block.');
     lines.push('Registered parser block names below represent the full registry, not the subset of block details currently hydrated into this prompt.');
-    lines.push('If you only know a block name but need its schema or usage details, call parser_registry with action "detail".');
-    lines.push('If you want the full registry names again, call parser_registry with action "list_names".');
-    lines.push('If you want to know which block details are currently hydrated in this prompt, call parser_registry with action "list_hydrated".');
+    lines.push('Strict rule: whenever you need to know, inspect, verify, discover, list, or ask about parser blocks, always use the parser_registry block instead of answering from memory or from the hydrated subset shown in this prompt.');
+    lines.push('Strict rule: never treat the hydrated block-detail subset as the full parser registry. Hydrated details are only the currently injected working subset.');
+    lines.push('If the user asks to list parser blocks, available blocks, all blocks, what blocks exist, or what blocks can be used, you must use parser_registry with action "list_names".');
+    lines.push('If the user asks which block details are currently injected into the prompt, you must use parser_registry with action "list_hydrated".');
+    lines.push('If you only know a block name but need its schema, payload shape, or usage rules, you must use parser_registry with action "detail".');
+    lines.push('Do not answer parser-registry discovery questions by reading the hydrated detail section below and paraphrasing it as if it were the full registry.');
     lines.push('Global rule: do not nest parser blocks inside other parser blocks unless a block explicitly documents that nested usage is allowed.');
+    lines.push('Treat paragraph content as plain visible prose only. Do not place other parser blocks inside paragraph unless a block explicitly supports nested behavior.');
+    lines.push('Detailed operational rules for default blocks such as context, summarize_prompt, or state_transition live in their hydrated block detail sections below, not in the global prompt.');
 
     lines.push('');
     lines.push('[REGISTERED PARSER BLOCK NAMES]');
@@ -182,6 +202,8 @@ export function buildContextPrompt(session: AISession): string {
     if (windowEntries.length === 0) return '';
 
     const lines: string[] = ['[ACTIVE CONTEXT]'];
+    lines.push('This is lightweight reasoning state that should survive across autonomous steps, such as user intent, plan decisions, observed results, and important constraints.');
+    lines.push('Use this section as short chaining knowledge, not as storage for large raw payloads.');
 
     for (const entry of windowEntries) {
         // Header: title + optional turn reference
@@ -209,7 +231,8 @@ export function buildMemoryPrompt(session: AISession): string {
     if (!session.working_memory || session.working_memory.length === 0) return '';
 
     const lines: string[] = ['[WORKING MEMORY (WORKBENCH)]'];
-    lines.push('Items placed here are kept available for reference. Use the working_memory parser block to drop items you no longer need.');
+    lines.push('This is the place for large raw runtime payloads, such as search results, files, tool outputs, or registry details, without polluting visible prose or context.');
+    lines.push('Use working memory when you need to inspect or reference a payload later. Remove items you no longer need to control token usage.');
 
     for (const entry of session.working_memory) {
         lines.push('');
@@ -240,26 +263,18 @@ export function buildHistoryPrompt(session: AISession): string {
     if (historyTurns.length === 0) return '';
 
     const lines: string[] = ['[CONVERSATION HISTORY]'];
+    lines.push('This section is turn-level memory for older conversation steps. Prefer these compact summaries over reconstructing meaning from raw historical block output.');
+    lines.push('Prompt summaries may be written deliberately by the AI through summarize_prompt. Response summaries may also be written manually by parser blocks so future turns remember outcomes without replaying raw blocks.');
 
     historyTurns.forEach((turn, idx) => {
         const turnIndex = start + idx;
         const turnNumber = turnIndex + 1;
         const historyEntry = session.history?.[turnIndex];
-
-        if (historyEntry?.status === 'active') {
-            if (historyEntry.prompt?.trim()) {
-                lines.push(`[TURN ${turnNumber}] User Summary: ${historyEntry.prompt.trim()}`);
-            }
-
-            if (historyEntry.response?.trim()) {
-                lines.push(`[TURN ${turnNumber}] Assistant Summary: ${historyEntry.response.trim()}`);
-            }
-
-            return;
-        }
-
         const userPrompt = turn.entries?.[0]?.prompt?.trim();
-        if (userPrompt) {
+        const promptSummary = historyEntry?.prompt?.trim();
+        if (promptSummary) {
+            lines.push(`[TURN ${turnNumber}] User Summary: ${promptSummary}`);
+        } else if (userPrompt) {
             lines.push(`[TURN ${turnNumber}] User: ${userPrompt}`);
         }
 
@@ -269,7 +284,10 @@ export function buildHistoryPrompt(session: AISession): string {
             .filter(Boolean)
             .join('\n');
 
-        if (assistantResponse) {
+        const responseSummary = historyEntry?.response?.trim();
+        if (responseSummary) {
+            lines.push(`[TURN ${turnNumber}] Assistant Summary: ${responseSummary}`);
+        } else if (assistantResponse) {
             lines.push(`[TURN ${turnNumber}] Assistant: ${assistantResponse}`);
         }
     });
