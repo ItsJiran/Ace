@@ -54,9 +54,15 @@ export function useAIChatSession(session_uid?: string) {
         }
     };
 
+    const interruptSession = () => {
+        if (!sessionUid) return;
+        AIGatewayEngine.interruptSession(sessionUid);
+    };
+
     return {
         session, // This will be undefined until sessionUid is set and memory is fetched
         sessionUid,
-        sendPrompt
+        sendPrompt,
+        interruptSession,
     };
 }

@@ -858,6 +858,8 @@ async function failStreamingEntry(session_uid: string, error: unknown): Promise<
     AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
 
     const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const isInterrupted = currentSessionState?.termination_requested === true
+        || (error instanceof Error && error.name === 'AbortError');
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index];
     const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
 
@@ -879,7 +881,7 @@ async function failStreamingEntry(session_uid: string, error: unknown): Promise<
     }
 
     console.log(currentSessionState);
-    currentEntry.status = 'error';
+    currentEntry.status = isInterrupted ? 'interrupted' : 'error';
 
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         ...currentSessionState,
@@ -894,8 +896,18 @@ async function failStreamingEntry(session_uid: string, error: unknown): Promise<
         ],
     });
 
+    if (isInterrupted) {
+        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+            autonomous_follow_up_loop_status: 'interrupted',
+            active_abort_controller: undefined,
+            termination_requested: false,
+        } as Partial<AISession>);
+        return;
+    }
+
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         status: AISessionStatus.ERROR,
+        active_abort_controller: undefined,
         error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) },
     } as Partial<AISession>);
 }

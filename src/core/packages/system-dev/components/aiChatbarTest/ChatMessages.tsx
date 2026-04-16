@@ -7,7 +7,7 @@ export interface ChatMessagesProps {
     session?: AISession | undefined;
     sessionUid?: string | undefined;
     className?: string;
-    bottomRef?: React.RefObject<HTMLDivElement> | undefined;
+    bottomRef?: React.RefObject<HTMLDivElement | null> | undefined;
 }
 
 /**

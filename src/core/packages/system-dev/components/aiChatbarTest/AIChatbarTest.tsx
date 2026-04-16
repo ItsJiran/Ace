@@ -23,7 +23,6 @@ export default function AIChatbarTest() {
         selectedModel,
         setSelectedModel,
         modelOptions,
-        fetchModels,
         ensureSelectedModel,
     } = useAIGateway();
 
@@ -39,11 +38,11 @@ export default function AIChatbarTest() {
     }
 
     // Destructure the values returned from the useAIChatSession hook
-    const { session, sessionUid, sendPrompt } = aiChatSessionReturn;
+    const { session, sessionUid, sendPrompt, interruptSession } = aiChatSessionReturn;
 
     useEffect(() => {
         console.log(session, sessionUid, selectedSdk, selectedModel);   
-    }, [session,selectedSdk, selectedModel]);
+    }, [session, sessionUid, selectedSdk, selectedModel]);
 
     // Handler for sending a prompt
     const onSendPrompt = () => {
@@ -76,13 +75,14 @@ export default function AIChatbarTest() {
             />
 
             <div className="flex-1 overflow-auto px-3 py-3 space-y-2">
-                <ChatMessages session={session} sessionUid={sessionUid} bottomRef={bottomRef} />
+                <ChatMessages session={session} sessionUid={sessionUid ?? undefined} bottomRef={bottomRef} />
             </div>
 
             <ControlPanel
                 prompt={prompt}
                 onPromptChange={setPrompt}
                 onSendPrompt={wrappedSendPrompt}
+                onStopPrompt={interruptSession}
                 session_status={session?.status || AISessionStatus.IDLE}
             />
         </div>

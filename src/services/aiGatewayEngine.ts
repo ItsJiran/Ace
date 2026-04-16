@@ -48,7 +48,7 @@ import type {
 } from '../schemas/ai_gateway';
 
 import type { SDKProvider, AISession, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
-import { AIProcessType, AISessionStatus } from '#/schemas/ai';
+import { AIProcessType } from '#/schemas/ai';
 
 import { KernelState } from './kernelEngine/kernelState';
 import type { KernelAISessionEntry } from './kernelEngine/types';
@@ -107,14 +107,16 @@ class AIGatewayEngineSingleton {
         const session = AISessionManager.get(sessionId);
         if (!session) return;
 
-        session.termination_requested = true;
+        KernelEngine.updateMemory(`system:ai_session:${sessionId}:state`, {
+            termination_requested: true,
+            autonomous_follow_up_loop_status: 'interrupted',
+        } as Partial<AISession>);
+
         if (session.active_abort_controller) {
             session.active_abort_controller.abort();
-            session.active_abort_controller = undefined;
-        }
-
-        if (session.status === AISessionStatus.STREAMING) {
-            session.status = AISessionStatus.IDLE;
+            KernelEngine.updateMemory(`system:ai_session:${sessionId}:state`, {
+                active_abort_controller: undefined,
+            } as Partial<AISession>);
         }
     }
 
@@ -240,6 +242,10 @@ class AIGatewayEngineSingleton {
             session,
             prompt,
         });
+    }
+
+    interruptSession(sessionUid: string): void {
+        this.abortSessionStream(sessionUid);
     }
 
     // ── Health / Discovery ────────────────────────────────────────────────────

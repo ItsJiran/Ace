@@ -78,7 +78,7 @@ export interface SessionInteractionLoopInput {
 }
 
 function buildAutonomousFollowUpPrompt(): string {
-    return 'This is an autonomous follow-up pass for the same user request. Continue from the latest session state, context, working memory, history summaries, and runtime results. Do not replay or reinterpret the original user prompt unless a clarification gap still exists.';
+    return 'This is an autonomous follow-up pass for the same user request. Start from the current pass handoff, active context index, active working-memory index, and expanded active payloads before reopening older history. Continue only from the latest validated state and completed runtime results. Do not replay or reinterpret the original user prompt unless the active handoff still leaves a real clarification gap.';
 }
 
 // Note : Future improvement since we already passing the session object, we can just directly update the session memory in the interaction loop without 
@@ -108,6 +108,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
     KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
         status: AISessionStatus.STREAMING,
         state: 'Reason',
+        termination_requested: false,
         // we always set refresh context index for every turn from newest to latest
         context_start_index: Math.max(0, KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.context?.length - 15),
         context_end_index: (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.context?.length ?? 0) - 1 + 1,
@@ -162,6 +163,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
             if (KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.autonomous_follow_up_loop_status === AIAutonomousFollowUpLoopStatus.INTERRUPTED) {
                 KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
                     status: AISessionStatus.IDLE,
+                    active_abort_controller: undefined,
                 } as AISession);
                 console.log(`[AIGatewayEngine] Interaction loop for session ${session.session_uid} completed and marked as IDLE.`);
                 return; // Exit the loop and end the function since the session is now idle.
@@ -173,6 +175,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
                 KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
                     status: AISessionStatus.IDLE,
                     autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.COMPLETED,
+                    active_abort_controller: undefined,
                 } as AISession);
                 console.log(`[AIGatewayEngine] Interaction loop for session ${session.session_uid} completed and marked as IDLE.`);
                 return; // Exit the loop and end the function since the session is now idle.
@@ -191,6 +194,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
         KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
             status: AISessionStatus.ERROR,
             autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.COMPLETED,
+            active_abort_controller: undefined,
             error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) },
         } as Partial<AISession>);
     }

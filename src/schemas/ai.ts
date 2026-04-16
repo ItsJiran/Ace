@@ -92,11 +92,7 @@ export interface AISession {
     // Contexting information that can be used for building the session context, such as summaries, relevant history, 
     // and other contextual data that can be fed back into the model for better responses. 
     // This is optional and can be populated based on the application's needs.
-    plan: Array<{
-        is_complete: boolean;
-        detail?: string;
-        [key: string]: string | number | boolean | object | unknown;
-    }>;
+    plan: Array<AIPlanEntry>;
 
     // Parser block list parser that currently active in the session, this can be used to 
     // efficiently load block context, schema used cased and etc.
@@ -225,6 +221,15 @@ export interface AIWorkingMemoryEntry {
     description: string; // Brief description of what this working memory holds
     content: string; // The potentially massive payload
     created_at: number;
+    lifecycle_turn?: number;
+}
+
+export interface AIPlanEntry {
+    state: AISessionState;
+    title: string;
+    is_complete: boolean;
+    detail?: string;
+    step_index?: number;
     lifecycle_turn?: number;
 }
 

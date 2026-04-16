@@ -59,7 +59,31 @@ describe('StateTransitionBlock', () => {
         expect((KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession).state).toBe('Finalize');
     });
 
-    it('continues parsing for non-Finalize transitions', async () => {
+    it('allows Act to finalize immediately and stops the loop', async () => {
+        const session = createSession('Act');
+        KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
+
+        const responses: string[] = [];
+        await handlerComplete({
+            block: {
+                session_uid: session.session_uid,
+                process_uid: session.process_uid,
+                turn_index: 0,
+                entry_index: 0,
+                block_index: 0,
+                block_slug: 'state_transition',
+                payload: { content: JSON.stringify({ next_state: 'Finalize', reason: 'Action completed the task.' }) },
+            },
+            lifecycle: 'complete',
+            dispatchParserResponse: (detail) => responses.push(detail),
+            abortCurrentResponseBuffer: new AbortController().signal,
+        });
+
+        expect(responses).toEqual([AIParserProtocolState.STOP_CURRENT_RESPONSE]);
+        expect((KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession).state).toBe('Finalize');
+    });
+
+    it('stops the current pass and continues the loop for non-Finalize transitions', async () => {
         const session = createSession('Reason');
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
 
@@ -79,7 +103,7 @@ describe('StateTransitionBlock', () => {
             abortCurrentResponseBuffer: new AbortController().signal,
         });
 
-        expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
+        expect(responses).toEqual([AIParserProtocolState.STOP_AND_CONTINUE_LOOP]);
         expect((KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession).state).toBe('Act');
     });
 });

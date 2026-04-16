@@ -6,7 +6,7 @@ import { KernelEngine } from '#/services/kernelEngine';
 const ALLOWED_NEXT_STATES: Record<AISessionState, AISessionState[]> = {
     Reason: ['Act', 'Finalize'],
     Plan: ['Reason', 'Act', 'Finalize'],
-    Act: ['Observe'],
+    Act: ['Observe', 'Finalize'],
     Observe: ['Reason', 'Reflect', 'Finalize'],
     Reflect: ['Reason', 'Finalize'],
     Finalize: ['Finalize'],
@@ -37,13 +37,16 @@ export const registry: AceRegistryType.Parser = {
             'When an action has completed and the next step should analyze the result.',
             'When the task is ready to be packaged back to the user.',
             'Use this as the main semantic control block for the autonomous loop. Finalize ends the turn; non-Finalize states keep the session moving.',
-            'When transitioning to Finalize, emit state_transition before the final user-facing prose because the parser stops immediately after this block.',
+            'This block is a phase boundary. After state_transition is emitted, the current pass stops immediately.',
+            'For non-Finalize transitions, the runtime stops the current pass and starts an autonomous follow-up pass using the new state.',
+            'For Finalize transitions, the runtime stops the current pass and returns control to the user.',
+            'Place state_transition as the last block of the current pass. Do not emit blocks from the next phase after it in the same response.',
         ],
         promptExamples: [
-            'Switch from Reason to Act before emitting the next concrete action.',
-            'Switch from Act to Observe after the runtime action has been chosen.',
-            'Switch to Finalize because the task is done and ready for user-facing output.',
-            'Before emitting the final visible answer, switch to Finalize.',
+            'While in Reason, decide that the next pass should be Act, then emit state_transition and stop the current pass.',
+            'While in Act, decide that the next pass should be Observe after the runtime action completes, then emit state_transition and stop.',
+            'Switch to Finalize because the task is done and ready to end the turn.',
+            'Do not emit Act blocks after switching from Reason to Act in the same response.',
         ],
         exampleLines: [
             '  @@ace:start state_transition',
@@ -113,7 +116,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         dispatchParserResponse(
             nextState === 'Finalize'
                 ? AIParserProtocolState.STOP_CURRENT_RESPONSE
-                : AIParserProtocolState.CONTINUE_NEXT_BLOCK
+                : AIParserProtocolState.STOP_AND_CONTINUE_LOOP
         );
     } catch (e) {
         console.error(`[StateTransitionBlock] Error processing block:`, e);
