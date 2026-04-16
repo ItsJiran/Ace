@@ -104,6 +104,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
     KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
         status: AISessionStatus.STREAMING,
         state: 'Reason',
+        state_cycle_index: 0,
         termination_requested: false,
         // we always set refresh context index for every turn from newest to latest
         context_start_index: Math.max(0, KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`)?.context?.length - 15),

@@ -17,9 +17,11 @@ export function buildCurrentTurnRetainedMemoryPrompt(session: AISession): string
 
     const historyEntry = session.history?.[session.turn_index] ?? session.history?.[currentTurnIndex];
     const eventSummaries = getHistoryEventSummaries(historyEntry?.responses);
+    const currentCycleIndex = session.state_cycle_index ?? 0;
     const completedSteps = (session.plan ?? [])
         .filter((entry) => entry.state === session.state)
         .filter((entry) => entry.lifecycle_turn === undefined || entry.lifecycle_turn === currentTurnIndex)
+        .filter((entry) => (entry.lifecycle_cycle ?? 0) === currentCycleIndex)
         .filter((entry) => entry.is_complete)
         .map((entry) => entry.title);
     const userPrompt = currentTurn.entries?.[0]?.prompt?.trim();
@@ -41,7 +43,7 @@ export function buildCurrentTurnRetainedMemoryPrompt(session: AISession): string
     }
 
     if (completedSteps.length > 0) {
-        lines.push(`- Completed plan steps in this state: ${completedSteps.join(' | ')}`);
+        lines.push(`- Completed plan steps in this state cycle: ${completedSteps.join(' | ')}`);
     }
 
     return lines.join('\n');

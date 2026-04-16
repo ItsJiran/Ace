@@ -59,13 +59,15 @@ export function shouldContinueAutonomousLoop(
     sessionState: AISessionState,
     terminalProtocolState?: AIParserProtocolState,
 ): boolean {
+    void sessionState;
+
     if (terminalProtocolState === AIParserProtocolState.STOP_AND_CONTINUE_LOOP) return true;
     if (
         terminalProtocolState === AIParserProtocolState.STOP_CURRENT_RESPONSE
         || terminalProtocolState === AIParserProtocolState.INTERRUPTED
     ) return false;
 
-    return sessionState !== 'Finalize';
+    return false;
 }
 
 async function runGatewayStreamRequest(

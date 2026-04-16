@@ -9,6 +9,13 @@
 
 import type { AISession, AIPlanEntry } from '#/schemas/ai';
 
+const PLAN_STATE_ORDER: Record<string, number> = {
+    Reason: 0,
+    Act: 1,
+    Observe: 2,
+    Finalize: 3,
+};
+
 export function getActiveContextEntries(session: AISession) {
     if (!session.context || session.context.length === 0) return [];
 
@@ -31,10 +38,19 @@ export function getPrioritizedWorkingMemoryEntries(session: AISession) {
 }
 
 export function getCurrentStatePlanEntries(session: AISession): AIPlanEntry[] {
+    const currentCycleIndex = session.state_cycle_index ?? 0;
+
     return [...(session.plan ?? [])]
-        .filter((entry) => entry.state === session.state)
+        .filter((entry) => session.state === 'Reason' ? entry.state !== 'Reason' : entry.state === session.state)
         .filter((entry) => entry.lifecycle_turn === undefined || entry.lifecycle_turn === session.turn_index)
-        .sort((left, right) => (left.step_index ?? Number.MAX_SAFE_INTEGER) - (right.step_index ?? Number.MAX_SAFE_INTEGER));
+        .filter((entry) => (entry.lifecycle_cycle ?? 0) === currentCycleIndex)
+        .sort((left, right) => {
+            const leftStateRank = PLAN_STATE_ORDER[left.state] ?? Number.MAX_SAFE_INTEGER;
+            const rightStateRank = PLAN_STATE_ORDER[right.state] ?? Number.MAX_SAFE_INTEGER;
+
+            if (leftStateRank !== rightStateRank) return leftStateRank - rightStateRank;
+            return (left.step_index ?? Number.MAX_SAFE_INTEGER) - (right.step_index ?? Number.MAX_SAFE_INTEGER);
+        });
 }
 
 export function getLatestCompletedAssistantEntry(session: AISession) {

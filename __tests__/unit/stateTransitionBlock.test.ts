@@ -14,6 +14,7 @@ function createSession(state: AISession['state']): AISession {
         model: 'gpt-test',
         status: 'idle',
         state,
+        state_cycle_index: 0,
         autonomous_follow_up_loop_status: 'none',
         error_payload: undefined,
         turn_index: 0,
@@ -35,8 +36,8 @@ describe('StateTransitionBlock', () => {
         KernelEngine.resetKernelSpace();
     });
 
-    it('dispatches stop_current_response when transitioning to Finalize', async () => {
-        const session = createSession('Reason');
+    it('lets Observe hand off into a Finalize pass', async () => {
+        const session = createSession('Observe');
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
 
         const responses: string[] = [];
@@ -56,20 +57,21 @@ describe('StateTransitionBlock', () => {
             abortCurrentResponseBuffer: new AbortController().signal,
         });
 
-        expect(responses).toEqual([AIParserProtocolState.STOP_CURRENT_RESPONSE]);
+        expect(responses).toEqual([AIParserProtocolState.STOP_AND_CONTINUE_LOOP]);
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
         expect(stored.state).toBe('Finalize');
+        expect(stored.state_cycle_index).toBe(0);
         expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 index: 0,
                 block_slug: 'state_transition',
                 status: 'completed',
-                summary: 'State transitioned from Reason to Finalize. Reason: Done.',
+                summary: 'State transitioned from Observe to Finalize for cycle 1. Reason: Done.',
             }),
         ]));
     });
 
-    it('allows Act to finalize immediately and stops the loop', async () => {
+    it('lets Act hand off only to Observe', async () => {
         const session = createSession('Act');
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
 
@@ -82,7 +84,7 @@ describe('StateTransitionBlock', () => {
                 entry_index: 0,
                 block_index: 0,
                 block_slug: 'state_transition',
-                payload: { content: JSON.stringify({ next_state: 'Finalize', reason: 'Action completed the task.' }) },
+                payload: { content: JSON.stringify({ next_state: 'Observe', reason: 'Action completed and now needs validation.' }) },
             },
             lifecycle: 'complete',
             history_event_index: 0,
@@ -90,15 +92,16 @@ describe('StateTransitionBlock', () => {
             abortCurrentResponseBuffer: new AbortController().signal,
         });
 
-        expect(responses).toEqual([AIParserProtocolState.STOP_CURRENT_RESPONSE]);
+        expect(responses).toEqual([AIParserProtocolState.STOP_AND_CONTINUE_LOOP]);
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
-        expect(stored.state).toBe('Finalize');
+        expect(stored.state).toBe('Observe');
+        expect(stored.state_cycle_index).toBe(0);
         expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 index: 0,
                 block_slug: 'state_transition',
                 status: 'completed',
-                summary: 'State transitioned from Act to Finalize. Reason: Action completed the task.',
+                summary: 'State transitioned from Act to Observe for cycle 1. Reason: Action completed and now needs validation.',
             }),
         ]));
     });
@@ -127,12 +130,48 @@ describe('StateTransitionBlock', () => {
         expect(responses).toEqual([AIParserProtocolState.STOP_AND_CONTINUE_LOOP]);
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
         expect(stored.state).toBe('Act');
+        expect(stored.state_cycle_index).toBe(0);
         expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 index: 0,
                 block_slug: 'state_transition',
                 status: 'completed',
-                summary: 'State transitioned from Reason to Act. Reason: Need to execute next step.',
+                summary: 'State transitioned from Reason to Act for cycle 1. Reason: Need to execute next step.',
+            }),
+        ]));
+    });
+
+    it('increments the cycle only when Observe returns to Reason', async () => {
+        const session = createSession('Observe');
+        KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
+
+        const responses: string[] = [];
+        await handlerComplete({
+            block: {
+                session_uid: session.session_uid,
+                process_uid: session.process_uid,
+                turn_index: 0,
+                entry_index: 0,
+                block_index: 0,
+                block_slug: 'state_transition',
+                payload: { content: JSON.stringify({ next_state: 'Reason', reason: 'Observed an execution failure and need replanning.' }) },
+            },
+            lifecycle: 'complete',
+            history_event_index: 0,
+            dispatchParserResponse: (detail) => responses.push(detail),
+            abortCurrentResponseBuffer: new AbortController().signal,
+        });
+
+        expect(responses).toEqual([AIParserProtocolState.STOP_AND_CONTINUE_LOOP]);
+        const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
+        expect(stored.state).toBe('Reason');
+        expect(stored.state_cycle_index).toBe(1);
+        expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                index: 0,
+                block_slug: 'state_transition',
+                status: 'completed',
+                summary: 'State transitioned from Observe to Reason for cycle 2. Reason: Observed an execution failure and need replanning.',
             }),
         ]));
     });

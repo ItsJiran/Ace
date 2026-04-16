@@ -15,22 +15,22 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'planning',
     slug: 'planning',
-    description: 'Manage the per-state execution plan for the current session. Use it to create, refresh, complete, or clear the checklist that the current state must finish before transitioning.',
+    description: 'Manage the per-cycle execution plan for the current session. Reason may create or reset downstream plans for the active cycle, while Act and Observe may only mark plan steps complete.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Use this block to manage a state-scoped checklist. Each operational state may have its own plan. If the current state has no plan yet, create one first. If a plan already exists, work through incomplete steps one by one and mark them complete before transitioning out of the state.',
+        purpose: 'Use this block to manage cycle-scoped execution checklists. Reason is the planning authority: it may create or reset downstream plans for Act or Observe in the current cycle. Act and Observe may only mark their own current-cycle steps complete. Finalize should not call planning.',
         requiredFields: '"action" (set | complete | reset).',
-        optionalFields: '"target_state" (defaults to current session state). For set: "steps" or "plan" array. For complete: "step_index" or "title".',
+        optionalFields: '"target_state". Required for Reason set/reset and must be Act or Observe. Optional for complete and defaults to the current session state. For set: "steps" or "plan" array. For complete: "step_index" or "title".',
         triggerConditions: [
-            'When the current state still needs a concrete checklist before any more work should happen.',
-            'When you need to refresh the current state plan because the evidence or objective changed.',
-            'When you completed one checklist item and need to mark it done.',
-            'When the current state plan became obsolete and should be cleared before replanning.',
+            'When Reason must define the Act or Observe checklist before leaving Reason.',
+            'When Reason must repair or replace a downstream checklist because the objective changed.',
+            'When Act completed one execution task and must mark it done.',
+            'When Observe validated one observation task and must mark it done.',
         ],
         promptExamples: [
-            'I am in Act and there is no plan yet, so I will define the Act checklist first.',
+            'I am in Reason and need to define the Act checklist before leaving Reason.',
             'I finished step 1 of the Observe checklist and will mark it complete.',
-            'The old Reason checklist is obsolete, so I will reset it and create a new one.',
+            'The old Act checklist is obsolete, so while in Reason I will reset it and create a new one.',
         ],
         exampleLines: [
             '  @@ace:start planning',
@@ -68,9 +68,23 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         const currentTurnIndex = sessionState.turn_index;
+        const currentCycleIndex = sessionState.state_cycle_index ?? 0;
+        const currentState = sessionState.state;
         const scopedPlans = [...(sessionState.plan ?? [])];
 
         if (action === 'set') {
+            if (currentState !== 'Reason') {
+                console.warn(`[PlanningBlock] action=set is only allowed in Reason. Current state: ${currentState}`);
+                dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+                return;
+            }
+
+            if (targetState !== 'Act' && targetState !== 'Observe') {
+                console.warn(`[PlanningBlock] action=set requires target_state Act or Observe. Received: ${String(targetState)}`);
+                dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+                return;
+            }
+
             const rawSteps = Array.isArray(payload.steps)
                 ? payload.steps
                 : Array.isArray(payload.plan)
@@ -83,22 +97,22 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 return;
             }
 
-            const otherPlans = scopedPlans.filter((entry) => !isScopedPlanEntry(entry, targetState, currentTurnIndex));
-            const nextPlans: AIPlanEntry[] = rawSteps.map((step: unknown, index: number) => normalizePlanStep(step, targetState, currentTurnIndex, index));
+            const otherPlans = scopedPlans.filter((entry) => !isScopedPlanEntry(entry, targetState, currentTurnIndex, currentCycleIndex));
+            const nextPlans: AIPlanEntry[] = rawSteps.map((step: unknown, index: number) => normalizePlanStep(step, targetState, currentTurnIndex, currentCycleIndex, index));
             const history = typeof history_event_index === 'number'
                 ? AIGatewayEngine.writeHistoryEventSummary(
                     sessionState,
                     currentTurnIndex,
                     history_event_index,
-                    `Planning created ${nextPlans.length} step(s) for state ${targetState}.`,
-                    { action: 'planning:set', target_state: targetState, step_count: nextPlans.length },
+                    `Planning created ${nextPlans.length} step(s) for state ${targetState} in cycle ${currentCycleIndex + 1}.`,
+                    { action: 'planning:set', target_state: targetState, state_cycle_index: currentCycleIndex, step_count: nextPlans.length },
                     { block_slug: 'planning' },
                 )
                 : AIGatewayEngine.appendHistoryResponseSummary(
                     sessionState,
                     currentTurnIndex,
-                    `Planning created ${nextPlans.length} step(s) for state ${targetState}.`,
-                    { action: 'planning:set', target_state: targetState, step_count: nextPlans.length },
+                    `Planning created ${nextPlans.length} step(s) for state ${targetState} in cycle ${currentCycleIndex + 1}.`,
+                    { action: 'planning:set', target_state: targetState, state_cycle_index: currentCycleIndex, step_count: nextPlans.length },
                 );
 
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
@@ -107,14 +121,26 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 history_end_index: Math.max(sessionState.history_end_index ?? 0, currentTurnIndex + 1),
             } as Partial<AISession>);
 
-            dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
+            dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
             return;
         }
 
         if (action === 'complete') {
+            if (currentState !== 'Act' && currentState !== 'Observe') {
+                console.warn(`[PlanningBlock] action=complete is only allowed in Act or Observe. Current state: ${currentState}`);
+                dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+                return;
+            }
+
+            if (targetState !== currentState) {
+                console.warn(`[PlanningBlock] action=complete may only target the active state. Current state: ${currentState}, target_state: ${String(targetState)}`);
+                dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+                return;
+            }
+
             let completedLabel: string | undefined;
             const nextPlans = scopedPlans.map((entry) => {
-                if (!isScopedPlanEntry(entry, targetState, currentTurnIndex)) return entry;
+                if (!isScopedPlanEntry(entry, targetState, currentTurnIndex, currentCycleIndex)) return entry;
 
                 const matchesIndex = Number.isFinite(Number(payload.step_index)) && entry.step_index === Number(payload.step_index);
                 const matchesTitle = typeof payload.title === 'string' && payload.title.trim() !== '' && entry.title === payload.title.trim();
@@ -135,15 +161,15 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                         sessionState,
                         currentTurnIndex,
                         history_event_index,
-                        `Planning marked step complete in state ${targetState}: ${completedLabel}.`,
-                        { action: 'planning:complete', target_state: targetState, title: completedLabel, step_index: payload.step_index },
+                        `Planning marked step complete in state ${targetState} for cycle ${currentCycleIndex + 1}: ${completedLabel}.`,
+                        { action: 'planning:complete', target_state: targetState, state_cycle_index: currentCycleIndex, title: completedLabel, step_index: payload.step_index },
                         { block_slug: 'planning' },
                     )
                     : AIGatewayEngine.appendHistoryResponseSummary(
                         sessionState,
                         currentTurnIndex,
-                        `Planning marked step complete in state ${targetState}: ${completedLabel}.`,
-                        { action: 'planning:complete', target_state: targetState, title: completedLabel, step_index: payload.step_index },
+                        `Planning marked step complete in state ${targetState} for cycle ${currentCycleIndex + 1}: ${completedLabel}.`,
+                        { action: 'planning:complete', target_state: targetState, state_cycle_index: currentCycleIndex, title: completedLabel, step_index: payload.step_index },
                     )
                 : sessionState.history;
 
@@ -160,29 +186,41 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         if (action === 'reset') {
+            if (currentState !== 'Reason') {
+                console.warn(`[PlanningBlock] action=reset is only allowed in Reason. Current state: ${currentState}`);
+                dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+                return;
+            }
+
+            if (targetState !== 'Act' && targetState !== 'Observe') {
+                console.warn(`[PlanningBlock] action=reset requires target_state Act or Observe. Received: ${String(targetState)}`);
+                dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
+                return;
+            }
+
             const history = typeof history_event_index === 'number'
                 ? AIGatewayEngine.writeHistoryEventSummary(
                     sessionState,
                     currentTurnIndex,
                     history_event_index,
-                    `Planning reset the current-turn plan for state ${targetState}.`,
-                    { action: 'planning:reset', target_state: targetState },
+                    `Planning reset the active plan for state ${targetState} in cycle ${currentCycleIndex + 1}.`,
+                    { action: 'planning:reset', target_state: targetState, state_cycle_index: currentCycleIndex },
                     { block_slug: 'planning' },
                 )
                 : AIGatewayEngine.appendHistoryResponseSummary(
                     sessionState,
                     currentTurnIndex,
-                    `Planning reset the current-turn plan for state ${targetState}.`,
-                    { action: 'planning:reset', target_state: targetState },
+                    `Planning reset the active plan for state ${targetState} in cycle ${currentCycleIndex + 1}.`,
+                    { action: 'planning:reset', target_state: targetState, state_cycle_index: currentCycleIndex },
                 );
 
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-                plan: scopedPlans.filter((entry) => !isScopedPlanEntry(entry, targetState, currentTurnIndex)),
+                plan: scopedPlans.filter((entry) => !isScopedPlanEntry(entry, targetState, currentTurnIndex, currentCycleIndex)),
                 history,
                 history_end_index: Math.max(sessionState.history_end_index ?? 0, currentTurnIndex + 1),
             } as Partial<AISession>);
 
-            dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
+            dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
             return;
         }
 
@@ -199,10 +237,8 @@ function normalizeTargetState(targetState: unknown, fallbackState: AISessionStat
 
     if (
         nextState === 'Reason'
-        || nextState === 'Plan'
         || nextState === 'Act'
         || nextState === 'Observe'
-        || nextState === 'Reflect'
         || nextState === 'Finalize'
     ) {
         return nextState;
@@ -211,11 +247,13 @@ function normalizeTargetState(targetState: unknown, fallbackState: AISessionStat
     return null;
 }
 
-function isScopedPlanEntry(entry: AIPlanEntry, targetState: AISessionState, turnIndex: number): boolean {
-    return entry.state === targetState && (entry.lifecycle_turn ?? turnIndex) === turnIndex;
+function isScopedPlanEntry(entry: AIPlanEntry, targetState: AISessionState, turnIndex: number, cycleIndex: number): boolean {
+    return entry.state === targetState
+        && (entry.lifecycle_turn ?? turnIndex) === turnIndex
+        && (entry.lifecycle_cycle ?? 0) === cycleIndex;
 }
 
-function normalizePlanStep(step: unknown, state: AISessionState, turnIndex: number, index: number): AIPlanEntry {
+function normalizePlanStep(step: unknown, state: AISessionState, turnIndex: number, cycleIndex: number, index: number): AIPlanEntry {
     if (typeof step === 'string') {
         return {
             state,
@@ -223,6 +261,7 @@ function normalizePlanStep(step: unknown, state: AISessionState, turnIndex: numb
             is_complete: false,
             step_index: index,
             lifecycle_turn: turnIndex,
+            lifecycle_cycle: cycleIndex,
         };
     }
 
@@ -241,6 +280,7 @@ function normalizePlanStep(step: unknown, state: AISessionState, turnIndex: numb
             is_complete: normalized.is_complete === true,
             step_index: index,
             lifecycle_turn: turnIndex,
+            lifecycle_cycle: cycleIndex,
         };
     }
 
@@ -250,5 +290,6 @@ function normalizePlanStep(step: unknown, state: AISessionState, turnIndex: numb
         is_complete: false,
         step_index: index,
         lifecycle_turn: turnIndex,
+        lifecycle_cycle: cycleIndex,
     };
 }

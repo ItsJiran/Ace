@@ -13,11 +13,10 @@ describe('interactionParserLoop parser protocol semantics', () => {
 		expect(AIParserProtocolState.CONTINUE_NEXT_BLOCK).not.toBe(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
 	});
 
-	it('continues by default for non-Finalize states', () => {
-		expect(shouldContinueAutonomousLoop('Reason')).toBe(true);
-		expect(shouldContinueAutonomousLoop('Act')).toBe(true);
-		expect(shouldContinueAutonomousLoop('Observe')).toBe(true);
-		expect(shouldContinueAutonomousLoop('Reflect')).toBe(true);
+	it('does not continue without an explicit parser continuation signal', () => {
+		expect(shouldContinueAutonomousLoop('Reason')).toBe(false);
+		expect(shouldContinueAutonomousLoop('Act')).toBe(false);
+		expect(shouldContinueAutonomousLoop('Observe')).toBe(false);
 	});
 
 	it('stops by default in Finalize', () => {

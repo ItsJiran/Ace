@@ -37,11 +37,6 @@ export type AISessionState =
     // even self-reflection on previous steps. Like getting relevant tools, relevant context, or even asking 
     // for clarification from the user.
 
-    | 'Plan'
-    // At this state the AI should be creating a concrete plan of action based on the reasoning step, this can include
-    // which tools to use, what questions to ask, or how to structure the response. The plan should be actionable and specific, 
-    // serving as a blueprint for the next steps in the interaction.
-
     | 'Act'
     // At this state the AI should be executing the plan created in the previous step, 
     // this can include calling tools, asking questions to the user, or generating a response.
@@ -53,10 +48,6 @@ export type AISessionState =
     // include the result of a tool call, the user's response to a question, or any new information that has been 
     // generated. The AI should be analyzing this new information and determining how it impacts the overall session, 
     // including whether the original plan is still valid or if it needs to be updated based on the new context.
-
-    | 'Reflect'
-    // At this state the AI should be reflecting on the overall session, evaluating the effectiveness of its actions, 
-    // and considering any adjustments needed for future interactions.
 
     | 'Finalize'
 // Packaging the result for the user, this can include formatting the response, ensuring that all necessary 
@@ -79,6 +70,7 @@ export interface AISession {
     // its lifecycle and handle UI state accordingly.
     status: AISessionStatus;
     state: AISessionState;
+    state_cycle_index: number;
 
     // Tracks autonomous follow-up loop state for multi-pass reasoning and result consumption.
     autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus;
@@ -276,6 +268,7 @@ export interface AIPlanEntry {
     detail?: string;
     step_index?: number;
     lifecycle_turn?: number;
+    lifecycle_cycle?: number;
 }
 
 export interface AIRenderer {

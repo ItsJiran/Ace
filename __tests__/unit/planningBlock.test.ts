@@ -15,6 +15,7 @@ function createSession(state: AISession['state']): AISession {
         model: 'gpt-test',
         status: 'idle',
         state,
+        state_cycle_index: 0,
         autonomous_follow_up_loop_status: 'none',
         error_payload: undefined,
         turn_index: 0,
@@ -36,8 +37,8 @@ describe('PlanningBlock', () => {
         KernelEngine.resetKernelSpace();
     });
 
-    it('sets a current-state plan and continues the outer loop', async () => {
-        const session = createSession('Act');
+    it('lets Reason create a downstream Act plan without forcing a loop boundary', async () => {
+        const session = createSession('Reason');
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
 
         const responses: string[] = [];
@@ -49,7 +50,7 @@ describe('PlanningBlock', () => {
                 entry_index: 0,
                 block_index: 0,
                 block_slug: 'planning',
-                payload: { content: JSON.stringify({ action: 'set', steps: ['Inspect result', 'Choose next state'] }) },
+                payload: { content: JSON.stringify({ action: 'set', target_state: 'Act', steps: ['Inspect result', 'Choose next state'] }) },
             },
             lifecycle: 'complete',
             history_event_index: 0,
@@ -59,16 +60,16 @@ describe('PlanningBlock', () => {
 
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
 
-        expect(responses).toEqual([AIParserProtocolState.STOP_AND_CONTINUE_LOOP]);
+        expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
         expect(stored.plan).toHaveLength(2);
-        expect(stored.plan[0]).toMatchObject({ state: 'Act', title: 'Inspect result', is_complete: false, step_index: 0 });
-        expect(stored.plan[1]).toMatchObject({ state: 'Act', title: 'Choose next state', is_complete: false, step_index: 1 });
+        expect(stored.plan[0]).toMatchObject({ state: 'Act', title: 'Inspect result', is_complete: false, step_index: 0, lifecycle_cycle: 0 });
+        expect(stored.plan[1]).toMatchObject({ state: 'Act', title: 'Choose next state', is_complete: false, step_index: 1, lifecycle_cycle: 0 });
         expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 index: 0,
                 block_slug: 'planning',
                 status: 'completed',
-                summary: 'Planning created 2 step(s) for state Act.',
+                summary: 'Planning created 2 step(s) for state Act in cycle 1.',
             }),
         ]));
     });
@@ -82,6 +83,7 @@ describe('PlanningBlock', () => {
                 is_complete: false,
                 step_index: 0,
                 lifecycle_turn: 0,
+                lifecycle_cycle: 0,
             },
             {
                 state: 'Observe',
@@ -89,6 +91,7 @@ describe('PlanningBlock', () => {
                 is_complete: false,
                 step_index: 1,
                 lifecycle_turn: 0,
+                lifecycle_cycle: 0,
             },
         ];
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
@@ -120,8 +123,34 @@ describe('PlanningBlock', () => {
                 index: 0,
                 block_slug: 'planning',
                 status: 'completed',
-                summary: 'Planning marked step complete in state Observe: Interpret output.',
+                summary: 'Planning marked step complete in state Observe for cycle 1: Interpret output.',
             }),
         ]));
+    });
+
+    it('rejects set outside Reason', async () => {
+        const session = createSession('Act');
+        KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
+
+        const responses: string[] = [];
+        await handlerComplete({
+            block: {
+                session_uid: session.session_uid,
+                process_uid: session.process_uid,
+                turn_index: 0,
+                entry_index: 0,
+                block_index: 0,
+                block_slug: 'planning',
+                payload: { content: JSON.stringify({ action: 'set', target_state: 'Act', steps: ['Do work'] }) },
+            },
+            lifecycle: 'complete',
+            history_event_index: 0,
+            dispatchParserResponse: (detail) => responses.push(detail),
+            abortCurrentResponseBuffer: new AbortController().signal,
+        });
+
+        const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
+        expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
+        expect(stored.plan).toEqual([]);
     });
 });
