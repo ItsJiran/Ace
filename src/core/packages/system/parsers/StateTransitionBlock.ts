@@ -1,6 +1,7 @@
 import { AIParserProtocolState, type AISession, type AISessionState } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
+import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 
 const ALLOWED_NEXT_STATES: Record<AISessionState, AISessionState[]> = {
@@ -64,7 +65,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
+export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse, history_event_index }: ParserBlockArgs) => {
     try {
         const payload = JSON.parse(block.payload.content);
         const nextState = payload.next_state as AISessionState | undefined;
@@ -106,9 +107,30 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         });
 
         const nextContextEndIndex = context.length - 1;
+        const historySummary = note?.trim()
+            ? `State transitioned from ${currentState} to ${nextState}. Reason: ${note.trim()}`
+            : `State transitioned from ${currentState} to ${nextState}.`;
+        const history = typeof history_event_index === 'number'
+            ? AIGatewayEngine.writeHistoryEventSummary(
+                sessionState,
+                sessionState.turn_index,
+                history_event_index,
+                historySummary,
+                { action: 'state_transition', from: currentState, to: nextState },
+                { block_slug: 'state_transition' },
+            )
+            : AIGatewayEngine.appendHistoryResponseSummary(
+                sessionState,
+                sessionState.turn_index,
+                historySummary,
+                { action: 'state_transition', from: currentState, to: nextState },
+            );
+
         KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
             state: nextState,
             context,
+            history,
+            history_end_index: Math.max(sessionState.history_end_index ?? 0, sessionState.turn_index + 1),
             context_start_index: Math.max(0, nextContextEndIndex - 15),
             context_end_index: nextContextEndIndex,
         } as Partial<AISession>);

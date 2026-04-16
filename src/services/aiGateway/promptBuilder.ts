@@ -326,6 +326,13 @@ export function buildHistoryPrompt(session: AISession): string {
         const turnIndex = start + idx;
         const turnNumber = turnIndex + 1;
         const historyEntry = session.history?.[turnIndex];
+        const eventSummaries = Array.isArray(historyEntry?.responses)
+            ? historyEntry.responses
+                .slice()
+                .sort((left, right) => left.index - right.index)
+                .map((event) => event.summary?.trim() ?? '')
+                .filter(Boolean)
+            : [];
         const userPrompt = turn.entries?.[0]?.prompt?.trim();
         const promptSummary = historyEntry?.prompt?.trim();
         if (promptSummary) {
@@ -334,17 +341,8 @@ export function buildHistoryPrompt(session: AISession): string {
             lines.push(`[TURN ${turnNumber}] User: ${userPrompt}`);
         }
 
-        const assistantResponse = turn.entries
-            ?.filter(e => e.status === 'completed' || e.status === 'success')
-            .map(e => e.response?.trim() ?? '')
-            .filter(Boolean)
-            .join('\n');
-
-        const responseSummary = historyEntry?.response?.trim();
-        if (responseSummary) {
-            lines.push(`[TURN ${turnNumber}] Assistant Summary: ${responseSummary}`);
-        } else if (assistantResponse) {
-            lines.push(`[TURN ${turnNumber}] Assistant: ${assistantResponse}`);
+        if (eventSummaries.length > 0) {
+            lines.push(`[TURN ${turnNumber}] Assistant Summary: ${eventSummaries.join(' ')}`);
         }
     });
 

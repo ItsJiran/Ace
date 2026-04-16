@@ -38,6 +38,7 @@ export interface BlockProtocolSchema {
 export type ParserBlockArgs = {
     block: AIBlock;
     lifecycle: ParserBlockLifecycle;
+    history_event_index?: number;
 
     // Incremental content for the current chunk lifecycle callback.
     chunk_text?: string;

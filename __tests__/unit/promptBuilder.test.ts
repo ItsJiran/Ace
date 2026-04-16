@@ -66,10 +66,10 @@ describe('promptBuilder history fallback', () => {
         }));
 
         expect(prompt).toContain('[TURN 1] User: Raw user prompt');
-        expect(prompt).toContain('[TURN 1] Assistant: Raw assistant response');
+        expect(prompt).not.toContain('[TURN 1] Assistant: Raw assistant response');
     });
 
-    it('falls back to raw prompt and raw response when history summary fields are empty', () => {
+    it('falls back to raw prompt but not raw assistant response when history summary fields are empty', () => {
         const prompt = buildHistoryPrompt(createSession({
             history: {
                 0: {
@@ -77,13 +77,13 @@ describe('promptBuilder history fallback', () => {
                     turn_index: 0,
                     status: 'active',
                     prompt: '   ',
-                    response: '',
+                    responses: [],
                 },
             },
         }));
 
         expect(prompt).toContain('[TURN 1] User: Raw user prompt');
-        expect(prompt).toContain('[TURN 1] Assistant: Raw assistant response');
+        expect(prompt).not.toContain('[TURN 1] Assistant: Raw assistant response');
     });
 
     it('uses available summary fields independently and falls back only for missing sides', () => {
@@ -94,13 +94,13 @@ describe('promptBuilder history fallback', () => {
                     turn_index: 0,
                     status: 'inactive',
                     prompt: 'Summarized user prompt',
-                    response: '   ',
+                    responses: [],
                 },
             },
         }));
 
         expect(prompt).toContain('[TURN 1] User Summary: Summarized user prompt');
-        expect(prompt).toContain('[TURN 1] Assistant: Raw assistant response');
+        expect(prompt).not.toContain('[TURN 1] Assistant: Raw assistant response');
     });
 });
 
@@ -131,7 +131,16 @@ describe('promptBuilder state emphasis', () => {
                     at: Date.now(),
                     turn_index: 1,
                     status: 'active',
-                    response: 'Registry detail is already loaded.',
+                    responses: [
+                        {
+                            index: 0,
+                            block_slug: 'parser_registry',
+                            status: 'completed',
+                            summary: 'Registry detail is already loaded.',
+                            at: Date.now(),
+                            updated_at: Date.now(),
+                        },
+                    ],
                 },
             },
             working_memory: [

@@ -1,7 +1,6 @@
 import { AIParserProtocolState, type AISession } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
-import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';
 
@@ -85,21 +84,6 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
     if (!sessionState) {
         dispatchParserResponse(AIParserProtocolState.ERROR);
         return;
-    }
-
-    const paragraphText = (block.payload.content ?? '').trim();
-    if (paragraphText !== '') {
-        const history = AIGatewayEngine.appendHistoryResponseSummary(
-            sessionState,
-            block.turn_index,
-            paragraphText,
-            { action: 'paragraph' },
-        );
-
-        KernelEngine.updateMemory(`system:ai_session:${block.session_uid}:state`, {
-            history,
-            history_end_index: Math.max(sessionState.history_end_index ?? 0, block.turn_index + 1),
-        } as Partial<AISession>);
     }
 
     dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);

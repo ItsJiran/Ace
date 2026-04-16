@@ -1,6 +1,7 @@
 import { AIParserProtocolState, type AISession, type AISessionState, type AIPlanEntry } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
+import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 
 export const handlerStart: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
@@ -47,7 +48,7 @@ export const registry: AceRegistryType.Parser = {
     },
 };
 
-export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
+export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse, history_event_index }: ParserBlockArgs) => {
     try {
         const payload = JSON.parse(block.payload.content);
         const action = payload.action;
@@ -84,9 +85,26 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
 
             const otherPlans = scopedPlans.filter((entry) => !isScopedPlanEntry(entry, targetState, currentTurnIndex));
             const nextPlans: AIPlanEntry[] = rawSteps.map((step: unknown, index: number) => normalizePlanStep(step, targetState, currentTurnIndex, index));
+            const history = typeof history_event_index === 'number'
+                ? AIGatewayEngine.writeHistoryEventSummary(
+                    sessionState,
+                    currentTurnIndex,
+                    history_event_index,
+                    `Planning created ${nextPlans.length} step(s) for state ${targetState}.`,
+                    { action: 'planning:set', target_state: targetState, step_count: nextPlans.length },
+                    { block_slug: 'planning' },
+                )
+                : AIGatewayEngine.appendHistoryResponseSummary(
+                    sessionState,
+                    currentTurnIndex,
+                    `Planning created ${nextPlans.length} step(s) for state ${targetState}.`,
+                    { action: 'planning:set', target_state: targetState, step_count: nextPlans.length },
+                );
 
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
                 plan: [...otherPlans, ...nextPlans],
+                history,
+                history_end_index: Math.max(sessionState.history_end_index ?? 0, currentTurnIndex + 1),
             } as Partial<AISession>);
 
             dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
@@ -94,6 +112,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         if (action === 'complete') {
+            let completedLabel: string | undefined;
             const nextPlans = scopedPlans.map((entry) => {
                 if (!isScopedPlanEntry(entry, targetState, currentTurnIndex)) return entry;
 
@@ -102,14 +121,38 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
 
                 if (!matchesIndex && !matchesTitle) return entry;
 
+                completedLabel = entry.title;
+
                 return {
                     ...entry,
                     is_complete: true,
                 };
             });
 
+            const history = completedLabel
+                ? typeof history_event_index === 'number'
+                    ? AIGatewayEngine.writeHistoryEventSummary(
+                        sessionState,
+                        currentTurnIndex,
+                        history_event_index,
+                        `Planning marked step complete in state ${targetState}: ${completedLabel}.`,
+                        { action: 'planning:complete', target_state: targetState, title: completedLabel, step_index: payload.step_index },
+                        { block_slug: 'planning' },
+                    )
+                    : AIGatewayEngine.appendHistoryResponseSummary(
+                        sessionState,
+                        currentTurnIndex,
+                        `Planning marked step complete in state ${targetState}: ${completedLabel}.`,
+                        { action: 'planning:complete', target_state: targetState, title: completedLabel, step_index: payload.step_index },
+                    )
+                : sessionState.history;
+
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
                 plan: nextPlans,
+                history,
+                history_end_index: completedLabel
+                    ? Math.max(sessionState.history_end_index ?? 0, currentTurnIndex + 1)
+                    : sessionState.history_end_index,
             } as Partial<AISession>);
 
             dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
@@ -117,8 +160,26 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         if (action === 'reset') {
+            const history = typeof history_event_index === 'number'
+                ? AIGatewayEngine.writeHistoryEventSummary(
+                    sessionState,
+                    currentTurnIndex,
+                    history_event_index,
+                    `Planning reset the current-turn plan for state ${targetState}.`,
+                    { action: 'planning:reset', target_state: targetState },
+                    { block_slug: 'planning' },
+                )
+                : AIGatewayEngine.appendHistoryResponseSummary(
+                    sessionState,
+                    currentTurnIndex,
+                    `Planning reset the current-turn plan for state ${targetState}.`,
+                    { action: 'planning:reset', target_state: targetState },
+                );
+
             KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
                 plan: scopedPlans.filter((entry) => !isScopedPlanEntry(entry, targetState, currentTurnIndex)),
+                history,
+                history_end_index: Math.max(sessionState.history_end_index ?? 0, currentTurnIndex + 1),
             } as Partial<AISession>);
 
             dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);

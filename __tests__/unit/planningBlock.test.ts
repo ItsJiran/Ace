@@ -52,6 +52,7 @@ describe('PlanningBlock', () => {
                 payload: { content: JSON.stringify({ action: 'set', steps: ['Inspect result', 'Choose next state'] }) },
             },
             lifecycle: 'complete',
+            history_event_index: 0,
             dispatchParserResponse: (detail) => responses.push(detail),
             abortCurrentResponseBuffer: new AbortController().signal,
         });
@@ -62,6 +63,14 @@ describe('PlanningBlock', () => {
         expect(stored.plan).toHaveLength(2);
         expect(stored.plan[0]).toMatchObject({ state: 'Act', title: 'Inspect result', is_complete: false, step_index: 0 });
         expect(stored.plan[1]).toMatchObject({ state: 'Act', title: 'Choose next state', is_complete: false, step_index: 1 });
+        expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                index: 0,
+                block_slug: 'planning',
+                status: 'completed',
+                summary: 'Planning created 2 step(s) for state Act.',
+            }),
+        ]));
     });
 
     it('marks a scoped plan step complete and keeps parser flow open', async () => {
@@ -96,6 +105,7 @@ describe('PlanningBlock', () => {
                 payload: { content: JSON.stringify({ action: 'complete', step_index: 0 }) },
             },
             lifecycle: 'complete',
+            history_event_index: 0,
             dispatchParserResponse: (detail) => responses.push(detail),
             abortCurrentResponseBuffer: new AbortController().signal,
         });
@@ -105,5 +115,13 @@ describe('PlanningBlock', () => {
         expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
         expect(stored.plan[0]?.is_complete).toBe(true);
         expect(stored.plan[1]?.is_complete).toBe(false);
+        expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                index: 0,
+                block_slug: 'planning',
+                status: 'completed',
+                summary: 'Planning marked step complete in state Observe: Interpret output.',
+            }),
+        ]));
     });
 });

@@ -51,12 +51,22 @@ describe('StateTransitionBlock', () => {
                 payload: { content: JSON.stringify({ next_state: 'Finalize', reason: 'Done.' }) },
             },
             lifecycle: 'complete',
+            history_event_index: 0,
             dispatchParserResponse: (detail) => responses.push(detail),
             abortCurrentResponseBuffer: new AbortController().signal,
         });
 
         expect(responses).toEqual([AIParserProtocolState.STOP_CURRENT_RESPONSE]);
-        expect((KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession).state).toBe('Finalize');
+        const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
+        expect(stored.state).toBe('Finalize');
+        expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                index: 0,
+                block_slug: 'state_transition',
+                status: 'completed',
+                summary: 'State transitioned from Reason to Finalize. Reason: Done.',
+            }),
+        ]));
     });
 
     it('allows Act to finalize immediately and stops the loop', async () => {
@@ -75,12 +85,22 @@ describe('StateTransitionBlock', () => {
                 payload: { content: JSON.stringify({ next_state: 'Finalize', reason: 'Action completed the task.' }) },
             },
             lifecycle: 'complete',
+            history_event_index: 0,
             dispatchParserResponse: (detail) => responses.push(detail),
             abortCurrentResponseBuffer: new AbortController().signal,
         });
 
         expect(responses).toEqual([AIParserProtocolState.STOP_CURRENT_RESPONSE]);
-        expect((KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession).state).toBe('Finalize');
+        const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
+        expect(stored.state).toBe('Finalize');
+        expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                index: 0,
+                block_slug: 'state_transition',
+                status: 'completed',
+                summary: 'State transitioned from Act to Finalize. Reason: Action completed the task.',
+            }),
+        ]));
     });
 
     it('stops the current pass and continues the loop for non-Finalize transitions', async () => {
@@ -99,11 +119,21 @@ describe('StateTransitionBlock', () => {
                 payload: { content: JSON.stringify({ next_state: 'Act', reason: 'Need to execute next step.' }) },
             },
             lifecycle: 'complete',
+            history_event_index: 0,
             dispatchParserResponse: (detail) => responses.push(detail),
             abortCurrentResponseBuffer: new AbortController().signal,
         });
 
         expect(responses).toEqual([AIParserProtocolState.STOP_AND_CONTINUE_LOOP]);
-        expect((KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession).state).toBe('Act');
+        const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
+        expect(stored.state).toBe('Act');
+        expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                index: 0,
+                block_slug: 'state_transition',
+                status: 'completed',
+                summary: 'State transitioned from Reason to Act. Reason: Need to execute next step.',
+            }),
+        ]));
     });
 });

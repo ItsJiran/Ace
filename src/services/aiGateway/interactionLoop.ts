@@ -62,7 +62,7 @@ import { AIAutonomousFollowUpLoopStatus, AISessionStatus, type AISession } from 
 
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';
-import { sendPromptToGateway, AISessionBlockBus } from './interactionParserLoop';
+import { sendPromptToGateway, AISessionBlockBus } from './sub-services/interactionParserLoop';
 import type { AIPromptKind } from './promptBuilder';
 
 // + ============== Session Management API ============== +

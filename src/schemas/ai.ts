@@ -212,7 +212,19 @@ export interface AIHistoryEntry {
     status: 'active' | 'inactive';
     lifecycle_turn?: number;
     prompt?: string;
-    response?: string;
+    responses?: AIHistoryEvent[];
+    payload?: Record<string, unknown>;
+}
+
+export interface AIHistoryEvent {
+    index: number;
+    block_slug: string;
+    entry_index?: number;
+    block_index?: number;
+    status: 'allocated' | 'completed' | 'aborted';
+    summary?: string;
+    at: number;
+    updated_at: number;
     payload?: Record<string, unknown>;
 }
 

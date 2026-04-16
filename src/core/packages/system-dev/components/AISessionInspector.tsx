@@ -328,10 +328,32 @@ function HistorySection({ entriesByTurn, startIdx, endIdx }: {
                                             <div className="text-zinc-300 whitespace-pre-wrap">{entry.prompt}</div>
                                         </div>
                                     )}
-                                    {entry.response && (
+                                    {entry.responses && entry.responses.length > 0 && (
                                         <div className="mb-1">
-                                            <div className="text-zinc-500 uppercase tracking-wide">Response</div>
-                                            <div className="text-zinc-300 whitespace-pre-wrap">{entry.response}</div>
+                                            <div className="text-zinc-500 uppercase tracking-wide">Responses</div>
+                                            <div className="space-y-1 mt-1">
+                                                {entry.responses
+                                                    .slice()
+                                                    .sort((a, b) => a.index - b.index)
+                                                    .map((response) => (
+                                                        <div key={response.index} className="bg-zinc-950 rounded p-2">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="text-zinc-500">#{response.index}</span>
+                                                                <span className="text-cyan-300 font-semibold">{response.block_slug}</span>
+                                                                <StatusBadge status={response.status} />
+                                                                <span className="ml-auto text-zinc-600">{ts(response.updated_at)}</span>
+                                                            </div>
+                                                            {response.summary && (
+                                                                <div className="text-zinc-300 whitespace-pre-wrap mb-1">{response.summary}</div>
+                                                            )}
+                                                            {response.payload && Object.keys(response.payload).length > 0 && (
+                                                                <pre className="text-zinc-300 bg-zinc-900 rounded p-1 overflow-x-auto whitespace-pre-wrap break-all max-h-20">
+                                                                    {JSON.stringify(response.payload, null, 2)}
+                                                                </pre>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                            </div>
                                         </div>
                                     )}
                                     {entry.payload && Object.keys(entry.payload).length > 0 && (
