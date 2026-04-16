@@ -15,21 +15,20 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'planning',
     slug: 'planning',
-    description: 'Manage the per-cycle execution plan for the current session. Reason may create or reset downstream plans for the active cycle, while Act and Observe may only mark plan steps complete.',
+    description: 'Manage the per-cycle execution plan for the current session. Reason may create or reset the Act plan for the active cycle, while Act may only mark Act plan steps complete.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Use this block to manage cycle-scoped execution checklists. Reason is the planning authority: it may create or reset downstream plans for Act or Observe in the current cycle. Act and Observe may only mark their own current-cycle steps complete. Finalize should not call planning.',
+        purpose: 'Use this block to manage the cycle-scoped Act checklist. Reason is the only planning authority: it may create or reset the Act plan for the current cycle. Act may only mark its current-cycle Act steps complete. Observe and Finalize should not call planning.',
         requiredFields: '"action" (set | complete | reset).',
-        optionalFields: '"target_state". Required for Reason set/reset and must be Act or Observe. Optional for complete and defaults to the current session state. For set: "steps" or "plan" array. For complete: "step_index" or "title".',
+        optionalFields: '"target_state". Required for Reason set/reset and must be Act. Optional for complete and defaults to the current session state. For set: "steps" or "plan" array. For complete: "step_index" or "title".',
         triggerConditions: [
-            'When Reason must define the Act or Observe checklist before leaving Reason.',
-            'When Reason must repair or replace a downstream checklist because the objective changed.',
+            'When Reason must define the Act checklist before leaving Reason.',
+            'When Reason must repair or replace the Act checklist because the objective changed.',
             'When Act completed one execution task and must mark it done.',
-            'When Observe validated one observation task and must mark it done.',
         ],
         promptExamples: [
             'I am in Reason and need to define the Act checklist before leaving Reason.',
-            'I finished step 1 of the Observe checklist and will mark it complete.',
+            'I finished step 1 of the Act checklist and will mark it complete.',
             'The old Act checklist is obsolete, so while in Reason I will reset it and create a new one.',
         ],
         exampleLines: [
@@ -79,8 +78,8 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 return;
             }
 
-            if (targetState !== 'Act' && targetState !== 'Observe') {
-                console.warn(`[PlanningBlock] action=set requires target_state Act or Observe. Received: ${String(targetState)}`);
+            if (targetState !== 'Act') {
+                console.warn(`[PlanningBlock] action=set requires target_state Act. Received: ${String(targetState)}`);
                 dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
                 return;
             }
@@ -126,8 +125,8 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         if (action === 'complete') {
-            if (currentState !== 'Act' && currentState !== 'Observe') {
-                console.warn(`[PlanningBlock] action=complete is only allowed in Act or Observe. Current state: ${currentState}`);
+            if (currentState !== 'Act') {
+                console.warn(`[PlanningBlock] action=complete is only allowed in Act. Current state: ${currentState}`);
                 dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
                 return;
             }
@@ -192,8 +191,8 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 return;
             }
 
-            if (targetState !== 'Act' && targetState !== 'Observe') {
-                console.warn(`[PlanningBlock] action=reset requires target_state Act or Observe. Received: ${String(targetState)}`);
+            if (targetState !== 'Act') {
+                console.warn(`[PlanningBlock] action=reset requires target_state Act. Received: ${String(targetState)}`);
                 dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
                 return;
             }

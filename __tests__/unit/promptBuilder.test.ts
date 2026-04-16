@@ -264,8 +264,9 @@ describe('promptBuilder state emphasis', () => {
         expect(prompt).toContain('Special rule for Act: Act may only complete Act plan steps. It cannot create or reset plans, and it must always hand off to Observe next.');
         expect(prompt).toContain('In state Act, you must finish this state\'s objective before moving to another state.');
         expect(prompt).toContain('Planning in state Act must stay within this scope: execute only the current cycle Act checklist and mark completed tasks; do not create plans, reset plans, or analyze outcomes here.');
-        expect(prompt).toContain('Non-Finalize states should not silently satisfy the user and stop. If the task is already answerable, hand off into Finalize and let the Finalize pass deliver the response.');
-        expect(prompt).toContain('When you change state, emit state_transition as the last block of this pass. The next state always runs in the next autonomous pass, never in the same response.');
+        expect(prompt).toContain('Non-Finalize states should not silently satisfy the user and stop. If the task is already answerable, finish the visible answer and then transition into Finalize to end the turn.');
+        expect(prompt).toContain('When you change state to Reason or Act or Observe, emit state_transition as the last block of this pass so the next state runs in the next autonomous pass.');
+        expect(prompt).toContain('When you change state to Finalize, only do it after the visible user-facing answer is already complete in the current response. Finalize does not get another follow-up pass.');
         expect(prompt).toContain('Current plan progress for state Act in cycle 1: 0/1 steps complete.');
         expect(prompt).toContain('There is a passed-off prompt below. Evaluate its impact on this state result and on plan progress before continuing the next plan step.');
         expect(prompt).toContain('Do not change state yet. Stay in Act until passed-off evaluation is done and this state\'s cycle plan is complete.');
@@ -274,15 +275,15 @@ describe('promptBuilder state emphasis', () => {
     it('tells the model to create a plan first when the current state has no plan', () => {
         const prompt = buildCurrentStateOperatingPrompt(createSession({ state: 'Reason', plan: [] }), 'Check whether the user intent is clear.', 'autonomous_follow_up');
 
-        expect(prompt).toContain('If there is no downstream plan yet for cycle 1, you must create the required Act and/or Observe plans first with the planning block before leaving Reason.');
-        expect(prompt).toContain('Do not leave Reason until the current cycle has enough downstream plans for execution and observation.');
+        expect(prompt).toContain('If there is no Act plan yet for cycle 1, you must create it first with the planning block before leaving Reason.');
+        expect(prompt).toContain('Do not leave Reason until the current cycle has an execution plan that is sufficient for the user prompt.');
     });
 
     it('hardens Reason as the only planning authority', () => {
         const prompt = buildCurrentStateOperatingPrompt(createSession({ state: 'Reason', plan: [] }), 'halo', 'user_prompt');
 
-        expect(prompt).toContain('Use state Reason when: use Reason when you need to understand the request, design the execution and observation checklists for the current cycle, or repair the plan after Observe found a problem.');
-        expect(prompt).toContain('Special rule for Reason: Reason is the only planning authority. Stay in Reason until the downstream plans are sufficient for the user prompt, including any block gathering, response requirements, and error-handling expectations.');
+        expect(prompt).toContain('Use state Reason when: use Reason when you need to understand the request, design the Act checklist for the current cycle, or repair the execution path after Observe found a problem.');
+        expect(prompt).toContain('Special rule for Reason: Reason is the only planning authority. Stay in Reason until the Act plan is sufficient for the user prompt, including any block gathering, response requirements, and error-handling expectations.');
     });
 
     it('adds gating guidance for Observe', () => {
@@ -290,7 +291,9 @@ describe('promptBuilder state emphasis', () => {
 
         expect(prompt).toContain('Use state Observe when: use Observe only when there is a fresh runtime result from Act, a parser block, or another concrete action that now needs interpretation.');
         expect(prompt).toContain('Never use state Observe when: never use Observe when no fresh runtime result exists yet, and never use it for simple conversational requests like greetings or lightweight replies.');
-        expect(prompt).toContain('Special rule for Observe: Observe is the decision gate. If you detect an error, failed tool result, or broken execution path, write context that records what failed and return to Reason. If the work is sufficient, hand off to Finalize.');
+        expect(prompt).toContain('Special rule for Observe: Observe is the decision gate. If you detect an error, failed tool result, or broken execution path, write context that records what failed and return to Reason. If the work is sufficient, hand off to Finalize. Observe never owns a plan.');
+        expect(prompt).toContain('Observe does not require a planning block. Summarize what happened in Act, note any failure or insufficiency in context, then choose Reason or Finalize.');
+        expect(prompt).toContain('When you change state to Finalize, only do it after the visible user-facing answer is already complete in the current response. Finalize does not get another follow-up pass.');
     });
 
     it('adds a visible-response obligation for Finalize', () => {
@@ -341,15 +344,7 @@ describe('promptBuilder operational handoff', () => {
     it('renders a current pass-off prompt instead of an autonomous follow-up prompt section', () => {
         const prompt = buildCurrentPassOffPrompt('Continue from the previous parser result.', createSession({
             state: 'Observe',
-            plan: [
-                {
-                    state: 'Observe',
-                    title: 'Inspect the parser result',
-                    is_complete: false,
-                    step_index: 0,
-                    lifecycle_turn: 1,
-                },
-            ],
+            plan: [],
         }), 'autonomous_follow_up');
 
         expect(prompt).toContain('[LIST PASSED OFF PROMPT]');
@@ -390,8 +385,7 @@ describe('promptBuilder operational handoff', () => {
             plan: [],
         }), 'Inspect the latest action result.', 'autonomous_follow_up');
 
-        expect(operatingPrompt).toContain('If there is no plan yet for state Observe in cycle 1, do not invent one here. Return to Reason so the next cycle can be replanned.');
-        expect(operatingPrompt).toContain('Do not change state yet. Stay in Observe until passed-off evaluation is done and this state\'s cycle plan is complete.');
+        expect(operatingPrompt).toContain('Observe does not require a planning block. Summarize what happened in Act, note any failure or insufficiency in context, then choose Reason or Finalize.');
     });
 
     it('renders context and working memory as index first, payload second', () => {
@@ -479,7 +473,7 @@ describe('promptBuilder operational handoff', () => {
             plan: [],
         }), 'Decide the next route.', 'autonomous_follow_up');
 
-        expect(prompt).toContain('Planning scope for state Reason: create or revise the downstream plans for Act and Observe in the current cycle, make sure the plan is sufficient for the user prompt, and define the expected evidence and outputs; do not execute actions, validate fresh results, or write the final user answer here.');
-        expect(prompt).toContain('IMPORTANT: there are no downstream plans yet for cycle 1. Create the required Act and/or Observe plans before leaving Reason.');
+        expect(prompt).toContain('Planning scope for state Reason: create or revise the Act plan for the current cycle, make sure the execution path is sufficient for the user prompt, and define what Observe must verify from the resulting output; do not execute actions, validate fresh results, or write the final user answer here.');
+        expect(prompt).toContain('IMPORTANT: there is no Act plan yet for cycle 1. Create it before leaving Reason.');
     });
 });

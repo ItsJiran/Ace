@@ -43,8 +43,10 @@ export function buildCurrentPassOffPrompt(prompt: string, session: AISession, pr
         - ${hasPlan
             ? `After evaluating the passed-off prompt, return to the plan for state ${session.state} in cycle ${currentCycleNumber} and continue the next incomplete step.`
             : session.state === 'Reason'
-                ? `If the evaluation shows that this cycle still has no downstream plan, create the required Act or Observe plans first with the planning block.`
-                : `If the evaluation shows that state ${session.state} still has no plan for cycle ${currentCycleNumber}, return to Reason instead of inventing a new plan here.`}
+                ? `If the evaluation shows that this cycle still has no Act plan, create it first with the planning block.`
+                : session.state === 'Observe'
+                    ? `Use this passed-off prompt to form a verdict about the last Act result. If the execution failed or is insufficient, write context and return to Reason.`
+                    : `If the evaluation shows that state ${session.state} still has no plan for cycle ${currentCycleNumber}, return to Reason instead of inventing a new plan here.`}
         ${prompt}`;
     }
 
@@ -76,12 +78,15 @@ export function buildCurrentStateOperatingPrompt(session: AISession, prompt: str
     lines.push(`- In state ${session.state}, you must finish this state's objective before moving to another state.`);
     lines.push(`- Planning in state ${session.state} must stay within this scope: ${describeStatePlanningScope(session.state)}.`);
     lines.push(session.state === 'Reason'
-        ? `- The plan shown below belongs to the current cycle. Reason may prepare downstream Act and Observe plans here before handing off.`
-        : `- The plan shown below belongs only to state ${session.state} in cycle ${currentCycleNumber}. Do not reuse a stale plan from an earlier cycle.`);
+        ? `- The plan shown below belongs to the current cycle. Reason may prepare the downstream Act plan here before handing off.`
+        : session.state === 'Observe'
+            ? '- Observe does not own a plan. Use the latest result, active context, and working memory to produce a verdict.'
+            : `- The plan shown below belongs only to state ${session.state} in cycle ${currentCycleNumber}. Do not reuse a stale plan from an earlier cycle.`);
 
     if (session.state !== 'Finalize') {
-        lines.push('- Non-Finalize states should not silently satisfy the user and stop. If the task is already answerable, hand off into Finalize and let the Finalize pass deliver the response.');
-        lines.push('- When you change state, emit state_transition as the last block of this pass. The next state always runs in the next autonomous pass, never in the same response.');
+        lines.push('- Non-Finalize states should not silently satisfy the user and stop. If the task is already answerable, finish the visible answer and then transition into Finalize to end the turn.');
+        lines.push('- When you change state to Reason or Act or Observe, emit state_transition as the last block of this pass so the next state runs in the next autonomous pass.');
+        lines.push('- When you change state to Finalize, only do it after the visible user-facing answer is already complete in the current response. Finalize does not get another follow-up pass.');
     } else {
         lines.push('- In Finalize, this response must contain visible user-facing prose. Do not stop at internal reasoning or block-only output.');
         lines.push('- Finalize is the terminal pass. Do not emit another state_transition after the answer is ready.');
@@ -95,9 +100,11 @@ export function buildCurrentStateOperatingPrompt(session: AISession, prompt: str
 
     if (session.state === 'Finalize') {
         lines.push('- Finalize does not require a planning block. Use the validated result and answer the user directly.');
+    } else if (session.state === 'Observe') {
+        lines.push('- Observe does not require a planning block. Summarize what happened in Act, note any failure or insufficiency in context, then choose Reason or Finalize.');
     } else if (currentStatePlan.length === 0) {
         lines.push(session.state === 'Reason'
-            ? `- If there is no downstream plan yet for cycle ${currentCycleNumber}, you must create the required Act and/or Observe plans first with the planning block before leaving Reason.`
+            ? `- If there is no Act plan yet for cycle ${currentCycleNumber}, you must create it first with the planning block before leaving Reason.`
             : `- If there is no plan yet for state ${session.state} in cycle ${currentCycleNumber}, do not invent one here. Return to Reason so the next cycle can be replanned.`);
     } else {
         const completedSteps = currentStatePlan.filter((entry) => entry.is_complete).length;
@@ -110,7 +117,7 @@ export function buildCurrentStateOperatingPrompt(session: AISession, prompt: str
             lines.push('- There is a passed-off prompt below. Evaluate its impact on this state result and on plan progress before continuing the next plan step.');
         } else {
             lines.push(session.state === 'Reason'
-                ? '- There is no passed-off prompt. Finish defining the downstream plans for this cycle before handing off to Act.'
+                ? '- There is no passed-off prompt. Finish defining the Act plan for this cycle before handing off to Act.'
                 : '- There is no passed-off prompt. Continue the checklist for this state until it is complete.');
         }
     }
@@ -121,11 +128,11 @@ export function buildCurrentStateOperatingPrompt(session: AISession, prompt: str
         if (session.state === 'Finalize') {
             lines.push('- The Finalize plan is complete. Deliver the user-facing answer now and let the turn end.');
         } else {
-            lines.push(`- If the state result is already correct and the plan is fully complete, you may hand off only to the following states: ${nextAllowedStates.join(' | ')}.`);
+            lines.push(`- If the state result is already correct and the plan is fully complete, you may move only to the following states: ${nextAllowedStates.join(' | ')}.`);
         }
     } else {
         if (session.state === 'Reason') {
-            lines.push('- Do not leave Reason until the current cycle has enough downstream plans for execution and observation.');
+            lines.push('- Do not leave Reason until the current cycle has an execution plan that is sufficient for the user prompt.');
         } else if (session.state !== 'Finalize') {
             lines.push(`- Do not change state yet. Stay in ${session.state} until passed-off evaluation is done and this state's cycle plan is complete.`);
         }
@@ -141,28 +148,47 @@ export function buildCurrentStatePlanPrompt(session: AISession, prompt: string, 
     const lines: string[] = ['[LIST PLAN RIGHT NOW]'];
     lines.push(session.state === 'Reason'
         ? 'This is the deterministic downstream checklist for the current reasoning cycle.'
+        : session.state === 'Observe'
+            ? 'Observe does not use a checklist. This section defines the verdict contract for the latest Act result.'
         : 'This is the deterministic checklist for the currently active state cycle.');
     lines.push(session.state === 'Reason'
-        ? `This section lists the downstream Act and Observe plans for cycle ${currentCycleNumber} of the active turn.`
+        ? `This section lists the downstream Act plan for cycle ${currentCycleNumber} of the active turn.`
+        : session.state === 'Observe'
+            ? `This section is about how Observe should judge the latest result in cycle ${currentCycleNumber} of the active turn.`
         : `This plan is the checklist for state ${session.state} in cycle ${currentCycleNumber} of the active turn.`);
     lines.push(session.state === 'Reason'
-        ? '- The focus of this section is to make sure the downstream execution and observation plans for this cycle are already sufficient.'
+        ? '- The focus of this section is to make sure the downstream Act plan for this cycle is already sufficient.'
+        : session.state === 'Observe'
+            ? '- The focus of this section is to force a verdict from the latest Act result, not to define new work.'
         : `- The focus of this section is to make sure you know whether this state cycle already has a plan and which steps are still incomplete.`);
     lines.push(`- Planning scope for state ${session.state}: ${describeStatePlanningScope(session.state)}.`);
     lines.push(session.state === 'Reason'
-        ? `- Only the current cycle's downstream plans are authoritative right now.`
+        ? `- Only the current cycle's Act plan is authoritative right now.`
+        : session.state === 'Observe'
+            ? '- Observe has no checklist authority. Use the latest result, context, and working memory to decide whether to return to Reason or move to Finalize.'
         : `- Only the current state's plan for cycle ${currentCycleNumber} is authoritative right now.`);
     lines.push(session.state === 'Reason'
-        ? `- While still in Reason, you may add or reset downstream plans for Act or Observe until the cycle is sufficiently specified.`
+        ? `- While still in Reason, you may add or reset the downstream Act plan until the cycle is sufficiently specified.`
+        : session.state === 'Observe'
+            ? '- In Observe, summarize what happened, record failures in context when needed, and choose the next state. Do not call planning here.'
         : `- If you stay in state ${session.state} within cycle ${currentCycleNumber}, keep updating this plan. If the cycle plan is obsolete, reset only this cycle plan and rebuild it.`);
+
+    if (session.state === 'Observe') {
+        if (hasPassedOffPrompt) {
+            lines.push('- Use the passed-off prompt as the primary evidence of what Act just produced.');
+        }
+        lines.push('- If the last Act result failed, was empty, or is insufficient, write a concise context note describing the failure and return to Reason.');
+        lines.push('- If the last Act result is sufficient, write the visible user-facing answer now and then transition to Finalize to stop the loop.');
+        return lines.join('\n');
+    }
 
     if (currentStatePlan.length === 0) {
         lines.push(session.state === 'Reason'
-            ? `- IMPORTANT: there are no downstream plans yet for cycle ${currentCycleNumber}. Create the required Act and/or Observe plans before leaving Reason.`
+            ? `- IMPORTANT: there is no Act plan yet for cycle ${currentCycleNumber}. Create it before leaving Reason.`
             : `- IMPORTANT: there is no plan yet for state ${session.state} in cycle ${currentCycleNumber}. Do not create one here. Return to Reason if replanning is required.`);
         if (hasPassedOffPrompt) {
             lines.push(session.state === 'Reason'
-                ? '- You should still evaluate the passed-off prompt to understand the latest result, but do not leave Reason before the downstream plans exist.'
+                ? '- You should still evaluate the passed-off prompt to understand the latest result, but do not leave Reason before the Act plan exists.'
                 : `- You should still evaluate the passed-off prompt to understand the latest result, but do not consider this state complete before the cycle plan for state ${session.state} exists.`);
         }
         return lines.join('\n');
@@ -177,7 +203,7 @@ export function buildCurrentStatePlanPrompt(session: AISession, prompt: string, 
             : '- Because there is no passed-off prompt, your main focus is to execute the next plan step.');
     }
     lines.push(session.state === 'Reason'
-        ? `- Current downstream completion snapshot: ${completedCount}/${currentStatePlan.length} steps already marked complete in this cycle.`
+        ? `- Current execution completion snapshot: ${completedCount}/${currentStatePlan.length} Act steps already marked complete in this cycle.`
         : `- Completion: ${completedCount}/${currentStatePlan.length} steps complete.`);
 
     for (const entry of currentStatePlan) {

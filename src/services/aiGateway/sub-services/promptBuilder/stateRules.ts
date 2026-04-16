@@ -21,11 +21,11 @@ type StateRuleSet = {
 const STATE_RULES: Record<AISession['state'], StateRuleSet> = {
     Reason: {
         focus: 'plan the downstream work for the current cycle: decide which Act tasks and Observe checks are needed before the answer can be finalized',
-        planningScope: 'create or revise the downstream plans for Act and Observe in the current cycle, make sure the plan is sufficient for the user prompt, and define the expected evidence and outputs; do not execute actions, validate fresh results, or write the final user answer here',
-        useWhen: 'use Reason when you need to understand the request, design the execution and observation checklists for the current cycle, or repair the plan after Observe found a problem',
-        exitWhen: 'exit Reason only when the current cycle has a sufficient downstream plan for Act and Observe and the next hand-off to Act is clear',
+        planningScope: 'create or revise the Act plan for the current cycle, make sure the execution path is sufficient for the user prompt, and define what Observe must verify from the resulting output; do not execute actions, validate fresh results, or write the final user answer here',
+        useWhen: 'use Reason when you need to understand the request, design the Act checklist for the current cycle, or repair the execution path after Observe found a problem',
+        exitWhen: 'exit Reason only when the current cycle has a sufficient Act plan and the next hand-off to Act is clear',
         avoidWhen: 'never use Reason to perform runtime actions, inspect fresh results, or draft the visible final answer',
-        specialRule: 'Reason is the only planning authority. Stay in Reason until the downstream plans are sufficient for the user prompt, including any block gathering, response requirements, and error-handling expectations.',
+        specialRule: 'Reason is the only planning authority. Stay in Reason until the Act plan is sufficient for the user prompt, including any block gathering, response requirements, and error-handling expectations.',
         allowedNextStates: ['Act'],
     },
     Act: {
@@ -39,11 +39,11 @@ const STATE_RULES: Record<AISession['state'], StateRuleSet> = {
     },
     Observe: {
         focus: 'inspect the latest result against the latest response, active context, and working memory, then decide whether the cycle succeeded or failed',
-        planningScope: 'inspect the latest result for the current cycle, mark Observe steps complete, create context notes about failures or important outcomes, and decide whether to hand back to Reason or move to Finalize',
+        planningScope: 'inspect the latest result for the current cycle, create context notes about failures or important outcomes, and decide whether to hand back to Reason or move to Finalize; do not create, reset, or complete plans here',
         useWhen: 'use Observe only when there is a fresh runtime result from Act, a parser block, or another concrete action that now needs interpretation',
         exitWhen: 'exit Observe only when the latest result has been evaluated against the current context and it is clear whether the cycle must return to Reason or can finish in Finalize',
         avoidWhen: 'never use Observe when no fresh runtime result exists yet, and never use it for simple conversational requests like greetings or lightweight replies',
-        specialRule: 'Observe is the decision gate. If you detect an error, failed tool result, or broken execution path, write context that records what failed and return to Reason. If the work is sufficient, hand off to Finalize.',
+        specialRule: 'Observe is the decision gate. If you detect an error, failed tool result, or broken execution path, write context that records what failed and return to Reason. If the work is sufficient, hand off to Finalize. Observe never owns a plan.',
         allowedNextStates: ['Reason', 'Finalize'],
     },
     Finalize: {

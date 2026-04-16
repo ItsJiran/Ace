@@ -36,7 +36,7 @@ describe('StateTransitionBlock', () => {
         KernelEngine.resetKernelSpace();
     });
 
-    it('lets Observe hand off into a Finalize pass', async () => {
+    it('stops immediately when Observe transitions to Finalize', async () => {
         const session = createSession('Observe');
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
 
@@ -57,7 +57,7 @@ describe('StateTransitionBlock', () => {
             abortCurrentResponseBuffer: new AbortController().signal,
         });
 
-        expect(responses).toEqual([AIParserProtocolState.STOP_AND_CONTINUE_LOOP]);
+        expect(responses).toEqual([AIParserProtocolState.STOP_CURRENT_RESPONSE]);
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
         expect(stored.state).toBe('Finalize');
         expect(stored.state_cycle_index).toBe(0);

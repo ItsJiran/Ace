@@ -27,18 +27,19 @@ export const registry: AceRegistryType.Parser = {
     description: 'Updates the session operational state for the next pass using a constrained transition graph.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Use this block to explicitly set the next session state when your response determines that the operational phase should change. This keeps the runtime state machine aligned with the AI decision and hands work off to a fresh follow-up pass.',
+        purpose: 'Use this block to explicitly set the next session state when your response determines that the operational phase should change. Non-Finalize transitions hand work off to a fresh follow-up pass. Finalize transitions terminate the loop immediately.',
         requiredFields: '"next_state" (must be one of Reason | Act | Observe | Finalize for the current MVP).',
         optionalFields: '"reason" or "note" for a short explanation of why the state changes.',
         triggerConditions: [
             'When the response has determined the next phase and the session state should be updated explicitly.',
             'When moving from reasoning into execution.',
             'When an action has completed and the next step should analyze the result.',
-            'When Observe has validated the work and the next pass should be Finalize for the final user-facing answer.',
-            'Use this as the main semantic control block for the autonomous loop. Every valid transition ends the current pass immediately and starts the next state in a fresh pass.',
+            'When Observe has validated the work and this same response is already ready to end in Finalize.',
+            'Use this as the main semantic control block for the autonomous loop. Non-Finalize transitions end the current pass immediately and start the next state in a fresh pass.',
             'This block is a phase boundary. After state_transition is emitted, the current pass stops immediately.',
-            'Transitions into Finalize still continue the loop once so the Finalize pass can generate the visible user-facing answer.',
-            'Do not use state_transition inside Finalize. The Finalize pass should end naturally after delivering the answer.',
+            'Transitions into Finalize stop the current response and end the autonomous loop immediately.',
+            'Only transition into Finalize after the visible user-facing answer is already complete in the current response.',
+            'Do not use state_transition inside Finalize.',
             'Place state_transition as the last block of the current pass. Do not emit blocks from the next phase after it in the same response.',
             'Reason may only transition to Act after the required downstream plans are sufficiently defined for the current cycle.',
             'Act may only transition to Observe after the planned execution work either completed or produced an execution error that Observe must inspect.',
@@ -47,7 +48,7 @@ export const registry: AceRegistryType.Parser = {
         promptExamples: [
             'While in Reason, decide that the next pass should be Act, then emit state_transition and stop the current pass.',
             'While in Act, decide that the next pass should be Observe after the runtime action completes, then emit state_transition and stop.',
-            'While in Observe, switch to Finalize because the work is validated and the next pass should package the answer for the user.',
+            'While in Observe, after finishing the visible answer, switch to Finalize to mark the turn complete.',
             'Do not emit Act blocks after switching from Reason to Act in the same response.',
         ],
         exampleLines: [
@@ -141,7 +142,11 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             context_end_index: nextContextEndIndex,
         } as Partial<AISession>);
 
-        dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
+        dispatchParserResponse(
+            nextState === 'Finalize'
+                ? AIParserProtocolState.STOP_CURRENT_RESPONSE
+                : AIParserProtocolState.STOP_AND_CONTINUE_LOOP
+        );
     } catch (e) {
         console.error(`[StateTransitionBlock] Error processing block:`, e);
         dispatchParserResponse(AIParserProtocolState.ERROR);

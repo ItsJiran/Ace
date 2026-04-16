@@ -74,20 +74,20 @@ describe('PlanningBlock', () => {
         ]));
     });
 
-    it('marks a scoped plan step complete and keeps parser flow open', async () => {
-        const session = createSession('Observe');
+    it('lets Act mark an Act plan step complete and keeps parser flow open', async () => {
+        const session = createSession('Act');
         session.plan = [
             {
-                state: 'Observe',
-                title: 'Interpret output',
+                state: 'Act',
+                title: 'Run the command',
                 is_complete: false,
                 step_index: 0,
                 lifecycle_turn: 0,
                 lifecycle_cycle: 0,
             },
             {
-                state: 'Observe',
-                title: 'Decide next state',
+                state: 'Act',
+                title: 'Store the result',
                 is_complete: false,
                 step_index: 1,
                 lifecycle_turn: 0,
@@ -123,9 +123,45 @@ describe('PlanningBlock', () => {
                 index: 0,
                 block_slug: 'planning',
                 status: 'completed',
-                summary: 'Planning marked step complete in state Observe for cycle 1: Interpret output.',
+                summary: 'Planning marked step complete in state Act for cycle 1: Run the command.',
             }),
         ]));
+    });
+
+    it('rejects complete outside Act', async () => {
+        const session = createSession('Observe');
+        session.plan = [
+            {
+                state: 'Act',
+                title: 'Run the command',
+                is_complete: false,
+                step_index: 0,
+                lifecycle_turn: 0,
+                lifecycle_cycle: 0,
+            },
+        ];
+        KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
+
+        const responses: string[] = [];
+        await handlerComplete({
+            block: {
+                session_uid: session.session_uid,
+                process_uid: session.process_uid,
+                turn_index: 0,
+                entry_index: 0,
+                block_index: 0,
+                block_slug: 'planning',
+                payload: { content: JSON.stringify({ action: 'complete', target_state: 'Act', step_index: 0 }) },
+            },
+            lifecycle: 'complete',
+            history_event_index: 0,
+            dispatchParserResponse: (detail) => responses.push(detail),
+            abortCurrentResponseBuffer: new AbortController().signal,
+        });
+
+        const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
+        expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
+        expect(stored.plan[0]?.is_complete).toBe(false);
     });
 
     it('rejects set outside Reason', async () => {

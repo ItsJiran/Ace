@@ -41,7 +41,7 @@ export function getCurrentStatePlanEntries(session: AISession): AIPlanEntry[] {
     const currentCycleIndex = session.state_cycle_index ?? 0;
 
     return [...(session.plan ?? [])]
-        .filter((entry) => session.state === 'Reason' ? entry.state !== 'Reason' : entry.state === session.state)
+        .filter((entry) => session.state === 'Reason' ? entry.state === 'Act' : entry.state === 'Act' && session.state === 'Act')
         .filter((entry) => entry.lifecycle_turn === undefined || entry.lifecycle_turn === session.turn_index)
         .filter((entry) => (entry.lifecycle_cycle ?? 0) === currentCycleIndex)
         .sort((left, right) => {
