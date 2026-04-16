@@ -15,7 +15,7 @@
  * - this module is intentionally memory-centric; it is the write boundary for stream state
  */
 
-import { AIBlockLifecycleStatus, type AIBlock, type AIEntry, type AISession, type AITurn } from '#/schemas/ai';
+import { AIBlockLifecycleStatus, type AIBlock, type AIEntry, type AINetworkTrace, type AISession, type AITurn } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';
 import type { StreamRuntimeState } from './shared';
@@ -47,9 +47,17 @@ export function appendChunkToCurrentEntry(session_uid: string, chunk: string): v
     const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index] as AITurn;
     const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
+    const now = Date.now();
 
     if (currentEntry.response == undefined) currentEntry.response = '';
     currentEntry.response += chunk;
+
+    if (currentEntry.network_trace?.response) {
+        currentEntry.network_trace.response.lifecycle = 'streaming';
+        currentEntry.network_trace.response.first_chunk_at ??= now;
+        currentEntry.network_trace.response.streamed_chunk_count = (currentEntry.network_trace.response.streamed_chunk_count ?? 0) + 1;
+        currentEntry.network_trace.response.streamed_char_count = (currentEntry.network_trace.response.streamed_char_count ?? 0) + chunk.length;
+    }
 
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         ...currentSessionState,
@@ -63,6 +71,29 @@ export function appendChunkToCurrentEntry(session_uid: string, chunk: string): v
             },
         ],
     });
+}
+
+export function patchCurrentEntryNetworkTrace(session_uid: string, patch: Partial<AINetworkTrace>): void {
+    const { currentSessionState, currentTurn, currentEntry } = getCurrentEntryRefs(session_uid);
+
+    currentEntry.network_trace = {
+        ...(currentEntry.network_trace ?? {}),
+        ...patch,
+        request: patch.request
+            ? {
+                ...(currentEntry.network_trace?.request ?? {}),
+                ...patch.request,
+            }
+            : currentEntry.network_trace?.request,
+        response: patch.response
+            ? {
+                ...(currentEntry.network_trace?.response ?? {}),
+                ...patch.response,
+            }
+            : currentEntry.network_trace?.response,
+    };
+
+    persistCurrentEntry(session_uid, currentSessionState, currentTurn, currentEntry);
 }
 
 export function createStreamingBlock(session_uid: string, blockSlug: string): AIBlock {

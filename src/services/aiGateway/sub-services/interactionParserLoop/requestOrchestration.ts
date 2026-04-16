@@ -33,7 +33,7 @@ import { HealthProbe } from '#/services/aiGateway/healthProbe';
 import { buildPrompt, type AIPromptKind } from '#/services/aiGateway/promptBuilder';
 import { KernelEngine } from '#/services/kernelEngine';
 import { invokeBlockLifecycleHandler } from './blockLifecycle';
-import { initializeStreamingEntry, persistBlock } from './persistence';
+import { initializeStreamingEntry, patchCurrentEntryNetworkTrace, persistBlock } from './persistence';
 import { AISessionBlockBus, type GatewayTargetConfig } from './shared';
 import { processGatewayStream } from './streamProcessor';
 
@@ -138,7 +138,28 @@ async function openGatewayResponseStream(
     model?: string,
     abortController?: AbortController,
 ): Promise<Response> {
-    const response = await fetch(`${activeGatewayUrl}/chat/${sdk}`, {
+    const requestUrl = `${activeGatewayUrl}/chat/${sdk}`;
+    const requestStartedAt = Date.now();
+    const requestHeaders = {
+        Authorization: sanitizeAuthorizationHeader(`Bearer ${sdkConfig.api_key}`),
+        'Content-Type': 'application/json',
+    };
+    const requestBody = { model, prompt: composed_prompt };
+
+    patchCurrentEntryNetworkTrace(session_uid, {
+        request: {
+            at: requestStartedAt,
+            method: 'POST',
+            url: requestUrl,
+            headers: requestHeaders,
+            body: requestBody,
+        },
+        response: {
+            lifecycle: 'pending',
+        },
+    });
+
+    const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
             Authorization: `Bearer ${sdkConfig.api_key}`,
@@ -148,7 +169,29 @@ async function openGatewayResponseStream(
         signal: abortController?.signal,
     });
 
+    const responseHeaders = serializeHeaders(response.headers);
+    patchCurrentEntryNetworkTrace(session_uid, {
+        response: {
+            at: Date.now(),
+            status: response.status,
+            status_text: response.statusText,
+            ok: response.ok,
+            headers: responseHeaders,
+            lifecycle: response.ok && response.body ? 'streaming' : 'failed',
+        },
+    });
+
     if (!response.ok || !response.body) {
+        const errorText = await response.text().catch(() => '');
+        patchCurrentEntryNetworkTrace(session_uid, {
+            response: {
+                completed_at: Date.now(),
+                duration_ms: Date.now() - requestStartedAt,
+                body_preview: errorText.slice(0, 4000),
+                lifecycle: 'failed',
+                error_message: `Response failed: ${response.statusText}`,
+            },
+        });
         AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
         throw new Error(`Response failed: ${response.statusText}`);
     }
@@ -162,6 +205,15 @@ function finalizeStreamingEntry(session_uid: string, terminalProtocolState?: AIP
     const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
 
     currentEntry.status = 'completed';
+    if (currentEntry.network_trace?.response) {
+        const completedAt = Date.now();
+        currentEntry.network_trace.response.completed_at = completedAt;
+        currentEntry.network_trace.response.lifecycle = 'completed';
+        currentEntry.network_trace.response.streamed_char_count = currentEntry.response.length;
+        if (currentEntry.network_trace.request?.at) {
+            currentEntry.network_trace.response.duration_ms = completedAt - currentEntry.network_trace.request.at;
+        }
+    }
 
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         ...currentSessionState,
@@ -220,6 +272,16 @@ async function failStreamingEntry(session_uid: string, error: unknown): Promise<
 
     console.log(currentSessionState);
     currentEntry.status = isInterrupted ? 'interrupted' : 'error';
+    if (currentEntry.network_trace?.response) {
+        const completedAt = Date.now();
+        currentEntry.network_trace.response.completed_at = completedAt;
+        currentEntry.network_trace.response.lifecycle = isInterrupted ? 'aborted' : 'failed';
+        currentEntry.network_trace.response.streamed_char_count = currentEntry.response.length;
+        currentEntry.network_trace.response.error_message = error instanceof Error ? error.message : String(error);
+        if (currentEntry.network_trace.request?.at) {
+            currentEntry.network_trace.response.duration_ms = completedAt - currentEntry.network_trace.request.at;
+        }
+    }
 
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         ...currentSessionState,
@@ -248,4 +310,22 @@ async function failStreamingEntry(session_uid: string, error: unknown): Promise<
         active_abort_controller: undefined,
         error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) },
     } as Partial<AISession>);
+}
+
+function sanitizeAuthorizationHeader(value: string): string {
+    const trimmed = value.trim();
+    if (trimmed === '') return trimmed;
+
+    const [scheme, token] = trimmed.split(/\s+/, 2);
+    if (!token) return `${scheme} ***`;
+    const visibleTail = token.slice(-4);
+    return `${scheme} ***${visibleTail}`;
+}
+
+function serializeHeaders(headers: Headers): Record<string, string> {
+    const result: Record<string, string> = {};
+    headers.forEach((value, key) => {
+        result[key] = value;
+    });
+    return result;
 }

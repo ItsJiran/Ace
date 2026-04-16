@@ -19,12 +19,14 @@ function badge(label: string, color: string) {
 }
 
 const statusColor: Record<string, string> = {
+    pending: 'bg-violet-500/20 text-violet-300 border border-violet-500/30',
     streaming: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
     completed: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
     success: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
     error: 'bg-rose-500/20 text-rose-300 border border-rose-500/30',
     failed: 'bg-rose-500/20 text-rose-300 border border-rose-500/30',
     interrupted: 'bg-orange-500/20 text-orange-300 border border-orange-500/30',
+    aborted: 'bg-orange-500/20 text-orange-300 border border-orange-500/30',
     idle: 'bg-zinc-700/40 text-zinc-400 border border-zinc-600/30',
     active: 'bg-sky-500/20 text-sky-300 border border-sky-500/30',
     inactive: 'bg-zinc-700/40 text-zinc-500 border border-zinc-600/30',
@@ -76,6 +78,124 @@ function BlockRow({ block, idx }: { block: AIBlock; idx: number }) {
     );
 }
 
+function formatBytes(charCount?: number) {
+    if (typeof charCount !== 'number') return 'n/a';
+    return `${charCount.toLocaleString()} chars`;
+}
+
+function formatMaybeTs(value?: number) {
+    return typeof value === 'number' ? ts(value) : 'n/a';
+}
+
+function NetworkTracePanel({ entry }: { entry: AIEntry }) {
+    const [open, setOpen] = useState(false);
+    const trace = entry.network_trace;
+
+    if (!trace) {
+        return (
+            <div>
+                <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Network Trace</div>
+                <div className="text-[10px] text-zinc-600 italic">no network trace recorded for this entry</div>
+            </div>
+        );
+    }
+
+    const responseLifecycle = trace.response?.lifecycle;
+
+    return (
+        <div className="border border-zinc-800 rounded overflow-hidden">
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 bg-zinc-900/60 hover:bg-zinc-800/60 text-left"
+            >
+                <span className="text-zinc-500">{open ? '▾' : '▸'}</span>
+                <span className="text-[10px] text-zinc-300 uppercase tracking-wide">Network Trace</span>
+                {trace.request?.method && <span className="text-[10px] text-sky-300 font-semibold">{trace.request.method}</span>}
+                {responseLifecycle && <StatusBadge status={responseLifecycle} />}
+                {typeof trace.response?.status === 'number' && (
+                    <span className="text-[10px] text-zinc-400">{trace.response.status} {trace.response.status_text}</span>
+                )}
+                <span className="ml-auto text-zinc-600 text-[10px]">
+                    {trace.response?.duration_ms !== undefined ? `${trace.response.duration_ms}ms` : 'duration n/a'}
+                </span>
+            </button>
+
+            {open && (
+                <div className="px-3 py-2 bg-zinc-950/60 space-y-3">
+                    <div className="text-[10px] text-zinc-500">This trace captures the app-to-gateway request for this entry. Provider-side HTTP details are not yet mirrored here.</div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <div className="bg-zinc-900 rounded p-2 space-y-1">
+                            <div className="text-zinc-500 uppercase tracking-wide">Summary</div>
+                            <div><span className="text-zinc-500">request at:</span> <span className="text-zinc-300">{formatMaybeTs(trace.request?.at)}</span></div>
+                            <div><span className="text-zinc-500">response at:</span> <span className="text-zinc-300">{formatMaybeTs(trace.response?.at)}</span></div>
+                            <div><span className="text-zinc-500">first chunk:</span> <span className="text-zinc-300">{formatMaybeTs(trace.response?.first_chunk_at)}</span></div>
+                            <div><span className="text-zinc-500">completed at:</span> <span className="text-zinc-300">{formatMaybeTs(trace.response?.completed_at)}</span></div>
+                            <div><span className="text-zinc-500">chunks:</span> <span className="text-zinc-300">{trace.response?.streamed_chunk_count ?? 'n/a'}</span></div>
+                            <div><span className="text-zinc-500">size:</span> <span className="text-zinc-300">{formatBytes(trace.response?.streamed_char_count)}</span></div>
+                        </div>
+                        <div className="bg-zinc-900 rounded p-2 space-y-1">
+                            <div className="text-zinc-500 uppercase tracking-wide">Response</div>
+                            <div><span className="text-zinc-500">status:</span> <span className="text-zinc-300">{trace.response?.status ?? 'n/a'} {trace.response?.status_text ?? ''}</span></div>
+                            <div><span className="text-zinc-500">ok:</span> <span className="text-zinc-300">{trace.response?.ok === undefined ? 'n/a' : String(trace.response.ok)}</span></div>
+                            <div><span className="text-zinc-500">lifecycle:</span> <span className="text-zinc-300">{trace.response?.lifecycle ?? 'n/a'}</span></div>
+                            <div><span className="text-zinc-500">duration:</span> <span className="text-zinc-300">{trace.response?.duration_ms !== undefined ? `${trace.response.duration_ms}ms` : 'n/a'}</span></div>
+                            {trace.response?.error_message && (
+                                <div><span className="text-zinc-500">error:</span> <span className="text-rose-300">{trace.response.error_message}</span></div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Request URL</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-24">
+                            {trace.request?.url ?? 'n/a'}
+                        </pre>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Request Headers</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+                            {trace.request?.headers ? JSON.stringify(trace.request.headers, null, 2) : 'n/a'}
+                        </pre>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Request Body</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                            {trace.request?.body !== undefined ? JSON.stringify(trace.request.body, null, 2) : 'n/a'}
+                        </pre>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Response Headers</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+                            {trace.response?.headers ? JSON.stringify(trace.response.headers, null, 2) : 'n/a'}
+                        </pre>
+                    </div>
+
+                    {trace.response?.body_preview && (
+                        <div>
+                            <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Response Error Preview</div>
+                            <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">
+                                {trace.response.body_preview}
+                            </pre>
+                        </div>
+                    )}
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Response Body Stream</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                            {entry.response || <span className="text-zinc-600 italic">empty</span>}
+                        </pre>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isActive: boolean }) {
     const [open, setOpen] = useState(false);
     return (
@@ -121,6 +241,8 @@ function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isAct
                             {entry.response || <span className="text-zinc-600 italic">empty</span>}
                         </pre>
                     </div>
+
+                    <NetworkTracePanel entry={entry} />
 
                     {/* Blocks — always rendered */}
                     <div>

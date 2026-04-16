@@ -163,10 +163,43 @@ export interface AIEntry {
     // To track retries of the interaction loop for the current turn, useful for debugging and UI feedback.
     active_interaction_loop_attempt?: number;
 
+    // Optional network trace for the gateway request that produced this entry.
+    // This is intended for local debugging in the session inspector.
+    network_trace?: AINetworkTrace;
+
     // Parsed blocks from the response, if applicable. The structure can be flexible 
     // to accommodate different types of block data depending on the use case and renderer requirements.
     blocks?: AIBlock[];
     status: 'success' | 'error' | 'streaming' | 'completed' | 'interrupted' | 'failed';
+}
+
+export interface AINetworkTrace {
+    request?: AINetworkRequestTrace;
+    response?: AINetworkResponseTrace;
+}
+
+export interface AINetworkRequestTrace {
+    at: number;
+    method: string;
+    url: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+}
+
+export interface AINetworkResponseTrace {
+    at?: number;
+    first_chunk_at?: number;
+    completed_at?: number;
+    status?: number;
+    status_text?: string;
+    ok?: boolean;
+    headers?: Record<string, string>;
+    body_preview?: string;
+    streamed_chunk_count?: number;
+    streamed_char_count?: number;
+    duration_ms?: number;
+    lifecycle?: 'pending' | 'streaming' | 'completed' | 'failed' | 'aborted';
+    error_message?: string;
 }
 
 export interface AIBlock {

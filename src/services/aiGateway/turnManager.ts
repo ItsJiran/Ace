@@ -22,6 +22,7 @@ const buildTurnEntry = (obj: Partial<AIEntry>): AIEntry => {
 
         prompt: obj.prompt ?? '',
         composed_prompt: obj.composed_prompt ?? '',
+        network_trace: obj.network_trace,
         blocks: [],
         status: AIResponseStatus.STREAMING,
 
