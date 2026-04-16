@@ -1,3 +1,20 @@
+/**
+ * Interaction Parser Loop Persistence
+ *
+ * Summary:
+ * - creates the streaming entry for the active turn
+ * - appends streamed text and parsed blocks into canonical session memory
+ * - exposes helpers to fetch and persist the current entry/block references
+ *
+ * Flow:
+ * - request orchestration initializes an entry
+ * - stream processing appends raw chunks and block payload content
+ * - block lifecycle updates are persisted back into Kernel memory
+ *
+ * Notes:
+ * - this module is intentionally memory-centric; it is the write boundary for stream state
+ */
+
 import { AIBlockLifecycleStatus, type AIBlock, type AIEntry, type AISession, type AITurn } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';

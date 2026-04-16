@@ -1,3 +1,31 @@
+/**
+ * Interaction Parser Loop Request Orchestration
+ *
+ * Summary:
+ * - builds the composed prompt and opens the gateway stream request
+ * - validates gateway availability, SDK config, and per-session abort wiring
+ * - finalizes the streaming entry into `continue`, `stop`, `interrupted`, or `error`
+ *
+ * ASCII Diagram:
+ *
+ *   prompt
+ *     |
+ *     v
+ *   buildPrompt()
+ *     |
+ *     v
+ *   validate gateway + attach abort controller
+ *     |
+ *     v
+ *   fetch stream -> processGatewayStream()
+ *     |
+ *     v
+ *   finalize entry -> dispatch `continue` or `stop`
+ *
+ * Notes:
+ * - this file owns request-level control flow; it should not parse stream content directly
+ */
+
 import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIEntry, type AISession, type AISessionState, type AITurn } from '#/schemas/ai';
 import type { AIGatewayConfig, AIGatewaySDKTarget } from '#/schemas/ai_gateway';
 import { AIGatewayEngine } from '#/services/aiGatewayEngine';

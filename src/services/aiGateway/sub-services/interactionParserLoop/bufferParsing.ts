@@ -1,3 +1,17 @@
+/**
+ * Interaction Parser Loop Buffer Parsing
+ *
+ * Summary:
+ * - scans the incoming text buffer for ACE start/end sentinels
+ * - distinguishes complete headers from partial trailing fragments
+ * - protects fenced code literals so embedded `@@ace:end` text is not misparsed
+ *
+ * Flow:
+ * - plain-text mode looks for the first valid `@@ace:start`
+ * - block mode scans until a real `@@ace:end` outside fenced literals
+ * - partial trailing candidates stay in the buffer for the next streamed chunk
+ */
+
 import { ACE_BLOCK_END_LINE, ACE_BLOCK_START_PREFIX } from './shared';
 
 export function findFirstAceStartSentinelIndex(buffer: string): number {

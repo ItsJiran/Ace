@@ -1,3 +1,16 @@
+/**
+ * Interaction Parser Loop Shared Contracts
+ *
+ * Summary:
+ * - defines the shared event bus used by the outer interaction loop and parser handlers
+ * - defines lightweight runtime types reused across stream parsing modules
+ * - centralizes ACE sentinel constants so parsing logic stays consistent
+ *
+ * Notes:
+ * - keep this file side-effect light because most sub-services depend on it
+ * - avoid importing heavy runtime services here to prevent circular dependencies
+ */
+
 import type { AISession } from '#/schemas/ai';
 import type { AIGatewaySDKTarget } from '#/schemas/ai_gateway';
 

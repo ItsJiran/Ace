@@ -1,3 +1,16 @@
+/**
+ * Interaction Parser Loop Paragraph Streaming
+ *
+ * Summary:
+ * - routes plain assistant text into paragraph renderers while no ACE block is active
+ * - keeps a temporary renderer handle so consecutive text chunks append to the same paragraph
+ * - resets paragraph runtime when block parsing takes over
+ *
+ * Notes:
+ * - paragraph rendering is treated as a UI streaming concern, not a parser-block concern
+ * - leading whitespace-only chunks are ignored until a paragraph renderer is actually opened
+ */
+
 import type { AISession, AITurn } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';

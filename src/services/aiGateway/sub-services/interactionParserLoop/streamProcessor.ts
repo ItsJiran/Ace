@@ -1,3 +1,18 @@
+/**
+ * Interaction Parser Loop Stream Processor
+ *
+ * Summary:
+ * - consumes the gateway response stream chunk by chunk
+ * - coordinates plain-text rendering, ACE block parsing, and lifecycle dispatch
+ * - stops early when parser protocol requests interruption or loop continuation
+ *
+ * Flow:
+ * - append raw chunk to current entry and runtime buffer
+ * - if inside a block, stream content until a matching end sentinel is found
+ * - if outside a block, render plain text or start a new parser block
+ * - flush remaining plain text and abort unfinished blocks when the stream ends
+ */
+
 import { AIParserProtocolState } from '#/schemas/ai';
 import { RegistryEngine } from '#/services/registryEngine';
 import { appendChunkToCurrentEntry, appendContentToBlock, createStreamingBlock, getActiveBlockFromRuntime, markBlockCompleted } from './persistence';

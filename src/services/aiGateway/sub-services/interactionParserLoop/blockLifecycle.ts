@@ -1,3 +1,27 @@
+/**
+ * Interaction Parser Loop Block Lifecycle
+ *
+ * Summary:
+ * - invokes parser block handlers for `start`, `chunk`, `complete`, and `abort`
+ * - allocates and finalizes stable history event slots for each parsed block
+ * - translates parser protocol responses into stop/continue decisions for the stream loop
+ *
+ * ASCII Diagram:
+ *
+ *   active block
+ *      |
+ *      v
+ *   RegistryEngine -> handler lifecycle
+ *      |                 |
+ *      |                 v
+ *      |           parser response event
+ *      v                 |
+ *   history slot <-------+
+ *      |
+ *      v
+ *   stream loop stop/continue decision
+ */
+
 import { AIParserProtocolState, type AIBlock, type AISession } from '#/schemas/ai';
 import type { ParserBlockLifecycle } from '#/schemas/parser';
 import { AIGatewayEngine } from '#/services/aiGatewayEngine';
