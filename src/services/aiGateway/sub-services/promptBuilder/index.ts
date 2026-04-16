@@ -11,7 +11,8 @@
  * - `buildBlockParserPrompt`: parser registry catalog and hydrated block detail rendering
  * - `buildContextPrompt`, `buildMemoryPrompt`, `buildExpandedWorkingMemoryPrompt`: evidence and payload sections
  * - `buildCurrentStateOperatingPrompt`, `buildCurrentStatePlanPrompt`, `buildCurrentPassOffPrompt`: deterministic state-control sections
- * - `buildHistoryPrompt`: turn memory summary rendering
+ * - `buildCurrentTurnRetainedMemoryPrompt`, `buildHistoricalTurnMemoryPrompt`: current-turn vs prior-turn memory rendering
+ * - `buildHistoryPrompt`: legacy alias for historical turn memory rendering
  * - `buildStoragePrompt`: reserved storage section hook
  *
  * Prompt Hierarchy:
@@ -60,7 +61,7 @@
 export type { AIPromptKind } from './shared';
 export { buildPrompt } from './composer';
 export { buildDefaultPrompt } from './defaultSection';
-export { buildHistoryPrompt } from './historySection';
+export { buildCurrentTurnRetainedMemoryPrompt, buildHistoricalTurnMemoryPrompt, buildHistoryPrompt } from './historySection';
 export { buildBlockParserPrompt } from './parserRegistrySection';
 export { buildContextPrompt, buildExpandedWorkingMemoryPrompt, buildMemoryPrompt } from './memorySections';
 export { buildCurrentPassOffPrompt, buildCurrentStateOperatingPrompt, buildCurrentStatePlanPrompt } from './stateSections';

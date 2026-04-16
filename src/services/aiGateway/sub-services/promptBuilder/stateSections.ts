@@ -9,7 +9,16 @@
 import type { AISession } from '#/schemas/ai';
 import type { AIPromptKind } from './shared';
 import { getCurrentStatePlanEntries, getLatestCompletedAssistantEntry } from './selectors';
-import { clipForPrompt, describeStateFocus, describeStatePlanningScope, getAllowedNextStates } from './stateRules';
+import {
+    clipForPrompt,
+    describeStateAvoidWhen,
+    describeStateExitWhen,
+    describeStateFocus,
+    describeStatePlanningScope,
+    describeStateSpecialRule,
+    describeStateUseWhen,
+    getAllowedNextStates,
+} from './stateRules';
 
 export function buildPromptInputSection(prompt: string, promptKind: AIPromptKind = 'user_prompt'): string {
     if (promptKind === 'autonomous_follow_up') {
@@ -55,8 +64,18 @@ export function buildCurrentStateOperatingPrompt(session: AISession, prompt: str
         : '- This is the first pass for a new user turn.');
     lines.push(`- The current active state is ${session.state}.`);
     lines.push(`- In state ${session.state}, your focus is ${describeStateFocus(session.state)}.`);
+    lines.push(`- Use state ${session.state} when: ${describeStateUseWhen(session.state)}.`);
+    lines.push(`- Exit state ${session.state} when: ${describeStateExitWhen(session.state)}.`);
+    lines.push(`- Never use state ${session.state} when: ${describeStateAvoidWhen(session.state)}.`);
+    lines.push(`- Special rule for ${session.state}: ${describeStateSpecialRule(session.state)}`);
     lines.push(`- In state ${session.state}, you must finish this state's objective before moving to another state.`);
     lines.push(`- Planning in state ${session.state} must stay within this scope: ${describeStatePlanningScope(session.state)}.`);
+
+    if (session.state !== 'Finalize') {
+        lines.push('- Non-Finalize states should not silently satisfy the user and stop. If the task is already answerable, move to Finalize and deliver the response there.');
+    } else {
+        lines.push('- In Finalize, this response must contain visible user-facing prose. Do not stop at internal reasoning or block-only output.');
+    }
 
     if (latestCompletedEntry) {
         lines.push(`- Latest completed result in this turn: ${clipForPrompt(latestCompletedEntry.response)}`);

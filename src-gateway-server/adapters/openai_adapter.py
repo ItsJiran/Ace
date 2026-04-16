@@ -2,8 +2,45 @@
 
 import asyncio
 import aiohttp
+from typing import List
 from adapters.base_adapter import BaseProviderAdapter
 from models import AIModel, ModelsResponse, TestResponseResult
+
+
+COMPOSED_PROMPT_MARKERS = (
+    "[DEFAULT CONTEXT]",
+    "[GENERAL CONSTRAINTS]",
+    "[CURRENT STATE]",
+    "[PARSER REGISTRY OVERVIEW]",
+)
+
+
+def build_openai_messages(
+    prompt: str,
+    fallback_user_prompt: str = "Continue based on the system instructions and current session state.",
+) -> List[dict[str, str]]:
+    normalized_prompt = (prompt or "").strip()
+
+    if normalized_prompt == "":
+        return [{"role": "user", "content": fallback_user_prompt}]
+
+    if not any(marker in normalized_prompt for marker in COMPOSED_PROMPT_MARKERS):
+        return [{"role": "user", "content": normalized_prompt}]
+
+    system_prompt = normalized_prompt
+    user_prompt = ""
+
+    if "[CURRENT INPUT]" in normalized_prompt:
+        system_prompt, current_input = normalized_prompt.split("[CURRENT INPUT]", 1)
+        system_prompt = system_prompt.strip()
+        user_prompt = current_input.strip()
+
+    messages: List[dict[str, str]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+
+    messages.append({"role": "user", "content": user_prompt or fallback_user_prompt})
+    return messages
 
 
 class OpenAIAdapter(BaseProviderAdapter):
@@ -85,7 +122,7 @@ class OpenAIAdapter(BaseProviderAdapter):
                 }
                 payload = {
                     "model": model or "gpt-3.5-turbo",
-                    "messages": [{"role": "user", "content": prompt or "ping"}],
+                    "messages": build_openai_messages(prompt or "ping", fallback_user_prompt="ping"),
                     "max_tokens": 64,
                 }
 
@@ -142,7 +179,7 @@ class OpenAIAdapter(BaseProviderAdapter):
                 }
                 payload = {
                     "model": model or "gpt-4o-mini",
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": build_openai_messages(prompt),
                     "stream": True,
                 }
                 async with session.post(

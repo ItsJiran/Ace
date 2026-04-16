@@ -77,10 +77,6 @@ export interface SessionInteractionLoopInput {
     prompt: string;
 }
 
-function buildAutonomousFollowUpPrompt(): string {
-    return 'This is an autonomous follow-up pass for the same user request. Start from the current pass handoff, active context index, active working-memory index, and expanded active payloads before reopening older history. Continue only from the latest validated state and completed runtime results. Do not replay or reinterpret the original user prompt unless the active handoff still leaves a real clarification gap.';
-}
-
 // Note : Future improvement since we already passing the session object, we can just directly update the session memory in the interaction loop without 
 // needing to read it again at the beginning of each loop. We just need to make sure to keep the session object updated with the latest state from memory 
 // at the end of each loop iteration. This way we can avoid redundant memory reads and have a more efficient loop.
@@ -180,7 +176,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
                 console.log(`[AIGatewayEngine] Interaction loop for session ${session.session_uid} completed and marked as IDLE.`);
                 return; // Exit the loop and end the function since the session is now idle.
             } else if (loopResponse === 'continue') {
-                nextPrompt = buildAutonomousFollowUpPrompt();
+                nextPrompt = '';
                 nextPromptKind = 'autonomous_follow_up';
                 console.log(`[AIGatewayEngine] Interaction loop requested to CONTINUE for session ${session.session_uid}. Initiating new entry.`);
             } else {

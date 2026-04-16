@@ -6,8 +6,10 @@ import {
     buildCurrentStateOperatingPrompt,
     buildPrompt,
     buildContextPrompt,
+    buildCurrentTurnRetainedMemoryPrompt,
     buildCurrentStatePlanPrompt,
     buildExpandedWorkingMemoryPrompt,
+    buildHistoricalTurnMemoryPrompt,
     buildHistoryPrompt,
     buildMemoryPrompt,
 } from '#/services/aiGateway/promptBuilder';
@@ -58,19 +60,25 @@ function createSession(overrides: Partial<AISession> = {}): AISession {
 }
 
 describe('promptBuilder history fallback', () => {
-    it('includes the current turn so far when it already has completed entries', () => {
-        const prompt = buildHistoryPrompt(createSession({
+    it('renders current-turn retained memory separately from older history', () => {
+        const session = createSession({
             turn_index: 0,
             history_start_index: 0,
             history_end_index: 0,
-        }));
+        });
 
-        expect(prompt).toContain('[TURN 1] User: Raw user prompt');
-        expect(prompt).not.toContain('[TURN 1] Assistant: Raw assistant response');
+        const currentTurnPrompt = buildCurrentTurnRetainedMemoryPrompt(session);
+        const historicalPrompt = buildHistoricalTurnMemoryPrompt(session);
+
+        expect(currentTurnPrompt).toContain('[CURRENT TURN RETAINED MEMORY]');
+        expect(currentTurnPrompt).toContain('Active turn user input: Raw user prompt');
+        expect(currentTurnPrompt).toContain('Current-turn assistant memory: no completed assistant summary yet.');
+        expect(historicalPrompt).toBe('');
     });
 
-    it('falls back to raw prompt but not raw assistant response when history summary fields are empty', () => {
-        const prompt = buildHistoryPrompt(createSession({
+    it('falls back to raw prompt but not raw assistant response when current-turn summary fields are empty', () => {
+        const prompt = buildCurrentTurnRetainedMemoryPrompt(createSession({
+            turn_index: 0,
             history: {
                 0: {
                     at: Date.now(),
@@ -82,12 +90,51 @@ describe('promptBuilder history fallback', () => {
             },
         }));
 
-        expect(prompt).toContain('[TURN 1] User: Raw user prompt');
-        expect(prompt).not.toContain('[TURN 1] Assistant: Raw assistant response');
+        expect(prompt).toContain('Active turn user input: Raw user prompt');
+        expect(prompt).not.toContain('Raw assistant response');
     });
 
-    it('uses available summary fields independently and falls back only for missing sides', () => {
-        const prompt = buildHistoryPrompt(createSession({
+    it('uses prior-turn history only for earlier turns', () => {
+        const prompt = buildHistoricalTurnMemoryPrompt(createSession({
+            turn_index: 1,
+            turns: [
+                {
+                    at: Date.now(),
+                    status: 'completed',
+                    user_renderers: [],
+                    assistant_renderers: [],
+                    active_entry_index: 0,
+                    entries: [
+                        {
+                            response: 'Older assistant response',
+                            response_buffer_memory_uid: undefined,
+                            prompt: 'Older raw user prompt',
+                            composed_prompt: 'Older composed prompt',
+                            active_interaction_loop_attempt: 0,
+                            blocks: [],
+                            status: 'completed',
+                        },
+                    ],
+                },
+                {
+                    at: Date.now(),
+                    status: 'completed',
+                    user_renderers: [],
+                    assistant_renderers: [],
+                    active_entry_index: 0,
+                    entries: [
+                        {
+                            response: 'Current assistant response',
+                            response_buffer_memory_uid: undefined,
+                            prompt: 'Current raw user prompt',
+                            composed_prompt: 'Current composed prompt',
+                            active_interaction_loop_attempt: 0,
+                            blocks: [],
+                            status: 'completed',
+                        },
+                    ],
+                },
+            ],
             history: {
                 0: {
                     at: Date.now(),
@@ -99,8 +146,59 @@ describe('promptBuilder history fallback', () => {
             },
         }));
 
+        expect(prompt).toContain('[HISTORICAL TURN MEMORY]');
         expect(prompt).toContain('[TURN 1] User Summary: Summarized user prompt');
-        expect(prompt).not.toContain('[TURN 1] Assistant: Raw assistant response');
+        expect(prompt).not.toContain('Raw assistant response');
+        expect(buildHistoryPrompt(createSession({
+            turn_index: 1,
+            turns: [
+                {
+                    at: Date.now(),
+                    status: 'completed',
+                    user_renderers: [],
+                    assistant_renderers: [],
+                    active_entry_index: 0,
+                    entries: [
+                        {
+                            response: 'Older assistant response',
+                            response_buffer_memory_uid: undefined,
+                            prompt: 'Older raw user prompt',
+                            composed_prompt: 'Older composed prompt',
+                            active_interaction_loop_attempt: 0,
+                            blocks: [],
+                            status: 'completed',
+                        },
+                    ],
+                },
+                {
+                    at: Date.now(),
+                    status: 'completed',
+                    user_renderers: [],
+                    assistant_renderers: [],
+                    active_entry_index: 0,
+                    entries: [
+                        {
+                            response: 'Current assistant response',
+                            response_buffer_memory_uid: undefined,
+                            prompt: 'Current raw user prompt',
+                            composed_prompt: 'Current composed prompt',
+                            active_interaction_loop_attempt: 0,
+                            blocks: [],
+                            status: 'completed',
+                        },
+                    ],
+                },
+            ],
+            history: {
+                0: {
+                    at: Date.now(),
+                    turn_index: 0,
+                    status: 'inactive',
+                    prompt: 'Summarized user prompt',
+                    responses: [],
+                },
+            },
+        }))).toContain('[HISTORICAL TURN MEMORY]');
     });
 });
 
@@ -158,8 +256,13 @@ describe('promptBuilder state emphasis', () => {
         expect(prompt).toContain('This is the main navigator for the current pass.');
         expect(prompt).toContain('The current active state is Act.');
         expect(prompt).toContain('In state Act, your focus is execute the exact next planned action only.');
+        expect(prompt).toContain('Use state Act when: use Act only when a concrete runtime action must be executed, such as calling a parser block or performing a direct operation that will create a new result.');
+        expect(prompt).toContain('Exit state Act when: exit Act when the planned action has actually been executed or when it is proven unnecessary and the next valid state is clear.');
+        expect(prompt).toContain('Never use state Act when: never use Act for pure analysis, conversation-only replies, or decisions that do not execute a concrete action.');
+        expect(prompt).toContain('Special rule for Act: Act should create a new result. If no concrete action is needed, do not force Act.');
         expect(prompt).toContain('In state Act, you must finish this state\'s objective before moving to another state.');
         expect(prompt).toContain('Planning in state Act must stay within this scope: execute the selected action only, including which parser block to call or which direct operation to perform; do not use this plan to analyze or validate outcomes.');
+        expect(prompt).toContain('Non-Finalize states should not silently satisfy the user and stop. If the task is already answerable, move to Finalize and deliver the response there.');
         expect(prompt).toContain('Current plan progress for state Act: 0/1 steps complete.');
         expect(prompt).toContain('There is a passed-off prompt below. Evaluate its impact on this state result and on plan progress before continuing the next plan step.');
         expect(prompt).toContain('Do not change state yet. Stay in Act until passed-off evaluation is done and this state\'s plan is complete.');
@@ -170,6 +273,30 @@ describe('promptBuilder state emphasis', () => {
 
         expect(prompt).toContain('If there is no plan yet for state Reason, you must create that plan first with the planning block before any other work can be considered complete.');
         expect(prompt).toContain('Do not change state yet. Stay in Reason until passed-off evaluation is done and this state\'s plan is complete.');
+    });
+
+    it('adds simple-task fast-path guidance for Reason', () => {
+        const prompt = buildCurrentStateOperatingPrompt(createSession({ state: 'Reason', plan: [] }), 'halo', 'user_prompt');
+
+        expect(prompt).toContain('Use state Reason when: use Reason when you need to classify the request, decide whether the task is simple or multi-step, determine whether tools are needed, or decide whether you can answer directly.');
+        expect(prompt).toContain('Special rule for Reason: Fast path: if the user request is a greeting, acknowledgement, simple conversational turn, or another request that can be answered directly without tools, prefer moving straight from Reason to Finalize instead of creating a multi-step loop.');
+    });
+
+    it('adds gating guidance for Observe', () => {
+        const prompt = buildCurrentStateOperatingPrompt(createSession({ state: 'Observe', plan: [] }), 'inspect the latest result', 'autonomous_follow_up');
+
+        expect(prompt).toContain('Use state Observe when: use Observe only when there is a fresh runtime result from Act, a parser block, or another concrete action that now needs interpretation.');
+        expect(prompt).toContain('Never use state Observe when: never use Observe when no fresh runtime result exists yet, and never use it for simple conversational requests like greetings or lightweight replies.');
+        expect(prompt).toContain('Special rule for Observe: Observe is gated by a fresh result. If there is nothing new to inspect in the current turn, do not choose Observe.');
+    });
+
+    it('adds a visible-response obligation for Finalize', () => {
+        const prompt = buildCurrentStateOperatingPrompt(createSession({ state: 'Finalize', plan: [] }), 'say hello back to the user', 'user_prompt');
+
+        expect(prompt).toContain('Use state Finalize when: use Finalize when the user should now receive the answer, the packaged result, or an explicit clarification question.');
+        expect(prompt).toContain('Never use state Finalize when: never enter Finalize without actually delivering visible user-facing prose or an explicit clarification question in the same response.');
+        expect(prompt).toContain('Special rule for Finalize: Finalize must contain the user-facing answer. Internal summaries, block results, or state reasoning are not sufficient by themselves.');
+        expect(prompt).toContain('In Finalize, this response must contain visible user-facing prose. Do not stop at internal reasoning or block-only output.');
     });
 });
 
@@ -182,9 +309,29 @@ describe('promptBuilder operational handoff', () => {
         const prompt = buildPrompt('Follow the passed prompt only.', session.session_uid, 'autonomous_follow_up');
 
         expect(prompt).not.toContain('[CURRENT INPUT]');
-        expect(prompt.indexOf('[CURRENT STATE]')).toBeLessThan(prompt.indexOf('[LIST PLAN RIGHT NOW]'));
+        expect(prompt.indexOf('[CURRENT STATE]')).toBeLessThan(prompt.indexOf('[CURRENT TURN RETAINED MEMORY]'));
+        expect(prompt.indexOf('[CURRENT TURN RETAINED MEMORY]')).toBeLessThan(prompt.indexOf('[LIST PLAN RIGHT NOW]'));
         expect(prompt.indexOf('[LIST PLAN RIGHT NOW]')).toBeLessThan(prompt.indexOf('[LIST PASSED OFF PROMPT]'));
         expect(prompt).toContain('[LIST PASSED OFF PROMPT]');
+    });
+
+    it('formats the composed prompt with normalized section indentation', () => {
+        const processUid = KernelEngine.spawnProcess('test_prompt_builder_format').process_uid;
+        const session = createSession({
+            session_uid: 'session-test-format',
+            process_uid: processUid,
+            turn_index: 0,
+            history_start_index: 0,
+            history_end_index: 0,
+        });
+        KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
+
+        const prompt = buildPrompt('List parser blocks.', session.session_uid, 'user_prompt');
+        const lines = prompt.split('\n');
+
+        expect(lines[0]).toBe('[DEFAULT CONTEXT] You are ACE Assistant. Follow the system guidance, stay aligned with the current session state, and produce the next valid response for the runtime.');
+        expect(lines.some((line) => /^\s{8,}\[/.test(line))).toBe(false);
+        expect(prompt).toContain('\n\n[CURRENT STATE]\n');
     });
 
     it('renders a current pass-off prompt instead of an autonomous follow-up prompt section', () => {
