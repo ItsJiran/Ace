@@ -398,34 +398,34 @@ function GeneralTab({ configItems }: { configItems: ConfigItem[] }) {
 
 // ─── Tab: AI Gateway ─────────────────────────────────────────────────────────
 
-type SDKProvider = 'openai' | 'google' | 'anthropic';
+type AIProvider = 'openai' | 'google' | 'anthropic';
 
-const SDK_OPTIONS: SDKProvider[] = ['openai', 'google', 'anthropic'];
+const PROVIDER_OPTIONS: AIProvider[] = ['openai', 'google', 'anthropic'];
 
 function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
     const [testPrompt, setTestPrompt] = useState('ping');
     const [feedback, setFeedback] = useState('');
-    const [savingSDK, setSavingSDK] = useState<SDKProvider | null>(null);
-    const [fetchingSDK, setFetchingSDK] = useState<SDKProvider | null>(null);
-    const [testingSDK, setTestingSDK] = useState<SDKProvider | null>(null);
+    const [savingProvider, setSavingProvider] = useState<AIProvider | null>(null);
+    const [fetchingProvider, setFetchingProvider] = useState<AIProvider | null>(null);
+    const [testingProvider, setTestingProvider] = useState<AIProvider | null>(null);
     const [checkingSidecar, setCheckingSidecar] = useState(false);
     const [scanningPorts, setScanningPorts] = useState(false);
     const [sidecarHealth, setSidecarHealth] = useState<AIGatewaySidecarHealthResult | null>(null);
     const [scanResult, setScanResult] = useState<AIGatewayRadarScanResult | null>(null);
-    const [testResult, setTestResult] = useState<{ sdk: SDKProvider; model: string; result: AIGatewayResponseResult } | null>(null);
-    const [apiKeys, setApiKeys] = useState<Record<SDKProvider, string>>({
-        openai: config.sdks.openai?.api_key ?? '',
-        google: config.sdks.google?.api_key ?? '',
-        anthropic: config.sdks.anthropic?.api_key ?? '',
+    const [testResult, setTestResult] = useState<{ provider: AIProvider; model: string; result: AIGatewayResponseResult } | null>(null);
+    const [apiKeys, setApiKeys] = useState<Record<AIProvider, string>>({
+        openai: config.providers.openai?.api_key ?? config.sdks.openai?.api_key ?? '',
+        google: config.providers.google?.api_key ?? config.sdks.google?.api_key ?? '',
+        anthropic: config.providers.anthropic?.api_key ?? config.sdks.anthropic?.api_key ?? '',
     });
 
     useEffect(() => {
         setApiKeys({
-            openai: config.sdks.openai?.api_key ?? '',
-            google: config.sdks.google?.api_key ?? '',
-            anthropic: config.sdks.anthropic?.api_key ?? '',
+            openai: config.providers.openai?.api_key ?? config.sdks.openai?.api_key ?? '',
+            google: config.providers.google?.api_key ?? config.sdks.google?.api_key ?? '',
+            anthropic: config.providers.anthropic?.api_key ?? config.sdks.anthropic?.api_key ?? '',
         });
-    }, [config.sdks.openai?.api_key, config.sdks.google?.api_key, config.sdks.anthropic?.api_key]);
+    }, [config.providers.openai?.api_key, config.providers.google?.api_key, config.providers.anthropic?.api_key, config.sdks.openai?.api_key, config.sdks.google?.api_key, config.sdks.anthropic?.api_key]);
 
     const runHealthCheck = async (baseUrl?: string) => {
         setCheckingSidecar(true);
@@ -479,71 +479,71 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
     }, []);
 
 
-    const onSaveApiKey = async (sdk: SDKProvider) => {
-        setSavingSDK(sdk);
+    const onSaveApiKey = async (provider: AIProvider) => {
+        setSavingProvider(provider);
         setFeedback('');
         try {
-            await window.ACE.ai_gateway.setSDKApiKey(sdk, apiKeys[sdk]);
-            setFeedback(`${sdk} API key saved to gateway.json.`);
+            await window.ACE.ai_gateway.setProviderApiKey(provider, apiKeys[provider]);
+            setFeedback(`${provider} API key saved to gateway.json.`);
         } catch (error) {
             setFeedback(error instanceof Error ? error.message : 'Failed to save API key.');
         } finally {
-            setSavingSDK(null);
+            setSavingProvider(null);
         }
     };
 
-    const onSetActiveSDK = async (sdk: SDKProvider) => {
+    const onSetActiveProvider = async (provider: AIProvider) => {
         setFeedback('');
-        await window.ACE.ai_gateway.setActiveSDK(sdk);
-        setFeedback(`Active SDK set to ${sdk}.`);
+        await window.ACE.ai_gateway.setActiveProvider(provider);
+        setFeedback(`Active provider set to ${provider}.`);
     };
 
-    const onFetchModels = async (sdk: SDKProvider) => {
-        setFetchingSDK(sdk);
+    const onFetchModels = async (provider: AIProvider) => {
+        setFetchingProvider(provider);
         setFeedback('');
         try {
-            await window.ACE.ai_gateway.setSDKApiKey(sdk, apiKeys[sdk]);
-            const result = await window.ACE.ai_gateway.fetchModels(sdk);
+            await window.ACE.ai_gateway.setProviderApiKey(provider, apiKeys[provider]);
+            const result = await window.ACE.ai_gateway.fetchModels(provider);
             if (!result.ok) {
-                setFeedback(`Fetch models failed for ${sdk}: ${result.error_message ?? 'unknown error'}`);
+                setFeedback(`Fetch models failed for ${provider}: ${result.error_message ?? 'unknown error'}`);
                 return;
             }
-            setFeedback(`Fetched ${result.models.length} model(s) from ${sdk}.`);
+            setFeedback(`Fetched ${result.models.length} model(s) from ${provider}.`);
         } catch (error) {
             setFeedback(error instanceof Error ? error.message : 'Failed to fetch models.');
         } finally {
-            setFetchingSDK(null);
+            setFetchingProvider(null);
         }
     };
 
-    const onSetActiveModel = async (sdk: SDKProvider, model: string) => {
+    const onSetActiveModel = async (provider: AIProvider, model: string) => {
         setFeedback('');
-        await window.ACE.ai_gateway.setActiveSDK(sdk);
+        await window.ACE.ai_gateway.setActiveProvider(provider);
         await window.ACE.ai_gateway.setActiveModel(model);
-        setFeedback(`Active model set to ${model} (${sdk}).`);
+        setFeedback(`Active model set to ${model} (${provider}).`);
     };
 
-    const onTestResponse = async (sdk: SDKProvider) => {
-        setTestingSDK(sdk);
+    const onTestResponse = async (provider: AIProvider) => {
+        setTestingProvider(provider);
         setFeedback('');
         try {
-            const sdkModels = config.sdks[sdk]?.models ?? [];
-            const selectedModel = config.active_sdk === sdk
-                ? config.active_model ?? sdkModels[0]?.id
-                : sdkModels[0]?.id;
+            const providerModels = config.providers[provider]?.models ?? config.sdks[provider]?.models ?? [];
+            const selectedModel = (config.active_provider ?? config.active_sdk) === provider
+                ? config.active_model ?? providerModels[0]?.id
+                : providerModels[0]?.id;
 
             if (!selectedModel) {
-                setFeedback(`No model selected for ${sdk}. Fetch models first.`);
+                setFeedback(`No model selected for ${provider}. Fetch models first.`);
                 return;
             }
 
-            await window.ACE.ai_gateway.setSDKApiKey(sdk, apiKeys[sdk]);
-            const result = await window.ACE.ai_gateway.testResponse(sdk, selectedModel, testPrompt.trim() || 'ping');
-            setTestResult({ sdk, model: selectedModel, result });
+            await window.ACE.ai_gateway.setProviderApiKey(provider, apiKeys[provider]);
+            const result = await window.ACE.ai_gateway.testResponse(provider, selectedModel, testPrompt.trim() || 'ping');
+            setTestResult({ provider, model: selectedModel, result });
         } catch (error) {
             setFeedback(error instanceof Error ? error.message : 'Failed to test model response.');
         } finally {
-            setTestingSDK(null);
+            setTestingProvider(null);
         }
     };
 
@@ -568,7 +568,7 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
                             }`}>
                                 {testResult.result.ok ? '✓ OK' : '✗ FAILED'}
                             </span>
-                            <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200 uppercase tracking-wide">{testResult.sdk}</span>
+                            <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200 uppercase tracking-wide">{testResult.provider}</span>
                             <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-mono truncate max-w-[200px]">{testResult.model}</span>
                         </div>
                         <button
@@ -596,7 +596,7 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
             <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
                 <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">Gateway Server Integration</div>
                 <div className="text-xs text-slate-500 dark:text-zinc-400">
-                    Configure per-SDK API keys and model lists in gateway.json, then run tests through the local sidecar.
+                    Configure per-provider API keys and model lists in gateway.json, then run tests through the local sidecar.
                 </div>
                 <div className="rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-950 p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2">
@@ -642,60 +642,60 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
                         className="px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
                     />
                     <div className="text-xs text-slate-500 dark:text-zinc-400 flex items-center px-2">
-                        Active: {config.active_sdk ?? 'none'} / {config.active_model ?? 'none'}
+                        Active: {config.active_provider ?? config.active_sdk ?? 'none'} / {config.active_model ?? 'none'}
                     </div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-                {SDK_OPTIONS.map((sdk) => {
-                    const sdkConfig = config.sdks[sdk];
-                    const models = sdkConfig?.models ?? [];
-                    const isActiveSDK = config.active_sdk === sdk;
-                    const selectedModel = isActiveSDK ? config.active_model : null;
+                {PROVIDER_OPTIONS.map((provider) => {
+                    const providerConfig = config.providers[provider] ?? config.sdks[provider];
+                    const models = providerConfig?.models ?? [];
+                    const isActiveProvider = (config.active_provider ?? config.active_sdk) === provider;
+                    const selectedModel = isActiveProvider ? config.active_model : null;
 
                     return (
-                        <div key={sdk} className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
+                        <div key={provider} className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
-                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase">{sdk}</div>
+                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase">{provider}</div>
                                     <div className="text-xs text-slate-500 dark:text-zinc-400">
                                         {models.length} model{models.length === 1 ? '' : 's'} cached
                                     </div>
                                 </div>
-                                {isActiveSDK && (
+                                {isActiveProvider && (
                                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium">
-                                        Active SDK
+                                        Active Provider
                                     </span>
                                 )}
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-2">
                                 <input
-                                    value={apiKeys[sdk]}
-                                    onChange={(e) => setApiKeys((prev) => ({ ...prev, [sdk]: e.target.value }))}
+                                    value={apiKeys[provider]}
+                                    onChange={(e) => setApiKeys((prev) => ({ ...prev, [provider]: e.target.value }))}
                                     placeholder="API key"
                                     className="px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
                                 />
                                 <button
-                                    onClick={() => { void onSaveApiKey(sdk); }}
-                                    disabled={savingSDK === sdk}
+                                    onClick={() => { void onSaveApiKey(provider); }}
+                                    disabled={savingProvider === provider}
                                     className="px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-60 text-xs"
                                 >
-                                    {savingSDK === sdk ? 'Saving...' : 'Save Key'}
+                                    {savingProvider === provider ? 'Saving...' : 'Save Key'}
                                 </button>
                                 <button
-                                    onClick={() => { void onFetchModels(sdk); }}
-                                    disabled={fetchingSDK === sdk}
+                                    onClick={() => { void onFetchModels(provider); }}
+                                    disabled={fetchingProvider === provider}
                                     className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs"
                                 >
-                                    {fetchingSDK === sdk ? 'Fetching...' : 'Fetch Models'}
+                                    {fetchingProvider === provider ? 'Fetching...' : 'Fetch Models'}
                                 </button>
                                 <button
-                                    onClick={() => { void onSetActiveSDK(sdk); }}
+                                    onClick={() => { void onSetActiveProvider(provider); }}
                                     className="px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-xs"
                                 >
-                                    Set Active SDK
+                                    Set Active Provider
                                 </button>
                             </div>
 
@@ -703,7 +703,7 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
                                 <div className="space-y-2">
                                     <select
                                         value={selectedModel ?? ''}
-                                        onChange={(e) => { void onSetActiveModel(sdk, e.target.value); }}
+                                        onChange={(e) => { void onSetActiveModel(provider, e.target.value); }}
                                         className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
                                     >
                                         <option value="">Select active model</option>
@@ -712,11 +712,11 @@ function AIGatewayTab({ config }: { config: AIGatewayConfig }) {
                                         ))}
                                     </select>
                                     <button
-                                        onClick={() => { void onTestResponse(sdk); }}
-                                        disabled={testingSDK === sdk}
+                                        onClick={() => { void onTestResponse(provider); }}
+                                        disabled={testingProvider === provider}
                                         className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs"
                                     >
-                                        {testingSDK === sdk ? 'Testing...' : 'Test Response'}
+                                        {testingProvider === provider ? 'Testing...' : 'Test Response'}
                                     </button>
                                 </div>
                             ) : (

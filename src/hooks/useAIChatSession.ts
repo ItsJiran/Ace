@@ -16,7 +16,7 @@ export function useAIChatSession(session_uid?: string) {
     const memoryKey = `system:ai_session:${sessionUid}:state`;
     const session = useAceMemory<AISession>(memoryKey);
 
-    const sendPrompt = async (prompt: string, selectedSdk: SDKProvider, selectedModel: string) => {
+    const sendPrompt = async (prompt: string, selectedProvider: SDKProvider, selectedModel: string) => {
         const normalizedPrompt = prompt.trim();
         if(!normalizedPrompt) return;
 
@@ -24,7 +24,7 @@ export function useAIChatSession(session_uid?: string) {
         // This ensures that we always have a valid session to work with.
         if(!sessionUid) {
             // Create a new session if one doesn't exist
-            const newSession = AIGatewayEngine.createSession(selectedSdk, selectedModel);
+            const newSession = AIGatewayEngine.createSession(selectedProvider, selectedModel);
             setSessionUid(newSession.session_uid);
             console.log('Created new session with UID:', newSession.session_uid);
 
@@ -33,7 +33,7 @@ export function useAIChatSession(session_uid?: string) {
             KernelEngine.updateMemory(
                 `system:ai_session:${newSession.session_uid}:state`, 
                 {
-                    sdk: selectedSdk, 
+                    sdk: selectedProvider, 
                     model: selectedModel 
                 }
             );
@@ -45,7 +45,7 @@ export function useAIChatSession(session_uid?: string) {
             KernelEngine.updateMemory(
                 `system:ai_session:${sessionUid}:state`, 
                 {
-                    sdk: selectedSdk, 
+                    sdk: selectedProvider, 
                     model: selectedModel 
                 }
             );

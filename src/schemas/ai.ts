@@ -1,4 +1,5 @@
 export type SDKProvider = 'openai' | 'google' | 'anthropic';
+export type AIProvider = SDKProvider;
 
 // + =========================================================== +
 // |                      AI Gateway TERMINOLOGY                 |         
@@ -29,32 +30,34 @@ export type SDKProvider = 'openai' | 'google' | 'anthropic';
 // |                      AI Gateway Types                       |         
 // + =========================================================== +
 
-// Updated for a non-linear, self-correcting loop
+// These phase labels are now primarily a backend-graph observability mirror on the client.
+// They are not a client-owned ReAct controller anymore; they only describe the currently
+// observed execution phase for session planning, prompt assembly, and parser-side tracing.
 export type AISessionState =
-    | 'Reason'
+    | 'reasoning'
     // High-level "Thinking" about the user's intent, at this moment the AI supposed to creating 
     // reasoning context for the next step, it can be tool selection, question for user, or 
     // even self-reflection on previous steps. Like getting relevant tools, relevant context, or even asking 
     // for clarification from the user.
 
-    | 'Act'
+    | 'acting'
     // At this state the AI should be executing the plan created in the previous step, 
     // this can include calling tools, asking questions to the user, or generating a response.
     // Update new context or memory based on the result of the action, this can include updating the session state,
     // adding new information to the context, or even updating the plan based on new information.
 
-    | 'Observe'
+    | 'observing'
     // At this state the AI should be observing the latest context after taking the action, this can 
     // include the result of a tool call, the user's response to a question, or any new information that has been 
     // generated. The AI should be analyzing this new information and determining how it impacts the overall session, 
     // including whether the original plan is still valid or if it needs to be updated based on the new context.
 
-    | 'Finalize'
+    | 'finalizing'
 // Packaging the result for the user, this can include formatting the response, ensuring that all necessary 
 // information is included, and preparing the final output for delivery to the user.
 
 /**
- * A live session bound to a specific SDK + model combination.
+ * A live session bound to a specific provider + model combination.
  * Multiple sessions can run concurrently, each with independent stream buffers.
  */
 export interface AISession {
@@ -63,6 +66,8 @@ export interface AISession {
     // This is the primary identifier for the session.
     session_uid: string;
     process_uid: string;
+    // Compatibility field kept as `sdk` for existing UI/config usage.
+    // Semantically this now means the active provider binding for the backend LangGraph runtime.
     sdk?: SDKProvider | undefined;
     model?: string | undefined;
 
@@ -72,7 +77,7 @@ export interface AISession {
     state: AISessionState;
     state_cycle_index: number;
 
-    // Tracks autonomous follow-up loop state for multi-pass reasoning and result consumption.
+    // Compatibility mirror for backend-run lifecycle. The frontend no longer owns autonomous continuation.
     autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus;
     error_payload?: Record<string, unknown>;
 
@@ -291,21 +296,15 @@ export interface AIRenderer {
 // =========================================================================
 // AI Interaction Loop Protocol State (OVERALL TURN CYCLE)
 // =========================================================================
-// This protocol state controls the "outer loop" of an AI session turn.
-// It decides what happens AFTER the current streaming response finishes completely.
-// If the AI is performing autonomous multi-step reasoning, it might immediately
-// "continue" and loop back to send another prompt to itself. If it has finished its
-// task and wants to give control back to the user, it will "stop" the interaction loop.
+// This protocol state is retained as a compatibility contract for older loop-oriented code.
+// The backend LangGraph runtime is now the source of truth for autonomous continuation.
 export const AIInteractionLoopProtocolState = {
-    // Break out of the autonomous loop.
-    // The current stream finishes normally, but no new automated turn is created.
-    // The session status returns to IDLE, passing control back to the user's input box.
-    // This is the default end-of-turn state.
+    // End the current run without requesting additional client-driven continuation.
+    // In the LangGraph architecture this is the default client-visible end-of-run signal.
     STOP: 'stop',
 
-    // Automatically trigger a new autonomous turn immediately after the current one completes.
-    // Used when the AI determines it needs to chain multiple thoughts or tool calls
-    // together autonomously without user intervention.
+    // Compatibility-only signal from older client-controlled loop behavior.
+    // New graph-driven flows should not rely on the frontend to trigger the next pass.
     CONTINUE: 'continue',
 } as const;
 
@@ -316,8 +315,8 @@ export type AIInteractionLoopProtocolState = typeof AIInteractionLoopProtocolSta
 // =========================================================================
 // Parser protocol state is the control signal emitted by a block handler after a single block is parsed.
 // The parser loop processes one block at a time, then waits for this state before deciding whether the
-// next block may continue, whether the current response should stop, or whether the loop should stop
-// and immediately begin a fresh follow-up pass with updated session memory.
+// next block may continue or whether the current response should stop. Follow-up passes are now owned
+// by the backend graph runtime rather than the frontend parser loop.
 export const AIParserProtocolState = {
     // No parser work is currently active for the current session or entry.
     IDLE: 'idle',
@@ -332,8 +331,9 @@ export const AIParserProtocolState = {
     // The outer interaction loop may still decide whether to finalize or continue based on session state.
     STOP_CURRENT_RESPONSE: 'stop_current_response',
 
-    // The current block completed, the current response should stop now, and the outer interaction loop
-    // should immediately start the next pass after this entry is finalized.
+    // Compatibility-only signal from older client-driven autonomous continuation.
+    // Current graph-driven flows should treat this as a stop boundary and allow the backend runtime
+    // to decide whether another pass is needed.
     STOP_AND_CONTINUE_LOOP: 'stop_and_continue_loop',
 
     // The current parser flow intentionally stops without treating the block as a failure.

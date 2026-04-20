@@ -1,6 +1,6 @@
 """Gateway server - main entry point.
 
-Runs the AI Gateway sidecar server that manages multi-provider LLM connectivity.
+Runs the AI Gateway sidecar server that hosts the LangGraph runtime.
 Listens on http://localhost:8888 by default.
 """
 
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     print("[Gateway] Initializing gateway facade...")
     gateway_instance = GatewayFacade()
     api.init_gateway(gateway_instance, RUNTIME_HOST, RUNTIME_PORT)
-    print(f"[Gateway] Ready. Supported SDKs: {', '.join(GatewayFacade.SUPPORTED_SDKS)}")
+    print(f"[Gateway] Ready. Supported providers: {', '.join(GatewayFacade.SUPPORTED_SDKS)}")
     
     yield
     
@@ -49,9 +49,9 @@ def create_app() -> FastAPI:
         Configured FastAPI application
     """
     app = FastAPI(
-        title="ACE AI Gateway Server",
-        description="Multi-provider LLM gateway for ACE Assistant",
-        version="1.0.0",
+        title="ACE LangGraph Gateway Server",
+        description="LangGraph runtime gateway for ACE Assistant",
+        version="2.0.0",
         lifespan=lifespan,
     )
 
@@ -102,7 +102,7 @@ def main():
     
     # Run the server
     print("=" * 60)
-    print("Starting ACE AI Gateway Server")
+    print("Starting ACE LangGraph Gateway Server")
     print("=" * 60)
     print(f"Listening on: http://{preferred_host}:{selected_port}")
     if selected_port != preferred_port:

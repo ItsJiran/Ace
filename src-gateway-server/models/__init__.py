@@ -59,8 +59,8 @@ class TestResponseResult:
 class HealthResponse:
     """Health check response."""
     ok: bool
-    gateway_name: str = "ace-sdk-gateway-server"
-    gateway_contract_version: str = "1.0.0"
+    gateway_name: str = "ace-langgraph-gateway-server"
+    gateway_contract_version: str = "2.0.0"
     base_url: str = ""
     port: Optional[int] = None
     loaded_adapters: List[str] = field(default_factory=list)

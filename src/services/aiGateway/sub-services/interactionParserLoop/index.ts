@@ -30,4 +30,4 @@
  */
 
 export { AISessionBlockBus, type SessionInteractionLoopInput } from './shared';
-export { sendPromptToGateway, shouldContinueAutonomousLoop } from './requestOrchestration';
+export { sendPromptToGateway } from './requestOrchestration';

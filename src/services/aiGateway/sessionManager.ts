@@ -80,7 +80,7 @@ class AISessionManagerSingleton {
             model,
 
             status: AISessionStatus.IDLE,
-            state: 'Reason',
+            state: 'reasoning',
             state_cycle_index: 0,
             autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.NONE,
 

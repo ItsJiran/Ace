@@ -5,13 +5,13 @@ import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 
 const ALLOWED_NEXT_STATES: Record<AISessionState, AISessionState[]> = {
-    Reason: ['Act'],
-    Act: ['Observe'],
-    Observe: ['Reason', 'Finalize'],
-    Finalize: [],
+    reasoning: ['acting'],
+    acting: ['observing'],
+    observing: ['reasoning', 'finalizing'],
+    finalizing: [],
 };
 
-const ACTIVE_MVP_STATES: AISessionState[] = ['Reason', 'Act', 'Observe', 'Finalize'];
+const ACTIVE_MVP_STATES: AISessionState[] = ['reasoning', 'acting', 'observing', 'finalizing'];
 
 export const handlerStart: ParserBlockHandler = async ({ dispatchParserResponse }: ParserBlockArgs) => {
     dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
@@ -24,44 +24,44 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'state_transition',
     slug: 'state_transition',
-    description: 'Updates the session operational state for the next pass using a constrained transition graph.',
+    description: 'Updates the session operational state mirror for graph observability and phase tracing.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Use this block to explicitly set the next session state when your response determines that the operational phase should change. Non-Finalize transitions hand work off to a fresh follow-up pass. Finalize transitions terminate the loop immediately.',
-        requiredFields: '"next_state" (must be one of Reason | Act | Observe | Finalize for the current MVP).',
+        purpose: 'Use this block to explicitly record the next session state when the backend graph determines that the operational phase changed. This block now acts as an observability boundary for the client session rather than a client-side loop controller.',
+        requiredFields: '"next_state" (must be one of reasoning | acting | observing | finalizing for the current MVP).',
         optionalFields: '"reason" or "note" for a short explanation of why the state changes.',
         triggerConditions: [
             'When the response has determined the next phase and the session state should be updated explicitly.',
             'When moving from reasoning into execution.',
             'When an action has completed and the next step should analyze the result.',
-            'When Observe has validated the work and this same response is already ready to end in Finalize.',
-            'Use this as the main semantic control block for the autonomous loop. Non-Finalize transitions end the current pass immediately and start the next state in a fresh pass.',
-            'This block is a phase boundary. After state_transition is emitted, the current pass stops immediately.',
-            'Transitions into Finalize stop the current response and end the autonomous loop immediately.',
-            'Only transition into Finalize after the visible user-facing answer is already complete in the current response.',
-            'Do not use state_transition inside Finalize.',
+            'When observing has validated the work and this same response is already ready to end in finalizing.',
+            'Use this as a semantic phase marker emitted by the backend graph when the run should record a state change.',
+            'This block is a phase boundary. After state_transition is emitted, the current streamed response should stop immediately on the client.',
+            'Transitions into finalizing stop the current response and mark the run as ready to end.',
+            'Only transition into finalizing after the visible user-facing answer is already complete in the current response.',
+            'Do not use state_transition inside finalizing.',
             'Place state_transition as the last block of the current pass. Do not emit blocks from the next phase after it in the same response.',
-            'Reason may only transition to Act after the required downstream plans are sufficiently defined for the current cycle.',
-            'Act may only transition to Observe after the planned execution work either completed or produced an execution error that Observe must inspect.',
-            'Observe is the only state that may choose between looping back to Reason or handing off to Finalize.',
+            'reasoning may only transition to acting after the required downstream plans are sufficiently defined for the current cycle.',
+            'acting may only transition to observing after the planned execution work either completed or produced an execution error that observing must inspect.',
+            'observing is the only state that may choose between looping back to reasoning or handing off to finalizing.',
         ],
         promptExamples: [
-            'While in Reason, decide that the next pass should be Act, then emit state_transition and stop the current pass.',
-            'While in Act, decide that the next pass should be Observe after the runtime action completes, then emit state_transition and stop.',
-            'While in Observe, after finishing the visible answer, switch to Finalize to mark the turn complete.',
-            'Do not emit Act blocks after switching from Reason to Act in the same response.',
+            'While in reasoning, decide that the next phase should be acting, then emit state_transition as the final block in the response.',
+            'While in acting, decide that the next phase should be observing after the runtime action completes, then emit state_transition and stop.',
+            'While in observing, after finishing the visible answer, switch to finalizing to record that the turn is ready to complete.',
+            'Do not emit acting blocks after switching from reasoning to acting in the same response.',
         ],
         exampleLines: [
             '  @@ace:start state_transition',
-            '  {"next_state":"Act","reason":"The next step is a concrete runtime action."}',
+            '  {"next_state":"acting","reason":"The next step is a concrete runtime action."}',
             '  @@ace:end',
             '',
             '  @@ace:start state_transition',
-            '  {"next_state":"Observe","reason":"A fresh runtime result is available and must be analyzed."}',
+            '  {"next_state":"observing","reason":"A fresh runtime result is available and must be analyzed."}',
             '  @@ace:end',
             '',
             '  @@ace:start state_transition',
-            '  {"next_state":"Finalize","reason":"The result is complete and ready for the user."}',
+            '  {"next_state":"finalizing","reason":"The result is complete and ready for the user."}',
             '  @@ace:end',
         ],
     },
@@ -110,7 +110,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         });
 
         const nextContextEndIndex = context.length - 1;
-        const nextCycleIndex = currentState === 'Observe' && nextState === 'Reason'
+        const nextCycleIndex = currentState === 'observing' && nextState === 'reasoning'
             ? currentCycleIndex + 1
             : currentCycleIndex;
         const historySummary = note?.trim()
@@ -142,11 +142,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             context_end_index: nextContextEndIndex,
         } as Partial<AISession>);
 
-        dispatchParserResponse(
-            nextState === 'Finalize'
-                ? AIParserProtocolState.STOP_CURRENT_RESPONSE
-                : AIParserProtocolState.STOP_AND_CONTINUE_LOOP
-        );
+        dispatchParserResponse(AIParserProtocolState.STOP_CURRENT_RESPONSE);
     } catch (e) {
         console.error(`[StateTransitionBlock] Error processing block:`, e);
         dispatchParserResponse(AIParserProtocolState.ERROR);

@@ -1,4 +1,4 @@
-# ACE AI Gateway Server
+# ACE LangGraph Gateway Server
 
 ## Related Runtime Docs
 
@@ -6,15 +6,15 @@ Gateway-side behavior documented here is consumed by app-side context compositio
 
 - `docs/GATEWAY_CONTEXT_MECHANISM.md`
 
-Multi-provider LLM gateway sidecar that manages connectivity to OpenAI, Google Gemini, and Anthropic Claude APIs.
+LangGraph-backed gateway sidecar that runs the ACE agent runtime across OpenAI, Google Gemini, and Anthropic models.
 
 ## Overview
 
 The gateway server is a Python-based sidecar that:
-- Exposes a unified HTTP API for all LLM providers
-- Manages API key credential security
-- Normalizes provider responses to a common contract
-- Handles timeouts and error cases gracefully
+- Exposes a unified HTTP API for the ACE app
+- Hosts the LangGraph runtime that executes agent runs
+- Resolves provider/model bindings through LangChain integrations
+- Streams plain text output that remains compatible with ACE block parsing on the client
 
 ## Architecture
 
@@ -26,17 +26,22 @@ The gateway server is a Python-based sidecar that:
             │ HTTP (localhost:8888)
             │
 ┌───────────▼──────────────┐
-│  AI Gateway Server       │  Python/FastAPI
+│  LangGraph Gateway       │  Python/FastAPI
 │  ├─ /health            │
 │  ├─ /models/{sdk}      │
-│  └─ /test/{sdk}        │
+│  ├─ /test/{sdk}        │
+│  └─ /chat/{sdk}        │
 └───────────┬──────────────┘
             │
+    ┌───────▼──────────────────┐
+    │   LangGraph ReAct App    │
+    └───────┬──────────────────┘
+      │
     ┌───────┼───────┐
     │       │       │
     ▼       ▼       ▼
  OpenAI  Google Anthropic
- API     API    API
+ LC      LC      LC
 ```
 
 ## Installation
@@ -53,10 +58,7 @@ cd src-gateway-server
 pip install -r requirements.txt
 ```
 
-2. (Optional) Install provider SDKs if not already installed:
-```bash
-pip install openai google-generativeai anthropic
-```
+2. The runtime uses LangGraph + LangChain provider packages listed in `requirements.txt`.
 
 ## Running the Server
 
@@ -86,7 +88,7 @@ GET http://localhost:8888/health
 # Response
 {
   "ok": true,
-  "gateway_contract_version": "1.0.0",
+  "gateway_contract_version": "2.0.0",
   "loaded_adapters": ["openai", "google"],
   "error_message": null
 }
@@ -151,18 +153,15 @@ sdk: "openai" | "google" | "anthropic"
 
 ### OpenAI
 - **API Key**: Get from https://platform.openai.com/account/api-keys
-- **Models**: GPT-4, GPT-3.5-turbo, and others
-- **Adapter**: `OpenAIAdapter`
+- **Runtime Binding**: `langchain_openai.ChatOpenAI`
 
 ### Google Gemini
 - **API Key**: Get from https://makersuite.google.com/app/apikey
-- **Models**: Gemini Pro, Gemini Pro Vision
-- **Adapter**: `GoogleAdapter`
+- **Runtime Binding**: `langchain_google_genai.ChatGoogleGenerativeAI`
 
 ### Anthropic Claude
 - **API Key**: Get from https://console.anthropic.com/
-- **Models**: Claude 3 Opus, Claude 3 Sonnet, Claude 3 Haiku, Claude 2.1, Claude 2
-- **Adapter**: `AnthropicAdapter`
+- **Runtime Binding**: `langchain_anthropic.ChatAnthropic`
 
 ## Project Structure
 
@@ -172,19 +171,14 @@ src-gateway-server/
 ├── main.py              # Server entry point
 ├── requirements.txt     # Python dependencies
 │
-├── adapters/            # Provider-specific adapters
-│   ├── __init__.py
-│   ├── base_adapter.py  # Abstract base class
-│   ├── openai_adapter.py
-│   ├── google_adapter.py
-│   └── anthropic_adapter.py
-│
 ├── models/              # Data Transfer Objects (DTOs)
 │   └── __init__.py      # AIModel, ModelsResponse, TestResponseResult, HealthResponse
 │
-├── core/                # Gateway orchestration
+├── core/                # LangGraph orchestration
 │   ├── __init__.py
-│   └── gateway.py       # GatewayFacade - main router
+│   ├── gateway.py       # GatewayFacade compatibility wrapper
+│   ├── graph_runtime.py # LangGraph runtime execution
+│   └── model_registry.py# Provider/model binding resolver
 │
 ├── routes/              # HTTP API endpoints
 │   ├── __init__.py
@@ -197,24 +191,17 @@ src-gateway-server/
 
 ## Design Patterns
 
-### Adapter Pattern
-All providers implement the `BaseProviderAdapter` interface:
-- `fetch_models() -> ModelsResponse`
-- `test_response(model, prompt) -> TestResponseResult`
-- `validate_api_key() -> bool`
-
-This allows new providers to be added by implementing a single interface.
-
 ### Facade Pattern
 `GatewayFacade` provides a unified interface:
-- Routes requests to the correct adapter
-- Manages adapter lifecycle
-- Normalizes errors
+- Preserves the old HTTP contract while routing work into LangGraph
+- Manages provider credential registration
+- Normalizes errors and health responses
 
-### Async/Await
-All I/O operations are async using `aiohttp` and `asyncio`:
-- Non-blocking HTTP calls to providers
-- Handles timeouts gracefully (9 second default)
+### LangGraph Runtime
+The server creates a LangGraph-based run per request:
+- Resolve provider + model through `ModelRegistry`
+- Build a ReAct-capable graph app
+- Run or stream the graph response back to the ACE client
 
 ## Error Handling
 

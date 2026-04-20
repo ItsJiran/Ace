@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 
 export type SDKProvider = 'openai' | 'google' | 'anthropic';
+export type AIProvider = SDKProvider;
 export type GatewayModel = {
     id: string;
     name: string;
@@ -13,8 +14,7 @@ export type GatewayModel = {
 // including SDK targets, models, and various result types for connectivity and operations.
 // It uses Zod for schema validation and type inference.
 
-// Per-SDK gateway target (simplified - endpoints managed by gateway server)
-export const AIGatewaySDKTargetSchema = z.object({
+export const AIGatewayProviderTargetSchema = z.object({
     api_key: z.string().min(0),
     models: z.array(
         z.object({
@@ -29,17 +29,48 @@ export const AIGatewaySDKTargetSchema = z.object({
     ).default([]),
 });
 
-export type AIGatewaySDKTarget = z.infer<typeof AIGatewaySDKTargetSchema>;
+// Legacy alias retained for compatibility with the existing UI/config layer.
+export const AIGatewaySDKTargetSchema = AIGatewayProviderTargetSchema;
+
+export type AIGatewayProviderTarget = z.infer<typeof AIGatewayProviderTargetSchema>;
+export type AIGatewaySDKTarget = AIGatewayProviderTarget;
 
 export const AIGatewayConfigSchema = z.object({
     version: z.literal(2),
-    active_sdk: z.enum(['openai', 'google', 'anthropic']).nullable(),
+    active_provider: z.enum(['openai', 'google', 'anthropic']).nullable().optional(),
+    // Compatibility field name retained while the backend runtime is now LangGraph-first.
+    active_sdk: z.enum(['openai', 'google', 'anthropic']).nullable().optional(),
     active_model: z.string().nullable(),
+    providers: z.object({
+        openai: AIGatewayProviderTargetSchema.optional(),
+        google: AIGatewayProviderTargetSchema.optional(),
+        anthropic: AIGatewayProviderTargetSchema.optional(),
+    }).optional(),
     sdks: z.object({
         openai: AIGatewaySDKTargetSchema.optional(),
         google: AIGatewaySDKTargetSchema.optional(),
         anthropic: AIGatewaySDKTargetSchema.optional(),
-    }),
+    }).optional(),
+}).transform((input) => {
+    const active_provider = input.active_provider ?? input.active_sdk ?? null;
+    const providers = input.providers ?? input.sdks ?? {};
+
+    return {
+        version: input.version,
+        active_provider,
+        active_sdk: active_provider,
+        active_model: input.active_model,
+        providers: {
+            openai: providers.openai,
+            google: providers.google,
+            anthropic: providers.anthropic,
+        },
+        sdks: {
+            openai: providers.openai,
+            google: providers.google,
+            anthropic: providers.anthropic,
+        },
+    };
 });
 
 export type AIGatewayConfig = z.infer<typeof AIGatewayConfigSchema>;

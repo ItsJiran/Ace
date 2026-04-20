@@ -17,10 +17,10 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'parser_registry',
     slug: 'parser_registry',
-    description: 'Allows dynamically listing available parser blocks or fetching full details (instructions, parameters) of a specific block to inject into the internal Context.',
+    description: 'Allows dynamically listing available parser blocks or fetching full details (instructions, parameters) of a specific block to inject into the internal context.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Allows the AI to explore the full parser registry separately from the smaller subset of block details currently hydrated into the prompt.',
+        purpose: 'Allows the AI to explore the full parser registry separately from the smaller subset of block details currently hydrated into the prompt. Registry reads may update working memory and should typically terminate the current streamed response so the backend graph can decide the next step.',
         requiredFields: '"action" (must be "list_names", "list_hydrated", "detail", "activate", or "deactivate")',
         optionalFields: '"target_slug" (required if action is detail, activate, or deactivate)',
         triggerConditions: [
@@ -111,7 +111,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                     currentTurn
                 ]
             } as Partial<AISession>);
-            dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
+            dispatchParserResponse(AIParserProtocolState.STOP_CURRENT_RESPONSE);
             return;
         }
         else if (action === 'list_hydrated') {
@@ -152,7 +152,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                     currentTurn
                 ]
             } as Partial<AISession>);
-            dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
+            dispatchParserResponse(AIParserProtocolState.STOP_CURRENT_RESPONSE);
             return;
         }
         else if (action === 'detail') {
@@ -193,7 +193,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                     currentTurn
                 ]
             } as Partial<AISession>);
-            dispatchParserResponse(AIParserProtocolState.STOP_AND_CONTINUE_LOOP);
+            dispatchParserResponse(AIParserProtocolState.STOP_CURRENT_RESPONSE);
             return;
         }
         else if (action === 'activate' || action === 'deactivate') {

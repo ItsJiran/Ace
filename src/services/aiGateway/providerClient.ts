@@ -4,8 +4,8 @@
  * Pure HTTP helpers for non-streaming gateway sidecar endpoints.
  *
  * Responsibilities:
- *  - Fetch the available model list for a given SDK from the gateway sidecar
- *  - Send a single non-streaming test prompt to verify an SDK + model works
+ *  - Fetch the available model list for a given provider from the gateway sidecar
+ *  - Send a single non-streaming test prompt to verify a provider + model works
  *
  * Design notes:
  *  - These functions are intentionally pure (no singletons, no side-effects).
@@ -25,29 +25,29 @@ import type {
     AIGatewayModel,
     AIGatewayResponseResult,
 } from '../../schemas/ai_gateway';
-import type { SDKProvider } from '#/schemas/ai';
+import type { AIProvider } from '#/schemas/ai';
 
 const FETCH_TIMEOUT_MS = 9000;
 
 /**
- * Calls GET /models/:sdk on the gateway sidecar and returns the model list.
+ * Calls GET /models/:provider on the gateway sidecar and returns the model list.
  *
  * The returned list is NOT stored here — the caller is responsible for
- * persisting it via AIConfigManager.updateSDKModels().
+ * persisting it via AIConfigManager.updateProviderModels().
  *
- * @param sdk            Provider to query (openai | google | anthropic)
- * @param gatewayConfig  Config snapshot — only the API key for `sdk` is read
+ * @param provider       Provider to query (openai | google | anthropic)
+ * @param gatewayConfig  Config snapshot — only the API key for `provider` is read
  * @param getBaseUrl     Async resolver that returns a verified gateway base URL
  *                       or null if the sidecar is unreachable
  */
 export async function fetchModels(
-    sdk: SDKProvider,
+    provider: AIProvider,
     gatewayConfig: AIGatewayConfig,
     getBaseUrl: () => Promise<string | null>,
 ): Promise<AIGatewayFetchModelsResult> {
-    const sdkConfig = gatewayConfig.sdks[sdk];
-    if (!sdkConfig?.api_key) {
-        return { ok: false, models: [], error_message: `${sdk} API key not configured.` };
+    const providerConfig = gatewayConfig.providers[provider];
+    if (!providerConfig?.api_key) {
+        return { ok: false, models: [], error_message: `${provider} API key not configured.` };
     }
 
     const baseUrl = await getBaseUrl();
@@ -55,15 +55,15 @@ export async function fetchModels(
         return {
             ok: false,
             models: [],
-            error_message: 'SDK gateway sidecar not found. Please run radar scan / health check.',
+            error_message: 'AI gateway sidecar not found. Please run radar scan / health check.',
         };
     }
 
     try {
-        const response = await fetch(`${baseUrl}/models/${sdk}`, {
+        const response = await fetch(`${baseUrl}/models/${provider}`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${sdkConfig.api_key}`,
+                'Authorization': `Bearer ${providerConfig.api_key}`,
                 'Content-Type': 'application/json',
             },
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -86,35 +86,35 @@ export async function fetchModels(
 }
 
 /**
- * Sends a single non-streaming prompt via POST /test/:sdk.
+ * Sends a single non-streaming prompt via POST /test/:provider.
  *
- * Used from the Settings panel to verify that a given SDK + model combination
+ * Used from the Settings panel to verify that a given provider + model combination
  * is reachable and returns a valid response before the user saves it as active.
  *
  * Latency is measured from request dispatch to full JSON body received
  * (not time-to-first-token, since the /test endpoint is non-streaming).
  *
- * @param sdk            Target provider
+ * @param provider       Target provider
  * @param model          Model ID string (e.g. "gpt-4o-mini")
  * @param prompt         Test prompt — defaults to "ping" on the server if empty
  * @param gatewayConfig  Config snapshot for API key lookup
  * @param getBaseUrl     Async resolver for a verified gateway base URL
  */
 export async function testResponse(
-    sdk: SDKProvider,
+    provider: AIProvider,
     model: string,
     prompt: string,
     gatewayConfig: AIGatewayConfig,
     getBaseUrl: () => Promise<string | null>,
 ): Promise<AIGatewayResponseResult> {
-    const sdkConfig = gatewayConfig.sdks[sdk];
-    if (!sdkConfig?.api_key) {
+    const providerConfig = gatewayConfig.providers[provider];
+    if (!providerConfig?.api_key) {
         return {
             ok: false,
             latency_ms: 0,
             status_code: null,
             response_text: '',
-            error_message: `${sdk} API key not configured.`,
+            error_message: `${provider} API key not configured.`,
         };
     }
 
@@ -125,16 +125,16 @@ export async function testResponse(
             latency_ms: 0,
             status_code: null,
             response_text: '',
-            error_message: 'SDK gateway sidecar not found. Please run radar scan / health check.',
+            error_message: 'AI gateway sidecar not found. Please run radar scan / health check.',
         };
     }
 
     try {
         const startTime = Date.now();
-        const response = await fetch(`${baseUrl}/test/${sdk}`, {
+        const response = await fetch(`${baseUrl}/test/${provider}`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${sdkConfig.api_key}`,
+                'Authorization': `Bearer ${providerConfig.api_key}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ model, prompt: prompt || 'ping' }),

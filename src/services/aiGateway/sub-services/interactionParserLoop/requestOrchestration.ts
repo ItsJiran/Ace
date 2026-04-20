@@ -4,7 +4,7 @@
  * Summary:
  * - builds the composed prompt and opens the gateway stream request
  * - validates gateway availability, SDK config, and per-session abort wiring
- * - finalizes the streaming entry into `continue`, `stop`, `interrupted`, or `error`
+ * - finalizes the streaming entry into `stop`, `interrupted`, or `error`
  *
  * ASCII Diagram:
  *
@@ -20,13 +20,13 @@
  *   fetch stream -> processGatewayStream()
  *     |
  *     v
- *   finalize entry -> dispatch `continue` or `stop`
+ *   finalize entry -> dispatch `stop`
  *
  * Notes:
  * - this file owns request-level control flow; it should not parse stream content directly
  */
 
-import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIEntry, type AISession, type AISessionState, type AITurn } from '#/schemas/ai';
+import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIEntry, type AISession, type AITurn } from '#/schemas/ai';
 import type { AIGatewayConfig, AIGatewaySDKTarget } from '#/schemas/ai_gateway';
 import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { HealthProbe } from '#/services/aiGateway/healthProbe';
@@ -53,21 +53,6 @@ export async function sendPromptToGateway(
             await failStreamingEntry(session_uid, error);
         }
     })();
-}
-
-export function shouldContinueAutonomousLoop(
-    sessionState: AISessionState,
-    terminalProtocolState?: AIParserProtocolState,
-): boolean {
-    void sessionState;
-
-    if (terminalProtocolState === AIParserProtocolState.STOP_AND_CONTINUE_LOOP) return true;
-    if (
-        terminalProtocolState === AIParserProtocolState.STOP_CURRENT_RESPONSE
-        || terminalProtocolState === AIParserProtocolState.INTERRUPTED
-    ) return false;
-
-    return false;
 }
 
 async function runGatewayStreamRequest(
@@ -230,20 +215,10 @@ function finalizeStreamingEntry(session_uid: string, terminalProtocolState?: AIP
         ],
     });
 
-    const updatedState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
-    const shouldContinue = shouldContinueAutonomousLoop(updatedState.state, terminalProtocolState);
-
-    if (shouldContinue) {
-        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-            autonomous_follow_up_loop_status: 'active',
-        } as Partial<AISession>);
-        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'continue' }));
-    } else {
-        KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-            autonomous_follow_up_loop_status: terminalProtocolState === AIParserProtocolState.INTERRUPTED ? 'interrupted' : 'completed',
-        } as Partial<AISession>);
-        AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
-    }
+    KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+        autonomous_follow_up_loop_status: terminalProtocolState === AIParserProtocolState.INTERRUPTED ? 'interrupted' : 'completed',
+    } as Partial<AISession>);
+    AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
 }
 
 async function failStreamingEntry(session_uid: string, error: unknown): Promise<void> {

@@ -19,8 +19,8 @@ export function buildCurrentTurnRetainedMemoryPrompt(session: AISession): string
     const eventSummaries = getHistoryEventSummaries(historyEntry?.responses);
     const currentCycleIndex = session.state_cycle_index ?? 0;
     const completedSteps = (session.plan ?? [])
-        .filter((entry) => entry.state === 'Act')
-        .filter(() => session.state === 'Reason' || session.state === 'Act')
+        .filter((entry) => entry.state === 'acting')
+        .filter(() => session.state === 'reasoning' || session.state === 'acting')
         .filter((entry) => entry.lifecycle_turn === undefined || entry.lifecycle_turn === currentTurnIndex)
         .filter((entry) => (entry.lifecycle_cycle ?? 0) === currentCycleIndex)
         .filter((entry) => entry.is_complete)

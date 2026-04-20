@@ -10,10 +10,10 @@
 import type { AISession, AIPlanEntry } from '#/schemas/ai';
 
 const PLAN_STATE_ORDER: Record<string, number> = {
-    Reason: 0,
-    Act: 1,
-    Observe: 2,
-    Finalize: 3,
+    reasoning: 0,
+    acting: 1,
+    observing: 2,
+    finalizing: 3,
 };
 
 export function getActiveContextEntries(session: AISession) {
@@ -41,7 +41,7 @@ export function getCurrentStatePlanEntries(session: AISession): AIPlanEntry[] {
     const currentCycleIndex = session.state_cycle_index ?? 0;
 
     return [...(session.plan ?? [])]
-        .filter((entry) => session.state === 'Reason' ? entry.state === 'Act' : entry.state === 'Act' && session.state === 'Act')
+        .filter((entry) => session.state === 'reasoning' ? entry.state === 'acting' : entry.state === 'acting' && session.state === 'acting')
         .filter((entry) => entry.lifecycle_turn === undefined || entry.lifecycle_turn === session.turn_index)
         .filter((entry) => (entry.lifecycle_cycle ?? 0) === currentCycleIndex)
         .sort((left, right) => {

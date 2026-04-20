@@ -22,7 +22,7 @@
  *    URL churn between calls).
  *
  * Identity check:
- *  The /health endpoint must return `{ ok: true, gateway_name: "ace-sdk-gateway-server" }`.
+ *  The /health endpoint must return `{ ok: true, gateway_name: "ace-langgraph-gateway-server" }`.
  *  Any other HTTP server on that port is silently rejected.
  */
 
@@ -30,7 +30,7 @@ import { KernelEngine } from '../kernelEngine';
 import type { AIGatewaySidecarHealthResult, AIGatewayRadarScanResult } from '../../schemas/ai_gateway';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8888';
-const GATEWAY_SERVER_NAME = 'ace-sdk-gateway-server';
+const GATEWAY_SERVER_NAME = 'ace-langgraph-gateway-server';
 const RUNTIME_MEMORY_UID = 'system:ai_gateway_runtime';
 
 /** Tight timeout for individual health probes. Keeps radar scans fast. */
@@ -100,7 +100,7 @@ class HealthProbeSingleton {
             error_message:
                 foundPorts.length > 0
                     ? undefined
-                    : 'No verified sdk-gateway-server found in scanned range.',
+                    : 'No verified langgraph-gateway-server found in scanned range.',
         };
 
         // Write a single synthetic health record to RAM for the winning port

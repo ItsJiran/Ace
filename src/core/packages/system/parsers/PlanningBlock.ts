@@ -15,21 +15,21 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'planning',
     slug: 'planning',
-    description: 'Manage the per-cycle execution plan for the current session. Reason may create or reset the Act plan for the active cycle, while Act may only mark Act plan steps complete.',
+    description: 'Manage the per-cycle execution plan for the current session. reasoning may create or reset the acting plan for the active cycle, while acting may only mark acting plan steps complete.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'Use this block to manage the cycle-scoped Act checklist. Reason is the only planning authority: it may create or reset the Act plan for the current cycle. Act may only mark its current-cycle Act steps complete. Observe and Finalize should not call planning.',
+        purpose: 'Use this block to manage the cycle-scoped acting checklist. reasoning is the only planning authority: it may create or reset the acting plan for the current cycle. acting may only mark its current-cycle acting steps complete. observing and finalizing should not call planning.',
         requiredFields: '"action" (set | complete | reset).',
-        optionalFields: '"target_state". Required for Reason set/reset and must be Act. Optional for complete and defaults to the current session state. For set: "steps" or "plan" array. For complete: "step_index" or "title".',
+        optionalFields: '"target_state". Required for reasoning set/reset and must be acting. Optional for complete and defaults to the current session state. For set: "steps" or "plan" array. For complete: "step_index" or "title".',
         triggerConditions: [
-            'When Reason must define the Act checklist before leaving Reason.',
-            'When Reason must repair or replace the Act checklist because the objective changed.',
-            'When Act completed one execution task and must mark it done.',
+            'When reasoning must define the acting checklist before leaving reasoning.',
+            'When reasoning must repair or replace the acting checklist because the objective changed.',
+            'When acting completed one execution task and must mark it done.',
         ],
         promptExamples: [
-            'I am in Reason and need to define the Act checklist before leaving Reason.',
-            'I finished step 1 of the Act checklist and will mark it complete.',
-            'The old Act checklist is obsolete, so while in Reason I will reset it and create a new one.',
+            'I am in reasoning and need to define the acting checklist before leaving reasoning.',
+            'I finished step 1 of the acting checklist and will mark it complete.',
+            'The old acting checklist is obsolete, so while in reasoning I will reset it and create a new one.',
         ],
         exampleLines: [
             '  @@ace:start planning',
@@ -72,14 +72,14 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         const scopedPlans = [...(sessionState.plan ?? [])];
 
         if (action === 'set') {
-            if (currentState !== 'Reason') {
-                console.warn(`[PlanningBlock] action=set is only allowed in Reason. Current state: ${currentState}`);
+            if (currentState !== 'reasoning') {
+                console.warn(`[PlanningBlock] action=set is only allowed in reasoning. Current state: ${currentState}`);
                 dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
                 return;
             }
 
-            if (targetState !== 'Act') {
-                console.warn(`[PlanningBlock] action=set requires target_state Act. Received: ${String(targetState)}`);
+            if (targetState !== 'acting') {
+                console.warn(`[PlanningBlock] action=set requires target_state acting. Received: ${String(targetState)}`);
                 dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
                 return;
             }
@@ -125,8 +125,8 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         if (action === 'complete') {
-            if (currentState !== 'Act') {
-                console.warn(`[PlanningBlock] action=complete is only allowed in Act. Current state: ${currentState}`);
+            if (currentState !== 'acting') {
+                console.warn(`[PlanningBlock] action=complete is only allowed in acting. Current state: ${currentState}`);
                 dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
                 return;
             }
@@ -185,14 +185,14 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
         }
 
         if (action === 'reset') {
-            if (currentState !== 'Reason') {
-                console.warn(`[PlanningBlock] action=reset is only allowed in Reason. Current state: ${currentState}`);
+            if (currentState !== 'reasoning') {
+                console.warn(`[PlanningBlock] action=reset is only allowed in reasoning. Current state: ${currentState}`);
                 dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
                 return;
             }
 
-            if (targetState !== 'Act') {
-                console.warn(`[PlanningBlock] action=reset requires target_state Act. Received: ${String(targetState)}`);
+            if (targetState !== 'acting') {
+                console.warn(`[PlanningBlock] action=reset requires target_state acting. Received: ${String(targetState)}`);
                 dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
                 return;
             }
@@ -235,10 +235,10 @@ function normalizeTargetState(targetState: unknown, fallbackState: AISessionStat
     const nextState = typeof targetState === 'string' ? targetState : fallbackState;
 
     if (
-        nextState === 'Reason'
-        || nextState === 'Act'
-        || nextState === 'Observe'
-        || nextState === 'Finalize'
+        nextState === 'reasoning'
+        || nextState === 'acting'
+        || nextState === 'observing'
+        || nextState === 'finalizing'
     ) {
         return nextState;
     }

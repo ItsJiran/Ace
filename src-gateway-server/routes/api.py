@@ -1,4 +1,4 @@
-"""HTTP route handlers for the gateway server."""
+"""HTTP route handlers for the LangGraph gateway server."""
 
 from typing import Optional
 from fastapi import APIRouter, Request
@@ -49,7 +49,7 @@ async def health(request: Request) -> dict:
     """Health check endpoint.
     
     Returns:
-        Dict with gateway status and loaded adapters
+        Dict with gateway status and registered providers
     """
     if gateway is None:
         return HealthResponse(
@@ -61,8 +61,8 @@ async def health(request: Request) -> dict:
 
     return HealthResponse(
         ok=True,
-        gateway_name="ace-sdk-gateway-server",
-        gateway_contract_version="1.0.0",
+        gateway_name="ace-langgraph-gateway-server",
+        gateway_contract_version="2.0.0",
         base_url=base_url,
         port=runtime_port,
         loaded_adapters=gateway.get_loaded_adapters(),
@@ -71,12 +71,12 @@ async def health(request: Request) -> dict:
 
 @router.get("/models/{sdk}")
 async def fetch_models(sdk: str, request: Request) -> JSONResponse:
-    """Fetch available models for an SDK.
+    """Fetch the curated provider model catalog.
     
     Expects Bearer token with API key in Authorization header.
     
     Args:
-        sdk: Provider ID ("openai", "google", "anthropic")
+        sdk: Provider ID (kept as `sdk` in the path for compatibility)
         request: FastAPI request to extract API key
         
     Returns:
@@ -101,7 +101,7 @@ async def fetch_models(sdk: str, request: Request) -> JSONResponse:
             }
         )
 
-    # Load/reload adapter with the provided API key
+    # Register provider credentials for this runtime process.
     if not gateway.load_adapter(sdk, api_key):
         return JSONResponse(
             status_code=400,
@@ -117,13 +117,13 @@ async def fetch_models(sdk: str, request: Request) -> JSONResponse:
 
 @router.post("/test/{sdk}")
 async def test_response(sdk: str, request: Request) -> JSONResponse:
-    """Test a completion with an SDK.
+    """Test a completion by running the LangGraph runtime once.
     
     Expects Bearer token with API key in Authorization header.
     Body should be JSON with "model" and "prompt" fields.
     
     Args:
-        sdk: Provider ID ("openai", "google", "anthropic")
+        sdk: Provider ID (kept as `sdk` in the path for compatibility)
         request: FastAPI request to extract API key and body
         
     Returns:
@@ -148,7 +148,7 @@ async def test_response(sdk: str, request: Request) -> JSONResponse:
             }
         )
 
-    # Load/reload adapter with the provided API key
+    # Register provider credentials for this runtime process.
     if not gateway.load_adapter(sdk, api_key):
         return JSONResponse(
             status_code=400,
@@ -187,14 +187,14 @@ async def test_response(sdk: str, request: Request) -> JSONResponse:
 
 @router.post("/chat/{sdk}")
 async def chat_stream(sdk: str, request: Request) -> StreamingResponse:
-    """Stream a chat completion token-by-token.
+    """Stream a LangGraph-backed chat run token-by-token.
 
     Expects Bearer token in Authorization header.
     Body: JSON with "model" and "prompt" fields.
     Returns a plain text chunked streaming response.
 
     Args:
-        sdk: Provider ID ("openai", "google", "anthropic")
+        sdk: Provider ID (kept as `sdk` in the path for compatibility)
         request: FastAPI request
 
     Returns:

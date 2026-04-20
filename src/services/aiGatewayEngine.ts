@@ -47,7 +47,7 @@ import type {
     AIGatewayConfig,
 } from '../schemas/ai_gateway';
 
-import type { SDKProvider, AISession, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
+import type { AIProvider, SDKProvider, AISession, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
 import { AIProcessType } from '#/schemas/ai';
 
 import { KernelState } from './kernelEngine/kernelState';
@@ -280,37 +280,49 @@ class AIGatewayEngineSingleton {
         return AIConfigManager.get();
     }
 
+    getActiveProvider(): AIProvider | null {
+        return AIConfigManager.getActiveProvider();
+    }
+
     getActiveSDK(): SDKProvider | null {
-        return AIConfigManager.getActiveSDK();
+        return AIConfigManager.getActiveProvider();
     }
 
     getActiveModel(): string | null {
         return AIConfigManager.getActiveModel();
     }
 
+    async setActiveProvider(provider: AIProvider | null): Promise<boolean> {
+        return AIConfigManager.setActiveProvider(provider);
+    }
+
     async setActiveSDK(sdk: SDKProvider | null): Promise<boolean> {
-        return AIConfigManager.setActiveSDK(sdk);
+        return AIConfigManager.setActiveProvider(sdk);
     }
 
     async setActiveModel(model: string | null): Promise<boolean> {
         return AIConfigManager.setActiveModel(model);
     }
 
+    async setProviderApiKey(provider: AIProvider, apiKey: string): Promise<boolean> {
+        return AIConfigManager.setProviderApiKey(provider, apiKey);
+    }
+
     async setSDKApiKey(sdk: SDKProvider, apiKey: string): Promise<boolean> {
-        return AIConfigManager.setSDKApiKey(sdk, apiKey);
+        return AIConfigManager.setProviderApiKey(sdk, apiKey);
     }
 
     // ── Provider calls ────────────────────────────────────────────────────────
 
     /**
-     * Fetches the available model list for a given SDK from the gateway sidecar.
+     * Fetches the available model list for a given provider from the gateway sidecar.
      * On success, the list is persisted into config via AIConfigManager so it
      * survives app restarts without re-fetching.
      */
-    async fetchModels(sdk: SDKProvider): Promise<AIGatewayFetchModelsResult> {
-        const result = await _fetchModels(sdk, AIConfigManager.get(), () => HealthProbe.ensure());
+    async fetchModels(provider: AIProvider): Promise<AIGatewayFetchModelsResult> {
+        const result = await _fetchModels(provider, AIConfigManager.get(), () => HealthProbe.ensure());
         if (result.ok && result.models.length > 0) {
-            await AIConfigManager.updateSDKModels(sdk, result.models);
+            await AIConfigManager.updateProviderModels(provider, result.models);
         }
         return result;
     }
@@ -319,8 +331,8 @@ class AIGatewayEngineSingleton {
      * Sends a single non-streaming test prompt.
      * Used by Settings panel to verify a provider + model before saving.
      */
-    async testResponse(sdk: SDKProvider, model: string, prompt: string): Promise<AIGatewayResponseResult> {
-        return _testResponse(sdk, model, prompt, AIConfigManager.get(), () => HealthProbe.ensure());
+    async testResponse(provider: AIProvider, model: string, prompt: string): Promise<AIGatewayResponseResult> {
+        return _testResponse(provider, model, prompt, AIConfigManager.get(), () => HealthProbe.ensure());
     }
 
     appendHistoryResponseSummary(

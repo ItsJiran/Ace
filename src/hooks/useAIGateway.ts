@@ -5,7 +5,7 @@ import type { GatewayConfig, SDKProvider } from '#/core/packages/system-dev/comp
 export function useAIGateway() {
     const gatewayConfig = useAceMemory<GatewayConfig>(window.ACE.ai_gateway.memory_uid);
 
-    const [selectedSdk, setSelectedSdk] = useState<SDKProvider>('openai');
+    const [selectedProvider, setSelectedProvider] = useState<SDKProvider>('openai');
     const [selectedModel, setSelectedModel] = useState<string>('');
 
     const configInitialised = useRef(false);
@@ -13,14 +13,18 @@ export function useAIGateway() {
     useEffect(() => {
         if (configInitialised.current || !gatewayConfig) return;
         configInitialised.current = true;
-        if (gatewayConfig.active_sdk) setSelectedSdk(gatewayConfig.active_sdk);
+        if (gatewayConfig.active_provider ?? gatewayConfig.active_sdk) {
+            setSelectedProvider((gatewayConfig.active_provider ?? gatewayConfig.active_sdk) as SDKProvider);
+        }
         if (gatewayConfig.active_model) setSelectedModel(gatewayConfig.active_model);
     }, [gatewayConfig]);
 
     const modelOptions = useMemo(() => {
-        const models = gatewayConfig?.sdks?.[selectedSdk]?.models ?? [];
+        const models = gatewayConfig?.providers?.[selectedProvider]?.models
+            ?? gatewayConfig?.sdks?.[selectedProvider]?.models
+            ?? [];
         return models;
-    }, [gatewayConfig, selectedSdk]);
+    }, [gatewayConfig, selectedProvider]);
 
     const ensureSelectedModel = () => {
         if (selectedModel) return selectedModel;
@@ -31,12 +35,14 @@ export function useAIGateway() {
     };
 
     const fetchModels = async () => {
-        await window.ACE.ai_gateway.fetchModels(selectedSdk);
+        await window.ACE.ai_gateway.fetchModels(selectedProvider);
     };
 
     return {
-        selectedSdk,
-        setSelectedSdk,
+        selectedProvider,
+        setSelectedProvider,
+        selectedSdk: selectedProvider,
+        setSelectedSdk: setSelectedProvider,
         selectedModel,
         setSelectedModel,
         modelOptions,
