@@ -1,15 +1,12 @@
 import { DeferredWindowContent } from '#/components/layout/DeferredWindowContent';
 import { SpatialVirtualizer } from '#/components/layout/SpatialVirtualizer';
 import { Share2, Power, Terminal, Bug, Settings, Gauge, Activity, MemoryStick, Wand2, BellRing, MessageSquare, Monitor, MessageCircle, Wrench, Workflow, ListTree } from 'lucide-react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useRef } from 'react';
 import type { DesktopState } from '#/schemas/globalState';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { useAceEvent } from '#/hooks/useAceEvent';
-import { useWindowContext } from '#/hooks/useWindowContext';
-import { useWindowSnapshot } from '#/hooks/useWindowSnapshot';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
+import { closeCurrentHostWindow } from '#/services/runtime/desktopHost';
 
 export const registry: AceRegistryType.Component = {
     name: 'dev_menu',
@@ -18,10 +15,6 @@ export const registry: AceRegistryType.Component = {
 };
 
 export default function DevMenu() {
-    const windowCtx = useWindowContext();
-    const { markDirty } = useWindowSnapshot(windowCtx?.window_uid || '');
-    const scrollTimeoutRef = useRef<number | undefined>(undefined);
-
     const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
     const isAmbient = overlayState?.mode === 'ambient';
 
@@ -368,7 +361,7 @@ export default function DevMenu() {
                 <div className="mt-auto h-px bg-zinc-800/50 my-2" />
 
                 <button
-                    onClick={() => getCurrentWindow().close()}
+                    onClick={() => void closeCurrentHostWindow()}
                     className="flex items-center gap-2 px-3 py-2 w-full mx-2 rounded text-sm transition-colors border bg-red-950/60 border-red-800/50 text-red-300 hover:bg-red-900/80 hover:text-red-100"
                 >
                     <Power size={14} className="text-red-400" />

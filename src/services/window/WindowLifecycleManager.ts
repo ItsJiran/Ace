@@ -1,22 +1,18 @@
 import { KernelEngine } from '../kernelEngine';
 import { GlobalStateManager } from '../globalStateManager';
 import type { WindowConfig } from '#/schemas/window';
-import type { AnimationSequence } from '#/schemas/animation';
-import { WindowAnimationController } from './WindowAnimationController';
 import type { SpawnWindowOptions } from '../windowEngine';
 
 export interface WindowLifecycleDependencies {
     bumpZIndex: () => number;
     focusWindow: (uid: string) => void;
     updateWindowConfig: (uid: string, updates: Partial<WindowConfig>) => void;
-    animationController: WindowAnimationController;
     windowMemoryUid: (uid: string) => string;
     getRegistry: (packageRef: string, slug: string) => any;
 }
 
 export class WindowLifecycleManager {
     private activeWindowProcesses = new Map<string, string>();
-    private pendingAnimations = new Map<string, AnimationSequence>();
     private windowSubscriptions = new Map<string, () => void>();
 
     private deps: WindowLifecycleDependencies;
@@ -24,17 +20,8 @@ export class WindowLifecycleManager {
         this.deps = deps;
     }
 
-    private publishSpawnTelemetry(): void {
-        const activeSpawnLoad = this.pendingAnimations.size;
-        if (activeSpawnLoad === 0) return;
-
-        // Worker queue was removed. Keep method as a lightweight hook for future diagnostics.
-    }
-
     // ─── Lifecycle Operations ──────────────────────────────────────────────────
     spawnWindow(options: SpawnWindowOptions): string | null {
-        this.publishSpawnTelemetry();
-
         const window_uid = 'win-' + Math.random().toString(36).substring(2, 9);
         const spawnOptions = { ...options, _reserved_uid: window_uid } as any;
         let spawnProcessUid: string | undefined = undefined;
@@ -135,7 +122,6 @@ export class WindowLifecycleManager {
             chrome_style: options.chrome_style ?? defaultConfig.chrome_style ?? 'standard',
             drag_surface: options.drag_surface ?? defaultConfig.drag_surface ?? 'header',
             hide_ring: options.hide_ring ?? defaultConfig.hide_ring ?? false,
-            is_focused: false,
             is_minimized: false
         };
 
@@ -162,16 +148,6 @@ export class WindowLifecycleManager {
         });
         this.windowSubscriptions.set(window_uid, unsub);
 
-        if (options.animation_sequence) {
-            this.pendingAnimations.set(window_uid, options.animation_sequence);
-            requestAnimationFrame(() => {
-                const pendingSeq = this.pendingAnimations.get(window_uid);
-                if (!pendingSeq) return;
-                this.pendingAnimations.delete(window_uid);
-                this.deps.animationController.playAnimation(window_uid, pendingSeq);
-            });
-        }
-
         return window_uid;
     }
 
@@ -194,9 +170,6 @@ export class WindowLifecycleManager {
             this.activeWindowProcesses.delete(window_uid);
         }
 
-        this.deps.animationController.cancelAnimation(window_uid);
-        this.pendingAnimations.delete(window_uid);
-
         KernelEngine.deleteMemory(this.deps.windowMemoryUid(window_uid));
 
         const focusedWindowUid = KernelEngine.readMemory('system:global_state:focused_window') as string | null | undefined;
@@ -205,16 +178,5 @@ export class WindowLifecycleManager {
         }
 
         KernelEngine.unregisterWindow(window_uid);
-    }
-
-    playAnimation(window_uid: string, sequence: AnimationSequence): void {
-        const exists = KernelEngine.readMemory(this.deps.windowMemoryUid(window_uid)) as WindowConfig | undefined;
-        if (!exists) {
-            this.pendingAnimations.set(window_uid, sequence);
-            return;
-        }
-
-        this.pendingAnimations.delete(window_uid);
-        this.deps.animationController.playAnimation(window_uid, sequence);
     }
 }

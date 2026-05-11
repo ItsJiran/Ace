@@ -4,6 +4,7 @@ import { WindowEngine } from './windowEngine';
 import { GlobalStateManager } from './globalStateManager';
 import { ConfigEngine } from './configEngine';
 import type { Keybind } from '#/schemas/keybinds';
+import { isElectronRuntime } from '#/services/runtime/desktopHost';
 
 class KeybindEngineSingleton {
     private isInitialized = false;
@@ -12,6 +13,7 @@ class KeybindEngineSingleton {
     private activeKeybinds: Keybind[] = [];
     private keybindsUnsub?: () => void;
     private handleKeyDownRef?: (event: KeyboardEvent) => void;
+    private electronShortcutUnsub?: () => void;
     private lastTriggeredByUid = new Map<string, number>();
     private readonly triggerCooldownMs = 220;
     private _lastKeybindsRaw: unknown = undefined;
@@ -86,7 +88,7 @@ class KeybindEngineSingleton {
             }
 
             const canonicalShortcut = this.canonicalizeShortcut(matchedKeybind.shortcut);
-            if (this.isTauriRuntime() && this.globallyRegisteredShortcuts.has(canonicalShortcut)) {
+            if (this.globallyRegisteredShortcuts.has(canonicalShortcut)) {
                 if (import.meta.env.DEV) {
                     console.log('[KeybindEngine] Skipping local keydown because shortcut is handled globally:', canonicalShortcut);
                 }
@@ -98,6 +100,17 @@ class KeybindEngineSingleton {
         };
 
         window.addEventListener('keydown', this.handleKeyDownRef);
+
+        if (isElectronRuntime()) {
+            this.electronShortcutUnsub?.();
+            this.electronShortcutUnsub = window.electronAPI?.onGlobalShortcut((accelerator) => {
+                const canonicalRegistered = this.canonicalizeShortcut(accelerator);
+                const matched = this.activeKeybinds.find((bind) => this.canonicalizeShortcut(bind.shortcut) === canonicalRegistered);
+                if (!matched) return;
+                this.triggerKeybind(matched, 'global');
+            });
+        }
+
         this.isInitialized = true;
     }
 
@@ -179,53 +192,25 @@ class KeybindEngineSingleton {
     }
 
     private async syncGlobalShortcutRegistrations() {
-        if (!this.isTauriRuntime()) return;
+        if (isElectronRuntime()) {
+            const shortcuts = [...new Set(this.activeKeybinds.map((bind) => this.toPluginShortcut(bind.shortcut)).filter(Boolean))];
+            try {
+                const registered = await window.electronAPI?.syncGlobalShortcuts(shortcuts);
+                this.globallyRegisteredShortcuts.clear();
+                for (const shortcut of registered ?? []) {
+                    this.globallyRegisteredShortcuts.add(this.canonicalizeShortcut(shortcut));
+                }
 
-        try {
-            const { register, unregisterAll } = await import('@tauri-apps/plugin-global-shortcut');
-            await unregisterAll();
-            this.globallyRegisteredShortcuts.clear();
-
-            const shortcuts = [...new Set(this.activeKeybinds.map((bind) => bind.shortcut).filter(Boolean))];
-            if (shortcuts.length === 0) {
                 if (import.meta.env.DEV) {
-                    console.log('[KeybindEngine] No active global shortcuts to register.');
+                    console.log('[KeybindEngine] Electron global shortcuts registered:', registered ?? []);
                 }
-                return;
+            } catch (error) {
+                console.warn('[KeybindEngine] Failed to sync Electron global shortcuts:', error);
             }
-
-            const registered: string[] = [];
-
-            for (const shortcut of shortcuts) {
-                try {
-                    const pluginShortcut = this.toPluginShortcut(shortcut);
-                    const canonicalRegistered = this.canonicalizeShortcut(pluginShortcut);
-
-                    await register(pluginShortcut, (event) => {
-                        if (event.state !== 'Pressed') return;
-
-                        // Do not trust `event.shortcut` textual format across platforms.
-                        // We already know which shortcut this callback belongs to.
-                        const matched = this.activeKeybinds.find((bind) => {
-                            return this.canonicalizeShortcut(bind.shortcut) === canonicalRegistered;
-                        });
-
-                        if (!matched) return;
-                        this.triggerKeybind(matched, 'global');
-                    });
-                    registered.push(pluginShortcut);
-                    this.globallyRegisteredShortcuts.add(canonicalRegistered);
-                } catch (error) {
-                    console.warn(`[KeybindEngine] Global shortcut rejected by OS: ${shortcut}`, error);
-                }
-            }
-
-            if (import.meta.env.DEV) {
-                console.log('[KeybindEngine] Global shortcuts registered:', registered);
-            }
-        } catch (error) {
-            console.warn('[KeybindEngine] Failed to sync global shortcuts:', error);
+            return;
         }
+
+        this.globallyRegisteredShortcuts.clear();
     }
 
     private triggerKeybind(matchedKeybind: Keybind, source: 'local' | 'global') {
@@ -257,11 +242,6 @@ class KeybindEngineSingleton {
         } finally {
             GlobalStateManager.clearRunningKeybind(matchedKeybind.keybind_uid);
         }
-    }
-
-    private isTauriRuntime() {
-        const runtimeWindow = window as Window & { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown };
-        return Boolean(runtimeWindow.__TAURI_INTERNALS__ || runtimeWindow.__TAURI__);
     }
 
     private toPluginShortcut(shortcut: string) {

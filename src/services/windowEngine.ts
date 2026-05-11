@@ -3,11 +3,8 @@ import { RegistryEngine } from './registryEngine';
 import { GlobalStateManager } from './globalStateManager';
 import { KernelEngine } from './kernelEngine';
 import type { WindowConfig } from '#/schemas/window';
-import type { AnimationSequence, BoundsAnchor } from '#/schemas/animation';
-import { WindowAnimationController } from './window/WindowAnimationController';
-import { WindowOverlayManager } from './window/WindowOverlayManager';
-import { WindowFocusManager } from './window/WindowFocusManager';
 import { WindowLifecycleManager } from './window/WindowLifecycleManager';
+import { focusHostDevtools, openHostDevtools } from '#/services/runtime/desktopHost';
 
 export interface SpawnWindowOptions {
     package?: string;
@@ -26,7 +23,6 @@ export interface SpawnWindowOptions {
     drag_surface?: 'header' | 'full';
     hide_ring?: boolean;
     z_index?: number;
-    animation_sequence?: AnimationSequence;
     parent_process_uid?: string;
 
     __skip_process_tracking?: boolean;
@@ -34,38 +30,17 @@ export interface SpawnWindowOptions {
 }
 
 class WindowEngineSingleton {
-    public readonly overlayStateMemoryUid = 'system:global_state:desktop';
-
     private highest_z_index = 100;
     private isRouteBound = false;
     private isTerminationHookBound = false;
 
-    private overlayManager: WindowOverlayManager;
-    private focusManager: WindowFocusManager;
     private lifecycleManager: WindowLifecycleManager;
-    private animationController: WindowAnimationController;
 
     constructor() {
-        this.overlayManager = new WindowOverlayManager();
-        
-        this.animationController = new WindowAnimationController(
-            (uid, x, y, w, h) => this.updateWindowBounds(uid, x, y, w, h, true),
-            (uid) => this.closeWindow(uid)
-        );
-
-        this.focusManager = new WindowFocusManager({
-            getHighestZIndex: () => this.highest_z_index,
-            bumpZIndex: () => { this.highest_z_index += 1; return this.highest_z_index; },
-            updateWindowConfig: (uid, updates) => this.updateWindowConfig(uid, updates),
-            setOverlayMode: (mode) => this.overlayManager.setOverlayMode(mode),
-            fireSetIgnoreCursorEvents: (ignore) => this.overlayManager.fireSetIgnoreCursorEvents(ignore),
-        });
-
         this.lifecycleManager = new WindowLifecycleManager({
             bumpZIndex: () => { this.highest_z_index += 1; return this.highest_z_index; },
-            focusWindow: (uid) => this.focusManager.focusWindow(uid),
+            focusWindow: (uid) => this.focusWindow(uid),
             updateWindowConfig: (uid, updates) => this.updateWindowConfig(uid, updates),
-            animationController: this.animationController,
             windowMemoryUid: (uid) => this.windowMemoryUid(uid),
             getRegistry: (pkg, slug) => this.getRegistry({ packageRef: pkg, slug }),
         });
@@ -77,9 +52,6 @@ class WindowEngineSingleton {
     }
 
     setupKernelSpace() {
-        this.overlayManager.setupKernelSpace();
-        WindowAnimationController.setupKernelSpace();
-        this.overlayManager.startBridges();
     }
 
     private registerTerminationHooks() {
@@ -134,7 +106,22 @@ class WindowEngineSingleton {
                     if (mode) this.setOverlayMode(mode);
                 }
                 if (action === 'debug_action') {
-                    await this.overlayManager.handleDebugAction(payload);
+                    if (payload?.action === 'toggle_debug_bg') {
+                        this.toggleDebugBg();
+                    }
+                    if (payload?.action === 'toggle_overlay_lock') {
+                        const state = GlobalStateManager.readDesktopState();
+                        KernelEngine.updateMemory('system:global_state:desktop', {
+                            ...state,
+                            is_overlay_locked: !state.is_overlay_locked,
+                        });
+                    }
+                    if (payload?.action === 'open_devtools') {
+                        await openHostDevtools();
+                    }
+                    if (payload?.action === 'focus_devtools') {
+                        await focusHostDevtools();
+                    }
                 }
                 if (action === 'close_window') {
                     const targetUid = payload?.window_uid || source?.window_uid;
@@ -157,15 +144,15 @@ class WindowEngineSingleton {
     }
 
     setOverlayMode(mode: 'ambient' | 'interactive') {
-        this.overlayManager.setOverlayMode(mode);
+        GlobalStateManager.setOverlayMode(mode);
     }
 
     toggleDebugBg() {
-        this.overlayManager.toggleDebugBg();
-    }
-
-    setMousePosition(x: number, y: number) {
-        GlobalStateManager.setCursorPosition(x, y);
+        const state = GlobalStateManager.readDesktopState();
+        KernelEngine.updateMemory('system:global_state:desktop', {
+            ...state,
+            debug_bg: !state.debug_bg,
+        });
     }
 
     spawnWindow(options: SpawnWindowOptions): string | null {
@@ -187,24 +174,37 @@ class WindowEngineSingleton {
     }
 
     focusWindow(window_uid: string) {
-        this.focusManager.focusWindow(window_uid);
-    }
+        const renderedWindows = KernelEngine.getRenderedWindows();
 
-    enterWindowSurface(window_uid: string) {
-        this.focusManager.enterWindowSurface(window_uid);
-    }
+        for (const renderedWindow of renderedWindows) {
+            const updates: Partial<WindowConfig> = {};
 
-    leaveWindowSurface(window_uid: string) {
-        this.focusManager.leaveWindowSurface(window_uid);
+            if (renderedWindow.uid === window_uid) {
+                this.highest_z_index += 1;
+                updates.z_index = this.highest_z_index;
+            }
+
+            this.updateWindowConfig(renderedWindow.uid, updates);
+        }
+
+        GlobalStateManager.setFocusedWindow(window_uid);
     }
 
     minimizeWindow(window_uid: string) {
-        this.focusManager.minimizeWindow(window_uid);
+        this.updateWindowConfig(window_uid, { is_minimized: true });
+
+        const focusedWindowUid = KernelEngine.readMemory('system:global_state:focused_window') as string | null | undefined;
+        if (focusedWindowUid === window_uid) {
+            GlobalStateManager.setFocusedWindow(null);
+        }
     }
 
     restoreWindow(window_uid: string) {
-        this.focusManager.restoreWindow(window_uid);
+        this.updateWindowConfig(window_uid, { is_minimized: false });
+        this.focusWindow(window_uid);
     }
+
+    // Update the bounds of a window, optionally skipping any animation effects (used for real-time dragging) 
 
     updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number, _skipMonolith = false) {
         const granularKey = this.windowMemoryUid(window_uid);
@@ -218,22 +218,6 @@ class WindowEngineSingleton {
             const nextConfig = { ...currentGranular, x, y, width, height };
             KernelEngine.updateMemory(granularKey, nextConfig);
         }
-    }
-
-    isAnimationLocked(window_uid: string): boolean {
-        return this.animationController.isAnimationLocked(window_uid);
-    }
-
-    playAnimation(window_uid: string, sequence: AnimationSequence): void {
-        this.lifecycleManager.playAnimation(window_uid, sequence);
-    }
-
-    cancelAnimation(window_uid: string): void {
-        this.animationController.cancelAnimation(window_uid);
-    }
-
-    retargetAnimation(window_uid: string, newTo: BoundsAnchor): void {
-        this.animationController.retargetAnimation(window_uid, newTo);
     }
 }
 

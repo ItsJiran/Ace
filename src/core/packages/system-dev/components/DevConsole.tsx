@@ -1,9 +1,9 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Layers, HardDrive, Share2, PaintBucket, Power, Activity, ListTree, Workflow, Wrench, PanelTop, Gauge, Flame } from 'lucide-react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { DesktopState } from '#/schemas/globalState';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { useAceEvent } from '#/hooks/useAceEvent';
+import { closeCurrentHostWindow } from '#/services/runtime/desktopHost';
 
 interface RuntimeRegistryDomains {
     windows?: Array<{
@@ -290,7 +290,7 @@ export default function SystemDevConsole() {
             </button>
 
             <button
-                onClick={() => getCurrentWindow().close()}
+                onClick={() => void closeCurrentHostWindow()}
                 className="flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors border mt-auto bg-red-950/60 border-red-800/50 text-red-300 hover:bg-red-900/80 hover:text-red-100"
             >
                 <Power size={14} className="text-red-400" />

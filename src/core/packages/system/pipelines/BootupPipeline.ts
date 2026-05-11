@@ -1,6 +1,5 @@
 import { PipelineEngine } from '#/services/pipelineEngine';
 import type { PipelineStep, PipelineContext } from '#/services/pipelineEngine';
-import { getCurrentWindow, currentMonitor, PhysicalSize, PhysicalPosition } from '@tauri-apps/api/window';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 
 export const registry: AceRegistryType.Pipeline = {
@@ -84,25 +83,7 @@ const InitWindowLayerStep: PipelineStep<void, void> = {
     execute: async () => {
         const WindowEngine = window.ACE.window;
 
-        try {
-            const runtimeWindow = window as Window & { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown };
-
-            if (runtimeWindow.__TAURI_INTERNALS__ || runtimeWindow.__TAURI__) {
-                const appWindow = getCurrentWindow();
-                const monitor = await currentMonitor();
-
-                if (monitor) {
-                    await appWindow.setSize(new PhysicalSize(monitor.size.width, monitor.size.height - 1));
-                    await appWindow.setPosition(new PhysicalPosition(0, 0));
-                }
-
-                await appWindow.show();
-            }
-        } catch (err) {
-            console.error('[Boot] Phase 3: Transparent layer setup failed:', err);
-        }
-
-        WindowEngine.setOverlayMode('ambient');
+        WindowEngine.setOverlayMode('interactive');
         console.log('[Boot] Phase 3: Window engine and transparent layer are ready.');
     }
 };
@@ -116,22 +97,13 @@ const InitGlobalInputHandlersStep: PipelineStep<void, void> = {
         const WindowEngine = window.ACE.window;
 
         if (typeof window !== 'undefined') {
-            // 1. Global ESC Failsafe: Always allow returning to ambient mode
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     WindowEngine.setOverlayMode('ambient');
                 }
             });
 
-            // 2. Global Context Menu Block: Prevent native browser context menu
-            window.addEventListener('contextmenu', (e) => {
-                // Allow if targeted explicitly by our components, otherwise block
-                if (!(e.target as HTMLElement).closest('[data-context-menu]')) {
-                    e.preventDefault();
-                }
-            }, { capture: true });
-
-            console.log('[Boot] Phase 4: Global input handlers attached (Minimal).');
+            console.log('[Boot] Phase 4: Global input handlers attached (Keyboard only).');
         }
     }
 };
