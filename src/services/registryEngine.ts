@@ -35,7 +35,7 @@ class RegistryEngineSingleton {
     /**
      * O(1) Lookup Index Structure
      */
-    private runtimeIndex = new Map<string, {
+    public runtimeIndex = new Map<string, {
         metadata: RegistryPackage['manifest'];
         package: RegistryPackage;
         domains: Record<string, Map<string, unknown>>;
@@ -213,12 +213,15 @@ class RegistryEngineSingleton {
      */
     resolveWindowComponent(query: string) {
         let entry = this.resolveEntry(query);
+        console.log('Esa',entry);
 
         // Fallback: If not found in 'windows' domain (implied by query), try 'components' domain
         if (!entry && query.includes(':windows:')) {
             const componentQuery = query.replace(':windows:', ':components:');
             entry = this.resolveEntry(componentQuery);
         }
+        console.log('Esa 2',entry);
+
 
         // If the entry is a config object (e.g. from a .ts file defining window props),
         // try to resolve the underlying React component it references.
@@ -240,6 +243,7 @@ class RegistryEngineSingleton {
             }
         }
 
+        console.log('Esa 3',entry);
         return entry;
     }
 

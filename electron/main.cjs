@@ -3,6 +3,8 @@ const path = require('path');
 
 const isDev = !app.isPackaged;
 let alwaysOnTopInterval = null;
+let mouseTrackingInterval = null;
+let lastMouseTrackingPayload = null;
 const registeredGlobalShortcuts = new Set();
 
 function getPrimaryWindow() {
@@ -14,6 +16,51 @@ function clearRegisteredGlobalShortcuts() {
         globalShortcut.unregister(accelerator);
     }
     registeredGlobalShortcuts.clear();
+}
+
+function stopMouseTracking() {
+    if (mouseTrackingInterval) {
+        clearInterval(mouseTrackingInterval);
+        mouseTrackingInterval = null;
+    }
+    lastMouseTrackingPayload = null;
+}
+
+function startMouseTracking() {
+    if (mouseTrackingInterval) {
+        return;
+    }
+
+    mouseTrackingInterval = setInterval(() => {
+        const currentWindow = getPrimaryWindow();
+        if (!currentWindow || currentWindow.isDestroyed()) {
+            return;
+        }
+
+        const point = screen.getCursorScreenPoint();
+        const bounds = currentWindow.getBounds();
+        const payload = {
+            x: point.x,
+            y: point.y,
+            isInsideApp:
+                point.x >= bounds.x &&
+                point.x < bounds.x + bounds.width &&
+                point.y >= bounds.y &&
+                point.y < bounds.y + bounds.height,
+        };
+
+        if (
+            lastMouseTrackingPayload &&
+            lastMouseTrackingPayload.x === payload.x &&
+            lastMouseTrackingPayload.y === payload.y &&
+            lastMouseTrackingPayload.isInsideApp === payload.isInsideApp
+        ) {
+            return;
+        }
+
+        lastMouseTrackingPayload = payload;
+        currentWindow.webContents.send('ace:screen:mouse-tracking', payload);
+    }, 50);
 }
 
 function createMainWindow() {
@@ -51,7 +98,7 @@ function createMainWindow() {
 
     const reassertAlwaysOnTop = () => {
         if (!mainWindow.isDestroyed()) {
-            mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            // mainWindow.setAlwaysOnTop(true, 'screen-saver');
         }
     };
 
@@ -117,6 +164,16 @@ app.whenReady().then(() => {
         }
 
         return window.getBounds();
+    });
+
+    ipcMain.handle('ace:screen:ignore-mouse-events', (event, ignore) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) {
+            return false;
+        }
+
+        window.setIgnoreMouseEvents(ignore, { forward: true });
+        return true;
     });
 
     ipcMain.handle('ace:screen:get-cursor-point', () => {
@@ -185,9 +242,28 @@ app.whenReady().then(() => {
         return true;
     });
 
+    ipcMain.handle('ace:window:focus-devtools', (event) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) {
+            return false;
+        }
+
+        window.webContents.openDevTools({ mode: 'detach', activate: true });
+
+        const devToolsContents = window.webContents.devToolsWebContents;
+        if (devToolsContents && !devToolsContents.isDestroyed()) {
+            devToolsContents.focus();
+        }
+
+        return true;
+    });
+
     ipcMain.handle('ace:app:platform', () => process.platform);
 
+    ipcMain.handle('ace:path:app-config-dir', () => app.getPath('userData'));
+
     createMainWindow();
+    startMouseTracking();
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -204,6 +280,8 @@ app.on('window-all-closed', () => {
         alwaysOnTopInterval = null;
     }
 
+    stopMouseTracking();
+
     if (process.platform !== 'darwin') {
         app.quit();
     }
@@ -211,4 +289,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
     clearRegisteredGlobalShortcuts();
+    stopMouseTracking();
 });

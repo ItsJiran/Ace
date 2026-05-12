@@ -1,12 +1,7 @@
-import { EventBus } from "./eventEngine";
 import { RegistryEngine } from "./registryEngine";
 import { GlobalStateManager } from "./globalStateManager";
 import { KernelEngine } from "./kernelEngine";
 import { WindowLifecycleManager } from "./window/WindowLifecycleManager";
-import {
-    focusHostDevtools,
-    openHostDevtools,
-} from "#/services/runtime/desktopHost";
 import type { WindowConfig, SpawnWindowOptions } from "#/schemas/window";
 
 class WindowEngineSingleton {

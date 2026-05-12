@@ -1,10 +1,11 @@
-import { EventBus } from './eventEngine';
+import { EventBus } from '#/services/eventEngine';
 import { KernelEngine } from './kernelEngine';
-import { WindowEngine } from './windowEngine';
 import { GlobalStateManager } from './globalStateManager';
-import { ConfigEngine } from './configEngine';
 import type { Keybind } from '#/schemas/keybinds';
 import { isElectronRuntime } from '#/services/runtime/desktopHost';
+import { injectDevKeybinds } from '#/services/keybind/devKeybinds';
+import { registerKeybindEventRoutes } from '#/services/keybind/eventRoutes';
+import { canonicalizeShortcut, matchesShortcut, toPluginShortcut } from '#/services/keybind/shortcutUtils';
 
 class KeybindEngineSingleton {
     private isInitialized = false;
@@ -47,7 +48,7 @@ class KeybindEngineSingleton {
             this.allKeybinds = Array.isArray(raw) ? raw as Keybind[] : [];
             
             if (import.meta.env.DEV) {
-                this.injectDevKeybinds();
+                injectDevKeybinds(this.allKeybinds);
             }
 
             this.activeKeybinds = this.allKeybinds.filter((bind) => bind.enabled);
@@ -119,76 +120,10 @@ class KeybindEngineSingleton {
         this.allKeybinds = Array.isArray(binds) ? binds as Keybind[] : [];
 
         if (import.meta.env.DEV) {
-            this.injectDevKeybinds();
+            injectDevKeybinds(this.allKeybinds);
         }
 
         this.activeKeybinds = this.allKeybinds.filter((bind) => bind.enabled);
-    }
-
-    private injectDevKeybinds() {
-        const id1 = 'dev.open_devtools';
-        if (!this.allKeybinds.some(k => k.keybind_uid === id1)) {
-           this.allKeybinds.push({
-               keybind_uid: id1,
-               shortcut: 'F12',
-               description: 'Open Browser DevTools (Dev Mode Only)',
-               enabled: true,
-               intent: {
-                   event_type: 'interaction',
-                   action: 'debug_action',
-                   sub_action: 'open_devtools',
-                   payload: { action: 'open_devtools' }
-               }
-           });
-        }
-
-        const id2 = 'dev.open_devtools_secondary';
-        if (!this.allKeybinds.some(k => k.keybind_uid === id2)) {
-            this.allKeybinds.push({
-               keybind_uid: id2,
-               shortcut: 'CommandOrControl+Shift+I',
-               description: 'Open Browser DevTools (Dev Mode Only) Secondary',
-               enabled: true,
-               intent: {
-                   event_type: 'interaction',
-                   action: 'debug_action',
-                   sub_action: 'open_devtools',
-                   payload: { action: 'open_devtools' }
-               }
-           });
-        }
-        
-        const id3 = 'dev.focus_devtools';
-        if (!this.allKeybinds.some(k => k.keybind_uid === id3)) {
-            this.allKeybinds.push({
-               keybind_uid: id3,
-               shortcut: 'CommandOrControl+Shift+J',
-               description: 'Focus Browser DevTools (Dev Mode Only)',
-               enabled: true,
-               intent: {
-                   event_type: 'interaction',
-                   action: 'debug_action',
-                   sub_action: 'focus_devtools',
-                   payload: { action: 'focus_devtools' }
-               }
-           });
-        }
-
-        const id4 = 'dev.toggle_lock';
-        if (!this.allKeybinds.some(k => k.keybind_uid === id4)) {
-            this.allKeybinds.push({
-               keybind_uid: id4,
-               shortcut: 'F9',
-               description: 'Toggle Interactive Lock Mode (Forces Overlay Interactive)',
-               enabled: true,
-               intent: {
-                   event_type: 'interaction',
-                   action: 'debug_action',
-                   sub_action: 'toggle_overlay_lock',
-                   payload: { action: 'toggle_overlay_lock' }
-               }
-           });
-        }
     }
 
     private async syncGlobalShortcutRegistrations() {
@@ -198,7 +133,7 @@ class KeybindEngineSingleton {
                 const registered = await window.electronAPI?.syncGlobalShortcuts(shortcuts);
                 this.globallyRegisteredShortcuts.clear();
                 for (const shortcut of registered ?? []) {
-                    this.globallyRegisteredShortcuts.add(this.canonicalizeShortcut(shortcut));
+                    this.globallyRegisteredShortcuts.add(canonicalizeShortcut(shortcut));
                 }
 
                 if (import.meta.env.DEV) {
@@ -246,142 +181,23 @@ class KeybindEngineSingleton {
 
     private toPluginShortcut(shortcut: string) {
         // Keep a stable token for plugin registration.
-        return shortcut
-            .replace(/cmdorcontrol/gi, 'CommandOrControl')
-            .replace(/command\s*\+\s*or\s*\+\s*control/gi, 'CommandOrControl');
+        return toPluginShortcut(shortcut);
     }
 
     private canonicalizeShortcut(shortcut: string) {
-        const tokens = shortcut
-            .split('+')
-            .map((token) => token.trim().toLowerCase())
-            .filter(Boolean)
-            .map((token) => {
-                if (token === 'cmdorcontrol' || token === 'commandorcontrol' || token === 'ctrl' || token === 'control' || token === 'meta' || token === 'command') {
-                    return 'mod';
-                }
-                if (token === 'option') return 'alt';
-                if (token === 'escape') return 'esc';
-                if (token.startsWith('key') && token.length === 4) return token.slice(3);
-                if (token.startsWith('digit') && token.length === 6) return token.slice(5);
-                return token;
-            });
-
-        const mods = ['mod', 'alt', 'shift'].filter((mod) => tokens.includes(mod));
-        const key = tokens.find((token) => token !== 'mod' && token !== 'alt' && token !== 'shift') ?? '';
-
-        return [...mods, key].join('+');
+        return canonicalizeShortcut(shortcut);
     }
 
     registerEventRoutes() {
         if (this.isRouteBound) return;
 
-        EventBus.registerProcessRoute('lookup', async (args) => {
-            if (args.sub_action === 'toggle_overlay_mode') {
-                const currentMode = GlobalStateManager.readDesktopState().mode;
-                WindowEngine.setOverlayMode(currentMode === 'ambient' ? 'interactive' : 'ambient');
-                return;
-            }
-
-            if (args.sub_action === 'set_window_mouse_focus' || args.sub_action === 'toggle_window_mouse_focus') {
-                const currentEnabled = KernelEngine.readMemory('system:global_state:mouse_focus_enabled') ?? true;
-                const rawEnabled = args.payload?.enabled;
-
-                // Behavior contract:
-                // - `toggle_window_mouse_focus` always flips state.
-                // - `set_window_mouse_focus` with explicit boolean sets that value,
-                //   but pressing the same set value again will flip (true toggle UX).
-                // - missing/invalid `enabled` falls back to toggle.
-                let enabled: boolean;
-                if (args.sub_action === 'toggle_window_mouse_focus') {
-                    enabled = !currentEnabled;
-                } else if (typeof rawEnabled === 'boolean') {
-                    enabled = rawEnabled === currentEnabled ? !currentEnabled : rawEnabled;
-                } else {
-                    enabled = !currentEnabled;
-                }
-
-                await ConfigEngine.updateConfigItem('window.mouse_focus_enabled', enabled, 'Window', 'Whether mouse presence/click on a window is allowed to focus and activate that window. If disabled, windows remain transparent to mouse focus behavior.');
-
-                GlobalStateManager.setMouseFocusEnabled(enabled);
-
-                if (!enabled) {
-                    WindowEngine.setOverlayMode('ambient');
-                } else {
-                    WindowEngine.setOverlayMode('interactive');
-                }
-            }
-        });
+        registerKeybindEventRoutes();
 
         this.isRouteBound = true;
     }
 
     private matchesShortcut(event: KeyboardEvent, shortcut: string) {
-        const tokens = shortcut.split('+').map((token) => token.trim().toLowerCase());
-        const keyToken = this.normalizeShortcutKeyToken(tokens[tokens.length - 1]);
-
-        const wantsCtrl = tokens.includes('commandorcontrol') || tokens.includes('control') || tokens.includes('ctrl');
-        const wantsAlt = tokens.includes('alt') || tokens.includes('option');
-        const wantsShift = tokens.includes('shift');
-        const wantsMeta = tokens.includes('command') || tokens.includes('meta');
-
-        const eventKeyCandidates = this.getEventKeyCandidates(event);
-
-        return Boolean(
-            event.ctrlKey === wantsCtrl &&
-            event.altKey === wantsAlt &&
-            event.shiftKey === wantsShift &&
-            event.metaKey === wantsMeta &&
-            eventKeyCandidates.has(keyToken)
-        );
-    }
-
-    private normalizeShortcutKeyToken(token: string) {
-        const raw = String(token || '').trim().toLowerCase();
-        if (raw === 'space') return 'space';
-        if (raw === 'esc' || raw === 'escape') return 'esc';
-        if (raw.startsWith('key') && raw.length === 4) return raw.slice(3);
-        if (raw.startsWith('digit') && raw.length === 6) return raw.slice(5);
-        return raw;
-    }
-
-    private getEventKeyCandidates(event: KeyboardEvent) {
-        const candidates = new Set<string>();
-
-        const key = String(event.key || '').toLowerCase();
-        const code = String(event.code || '').toLowerCase();
-
-        if (key) {
-            if (key === ' ') {
-                candidates.add('space');
-            } else if (key === 'escape') {
-                candidates.add('esc');
-            } else {
-                candidates.add(key);
-            }
-        }
-
-        if (code.startsWith('key') && code.length === 4) {
-            candidates.add(code.slice(3));
-        }
-        if (code.startsWith('digit') && code.length === 6) {
-            candidates.add(code.slice(5));
-        }
-        if (code.startsWith('numpad')) {
-            const tail = code.slice('numpad'.length);
-            if (tail) {
-                candidates.add(tail);
-                candidates.add(`numpad${tail}`);
-            }
-        }
-        if (code === 'space') {
-            candidates.add('space');
-        }
-        if (code === 'escape') {
-            candidates.add('esc');
-        }
-
-        return candidates;
+        return matchesShortcut(event, shortcut);
     }
 }
 

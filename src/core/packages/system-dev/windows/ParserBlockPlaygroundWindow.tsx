@@ -12,7 +12,7 @@ export const registry: AceRegistryType.Window = {
         width: 860,
         height: 560,
         title: 'Parser Block Playground',
-        chrome_style: 'standard',
+        window_style:'standard',
         is_locked: false,
         always_on_top: false,
     },

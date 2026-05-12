@@ -1,5 +1,5 @@
 import { KernelEngine } from './kernelEngine';
-import { EventBus } from './eventEngine';
+import { EventBus } from '#/services/eventEngine';
 import { WindowEngine } from './windowEngine';
 import { FSEngine } from './fsEngine';
 import type { LayoutSnapshot, WindowLayoutEntry } from '#/schemas/layout';

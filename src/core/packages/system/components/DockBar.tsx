@@ -2,13 +2,14 @@ import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Settings, Box, Bell, Terminal, Command } from 'lucide-react';
 import { useAceWindow } from '#/hooks/useAceWindow';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const registry: AceRegistryType.Component = {
     name: 'dock_bar',    slug: 'dock-bar',    react_behavior: 'dock_bar_ui',
 };
 
 export const DockBar = ({ windowUid }: { windowUid: string }) => {
     // Component consumes hook directly because it is a custom borderless shell deeply integrated with drag
-    const { dragHandleProps, isDragging } = useAceWindow(windowUid);
+    const { dragHandleProps } = useAceWindow(windowUid);
 
     const items = [
         { id: 'launcher', icon: <Command size={18} />, label: 'Launcher' },

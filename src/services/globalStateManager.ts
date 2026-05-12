@@ -101,6 +101,41 @@ class GlobalStateManagerSingleton {
         });
     }
 
+    setDebugBg(debug_bg: boolean) {
+        const state = this.readDesktopState();
+        if (state.debug_bg === debug_bg) return;
+
+        KernelEngine.updateMemory(this.desktopStateUid, {
+            ...state,
+            debug_bg,
+        });
+    }
+
+    toggleDebugBg() {
+        const state = this.readDesktopState();
+        this.setDebugBg(!state.debug_bg);
+    }
+
+    setOverlayLocked(is_overlay_locked: boolean) {
+        const state = this.readDesktopState();
+        if (state.is_overlay_locked === is_overlay_locked) return;
+
+        KernelEngine.updateMemory(this.desktopStateUid, {
+            ...state,
+            is_overlay_locked,
+        });
+    }
+
+    toggleOverlayLocked() {
+        const state = this.readDesktopState();
+        const nextLocked = !state.is_overlay_locked;
+
+        this.setOverlayLocked(nextLocked);
+        if (nextLocked) {
+            this.setOverlayMode('interactive');
+        }
+    }
+
     setFocusedWindow(focused_window_uid: string | null) {
         const current = KernelEngine.readMemory(this.focusedWindowMemoryUid);
         if (current === focused_window_uid) return;

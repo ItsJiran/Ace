@@ -1,18 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import { useAceMemory } from '#/hooks/useAceMemory';
-import { useProcessContext } from '#/hooks/useProcessContext';
-import { ProcessContextProvider } from '#/hooks/useProcessContext';
-import { WindowContextProvider } from '#/hooks/useWindowContext';
-import { initializeBridgeHooks, registerProcessContextHook } from '#/services/bridgeHooks';
-import type { DesktopState } from '#/schemas/globalState';
-import { useRenderCount } from '#/hooks/useRenderCount';
-import { MemoizedWindowItem } from '#/components/layout/MemoizedWindowItem';
-import type { KernelWindowEntry } from '#/services/kernelEngine/types';
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { useAceMemory } from "#/hooks/useAceMemory";
+import { ProcessContextProvider } from "#/hooks/useProcessContext";
+import { WindowContextProvider } from "#/hooks/useWindowContext";
+import type { DesktopState } from "#/schemas/globalState";
+import { useRenderCount } from "#/hooks/useRenderCount";
+import { MemoizedWindowItem } from "#/components/layout/MemoizedWindowItem";
+import type { KernelWindowEntry } from "#/services/kernelEngine/types";
+import { GlobalStateManager } from "#/services/globalStateManager";
 
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
-  const renderCount = useRenderCount('GlobalOverlay');
+  const renderCount = useRenderCount("GlobalOverlay");
 
   // 🚀 ACE BOOTUP: Trigger the ordered runtime boot sequence on mount
   useEffect(() => {
@@ -20,7 +19,7 @@ function App() {
 
     void (async () => {
       try {
-        const { bootACE } = await import('./boot');
+        const { bootACE } = await import("./boot");
         await bootACE();
         if (isMounted) {
           setIsBootReady(true);
@@ -29,7 +28,7 @@ function App() {
         if (isMounted) {
           setIsBootReady(false);
         }
-        console.error('[App] bootACE failed:', error);
+        console.error("[App] bootACE failed:", error);
       }
     })();
 
@@ -38,18 +37,30 @@ function App() {
     };
   }, []);
 
-  // [Phase E] Initialize bridge hooks after React mounts
-  // This allows external packages to access React hooks via window.ACE.hooks
   useEffect(() => {
-    if (isBootReady) {
-      initializeBridgeHooks();
-      registerProcessContextHook(useProcessContext);
+    if (!isBootReady || typeof window === "undefined" || !window.electronAPI?.onMouseTracking) {
+      return;
     }
+
+    const unsubscribe = window.electronAPI.onMouseTracking(({ x, y, isInsideApp }) => {
+      GlobalStateManager.setCursorPosition(x, y);
+      GlobalStateManager.setPointerInside(isInsideApp);
+      console.log(`[Mouse Tracking] x: ${x}, y: ${y}, isInsideApp: ${isInsideApp}`);
+    });
+
+    return () => {
+      unsubscribe();
+      GlobalStateManager.setPointerInside(false);
+    };
   }, [isBootReady]);
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
-  const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
-  const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>('system:window_system');
+  const overlayState = useAceMemory<DesktopState>(
+    "system:global_state:desktop",
+  );
+  const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>(
+    "system:window_system",
+  );
 
   const renderedWindowNodes = useMemo(() => {
     const nodes: ReactNode[] = [];
@@ -57,28 +68,32 @@ function App() {
 
     for (const entry of windowSystem.values()) {
       nodes.push(
-        <ProcessContextProvider key={entry.window_uid} process_uid={entry.process_uid}>
-          <WindowContextProvider window_uid={entry.window_uid} process_uid={entry.process_uid}>
-            <MemoizedWindowItem uid={entry.window_uid} component={entry.component} />
+        <ProcessContextProvider
+          key={entry.window_uid}
+          process_uid={entry.process_uid}
+        >
+          <WindowContextProvider
+            window_uid={entry.window_uid}
+            process_uid={entry.process_uid}
+          >
+            <MemoizedWindowItem
+              uid={entry.window_uid}
+              component={entry.component}
+            />
           </WindowContextProvider>
         </ProcessContextProvider>,
       );
     }
-
     return nodes;
   }, [windowSystem]);
 
-
   if (!isBootReady || !overlayState) return null;
-  const isAmbient = overlayState.mode === 'ambient';
+  const isAmbient = overlayState.mode === "ambient";
 
   return (
-    // 🚀 THE MAGIC WRAPPER
-    // Di Tauri, bg-transparent biasanya cukup, tapi 0.005 tetap aman digunakan
     <div
-     
       onContextMenu={(e) => e.preventDefault()}
-     style={{
+      style={{
         width: "100vw",
         height: "100vh",
         background: "transparent",

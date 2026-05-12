@@ -1,8 +1,10 @@
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { AceWindow } from '#/components/layout/AceWindow';
-import { X, Terminal } from 'lucide-react';
+import { AceWindowHead } from '#/components/layout/AceWindowHead';
+import { Terminal } from 'lucide-react';
 import SystemConsole from '../components/SystemConsole';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const registry: AceRegistryType.Window = {
     name: 'System Console Window',
     slug: 'system-console-window',
@@ -13,7 +15,7 @@ export const registry: AceRegistryType.Window = {
 export default function SystemConsoleWindow({ windowUid }: { windowUid: string }) {
     return (
         <AceWindow windowUid={windowUid} headless>
-            {({ dragHandleProps, close, isFocused, isDragging }) => (
+            {({ dragHandleProps, close, minimize, isFocused, isDragging }) => (
                 <div 
                     className={`w-full h-full flex flex-col transition-colors rounded-xl overflow-hidden ${
                          // PERF: Disable expensive backdrop blur completely
@@ -25,26 +27,14 @@ export default function SystemConsoleWindow({ windowUid }: { windowUid: string }
                     }`}
                 >
                     {/* Window Chrome / Titlebar */}
-                    <div 
-                        {...dragHandleProps}
-                        className={`flex items-center justify-between px-3 py-2 border-b bg-white/5 cursor-grab active:cursor-grabbing ${
-                            isFocused ? 'border-white/10' : 'border-white/5'
-                        }`}
-                    >
-                        <div className="flex items-center gap-2">
-                            <Terminal size={14} className={isFocused ? 'text-zinc-300' : 'text-zinc-500'} />
-                            <span className={`text-[10px] uppercase font-bold tracking-widest ${
-                                isFocused ? 'text-zinc-400' : 'text-zinc-600'
-                            }`}>System Logs</span>
-                        </div>
-                        
-                        <button 
-                            onClick={() => close()}
-                            className="text-zinc-500 hover:text-white transition-colors"
-                        >
-                            <X size={14} />
-                        </button>
-                    </div>
+                    <AceWindowHead
+                        title="System Logs"
+                        icon={<Terminal size={14} />}
+                        dragHandleProps={dragHandleProps}
+                        isFocused={isFocused}
+                        onMinimize={minimize}
+                        onClose={close}
+                    />
 
                     {/* Content Area */}
                     <div className="flex-1 overflow-hidden relative border-x border-b border-white/10 rounded-b-xl">

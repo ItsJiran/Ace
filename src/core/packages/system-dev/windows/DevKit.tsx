@@ -13,7 +13,7 @@ export const registry: AceRegistryType.Window = {
         width: 340,
         height: 600,
         title: 'Dev Kit',
-        chrome_style: 'standard',
+        window_style: 'standard',
         is_locked: false,
         always_on_top: false,
     },

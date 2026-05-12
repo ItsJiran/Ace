@@ -6,7 +6,7 @@ import { useAceMemory } from '#/hooks/useAceMemory';
 import { useAceEvent } from '#/hooks/useAceEvent';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { RenderCounterBadge } from '#/components/dev/RenderCounterBadge';
-import { closeCurrentHostWindow } from '#/services/runtime/desktopHost';
+import { closeCurrentHostWindow, focusHostDevtools } from '#/services/runtime/desktopHost';
 
 export const registry: AceRegistryType.Component = {
     name: 'dev_menu',
@@ -262,7 +262,7 @@ export default function DevMenu() {
     };
 
     const openDevTools = () => {
-        emitDebugAction({ action: 'open_devtools' });
+        void focusHostDevtools();
     };
 
     const toggleFPS = () => {

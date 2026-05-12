@@ -1,113 +1,20 @@
-import { BaseDirectory, writeTextFile, readTextFile, exists, mkdir, readDir, remove } from '@tauri-apps/plugin-fs';
-import { appConfigDir, homeDir, join, normalize } from '@tauri-apps/api/path';
-
-// Late binding to avoid circular dep: processEngine → registryEngine → fsEngine → processEngine
-type ProcessTracker = {
-    track: <T>(type: string, meta: Record<string, any>, fn: (uid: string) => Promise<T>) => Promise<T>;
-};
-const getProcessEngine = (): ProcessTracker | null =>
-    (typeof window !== 'undefined' ? (window as any).ACE?.process : null) ?? null;
+import { FsFallbackStorage } from '#/services/fs/fallbackStorage';
+import { resolveAppConfigPath, resolveFsTarget } from '#/services/fs/pathResolution';
+import { fsRuntimeHost } from '#/services/fs/runtimeHost';
 
 class FSEngineSingleton {
     private hasShownPermissionPopup = false;
-    private readonly fallbackPrefix = 'ace:appconfig:';
-
-    private readonly homePathPattern = /^(~(?:[\\/]|$)|[a-zA-Z]:[\\/]|\\\\|\/)/;
-
-    private toFsOptions(baseDir?: BaseDirectory) {
-        return baseDir ? { baseDir } : undefined;
-    }
-
-    private normalizeSeparators(value: string): string {
-        return value.replace(/\\/g, '/');
-    }
-
-    private async resolveFsTarget(path: string): Promise<{
-        requested_path: string;
-        fs_path: string;
-        absolute_path: string;
-        baseDir?: BaseDirectory;
-        isExternal: boolean;
-    }> {
-        const requested_path = path.trim();
-        if (!requested_path) {
-            throw new Error('FSEngine: path is required');
-        }
-
-        if (!this.homePathPattern.test(requested_path)) {
-            return {
-                requested_path,
-                fs_path: requested_path,
-                absolute_path: await this.resolveAppConfigPath(requested_path),
-                baseDir: BaseDirectory.AppConfig,
-                isExternal: false,
-            };
-        }
-
-        const home = await homeDir();
-        const normalizedHome = this.normalizeSeparators(await normalize(home)).replace(/\/$/, '');
-
-        if (requested_path === '~' || requested_path.startsWith('~/') || requested_path.startsWith('~\\')) {
-            const relativePath = requested_path === '~' ? '' : requested_path.slice(2);
-            const absolute_path = relativePath ? await join(home, relativePath) : home;
-            return {
-                requested_path,
-                fs_path: absolute_path,
-                absolute_path,
-                isExternal: true,
-            };
-        }
-
-        const absolute_path = await normalize(requested_path);
-        const normalizedAbsolute = this.normalizeSeparators(absolute_path);
-        if (normalizedAbsolute !== normalizedHome && !normalizedAbsolute.startsWith(`${normalizedHome}/`)) {
-            throw new Error(`FSEngine: external path must stay inside current user home: ${requested_path}`);
-        }
-
-        return {
-            requested_path,
-            fs_path: absolute_path,
-            absolute_path,
-            isExternal: true,
-        };
-    }
-
-    private getFallbackKey(filename: string): string {
-        return `${this.fallbackPrefix}${filename}`;
-    }
-
-    private readFallbackRaw(filename: string): string | null {
-        if (typeof window === 'undefined' || !window.localStorage) return null;
-        try {
-            return window.localStorage.getItem(this.getFallbackKey(filename));
-        } catch {
-            return null;
-        }
-    }
-
-    private writeFallbackRaw(filename: string, content: string): boolean {
-        if (typeof window === 'undefined' || !window.localStorage) return false;
-        try {
-            window.localStorage.setItem(this.getFallbackKey(filename), content);
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
-    private hasFallbackFile(filename: string): boolean {
-        return this.readFallbackRaw(filename) !== null;
-    }
+    private readonly fallbackStorage = new FsFallbackStorage('ace:appconfig:');
 
     /**
      * Ensures a directory exists in the App Data directory.
      */
     async createDirectory(path: string): Promise<boolean> {
         try {
-            const target = await this.resolveFsTarget(path);
-            const dirExists = await exists(target.fs_path, this.toFsOptions(target.baseDir));
+                        const target = await resolveFsTarget(fsRuntimeHost, path);
+                        const dirExists = await fsRuntimeHost.exists(target.fs_path, target.baseDir);
             if (!dirExists) {
-                 await mkdir(target.fs_path, { ...this.toFsOptions(target.baseDir), recursive: true });
+                                await fsRuntimeHost.mkdir(target.fs_path, target.baseDir);
             }
             return true;
         } catch (error) {
@@ -121,8 +28,8 @@ class FSEngineSingleton {
      */
     async readDirectory(path: string) {
         try {
-            const target = await this.resolveFsTarget(path);
-            return await readDir(target.fs_path, this.toFsOptions(target.baseDir));
+            const target = await resolveFsTarget(fsRuntimeHost, path);
+            return await fsRuntimeHost.readDir(target.fs_path, target.baseDir);
         } catch (error) {
             console.error(`FSEngine: Failed to read directory ${path}:`, error);
             return [];
@@ -134,18 +41,17 @@ class FSEngineSingleton {
      */
     async writeFile(filename: string, content: string): Promise<boolean> {
         try {
-            const target = await this.resolveFsTarget(filename);
-            await writeTextFile(target.fs_path, content, this.toFsOptions(target.baseDir));
+            const target = await resolveFsTarget(fsRuntimeHost, filename);
+            await fsRuntimeHost.writeTextFile(target.fs_path, content, target.baseDir);
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to write file ${filename}:`, error);
             this.showPermissionDeniedPopup(filename, error);
-            const target = await this.resolveFsTarget(filename).catch(() => null);
+            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
             if (target?.isExternal) {
                 return false;
             }
-            // Dev/runtime fallback (non-Tauri or denied capability)
-            const fallbackOk = this.writeFallbackRaw(filename, content);
+            const fallbackOk = this.fallbackStorage.writeRaw(filename, content);
             if (fallbackOk) {
                 console.warn(`FSEngine: write fallback to localStorage for ${filename}`);
             }
@@ -157,41 +63,41 @@ class FSEngineSingleton {
      * Ensures a JSON file exists in the App Data directory.
      * If not, it writes the default data.
      */
-    async ensureFile(filename: string, defaultData: any): Promise<boolean> {
+    async ensureFile(filename: string, defaultData: unknown): Promise<boolean> {
         try {
-            const target = await this.resolveFsTarget(filename);
-            const fileExists = await exists(target.fs_path, this.toFsOptions(target.baseDir));
+            const target = await resolveFsTarget(fsRuntimeHost, filename);
+            const fileExists = await fsRuntimeHost.exists(target.fs_path, target.baseDir);
             if (!fileExists) {
                 return await this.saveFile(filename, defaultData);
             }
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to ensure file ${filename}:`, error);
-            const target = await this.resolveFsTarget(filename).catch(() => null);
+            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
             if (target?.isExternal) {
                 return false;
             }
-            if (this.hasFallbackFile(filename)) {
+            if (this.fallbackStorage.hasFile(filename)) {
                 return true;
             }
             return await this.saveFile(filename, defaultData);
         }
     }
 
-    async saveFile(filename: string, data: any): Promise<boolean> {
+    async saveFile(filename: string, data: unknown): Promise<boolean> {
         const content = JSON.stringify(data, null, 2);
         try {
-            const target = await this.resolveFsTarget(filename);
-            await writeTextFile(target.fs_path, content, this.toFsOptions(target.baseDir));
+            const target = await resolveFsTarget(fsRuntimeHost, filename);
+            await fsRuntimeHost.writeTextFile(target.fs_path, content, target.baseDir);
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to save file ${filename}:`, error);
             this.showPermissionDeniedPopup(filename, error);
-            const target = await this.resolveFsTarget(filename).catch(() => null);
+            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
             if (target?.isExternal) {
                 return false;
             }
-            const fallbackOk = this.writeFallbackRaw(filename, content);
+            const fallbackOk = this.fallbackStorage.writeRaw(filename, content);
             if (fallbackOk) {
                 console.warn(`FSEngine: save fallback to localStorage for ${filename}`);
             }
@@ -201,16 +107,16 @@ class FSEngineSingleton {
 
     async readFile(filename: string) {
         try {
-            const target = await this.resolveFsTarget(filename);
-            const content = await readTextFile(target.fs_path, this.toFsOptions(target.baseDir));
+            const target = await resolveFsTarget(fsRuntimeHost, filename);
+            const content = await fsRuntimeHost.readTextFile(target.fs_path, target.baseDir);
             return JSON.parse(content);
         } catch (error) {
             console.error(`FSEngine: Failed to read file ${filename}:`, error);
-            const target = await this.resolveFsTarget(filename).catch(() => null);
+            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
             if (target?.isExternal) {
                 return null;
             }
-            const fallbackRaw = this.readFallbackRaw(filename);
+            const fallbackRaw = this.fallbackStorage.readRaw(filename);
             if (fallbackRaw !== null) {
                 try {
                     return JSON.parse(fallbackRaw);
@@ -227,15 +133,15 @@ class FSEngineSingleton {
      */
     async readRaw(filename: string): Promise<string | null> {
         try {
-            const target = await this.resolveFsTarget(filename);
-            return await readTextFile(target.fs_path, this.toFsOptions(target.baseDir));
+            const target = await resolveFsTarget(fsRuntimeHost, filename);
+            return await fsRuntimeHost.readTextFile(target.fs_path, target.baseDir);
         } catch (error) {
             console.error(`FSEngine: Failed to read raw file ${filename}:`, error);
-            const target = await this.resolveFsTarget(filename).catch(() => null);
+            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
             if (target?.isExternal) {
                 return null;
             }
-            return this.readFallbackRaw(filename);
+            return this.fallbackStorage.readRaw(filename);
         }
     }
 
@@ -244,8 +150,8 @@ class FSEngineSingleton {
      */
     async deleteFile(filename: string): Promise<boolean> {
         try {
-            const target = await this.resolveFsTarget(filename);
-            await remove(target.fs_path, this.toFsOptions(target.baseDir));
+            const target = await resolveFsTarget(fsRuntimeHost, filename);
+            await fsRuntimeHost.remove(target.fs_path, target.baseDir);
             return true;
         } catch (error) {
             console.error(`FSEngine: Failed to delete file ${filename}:`, error);
@@ -259,8 +165,7 @@ class FSEngineSingleton {
      */
     async resolveAppConfigPath(filename: string): Promise<string> {
         try {
-            const base = await appConfigDir();
-            return await join(base, filename);
+            return await resolveAppConfigPath(fsRuntimeHost, filename);
         } catch {
             // Fallback when path API is unavailable (e.g. web runtime)
             return `AppConfig:${filename}`;
@@ -269,86 +174,11 @@ class FSEngineSingleton {
 
     async resolvePath(filename: string): Promise<string> {
         try {
-            const target = await this.resolveFsTarget(filename);
+            const target = await resolveFsTarget(fsRuntimeHost, filename);
             return target.absolute_path;
         } catch {
             return `Unknown:${filename}`;
         }
-    }
-
-    /**
-     * Wrapped variants: run a file operation as a tracked ProcessEngine record.
-     * Useful when callers want process-level observability.
-     */
-    async trackedRead(
-        filename: string,
-        options?: { parent_process_uid?: string },
-    ): Promise<ReturnType<FSEngineSingleton['readFile']>> {
-        const pe = getProcessEngine();
-        if (!pe) return this.readFile(filename);
-        return pe.track(
-            'fs:read_file',
-            { filename },
-            () => this.readFile(filename),
-            {
-                parent_process_uid: options?.parent_process_uid,
-                process_kind: 'fs_task',
-                owner_engine: 'fsEngine',
-                payload: {
-                    status: 'running',
-                    operation: 'read_file',
-                    filename,
-                },
-            },
-        );
-    }
-
-    async trackedWrite(
-        filename: string,
-        content: string,
-        options?: { parent_process_uid?: string },
-    ): Promise<boolean> {
-        const pe = getProcessEngine();
-        if (!pe) return this.writeFile(filename, content);
-        return pe.track(
-            'fs:write_file',
-            { filename },
-            () => this.writeFile(filename, content),
-            {
-                parent_process_uid: options?.parent_process_uid,
-                process_kind: 'fs_task',
-                owner_engine: 'fsEngine',
-                payload: {
-                    status: 'running',
-                    operation: 'write_file',
-                    filename,
-                },
-            },
-        );
-    }
-
-    async trackedSave(
-        filename: string,
-        data: unknown,
-        options?: { parent_process_uid?: string },
-    ): Promise<boolean> {
-        const pe = getProcessEngine();
-        if (!pe) return this.saveFile(filename, data);
-        return pe.track(
-            'fs:save_file',
-            { filename },
-            () => this.saveFile(filename, data),
-            {
-                parent_process_uid: options?.parent_process_uid,
-                process_kind: 'fs_task',
-                owner_engine: 'fsEngine',
-                payload: {
-                    status: 'running',
-                    operation: 'save_file',
-                    filename,
-                },
-            },
-        );
     }
 
     private showPermissionDeniedPopup(filename: string, error: unknown) {

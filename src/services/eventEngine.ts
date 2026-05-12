@@ -127,13 +127,13 @@ class EventEngineSingleton {
             
         const allHandlers = [...specificHandlers, ...broadHandlers];
 
+
         if (allHandlers.length === 0) {
             console.warn(`[EventBus] No process is listening to action route: ${normalized.action} or ${specificRouteKey}`);
             this.logEvent(normalized, 'dropped');
             return;
         }
 
-        this.logEvent(normalized, 'routed');
 
         // Construct the Unified Handler Argument
         const coreArgs: CoreEngineHandlerArgs<any> = {

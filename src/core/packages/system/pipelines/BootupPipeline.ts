@@ -1,6 +1,13 @@
 import { PipelineEngine } from '#/services/pipelineEngine';
 import type { PipelineStep, PipelineContext } from '#/services/pipelineEngine';
 import type { AceRegistryType } from '#/schemas/registryTypes';
+import { GlobalStateManager } from '#/services/globalStateManager';
+import {
+  initializeBridgeHooks,
+  registerProcessContextHook,
+} from "#/services/bridgeHooks";
+import { useProcessContext } from '#/hooks/useProcessContext';
+import { RegistryEngine } from '#/services/registryEngine';
 
 export const registry: AceRegistryType.Pipeline = {
     name: 'bootup_sequence',
@@ -53,6 +60,7 @@ const InitConfigAndGlobalStateStep: PipelineStep<void, void> = {
         console.log('Installed packages:', packages.map((pkg: { package_name: string }) => pkg.package_name));
 
         for (const pkg of packages) {
+            console.log(`Package: ${Object.keys(pkg)}`);
             console.group(`[Package] ${pkg.package_name}`);
 
             for (const [domainName, domainEntries] of Object.entries(pkg.domains)) {
@@ -78,12 +86,14 @@ const InitConfigAndGlobalStateStep: PipelineStep<void, void> = {
 /**
  * Phase 3: Window Layer & Transparent Overlay
  */
-const InitWindowLayerStep: PipelineStep<void, void> = {
-    name: 'Init Window Layer',
+const InitGlobalState: PipelineStep<void, void> = {
+    name: 'Init Global State Layer',
     execute: async () => {
-        const WindowEngine = window.ACE.window;
+        GlobalStateManager.setOverlayMode('interactive'); 
 
-        WindowEngine.setOverlayMode('interactive');
+        console.log('Esa',RegistryEngine.getPackages());
+        console.log('Esa',RegistryEngine.runtimeIndex);
+
         console.log('[Boot] Phase 3: Window engine and transparent layer are ready.');
     }
 };
@@ -94,12 +104,10 @@ const InitWindowLayerStep: PipelineStep<void, void> = {
 const InitGlobalInputHandlersStep: PipelineStep<void, void> = {
     name: 'Init Global Input Handlers',
     execute: async () => {
-        const WindowEngine = window.ACE.window;
-
         if (typeof window !== 'undefined') {
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
-                    WindowEngine.setOverlayMode('ambient');
+                    GlobalStateManager.setOverlayMode('ambient'); 
                 }
             });
 
@@ -197,16 +205,26 @@ const InitEngineRoutesStep: PipelineStep<void, void> = {
     }
 };
 
+const InitializeBridgeHooksStep: PipelineStep<void, void> = {
+    name: 'Initialize Bridge Hooks',
+    execute: async () => {
+        initializeBridgeHooks();
+        registerProcessContextHook(useProcessContext);
+        console.log('[Boot] Bridge hooks initialized and registered to window.ACE.hooks');
+    }
+};
+
 export class BootupPipeline extends PipelineEngine<void, void> {
     constructor() {
         super('Bootup Sequence'); // argument is void
         this.addStep(InitCoreRuntimeBedStep);
         this.addStep(InitConfigAndGlobalStateStep);
-        this.addStep(InitWindowLayerStep);
+        this.addStep(InitGlobalState);
         this.addStep(InitGlobalInputHandlersStep);
         this.addStep(InitAutoStartWidgetsStep);
         this.addStep(InitLayoutEngineStep);
         this.addStep(InitEngineRoutesStep);
+        this.addStep(InitializeBridgeHooksStep);
     }
 }
 

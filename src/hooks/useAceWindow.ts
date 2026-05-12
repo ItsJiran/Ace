@@ -1,10 +1,76 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import type { PanInfo } from 'framer-motion';
 import type { WindowConfig } from '#/schemas/window';
 import { WindowEngine } from '#/services/windowEngine';
-import { KernelEngine } from '#/services/kernelEngine';
 import { GlobalStateManager } from '#/services/globalStateManager';
 import { useAceMemory, useAceMemorySelector } from '#/hooks/useAceMemory';
+
+type DragStartEvent = ReactMouseEvent<HTMLElement> | React.PointerEvent<HTMLElement>;
+type ResizeStartEvent = React.PointerEvent<HTMLElement>;
+type ResizeDirection = 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+
+const MIN_WINDOW_WIDTH = 240;
+const MIN_WINDOW_HEIGHT = 160;
+
+export interface AceWindowRenderProps {
+    dragHandleProps: {
+        onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+    };
+    resizeHandleProps: {
+        onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+    };
+    getResizeHandleProps: (direction: ResizeDirection) => {
+        onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+    };
+    close: () => void;
+    minimize: () => void;
+    focus: () => void;
+    isFocused: boolean;
+    isDragging: boolean;
+    isResizing: boolean;
+    isLocked: boolean;
+    canCapturePointer: boolean;
+    windowUid: string;
+    windowConfig?: WindowConfig;
+}
+
+export interface AceWindowHookResult extends AceWindowRenderProps {
+    rootStyle: CSSProperties;
+    position: {
+        x: number;
+        y: number;
+    };
+    size: {
+        width: number;
+        height: number;
+    };
+    isHovered: boolean;
+    isMounted: boolean;
+    setOpacity: (opacity: number) => void;
+    updateConfig: (partial: Partial<WindowConfig>) => void;
+    updateBounds: (x: number, y: number, width: number, height: number) => void;
+    toggleLock: () => void;
+    toggleAlwaysOnTop: () => void;
+    beginDrag: (event: DragStartEvent, startDrag?: () => void) => void;
+    handleDragStart: () => void;
+    handleDrag: (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
+    handleDragEnd: (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
+    handlePointerEnter: () => void;
+    handlePointerLeave: () => void;
+    beginResize: (direction: ResizeDirection, event: ResizeStartEvent) => void;
+    ref: React.RefObject<HTMLDivElement | null>;
+}
+
+type ResizeSession = {
+    direction: ResizeDirection;
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+    startWidth: number;
+    startHeight: number;
+};
 
 // -----------------------------------------------------------------------------
 // Hook Contract Types
@@ -25,7 +91,7 @@ import { useAceMemory, useAceMemorySelector } from '#/hooks/useAceMemory';
  * - This hook does not render any DOM.
  * - Consumers own all markup and CSS.
  */
-export function useAceWindow(window_uid : string): any {
+export function useAceWindow(window_uid : string): AceWindowHookResult {
     // -------------------------------------------------------------------------
     // Runtime Memory Subscriptions
     // -------------------------------------------------------------------------
@@ -48,6 +114,7 @@ export function useAceWindow(window_uid : string): any {
 
     const [isMounted, setIsMounted] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const isFocused = useAceMemorySelector<string | null, boolean>(
         'system:global_state:focused_window',
@@ -60,17 +127,35 @@ export function useAceWindow(window_uid : string): any {
     // Only commit to global on drag-end.
     const [localX, setLocalX] = useState<number | null>(null);
     const [localY, setLocalY] = useState<number | null>(null);
+    const [localWidth, setLocalWidth] = useState<number | null>(null);
+    const [localHeight, setLocalHeight] = useState<number | null>(null);
+    const dragOriginRef = useRef({ x: 0, y: 0 });
+    const resizeSessionRef = useRef<ResizeSession>({
+        direction: 'se',
+        startX: 0,
+        startY: 0,
+        startLeft: 0,
+        startTop: 0,
+        startWidth: 0,
+        startHeight: 0,
+    });
 
     // Initialize local position when config first becomes available.
     // Important: config for string input may arrive AFTER mount from RAM sync.
     useEffect(() => {
-        
-        if (windowConfig && localX === null && localY === null) {
-            setLocalX(windowConfig.x);
-            setLocalY(windowConfig.y);
+        if (!windowConfig || isDragging || isResizing) {
+            return;
         }
 
-    }, [windowConfig, localX, localY]);
+        const frameId = window.requestAnimationFrame(() => {
+            setLocalX((currentX) => currentX === null || currentX !== windowConfig.x ? windowConfig.x : currentX);
+            setLocalY((currentY) => currentY === null || currentY !== windowConfig.y ? windowConfig.y : currentY);
+            setLocalWidth((currentWidth) => currentWidth === null || currentWidth !== windowConfig.width ? windowConfig.width : currentWidth);
+            setLocalHeight((currentHeight) => currentHeight === null || currentHeight !== windowConfig.height ? windowConfig.height : currentHeight);
+        });
+
+        return () => window.cancelAnimationFrame(frameId);
+    }, [windowConfig, isDragging, isResizing]);
 
     useEffect(() => {
         const id = window.setTimeout(() => setIsMounted(true), 10);
@@ -85,7 +170,6 @@ export function useAceWindow(window_uid : string): any {
     // Keep a renderable `isHovered` derived from state so consumers re-render when hover changes
 
     const isLocked = windowConfig?.is_locked ?? false;
-    const windowStyle = windowConfig?.window_style ?? 'standard';
     const canCapturePointer = mouseFocusEnabled;
 
     // -------------------------------------------------------------------------
@@ -141,66 +225,204 @@ export function useAceWindow(window_uid : string): any {
     // -------------------------------------------------------------------------
 
     const beginDrag = useCallback(
-        (e: ReactMouseEvent<HTMLElement>) => {
+        (event: DragStartEvent, startDrag?: () => void) => {
             if (!windowConfig || !canCapturePointer || windowConfig.is_locked) return;
-            if (e.button !== 0) return;
+            if ('button' in event && event.button !== 0) return;
 
             // Prevent multiple concurrent drag initiations which cause RAF loops to clash
             if (elementRef.current?.dataset.isDragging === 'true') return;
 
-            e.preventDefault();
-            e.stopPropagation();
+            event.preventDefault();
+            event.stopPropagation();
 
-            // SKIP: focus() already called in rootProps.onMouseDown above this
-            // Avoid double-firing storage updates during drag initiation
-            GlobalStateManager.setPointerDown(true);
+            focus();
+            startDrag?.();
+        },
+        [canCapturePointer, focus, windowConfig]
+    );
 
-            if (elementRef.current) {
-                elementRef.current.dataset.isDragging = 'true';
+    const beginResize = useCallback((direction: ResizeDirection, event: ResizeStartEvent) => {
+        if (!windowConfig || !canCapturePointer || windowConfig.is_locked) return;
+        if (event.button !== 0) return;
+        if (elementRef.current?.dataset.isDragging === 'true' || elementRef.current?.dataset.isResizing === 'true') return;
+
+        const startLeft = localX ?? windowConfig.x;
+        const startTop = localY ?? windowConfig.y;
+        const startWidth = localWidth ?? windowConfig.width;
+        const startHeight = localHeight ?? windowConfig.height;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        resizeSessionRef.current = {
+            direction,
+            startX: event.clientX,
+            startY: event.clientY,
+            startLeft,
+            startTop,
+            startWidth,
+            startHeight,
+        };
+
+        setIsResizing(true);
+        GlobalStateManager.setPointerDown(true);
+        focus();
+
+        if (elementRef.current) {
+            elementRef.current.dataset.isResizing = 'true';
+        }
+    }, [canCapturePointer, focus, localHeight, localWidth, localX, localY, windowConfig]);
+
+    const handleDragStart = useCallback(() => {
+        if (!windowConfig) return;
+
+        dragOriginRef.current = {
+            x: localX ?? windowConfig.x,
+            y: localY ?? windowConfig.y,
+        };
+
+        setIsDragging(true);
+        GlobalStateManager.setPointerDown(true);
+
+        if (elementRef.current) {
+            elementRef.current.dataset.isDragging = 'true';
+        }
+    }, [localX, localY, windowConfig]);
+
+    const handleDrag = useCallback(() => {
+        return;
+    }, []);
+
+    const handleDragEnd = useCallback((_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+        if (!windowConfig) return;
+
+        const nextX = Math.round(dragOriginRef.current.x + info.offset.x);
+        const nextY = Math.round(dragOriginRef.current.y + info.offset.y);
+
+        setLocalX(nextX);
+        setLocalY(nextY);
+        setIsDragging(false);
+        GlobalStateManager.setPointerDown(false);
+        WindowEngine.updateWindowBounds(windowUid, nextX, nextY, windowConfig.width, windowConfig.height);
+
+        if (elementRef.current) {
+            delete elementRef.current.dataset.isDragging;
+        }
+    }, [windowConfig, windowUid]);
+
+    const handlePointerEnter = useCallback(() => {
+        setIsHovered(true);
+    }, []);
+
+    const handlePointerLeave = useCallback(() => {
+        setIsHovered(false);
+    }, []);
+
+    const dragHandleProps = useMemo<AceWindowRenderProps['dragHandleProps']>(() => ({
+        onPointerDown: (event) => {
+            beginDrag(event);
+        },
+    }), [beginDrag]);
+
+    const getResizeHandleProps = useCallback<AceWindowRenderProps['getResizeHandleProps']>((direction) => ({
+        onPointerDown: (event) => {
+            beginResize(direction, event);
+        },
+    }), [beginResize]);
+
+    const resizeHandleProps = useMemo<AceWindowRenderProps['resizeHandleProps']>(() => ({
+        onPointerDown: (event) => {
+            beginResize('se', event);
+        },
+    }), [beginResize]);
+
+    useEffect(() => {
+        if (!isResizing || !windowConfig) {
+            return;
+        }
+
+        const computeNextBounds = (event: PointerEvent) => {
+            const { direction, startX, startY, startLeft, startTop, startWidth, startHeight } = resizeSessionRef.current;
+            const deltaX = event.clientX - startX;
+            const deltaY = event.clientY - startY;
+            const startRight = startLeft + startWidth;
+            const startBottom = startTop + startHeight;
+
+            let nextX = startLeft;
+            let nextY = startTop;
+            let nextWidth = startWidth;
+            let nextHeight = startHeight;
+
+            if (direction.includes('e')) {
+                nextWidth = Math.max(MIN_WINDOW_WIDTH, Math.round(startWidth + deltaX));
             }
 
-            // future implementation
-            const elementId = `window-${windowConfig.window_uid}`;
+            if (direction.includes('s')) {
+                nextHeight = Math.max(MIN_WINDOW_HEIGHT, Math.round(startHeight + deltaY));
+            }
 
-            const updatePosition = () => {
-                // NOW (at drag-end only) commit to global store
-                // WindowEngine.updateWindowBounds(
-                //     windowConfig.window_uid,
-                //     Math.round(targetX),
-                //     Math.round(targetY),
-                //     windowConfig.width,
-                //     windowConfig.height
-                // );
+            if (direction.includes('w')) {
+                nextX = Math.min(Math.round(startLeft + deltaX), startRight - MIN_WINDOW_WIDTH);
+                nextWidth = Math.max(MIN_WINDOW_WIDTH, Math.round(startRight - nextX));
+            }
 
-                // IMPORTANT: Only return control to React AFTER commit is done.
-                // setIsDragging(false);                
-            };
+            if (direction.includes('n')) {
+                nextY = Math.min(Math.round(startTop + deltaY), startBottom - MIN_WINDOW_HEIGHT);
+                nextHeight = Math.max(MIN_WINDOW_HEIGHT, Math.round(startBottom - nextY));
+            }
 
-            // Ref used to communicate dragging state inside RAF loop
-            const isDraggingRef = { current: true };
+            return { nextX, nextY, nextWidth, nextHeight };
+        };
 
-            const onMouseMove = (moveEvent: MouseEvent) => {
+        const handlePointerMove = (event: PointerEvent) => {
+            const { nextX, nextY, nextWidth, nextHeight } = computeNextBounds(event);
 
-            };
+            setLocalX(nextX);
+            setLocalY(nextY);
+            setLocalWidth(nextWidth);
+            setLocalHeight(nextHeight);
+        };
 
-            const onMouseUp = () => {
-                isDraggingRef.current = false; // Signal loop to check for settling
-                // IMPORTANT: Do NOT setIsDragging(false) here. 
-                // Let the physics loop 'settle' first, then cleanup.
-                GlobalStateManager.setPointerDown(false);
+        const handlePointerUp = (event: PointerEvent) => {
+            const { nextX, nextY, nextWidth, nextHeight } = computeNextBounds(event);
 
-                window.removeEventListener('mousemove', onMouseMove);
-                window.removeEventListener('mouseup', onMouseUp);
+            setLocalX(nextX);
+            setLocalY(nextY);
+            setLocalWidth(nextWidth);
+            setLocalHeight(nextHeight);
+            setIsResizing(false);
+            GlobalStateManager.setPointerDown(false);
+            WindowEngine.updateWindowBounds(
+                windowUid,
+                nextX,
+                nextY,
+                nextWidth,
+                nextHeight,
+            );
 
-                // Note: We do NOT cancel RAF here. 
-                // We let the physics loop run until settled (inertial slide / spring settle).
-            };
+            if (elementRef.current) {
+                delete elementRef.current.dataset.isResizing;
+            }
+        };
 
-            window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mouseup', onMouseUp);
-        },
-        [canCapturePointer, windowConfig, focus, localX, localY]
-    );
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp, { once: true });
+
+        return () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+        };
+    }, [isResizing, windowConfig, windowUid]);
+
+    const position = useMemo(() => ({
+        x: localX ?? windowConfig?.x ?? 0,
+        y: localY ?? windowConfig?.y ?? 0,
+    }), [localX, localY, windowConfig?.x, windowConfig?.y]);
+
+    const size = useMemo(() => ({
+        width: localWidth ?? windowConfig?.width ?? MIN_WINDOW_WIDTH,
+        height: localHeight ?? windowConfig?.height ?? MIN_WINDOW_HEIGHT,
+    }), [localHeight, localWidth, windowConfig?.height, windowConfig?.width]);
 
     // -------------------------------------------------------------------------
     // Headless Style Output
@@ -217,8 +439,8 @@ export function useAceWindow(window_uid : string): any {
         // The `elementRef` effect handles positioning to avoid React fighting the drag RAF loop.
         if (windowConfig.is_minimized) {
             return {
-                width: windowConfig.width,
-                height: windowConfig.height,
+                width: size.width,
+                height: size.height,
                 zIndex: -1,
                 opacity: 0,
                 visibility: 'hidden' as const,
@@ -228,12 +450,13 @@ export function useAceWindow(window_uid : string): any {
         }
 
         return {
-            width: windowConfig.width,
-            height: windowConfig.height,
+            width: size.width,
+            height: size.height,
             zIndex: windowConfig.always_on_top ? 9999 + windowConfig.z_index : windowConfig.z_index,
+            pointerEvents: canCapturePointer ? 'auto' as const : 'none' as const,
             willChange: 'transform',
         };
-    }, [windowConfig]);
+    }, [canCapturePointer, size.height, size.width, windowConfig]);
 
     // Sync windowConfig.opacity to DOM directly so changes don't require rootStyle to recompute.
     // Skip when not yet mounted (opacity-0 Tailwind class handles the hidden state) or minimized
@@ -242,7 +465,7 @@ export function useAceWindow(window_uid : string): any {
         const el = elementRef.current;
         if (!el || !windowConfig || !isMounted || windowConfig.is_minimized) return;
         el.style.opacity = String(windowConfig.opacity ?? 1);
-    }, [isMounted, windowConfig?.opacity, windowConfig?.is_minimized]);
+    }, [isMounted, windowConfig, windowConfig?.opacity, windowConfig?.is_minimized]);
 
 
     // -------------------------------------------------------------------------
@@ -252,12 +475,19 @@ export function useAceWindow(window_uid : string): any {
     return {
         windowUid,
         windowConfig,
+        dragHandleProps,
+        resizeHandleProps,
+        getResizeHandleProps,
         rootStyle,
+        position,
+        size,
         
         isFocused,
         isHovered,
         isDragging,
+        isResizing,
         isMounted,
+        isLocked,
         canCapturePointer,
 
         focus,
@@ -269,6 +499,13 @@ export function useAceWindow(window_uid : string): any {
         setOpacity,
         updateConfig,
         updateBounds,
+        beginDrag,
+        beginResize,
+        handleDragStart,
+        handleDrag,
+        handleDragEnd,
+        handlePointerEnter,
+        handlePointerLeave,
         ref: elementRef,
     };
 }

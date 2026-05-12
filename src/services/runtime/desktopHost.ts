@@ -29,7 +29,7 @@ export async function openHostDevtools(): Promise<void> {
 
 export async function focusHostDevtools(): Promise<void> {
     if (isElectronRuntime()) {
-        await window.electronAPI?.toggleDevtools();
+        await window.electronAPI?.focusDevtools();
         return;
     }
 }

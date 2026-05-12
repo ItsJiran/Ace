@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { EventBus } from '../services/eventEngine';
+import { EventBus } from '#/services/eventEngine';
 import { useProcessContext } from './useProcessContext';
 import type { CoreEngineHandlerArgs } from '../schemas/events';
 

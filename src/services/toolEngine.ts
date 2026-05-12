@@ -1,6 +1,6 @@
 import { RegistryEngine } from './registryEngine';
 import { KernelEngine } from './kernelEngine';
-import { EventBus } from './eventEngine';
+import { EventBus } from '#/services/eventEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 import type { CoreEngineHandlerArgs } from '#/schemas/events';
