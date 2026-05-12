@@ -40,6 +40,29 @@ const resizeHandleDefinitions = [
   },
 ] as const;
 
+function renderResizeHandles(
+  getResizeHandleProps: AceWindowRenderProps["getResizeHandleProps"],
+  showCornerGrip: boolean,
+) {
+  return (
+    <>
+      {resizeHandleDefinitions.map((handle) => (
+        <div
+          key={handle.direction}
+          {...getResizeHandleProps(handle.direction)}
+          className={handle.className}
+          data-window-resize-handle={handle.direction}
+        />
+      ))}
+      {showCornerGrip ? (
+        <div className="pointer-events-none absolute bottom-0 right-0 h-5 w-5">
+          <div className="absolute bottom-1.5 right-1.5 h-2.5 w-2.5 rounded-sm border-r border-b border-white/30" />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 type AceWindowProps = {
   windowUid: string;
   headless?: boolean;
@@ -60,6 +83,7 @@ function AceWindowComponent({
   const resolvedConfig = aceWindow?.windowConfig;
 
   if (!resolvedConfig) return null;
+  console.log('esa', headless);
 
   const {
     beginDrag,
@@ -140,17 +164,6 @@ function AceWindowComponent({
       >
         {renderedChildren}
       </div>
-      {resizeHandleDefinitions.map((handle) => (
-        <div
-          key={handle.direction}
-          {...aceWindow.getResizeHandleProps(handle.direction)}
-          className={handle.className}
-          data-window-resize-handle={handle.direction}
-        />
-      ))}
-      <div className="pointer-events-none absolute bottom-0 right-0 h-5 w-5">
-        <div className="absolute bottom-1.5 right-1.5 h-2.5 w-2.5 rounded-sm border-r border-b border-white/30" />
-      </div>
     </div>
   );
   const animateProps = {
@@ -199,6 +212,7 @@ function AceWindowComponent({
       data-window-uid={resolvedConfig.window_uid}
     >
       {contentNode}
+      {renderResizeHandles(aceWindow.getResizeHandleProps, !headless)}
     </motion.div>
   );
 }
