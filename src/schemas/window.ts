@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AnimationSequence } from './animation';
 
 // ============================================================================
 // WINDOW SCHEMAS
@@ -43,6 +44,7 @@ export interface SpawnWindowOptions {
     is_locked?: boolean;
     always_on_top?: boolean;
     z_index?: number;
+    animation_sequence?: AnimationSequence;
 
     __skip_process_tracking?: boolean;
     __process_uid?: string;

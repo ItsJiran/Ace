@@ -1,6 +1,7 @@
 import React from "react";
 import type { ReactNode } from "react";
 import { motion, useDragControls } from "framer-motion";
+import type { Transition } from "framer-motion";
 import type { AceWindowRenderProps } from "#/hooks/useAceWindow";
 import { useAceWindow } from "#/hooks/useAceWindow";
 import { AceWindowHead } from "#/components/layout/AceWindowHead";
@@ -83,11 +84,11 @@ function AceWindowComponent({
   const resolvedConfig = aceWindow?.windowConfig;
 
   if (!resolvedConfig) return null;
-  console.log('esa', headless);
 
   const {
     beginDrag,
     beginResize,
+    animationState,
     close,
     minimize,
     focus,
@@ -167,13 +168,31 @@ function AceWindowComponent({
     </div>
   );
   const animateProps = {
-    opacity: resolvedConfig.is_minimized ? 0 : resolvedConfig.opacity ?? 1,
-    scale: isDragging ? 1.01 : 1,
+    x: !isDragging && !isResizing && animationState?.values.x !== undefined ? animationState.values.x : position.x,
+    y: !isDragging && !isResizing && animationState?.values.y !== undefined ? animationState.values.y : position.y,
+    width: !isResizing && animationState?.values.width !== undefined ? animationState.values.width : size.width,
+    height: !isResizing && animationState?.values.height !== undefined ? animationState.values.height : size.height,
+    opacity: resolvedConfig.is_minimized ? 0 : animationState?.values.opacity ?? resolvedConfig.opacity ?? 1,
+    scale: isDragging ? 1.01 : animationState?.values.scale ?? 1,
   };
-  const transitionProps = {
-    opacity: { duration: 0.14 },
-    scale: { duration: 0.12 },
-  };
+  const transitionDuration = (animationState?.transitionMs ?? 140) / 1000;
+  const transitionProps: Transition = animationState?.easing === "spring_back"
+    ? {
+        x: { type: "spring" as const, stiffness: 280, damping: 24, mass: 0.8 },
+        y: { type: "spring" as const, stiffness: 280, damping: 24, mass: 0.8 },
+        width: { type: "spring" as const, stiffness: 280, damping: 24, mass: 0.8 },
+        height: { type: "spring" as const, stiffness: 280, damping: 24, mass: 0.8 },
+        opacity: { duration: transitionDuration },
+        scale: { type: "spring" as const, stiffness: 280, damping: 24, mass: 0.8 },
+      }
+    : {
+        x: { duration: transitionDuration, ease: animationState?.easing === "linear" ? "linear" : animationState?.easing === "ease_in" ? "easeIn" : animationState?.easing === "ease_out" ? "easeOut" : "easeInOut" },
+        y: { duration: transitionDuration, ease: animationState?.easing === "linear" ? "linear" : animationState?.easing === "ease_in" ? "easeIn" : animationState?.easing === "ease_out" ? "easeOut" : "easeInOut" },
+        width: { duration: transitionDuration, ease: animationState?.easing === "linear" ? "linear" : animationState?.easing === "ease_in" ? "easeIn" : animationState?.easing === "ease_out" ? "easeOut" : "easeInOut" },
+        height: { duration: transitionDuration, ease: animationState?.easing === "linear" ? "linear" : animationState?.easing === "ease_in" ? "easeIn" : animationState?.easing === "ease_out" ? "easeOut" : "easeInOut" },
+        opacity: { duration: transitionDuration, ease: animationState?.easing === "linear" ? "linear" : animationState?.easing === "ease_in" ? "easeIn" : animationState?.easing === "ease_out" ? "easeOut" : "easeInOut" },
+        scale: { duration: transitionDuration, ease: animationState?.easing === "linear" ? "linear" : animationState?.easing === "ease_in" ? "easeIn" : animationState?.easing === "ease_out" ? "easeOut" : "easeInOut" },
+      };
 
   return (
     <motion.div
@@ -201,10 +220,6 @@ function AceWindowComponent({
         .join(" ")}
       style={{
         ...rootStyle,
-        x: position.x,
-        y: position.y,
-        width: size.width,
-        height: size.height,
         touchAction: "none",
         ...style,
       }}

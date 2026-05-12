@@ -5,6 +5,7 @@ import type { WindowConfig } from '#/schemas/window';
 import { WindowEngine } from '#/services/windowEngine';
 import { GlobalStateManager } from '#/services/globalStateManager';
 import { useAceMemory, useAceMemorySelector } from '#/hooks/useAceMemory';
+import type { WindowAnimationSnapshot } from '#/services/window/windowAnimationEngine';
 
 type DragStartEvent = ReactMouseEvent<HTMLElement> | React.PointerEvent<HTMLElement>;
 type ResizeStartEvent = React.PointerEvent<HTMLElement>;
@@ -45,6 +46,7 @@ export interface AceWindowHookResult extends AceWindowRenderProps {
         width: number;
         height: number;
     };
+    animationState?: WindowAnimationSnapshot;
     isHovered: boolean;
     isMounted: boolean;
     setOpacity: (opacity: number) => void;
@@ -99,6 +101,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
     // Resolve runtime identity.
     const windowUid = window_uid;
     const windowConfig = useAceMemory<WindowConfig>(`system:window:${windowUid}`); // contoning current global window state
+    const animationState = useAceMemory<WindowAnimationSnapshot>(`system:window_animation:${windowUid}`);
 
     // OPTIMIZATION: Removed global animation subscription (`system:window_animations`).
     // Previously, every AceWindow re-rendered whenever ANY window animated.
@@ -481,6 +484,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         rootStyle,
         position,
         size,
+        animationState,
         
         isFocused,
         isHovered,

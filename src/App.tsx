@@ -9,6 +9,26 @@ import { MemoizedWindowItem } from "#/components/layout/MemoizedWindowItem";
 import type { KernelWindowEntry } from "#/services/kernelEngine/types";
 import { GlobalStateManager } from "#/services/globalStateManager";
 
+function resolveOverlayModeAtPoint(x: number, y: number): {
+  element: Element | null;
+  mode: DesktopState["mode"];
+} {
+  const element = document.elementFromPoint(Math.round(x), Math.round(y));
+  if (!element) {
+    return { element: null, mode: "ambient" };
+  }
+
+  const tagName = element.tagName.toLowerCase();
+  const isDocumentRoot = tagName === "html" || tagName === "body";
+  const isWindowElement = Boolean(element.closest("[data-window-uid]"));
+
+  if (isWindowElement) {
+    return { element, mode: "interactive" };
+  }
+
+  return { element, mode: isDocumentRoot ? "ambient" : "ambient" };
+}
+
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
   const renderCount = useRenderCount("GlobalOverlay");
@@ -42,15 +62,33 @@ function App() {
       return;
     }
 
-    const unsubscribe = window.electronAPI.onMouseTracking(({ x, y, isInsideApp }) => {
+    const unsubscribe = window.electronAPI.onMouseTracking(({ x, y, localX, localY, isInsideApp }) => {
+      const desktopState = GlobalStateManager.readDesktopState();
+      const cursorState = GlobalStateManager.readCursorState();
+
       GlobalStateManager.setCursorPosition(x, y);
       GlobalStateManager.setPointerInside(isInsideApp);
-      console.log(`[Mouse Tracking] x: ${x}, y: ${y}, isInsideApp: ${isInsideApp}`);
+
+      if (!isInsideApp) {
+        GlobalStateManager.setActiveElement(null);
+        if (!desktopState.is_overlay_locked && !cursorState.is_pointer_down) {
+          GlobalStateManager.setOverlayMode("ambient");
+        }
+        return;
+      }
+
+      const { element, mode } = resolveOverlayModeAtPoint(localX, localY);
+      GlobalStateManager.setActiveElement(element);
+
+      if (!desktopState.is_overlay_locked) {
+        GlobalStateManager.setOverlayMode(cursorState.is_pointer_down ? "interactive" : mode);
+      }
     });
 
     return () => {
       unsubscribe();
       GlobalStateManager.setPointerInside(false);
+      GlobalStateManager.setActiveElement(null);
     };
   }, [isBootReady]);
 
@@ -61,6 +99,19 @@ function App() {
   const windowSystem = useAceMemory<Map<string, KernelWindowEntry>>(
     "system:window_system",
   );
+  const overlayMode = overlayState?.mode;
+
+  useEffect(() => {
+    if (!isBootReady || !overlayMode || typeof window === "undefined") {
+      return;
+    }
+
+    void window.electronAPI?.ignoreMouseEvents(overlayMode === "ambient");
+
+    return () => {
+      void window.electronAPI?.ignoreMouseEvents(false);
+    };
+  }, [isBootReady, overlayMode]);
 
   const renderedWindowNodes = useMemo(() => {
     const nodes: ReactNode[] = [];

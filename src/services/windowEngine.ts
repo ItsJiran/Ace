@@ -2,6 +2,9 @@ import { RegistryEngine } from "./registryEngine";
 import { GlobalStateManager } from "./globalStateManager";
 import { KernelEngine } from "./kernelEngine";
 import { WindowLifecycleManager } from "./window/WindowLifecycleManager";
+import { WindowAnimationEngine } from "./window/windowAnimationEngine";
+import type { AnimationSequence } from "#/schemas/animation";
+import type { WindowAnimationSequence } from "./window/windowAnimationEngine";
 import type { WindowConfig, SpawnWindowOptions } from "#/schemas/window";
 
 class WindowEngineSingleton {
@@ -27,14 +30,16 @@ class WindowEngineSingleton {
         this.registerTerminationHooks();
     }
 
-    setupKernelSpace() { }
+    setupKernelSpace() {
+        WindowAnimationEngine.setupKernelSpace();
+    }
 
     private registerTerminationHooks() {
         if (this.isTerminationHookBound) return;
 
         KernelEngine.registerTerminationHandler(
             "windowEngine",
-            ({ record }: { record: any }) => {
+            ({ record }: { record: { process_uid: string; type?: string; payload?: unknown; metadata?: unknown } }) => {
                 // First, close any windows explicitly owned by this process in the window registry
                 const ownedWindows = KernelEngine.getRenderedWindows().filter(
                     (w) => w.process_uid === record.process_uid,
@@ -89,13 +94,22 @@ class WindowEngineSingleton {
     // + --──────────────────────────────────────────────────────────────────────────────
 
     spawnWindow(options: SpawnWindowOptions): string | null {
-        return this.lifecycleManager.spawnWindow(options);
+        const windowUid = this.lifecycleManager.spawnWindow(options);
+        if (windowUid) {
+            if (options.animation_sequence) {
+                WindowAnimationEngine.playLegacySequence(windowUid, options.animation_sequence);
+            } else {
+                WindowAnimationEngine.playPreset(windowUid, 'spawn');
+            }
+        }
+        return windowUid;
     }
 
     closeWindow(
         window_uid: string,
         options?: { skipProcessLifecycle?: boolean },
     ) {
+        WindowAnimationEngine.clearWindow(window_uid);
         this.lifecycleManager.closeWindow(window_uid, options);
     }
 
@@ -114,6 +128,7 @@ class WindowEngineSingleton {
         }
 
         GlobalStateManager.setFocusedWindow(window_uid);
+        WindowAnimationEngine.playPreset(window_uid, 'focus');
     }
 
     minimizeWindow(window_uid: string) {
@@ -130,6 +145,22 @@ class WindowEngineSingleton {
     restoreWindow(window_uid: string) {
         this.updateWindowConfig(window_uid, { is_minimized: false });
         this.focusWindow(window_uid);
+        WindowAnimationEngine.playPreset(window_uid, 'restore');
+    }
+
+    playAnimation(window_uid: string, sequence: AnimationSequence) {
+        WindowAnimationEngine.playLegacySequence(window_uid, sequence);
+    }
+
+    playSequence(window_uid: string, sequence: Omit<WindowAnimationSequence, 'windowUid'>) {
+        WindowAnimationEngine.playSequence({
+            ...sequence,
+            windowUid: window_uid,
+        });
+    }
+
+    cancelAnimation(window_uid: string) {
+        WindowAnimationEngine.cancelAnimation(window_uid);
     }
 
     updateWindowConfig(window_uid: string, updates: Partial<WindowConfig>) {
@@ -150,7 +181,6 @@ class WindowEngineSingleton {
         y: number,
         width: number,
         height: number,
-        _skipMonolith = false,
     ) {
         const granularKey = this.windowMemoryUid(window_uid);
         const currentGranular = KernelEngine.readMemory(granularKey) as

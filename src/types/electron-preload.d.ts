@@ -4,6 +4,7 @@ interface ElectronAPI {
     minimizeWindow: () => Promise<void>;
     toggleDevtools: () => Promise<boolean>;
     focusDevtools: () => Promise<boolean>;
+    ignoreMouseEvents: (ignore: boolean) => Promise<boolean>;
     getWindowBounds: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
     getCursorScreenPoint: () => Promise<{ x: number; y: number }>;
     fsExists: (targetPath: string, baseDir?: 'appConfig') => Promise<boolean>;
@@ -18,7 +19,7 @@ interface ElectronAPI {
     pathNormalize: (targetPath: string) => Promise<string> | string;
     syncGlobalShortcuts: (accelerators: string[]) => Promise<string[]>;
     onGlobalShortcut: (callback: (accelerator: string) => void) => () => void;
-    onMouseTracking: (callback: (payload: { x: number; y: number; isInsideApp: boolean }) => void) => () => void;
+    onMouseTracking: (callback: (payload: { x: number; y: number; localX: number; localY: number; isInsideApp: boolean }) => void) => () => void;
     getPlatform: () => Promise<string>;
 }
 

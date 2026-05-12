@@ -1,11 +1,32 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron');
 const path = require('path');
 
+let uIOhook = null;
+try {
+    ({ uIOhook } = require('uiohook-napi'));
+} catch (error) {
+    console.warn('[electron] uiohook-napi unavailable, falling back to screen polling:', error);
+}
+
 const isDev = !app.isPackaged;
 let alwaysOnTopInterval = null;
 let mouseTrackingInterval = null;
 let lastMouseTrackingPayload = null;
+let uiohookMouseListener = null;
 const registeredGlobalShortcuts = new Set();
+
+function applyAlwaysOnTop(window) {
+    if (!window || window.isDestroyed()) {
+        return;
+    }
+
+    if (process.platform === 'darwin') {
+        window.setAlwaysOnTop(true, 'screen-saver');
+        return;
+    }
+
+    window.setAlwaysOnTop(true);
+}
 
 function getPrimaryWindow() {
     return BrowserWindow.getAllWindows()[0] ?? null;
@@ -19,48 +40,99 @@ function clearRegisteredGlobalShortcuts() {
 }
 
 function stopMouseTracking() {
+    if (uIOhook && uiohookMouseListener) {
+        uIOhook.off('mousemove', uiohookMouseListener);
+        uIOhook.off('mousedown', uiohookMouseListener);
+        uIOhook.off('mouseup', uiohookMouseListener);
+        uiohookMouseListener = null;
+
+        try {
+            uIOhook.stop();
+        } catch (error) {
+            console.warn('[electron] Failed to stop uiohook mouse tracking:', error);
+        }
+    }
+
     if (mouseTrackingInterval) {
         clearInterval(mouseTrackingInterval);
         mouseTrackingInterval = null;
     }
+
     lastMouseTrackingPayload = null;
 }
 
-function startMouseTracking() {
+function emitMouseTracking(point) {
+    const currentWindow = getPrimaryWindow();
+    if (!currentWindow || currentWindow.isDestroyed()) {
+        return;
+    }
+
+    const contentBounds = currentWindow.getContentBounds();
+    const dipPoint = typeof screen.screenToDipPoint === 'function'
+        ? screen.screenToDipPoint({ x: point.x, y: point.y })
+        : point;
+    const payload = {
+        x: point.x,
+        y: point.y,
+        localX: dipPoint.x - contentBounds.x,
+        localY: dipPoint.y - contentBounds.y,
+        isInsideApp:
+            dipPoint.x >= contentBounds.x &&
+            dipPoint.x < contentBounds.x + contentBounds.width &&
+            dipPoint.y >= contentBounds.y &&
+            dipPoint.y < contentBounds.y + contentBounds.height,
+    };
+
+    if (
+        lastMouseTrackingPayload &&
+        lastMouseTrackingPayload.x === payload.x &&
+        lastMouseTrackingPayload.y === payload.y &&
+        lastMouseTrackingPayload.isInsideApp === payload.isInsideApp
+    ) {
+        return;
+    }
+
+    lastMouseTrackingPayload = payload;
+    currentWindow.webContents.send('ace:screen:mouse-tracking', payload);
+}
+
+function startPollingMouseTracking() {
     if (mouseTrackingInterval) {
         return;
     }
 
     mouseTrackingInterval = setInterval(() => {
-        const currentWindow = getPrimaryWindow();
-        if (!currentWindow || currentWindow.isDestroyed()) {
+        emitMouseTracking(screen.getCursorScreenPoint());
+    }, 50);
+}
+
+function startMouseTracking() {
+    if (uIOhook) {
+        if (uiohookMouseListener) {
             return;
         }
 
-        const point = screen.getCursorScreenPoint();
-        const bounds = currentWindow.getBounds();
-        const payload = {
-            x: point.x,
-            y: point.y,
-            isInsideApp:
-                point.x >= bounds.x &&
-                point.x < bounds.x + bounds.width &&
-                point.y >= bounds.y &&
-                point.y < bounds.y + bounds.height,
+        uiohookMouseListener = (event) => {
+            emitMouseTracking({ x: event.x, y: event.y });
         };
 
-        if (
-            lastMouseTrackingPayload &&
-            lastMouseTrackingPayload.x === payload.x &&
-            lastMouseTrackingPayload.y === payload.y &&
-            lastMouseTrackingPayload.isInsideApp === payload.isInsideApp
-        ) {
-            return;
-        }
+        uIOhook.on('mousemove', uiohookMouseListener);
+        uIOhook.on('mousedown', uiohookMouseListener);
+        uIOhook.on('mouseup', uiohookMouseListener);
 
-        lastMouseTrackingPayload = payload;
-        currentWindow.webContents.send('ace:screen:mouse-tracking', payload);
-    }, 50);
+        try {
+            uIOhook.start();
+            return;
+        } catch (error) {
+            console.warn('[electron] Failed to start uiohook mouse tracking, falling back to screen polling:', error);
+            uIOhook.off('mousemove', uiohookMouseListener);
+            uIOhook.off('mousedown', uiohookMouseListener);
+            uIOhook.off('mouseup', uiohookMouseListener);
+            uiohookMouseListener = null;
+        }
+    }
+
+    startPollingMouseTracking();
 }
 
 function createMainWindow() {
@@ -82,6 +154,8 @@ function createMainWindow() {
         alwaysOnTop: true,
         skipTaskbar: !isDev,
         webPreferences: {
+            backgroundThrottling: false, 
+            offscreen: false, 
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
             nodeIntegration: false,
@@ -94,11 +168,11 @@ function createMainWindow() {
         mainWindow.focus();
     });
 
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    applyAlwaysOnTop(mainWindow);
 
     const reassertAlwaysOnTop = () => {
         if (!mainWindow.isDestroyed()) {
-            // mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            applyAlwaysOnTop(mainWindow);
         }
     };
 
@@ -153,7 +227,7 @@ app.whenReady().then(() => {
 
         window.focus();
         window.moveTop();
-        window.setAlwaysOnTop(true, 'screen-saver');
+        applyAlwaysOnTop(window);
         return true;
     });
 
