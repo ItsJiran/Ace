@@ -78,7 +78,6 @@ export default function activate() {
             y: Math.max(12, screenH - height - 24),
             chrome_style: 'borderless',
             drag_surface: 'full',
-            hide_ring: true,
             always_on_top: true,
         });
     }

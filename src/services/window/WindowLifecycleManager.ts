@@ -1,7 +1,7 @@
 import { KernelEngine } from '../kernelEngine';
 import { GlobalStateManager } from '../globalStateManager';
-import type { WindowConfig } from '#/schemas/window';
-import type { SpawnWindowOptions } from '../windowEngine';
+import type { WindowConfig, SpawnWindowOptions } from '#/schemas/window';
+
 
 export interface WindowLifecycleDependencies {
     bumpZIndex: () => number;
@@ -27,12 +27,12 @@ export class WindowLifecycleManager {
         let spawnProcessUid: string | undefined = undefined;
 
         if (!options.__skip_process_tracking) {
-            const parentProcessUid = options.parent_process_uid ?? KernelEngine.getCurrentProcessContext();
+            const parentProcessUid = options.__parent_process_uid ?? KernelEngine.getCurrentProcessContext();
+            
             const metadata = {
                 source_process_uid: parentProcessUid,
                 package: options.package,
                 window: options.window,
-                component_name: options.component_name,
                 window_uid,
             };
 
@@ -119,9 +119,7 @@ export class WindowLifecycleManager {
             opacity: options.opacity ?? defaultConfig.opacity ?? 1,
             is_locked: options.is_locked ?? defaultConfig.is_locked ?? false,
             always_on_top: options.always_on_top ?? defaultConfig.always_on_top ?? false,
-            chrome_style: options.chrome_style ?? defaultConfig.chrome_style ?? 'standard',
-            drag_surface: options.drag_surface ?? defaultConfig.drag_surface ?? 'header',
-            hide_ring: options.hide_ring ?? defaultConfig.hide_ring ?? false,
+            window_style: options.window_style ?? defaultConfig.window_style ?? 'standard', 
             is_minimized: false
         };
 

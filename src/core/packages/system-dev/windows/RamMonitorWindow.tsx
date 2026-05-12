@@ -14,7 +14,7 @@ export const registry: AceRegistryType.Window = {
         width: 520,
         height: 580,
         title: 'RAM Monitor',
-        chrome_style: 'standard',
+        window_style: 'standard',
         is_locked: false,
         always_on_top: false,
     },

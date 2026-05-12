@@ -127,31 +127,6 @@ export default function DevMenu() {
             drag_surface: 'full',
             hide_ring: true,
             always_on_top: true,
-            animation_sequence: {
-                pattern_id: 'anim:prompt_bar:devmenu_morph:stateful_fixed:v1',
-                positioning_mode: 'stateful_fixed',
-                interrupt_policy: 'retarget',
-                loop: false,
-                on_complete: 'idle',
-                segments: [
-                    {
-                        phase_label: 'expand',
-                        duration_ms: 520,
-                        from: 'current',
-                        to: { x: expandedX, y: expandedY, width: expandedWidth, height: 64 },
-                        easing: 'spring_back',
-                        hold_ms: 120,
-                    },
-                    {
-                        phase_label: 'settle',
-                        duration_ms: 360,
-                        from: 'current',
-                        to: { x: expandedX, y: expandedY, width: expandedWidth, height: expandedHeight },
-                        easing: 'ease_out',
-                        hold_ms: 0,
-                    },
-                ],
-            },
         });
     };
 

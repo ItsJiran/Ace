@@ -6,13 +6,13 @@ import { z } from 'zod';
 // ============================================================================
 
 export const WindowConfigSchema = z.object({
+    /** The unique identifier for this window instance */
     window_uid: z.string(),
+    window_style: z.enum(['standard', 'borderless']).optional().default('standard'),
 
     /** The name of the registered React component to render inside this window */
+    title: z.string().optional(),
     component: z.string(),
-
-    /** The memory_uid of the payload this component should read data from */
-    payload_memory_uid: z.string().optional(),
 
     // Visual bounds
     x: z.number(),
@@ -25,13 +25,46 @@ export const WindowConfigSchema = z.object({
     opacity: z.number().optional().default(1),
     is_locked: z.boolean().optional().default(false),
     always_on_top: z.boolean().optional().default(false),
-    chrome_style: z.enum(['standard', 'borderless']).optional().default('standard'),
-    drag_surface: z.enum(['header', 'full']).optional().default('header'),
-    hide_ring: z.boolean().optional().default(false),
-
     is_minimized: z.boolean(),
-
-    title: z.string().optional()
 });
+
+
+export interface SpawnWindowOptions {
+    package?: string;
+    window?: string;
+    window_style?: 'standard' | 'borderless';
+
+    title?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    opacity?: number;
+    is_locked?: boolean;
+    always_on_top?: boolean;
+    z_index?: number;
+
+    __skip_process_tracking?: boolean;
+    __process_uid?: string;
+    __parent_process_uid?: string;
+}
+
+    // package?: string;
+    // window?: string;
+    // window_style?: 'standard' | 'borderless';
+
+    // title?: string;
+    // x?: number;
+    // y?: number;
+    // width?: number;
+    // height?: number;
+    // opacity?: number;
+    // is_locked?: boolean;
+    // always_on_top?: boolean;
+    // z_index?: number;
+
+    // __skip_process_tracking?: boolean;
+    // __process_uid?: string;
+    // __parent_process_uid?: string;
 
 export type WindowConfig = z.infer<typeof WindowConfigSchema>;
