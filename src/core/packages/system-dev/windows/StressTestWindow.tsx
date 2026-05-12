@@ -13,7 +13,7 @@ export const registry: AceRegistryType.Window = {
     react_behavior: 'window_shell',
 };
 
-type SwarmPattern = 'orbit' | 'bounce_grid' | 'scatter_loop' | 'prompt_bar_morph';
+type SwarmPattern = 'orbit' | 'bounce_grid' | 'scatter_loop' | 'prompt_bar_morph' | 'large_box_sweep';
 
 type Scenario = {
     packageRef: string;
@@ -33,6 +33,7 @@ const PATTERN_LABELS: Record<SwarmPattern, string> = {
     bounce_grid: 'Bounce Grid (Vertical)',
     scatter_loop: 'Scatter Loop (Random)',
     prompt_bar_morph: 'Prompt Bar Morph',
+    large_box_sweep: 'Large Box Sweep',
 };
 
 const PATTERN_DESC: Record<SwarmPattern, string> = {
@@ -40,6 +41,7 @@ const PATTERN_DESC: Record<SwarmPattern, string> = {
     bounce_grid: 'Grid layout bouncing up/down. Tests multiple concurrent distinct sequences.',
     scatter_loop: 'Windows traverse 5 random points in a loop. Tests chaotic movement.',
     prompt_bar_morph: 'Small rounded surfaces expand into long prompt bars near the bottom-center. Tests width/height morphs plus staggered launch timing.',
+    large_box_sweep: 'Large windows sweep across the viewport while resizing between wide panel states. Useful for stressing large-area redraw and geometry interpolation.',
 };
 
 export default function StressTestWindow({ windowUid }: { windowUid: string }) {
@@ -165,6 +167,84 @@ export default function StressTestWindow({ windowUid }: { windowUid: string }) {
                     loop: true,
                     source: 'stressTestWindow.scatter_loop',
                     steps,
+                },
+            };
+        }
+
+        if (selectedPattern === 'large_box_sweep') {
+            const laneOffset = index * 36;
+            const startX = 120 + laneOffset;
+            const startY = 80 + laneOffset;
+            const midWidth = 860;
+            const midHeight = 500;
+            const wideWidth = 1120;
+            const wideHeight = 620;
+
+            return {
+                packageRef: 'itsjiran/ace-system',
+                windowSlug: 'system-console-window',
+                title: `Large Box ${index + 1}`,
+                startBounds: {
+                    x: startX,
+                    y: startY,
+                    width: midWidth,
+                    height: midHeight,
+                },
+                sequence: {
+                    id: `stress-large-box-${index}`,
+                    policy: 'replace',
+                    loop: true,
+                    source: 'stressTestWindow.large_box_sweep',
+                    steps: [
+                        {
+                            key: 'large-sweep-right',
+                            values: {
+                                x: 180 + laneOffset,
+                                y: 120 + laneOffset,
+                                width: wideWidth,
+                                height: wideHeight,
+                            },
+                            transitionMs: Math.max(320, 1600 / speed),
+                            holdMs: Math.max(320, 1600 / speed),
+                            easing: 'ease_in_out',
+                        },
+                        {
+                            key: 'large-sweep-down',
+                            values: {
+                                x: 300 + laneOffset,
+                                y: 220 + laneOffset,
+                                width: 980,
+                                height: 560,
+                            },
+                            transitionMs: Math.max(320, 1700 / speed),
+                            holdMs: Math.max(320, 1700 / speed),
+                            easing: 'ease_in_out',
+                        },
+                        {
+                            key: 'large-sweep-left',
+                            values: {
+                                x: 80 + laneOffset,
+                                y: 180 + laneOffset,
+                                width: 900,
+                                height: 540,
+                            },
+                            transitionMs: Math.max(320, 1500 / speed),
+                            holdMs: Math.max(320, 1500 / speed),
+                            easing: 'ease_in_out',
+                        },
+                        {
+                            key: 'large-reset',
+                            values: {
+                                x: startX,
+                                y: startY,
+                                width: midWidth,
+                                height: midHeight,
+                            },
+                            transitionMs: Math.max(320, 1400 / speed),
+                            holdMs: Math.max(320, 1400 / speed),
+                            easing: 'ease_in_out',
+                        },
+                    ],
                 },
             };
         }

@@ -193,6 +193,14 @@ function AceWindowComponent({
         opacity: { duration: transitionDuration, ease: animationState?.easing === "linear" ? "linear" : animationState?.easing === "ease_in" ? "easeIn" : animationState?.easing === "ease_out" ? "easeOut" : "easeInOut" },
         scale: { duration: transitionDuration, ease: animationState?.easing === "linear" ? "linear" : animationState?.easing === "ease_in" ? "easeIn" : animationState?.easing === "ease_out" ? "easeOut" : "easeInOut" },
       };
+  const initialProps = {
+    x: animateProps.x,
+    y: animateProps.y,
+    width: animateProps.width,
+    height: animateProps.height,
+    opacity: 0,
+    scale: 0.98,
+  };
 
   return (
     <motion.div
@@ -207,7 +215,7 @@ function AceWindowComponent({
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
       onMouseDown={focus}
-      initial={{ opacity: 0, scale: 0.98 }}
+      initial={initialProps}
       animate={animateProps}
       transition={transitionProps}
       className={[
