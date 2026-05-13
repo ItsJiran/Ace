@@ -93,12 +93,21 @@ function persistGatewayPromptDebug(
                 ...(currentEntry.network_trace?.request ?? {}),
                 body: {
                     ...existingRequestBody,
-                    gateway_final_system_prompt: typeof payload.gateway_final_system_prompt === 'string'
-                        ? payload.gateway_final_system_prompt
-                        : existingRequestBody.gateway_final_system_prompt,
-                    gateway_final_messages: Array.isArray(payload.gateway_final_messages)
-                        ? payload.gateway_final_messages
-                        : existingRequestBody.gateway_final_messages,
+                    gateway_agent_profile: typeof payload.gateway_agent_profile === 'string'
+                        ? payload.gateway_agent_profile
+                        : existingRequestBody.gateway_agent_profile,
+                    gateway_agent_system_prompt: typeof payload.gateway_agent_system_prompt === 'string'
+                        ? payload.gateway_agent_system_prompt
+                        : existingRequestBody.gateway_agent_system_prompt,
+                    gateway_agent_messages: Array.isArray(payload.gateway_agent_messages)
+                        ? payload.gateway_agent_messages
+                        : existingRequestBody.gateway_agent_messages,
+                    gateway_agent_tools: Array.isArray(payload.gateway_agent_tools)
+                        ? payload.gateway_agent_tools
+                        : existingRequestBody.gateway_agent_tools,
+                    gateway_agent_memory: Array.isArray(payload.gateway_agent_memory)
+                        ? payload.gateway_agent_memory
+                        : existingRequestBody.gateway_agent_memory,
                     gateway_prompt_debug_provider: typeof payload.provider === 'string'
                         ? payload.provider
                         : existingRequestBody.gateway_prompt_debug_provider,

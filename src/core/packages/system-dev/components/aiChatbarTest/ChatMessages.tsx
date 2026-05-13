@@ -405,6 +405,7 @@ function NarrativeActivityRow({ renderer }: { renderer: AIRenderer }) {
     const isExpanded = open || (status === 'error' && hasDebugPayload);
     const rowMotion = buildActivityRowMotion(status);
     const iconNode = renderActivityIcon(renderer, 14);
+    const category = getActivityCategoryKey(renderer);
 
     return (
         <div className="rounded-lg bg-white/5">
@@ -420,7 +421,8 @@ function NarrativeActivityRow({ renderer }: { renderer: AIRenderer }) {
                 >
                     <span className={`mt-0.5 ${statusTone}`}>{iconNode}</span>
                     <div className="min-w-0 flex-1 text-zinc-300">
-                        {narrative}
+                        <div>{narrative}</div>
+                        {category === 'tool' ? <ToolActivityPreview renderer={renderer} /> : null}
                     </div>
                     {hasDebugPayload ? (
                         <button
@@ -449,6 +451,28 @@ function NarrativeActivityRow({ renderer }: { renderer: AIRenderer }) {
                     </motion.div>
                 ) : null}
             </AnimatePresence>
+        </div>
+    );
+}
+
+function ToolActivityPreview({ renderer }: { renderer: AIRenderer }) {
+    const payload = toPayloadRecord(renderer.payload);
+    const result = toPayloadRecord(payload.result);
+    const resultMemoryUid = resolveToolResultMemoryUid(payload, result);
+    const resultMemory = useAceMemory<Record<string, unknown> | undefined>(resultMemoryUid || '__tool_preview_no_memory__');
+    const resolvedResult = resultMemory && typeof resultMemory === 'object' ? resultMemory : result;
+    const preview = buildToolPreview(renderer, resolvedResult);
+
+    if (!preview) {
+        return null;
+    }
+
+    return (
+        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                Tool Preview
+            </div>
+            {preview}
         </div>
     );
 }
@@ -690,6 +714,176 @@ function buildActivityNarrative(renderer: AIRenderer): string {
     }
 
     return 'Saya sedang menjalankan langkah internal.';
+}
+
+function buildToolPreview(renderer: AIRenderer, result: Record<string, unknown>): React.ReactNode | null {
+    const payload = toPayloadRecord(renderer.payload);
+    const toolSlug = typeof payload.tool_slug === 'string' ? payload.tool_slug : 'tool';
+
+    if (toolSlug === 'update_session_plan') {
+        const planItems = Array.isArray(result.plan_items) ? result.plan_items.filter((item): item is string => typeof item === 'string') : [];
+        if (planItems.length === 0) {
+            return null;
+        }
+
+        return (
+            <div className="space-y-1">
+                {planItems.slice(0, 4).map((item, index) => (
+                    <div key={`${index}:${item}`} className="text-[11px] text-zinc-300">
+                        {index + 1}. {item}
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (toolSlug === 'transfer_to_agent') {
+        const targetAgent = typeof result.target_agent === 'string' ? result.target_agent : 'unknown';
+        const reason = typeof result.reason === 'string' ? result.reason : '';
+        const summary = typeof result.context_summary === 'string' ? result.context_summary : '';
+        return (
+            <div className="space-y-1 text-[11px] text-zinc-300">
+                <div>Target: <span className="text-zinc-100">{targetAgent}</span></div>
+                {reason ? <div>Reason: {reason}</div> : null}
+                {summary ? <div className="text-zinc-400">{summary}</div> : null}
+            </div>
+        );
+    }
+
+    if (toolSlug === 'list_ace_tools' || toolSlug === 'search_ace_tools') {
+        const tools = Array.isArray(result.matches) ? result.matches : Array.isArray(result.ace_tools) ? result.ace_tools : [];
+        if (tools.length === 0) {
+            return null;
+        }
+
+        return (
+            <div className="space-y-1">
+                {tools.slice(0, 3).map((tool, index) => {
+                    const item = toPayloadRecord(tool);
+                    const packageRef = typeof item.package_ref === 'string' ? item.package_ref : 'unknown';
+                    const slug = typeof item.slug === 'string' ? item.slug : 'tool';
+                    const description = typeof item.description === 'string' ? item.description : '';
+                    return (
+                        <div key={`${index}:${packageRef}:${slug}`} className="rounded bg-white/5 px-2 py-1 text-[11px] text-zinc-300">
+                            <div className="text-zinc-100">{packageRef}/{slug}</div>
+                            {description ? <div className="text-zinc-400">{description}</div> : null}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    if (toolSlug === 'inspect_ace_tool') {
+        const aceTool = toPayloadRecord(result.ace_tool);
+        if (Object.keys(aceTool).length === 0) {
+            return null;
+        }
+
+        const packageRef = typeof aceTool.package_ref === 'string' ? aceTool.package_ref : 'unknown';
+        const slug = typeof aceTool.slug === 'string' ? aceTool.slug : 'tool';
+        const description = typeof aceTool.description === 'string' ? aceTool.description : '';
+        return (
+            <div className="rounded bg-white/5 px-2 py-2 text-[11px] text-zinc-300">
+                <div className="text-zinc-100">{packageRef}/{slug}</div>
+                {description ? <div className="mt-1 text-zinc-400">{description}</div> : null}
+            </div>
+        );
+    }
+
+    if (toolSlug === 'request_ace_tool_execution') {
+        const intent = toPayloadRecord(result.execution_intent);
+        const packageRef = typeof intent.package_ref === 'string' ? intent.package_ref : 'unknown';
+        const intentToolSlug = typeof intent.tool_slug === 'string' ? intent.tool_slug : 'tool';
+        const intentPayload = toPayloadRecord(intent.payload);
+        const fsPreview = buildFsToolPreview(intentPayload, packageRef, intentToolSlug);
+        if (fsPreview) {
+            return fsPreview;
+        }
+
+        return (
+            <div className="rounded bg-white/5 px-2 py-2 text-[11px] text-zinc-300">
+                <div className="text-zinc-100">Intent: {packageRef}/{intentToolSlug}</div>
+                <div className="mt-1 text-zinc-400">{JSON.stringify(intentPayload)}</div>
+            </div>
+        );
+    }
+
+    const resultPayload = toPayloadRecord(result.result);
+    return buildFsToolPreview(Object.keys(resultPayload).length > 0 ? resultPayload : result, '', '');
+}
+
+function buildFsToolPreview(
+    payload: Record<string, unknown>,
+    packageRef: string,
+    toolSlug: string,
+): React.ReactNode | null {
+    const action = typeof payload.action === 'string' ? payload.action : '';
+    const path = typeof payload.path === 'string' ? payload.path : '';
+    const absolutePath = typeof payload.absolute_path === 'string' ? payload.absolute_path : '';
+
+    if (!action && toolSlug !== 'fs-tool' && toolSlug !== 'fs_tool') {
+        return null;
+    }
+
+    if (action === 'read_file') {
+        const content = typeof payload.content === 'string' ? payload.content : '';
+        return (
+            <div className="space-y-2">
+                <div className="text-[11px] text-zinc-100">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · read_file</div>
+                <div className="text-[11px] text-zinc-400">{absolutePath || path}</div>
+                {content ? (
+                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-950/90 p-2 text-[10px] text-zinc-300">{content}</pre>
+                ) : null}
+            </div>
+        );
+    }
+
+    if (action === 'list_directory') {
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        return (
+            <div className="space-y-2">
+                <div className="text-[11px] text-zinc-100">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · list_directory</div>
+                <div className="text-[11px] text-zinc-400">{absolutePath || path}</div>
+                <div className="space-y-1">
+                    {items.slice(0, 5).map((item, index) => {
+                        const entry = toPayloadRecord(item);
+                        const name = typeof entry.name === 'string' ? entry.name : `item-${index + 1}`;
+                        const isDirectory = entry.is_directory === true;
+                        return <div key={`${index}:${name}`} className="text-[11px] text-zinc-300">{isDirectory ? 'DIR' : 'FILE'} {name}</div>;
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    if (action === 'write_file' || action === 'create_directory' || action === 'delete_file') {
+        return (
+            <div className="space-y-1 text-[11px] text-zinc-300">
+                <div className="text-zinc-100">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · {action}</div>
+                <div className="text-zinc-400">{absolutePath || path}</div>
+            </div>
+        );
+    }
+
+    return null;
+}
+
+function resolveToolResultMemoryUid(payload: Record<string, unknown>, result: Record<string, unknown>): string {
+    if (typeof result.result_memory_uid === 'string') {
+        return result.result_memory_uid;
+    }
+
+    const nestedResult = toPayloadRecord(result.result);
+    if (typeof nestedResult.result_memory_uid === 'string') {
+        return nestedResult.result_memory_uid;
+    }
+
+    if (typeof payload.result_memory_uid === 'string') {
+        return payload.result_memory_uid;
+    }
+
+    return '';
 }
 
 function resolveAccordionPreviewRenderer(renderers: AIRenderer[]): AIRenderer | undefined {

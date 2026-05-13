@@ -1,10 +1,11 @@
-"""Agent role scaffolds for the gateway.
+"""Agent role packages for the gateway.
 
-These profiles are intentionally lightweight for now. The current runtime still
-uses one active DeepAgent path, but this folder defines the role split we want
-for the next iteration:
-- coordinator: classify, plan, and hand off
-- executor: execute the response/tool path and package user-facing output
+Each agent owns its own prompt files, profile declaration, and tool contract.
+The runtime still binds them into one DeepAgent harness per request, but the
+filesystem layout now follows the intended architecture:
+- agents/coordinator/*
+- agents/executor/*
+- agents/tools/*
 """
 
 from .coordinator import CoordinatorAgentProfile, build_coordinator_profile

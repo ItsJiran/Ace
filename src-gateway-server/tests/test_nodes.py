@@ -13,6 +13,7 @@ def test_build_runtime_events_emits_structured_planning_todos() -> None:
         'Buat rencana implementasi agentic planning',
         session_uid='session-123',
         prior_turns=[{'prompt': 'hello', 'response': 'hi'}],
+        context_bank=['Tool search_ace_tools found 3 matching file tools'],
         memory_bank=['Known user name: Jiran'],
     )
 
@@ -28,6 +29,20 @@ def test_build_runtime_events_emits_structured_planning_todos() -> None:
     assert planning_event['payload']['title'] == 'Current Plan'
     assert planning_event['payload']['todo_items'] == planning_event['todo_items']
     assert all(item['is_complete'] is False for item in planning_event['todo_items'])
+
+
+def test_build_runtime_events_includes_session_context_items() -> None:
+    events = build_runtime_events(
+        'openai',
+        'gpt-4.1',
+        'Lanjutkan eksekusi tool',
+        session_uid='session-123',
+        context_bank=['Tool fs-tool read README.md successfully'],
+    )
+
+    context_event = next(event for event in events if event['event_type'] == 'context')
+
+    assert 'Session context: Tool fs-tool read README.md successfully' in context_event['context']
 
 
 def test_build_runtime_events_marks_final_todos_completed() -> None:

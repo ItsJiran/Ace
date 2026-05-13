@@ -60,24 +60,54 @@ function extractGatewayRequestPrompt(entry: AIEntry): string | undefined {
     return typeof prompt === 'string' && prompt.trim() ? prompt : undefined;
 }
 
-function extractGatewayFinalSystemPrompt(entry: AIEntry): string | undefined {
+function extractGatewayAgentSystemPrompt(entry: AIEntry): string | undefined {
     const requestBody = entry.network_trace?.request?.body;
     if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
         return undefined;
     }
 
-    const prompt = (requestBody as Record<string, unknown>).gateway_final_system_prompt;
+    const prompt = (requestBody as Record<string, unknown>).gateway_agent_system_prompt;
     return typeof prompt === 'string' && prompt.trim() ? prompt : undefined;
 }
 
-function extractGatewayFinalMessages(entry: AIEntry): unknown[] {
+function extractGatewayAgentMessages(entry: AIEntry): unknown[] {
     const requestBody = entry.network_trace?.request?.body;
     if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
         return [];
     }
 
-    const messages = (requestBody as Record<string, unknown>).gateway_final_messages;
+    const messages = (requestBody as Record<string, unknown>).gateway_agent_messages;
     return Array.isArray(messages) ? messages : [];
+}
+
+function extractGatewayAgentProfile(entry: AIEntry): string | undefined {
+    const requestBody = entry.network_trace?.request?.body;
+    if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+        return undefined;
+    }
+
+    const profile = (requestBody as Record<string, unknown>).gateway_agent_profile;
+    return typeof profile === 'string' && profile.trim() ? profile : undefined;
+}
+
+function extractGatewayAgentTools(entry: AIEntry): unknown[] {
+    const requestBody = entry.network_trace?.request?.body;
+    if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+        return [];
+    }
+
+    const tools = (requestBody as Record<string, unknown>).gateway_agent_tools;
+    return Array.isArray(tools) ? tools : [];
+}
+
+function extractGatewayAgentMemory(entry: AIEntry): unknown[] {
+    const requestBody = entry.network_trace?.request?.body;
+    if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+        return [];
+    }
+
+    const memory = (requestBody as Record<string, unknown>).gateway_agent_memory;
+    return Array.isArray(memory) ? memory : [];
 }
 
 function readSessionsFromMemory(): AISessionRuntime[] {
@@ -294,8 +324,11 @@ function NetworkTracePanel({ entry }: { entry: AIEntry }) {
 function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isActive: boolean }) {
     const [open, setOpen] = useState(false);
     const gatewayRequestPrompt = extractGatewayRequestPrompt(entry);
-    const gatewayFinalSystemPrompt = extractGatewayFinalSystemPrompt(entry);
-    const gatewayFinalMessages = extractGatewayFinalMessages(entry);
+    const gatewayAgentProfile = extractGatewayAgentProfile(entry);
+    const gatewayAgentSystemPrompt = extractGatewayAgentSystemPrompt(entry);
+    const gatewayAgentMessages = extractGatewayAgentMessages(entry);
+    const gatewayAgentTools = extractGatewayAgentTools(entry);
+    const gatewayAgentMemory = extractGatewayAgentMemory(entry);
 
     return (
         <div className={`border rounded mb-2 overflow-hidden ${isActive ? 'border-amber-500/40' : 'border-zinc-700/40'}`}>
@@ -341,16 +374,33 @@ function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isAct
                     </div>
 
                     <div>
-                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Final System Prompt</div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Agent System Prompt</div>
+                        {gatewayAgentProfile && (
+                            <div className="text-[10px] text-zinc-500 mb-1">profile: <span className="text-zinc-300">{gatewayAgentProfile}</span></div>
+                        )}
                         <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-60">
-                            {gatewayFinalSystemPrompt || <span className="text-zinc-600 italic">missing from gateway debug payload</span>}
+                            {gatewayAgentSystemPrompt || <span className="text-zinc-600 italic">missing from gateway debug payload</span>}
                         </pre>
                     </div>
 
                     <div>
-                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Final Messages</div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Agent Messages</div>
                         <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-60">
-                            {gatewayFinalMessages.length > 0 ? JSON.stringify(gatewayFinalMessages, null, 2) : <span className="text-zinc-600 italic">missing from gateway debug payload</span>}
+                            {gatewayAgentMessages.length > 0 ? JSON.stringify(gatewayAgentMessages, null, 2) : <span className="text-zinc-600 italic">missing from gateway debug payload</span>}
+                        </pre>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Agent Tools</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">
+                            {gatewayAgentTools.length > 0 ? JSON.stringify(gatewayAgentTools, null, 2) : <span className="text-zinc-600 italic">missing from gateway debug payload</span>}
+                        </pre>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Agent Memory</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">
+                            {gatewayAgentMemory.length > 0 ? JSON.stringify(gatewayAgentMemory, null, 2) : <span className="text-zinc-600 italic">no explicit agent memory payload</span>}
                         </pre>
                     </div>
 

@@ -1,92 +1,56 @@
-"""DeepAgents runtime wrapper for gateway chat execution.
+"""Thin runtime orchestrator for the backend-owned agentic gateway.
 
-Cara kerja file ini:
-1. Gateway menerima provider, model, prompt, dan optional `session_uid`.
-2. Runtime mengambil session backend yang menyimpan riwayat turn dan memory.
-3. Snapshot planning/context/memory dibangun dari state backend saat ini.
-4. Snapshot itu digabung ke markdown prompt files untuk membentuk system prompt.
-5. Runtime membuat DeepAgent harness memakai provider/model yang aktif.
-6. Saat streaming berjalan, backend mengirim text biasa dan meta-event snapshot.
-7. Setelah selesai, turn disimpan dan memory facts diekstrak untuk request berikutnya.
+End-to-end agentic flow in this module:
+1. The gateway receives `provider`, `model`, `prompt`, optional `session_uid`,
+    and the mirrored ACE tool catalog from the frontend request.
+2. A backend session is resolved or created. That session owns the durable
+    turn history, retained memory facts, current orchestrator plan, discovered
+    ACE tools, and the currently active logical agent.
+3. The runtime asks the snapshot layer for the current planning/context/memory
+    view of the session. This is not just for debugging; it is the canonical
+    current-state input that agent profiles reason over.
+4. The active agent profile transforms that current context into an invocation
+    config. The profile decides how much of the current state becomes prompt
+    text, which tools are allowed, and whether any explicit memory payload is
+    passed to the DeepAgent harness.
+5. The runtime binds session-aware gateway tools to the current backend session.
+    Those tool callables can mutate plan state, discovered tools, and active
+    agent handoff state while the model is running.
+6. The DeepAgent harness is created and executed. During streaming, this module
+    emits two parallel outputs:
+    - plain model text chunks for the user-visible response
+    - meta events for inspector/runtime observability
+7. After the stream completes, the finished turn is persisted back into the
+    backend session. Durable memory changes happen only when an agent invokes
+    the explicit session-memory tool.
 
-Tujuan utamanya adalah menjaga cognition tetap dimiliki backend Python, sementara
-frontend hanya menjadi pengirim request, penerima stream, dan observer runtime.
+This keeps cognition, planning, handoff state, and tool discovery owned by the
+backend runtime. The frontend observes and mirrors that state, but does not own
+the orchestration loop.
 """
 
 from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import AsyncIterator
 
 from deepagents import create_deep_agent
 
 from agents import build_coordinator_profile, build_executor_profile
-from core.gateway_tools import AceToolDescriptor, build_gateway_tool_descriptors, build_gateway_tools, normalize_ace_tools
+from core.deepagent_runtime_support import (
+    GatewaySessionState,
+    build_current_context,
+    build_messages,
+    build_session_tools,
+    chunk_to_text,
+    get_active_profile,
+    get_or_create_session_state,
+    store_turn_result,
+)
 from models import TestResponseResult
 from core.model_registry import ModelRegistry
-from core.nodes import GatewayTurnRecord, build_activity_event, build_runtime_headers, build_runtime_events, extract_memory_facts
-
-PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts" / "agent"
-PROMPT_FILES = (
-    "system.md",
-    "tool_policy.md",
-    "memory_policy.md",
-    "output_contract.md",
-)
-
-
-@dataclass
-class GatewaySessionState:
-    """Session-scoped state retained between gateway turns.
-
-    The frontend only sends `session_uid`; the gateway owns the actual running
-    history and memory bank used to reconstruct the next DeepAgent request.
-    """
-
-    session_uid: str
-    provider: str
-    model: str
-    turns: list[GatewayTurnRecord] = field(default_factory=list)
-    memory_bank: list[str] = field(default_factory=list)
-    available_ace_tools: list[AceToolDescriptor] = field(default_factory=list)
-
-
-def _chunk_to_text(chunk) -> str:
-    """Normalize streamed model chunks into plain text.
-
-    DeepAgent and provider adapters can yield chunk payloads in different
-    shapes. This helper keeps the rest of the runtime focused on text flow
-    instead of transport-specific chunk parsing.
-    """
-
-    content = getattr(chunk, "content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict):
-                text = item.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-        return "".join(parts)
-    return str(content or "")
-
-
-def _load_markdown_prompts() -> str:
-    """Load the markdown prompt bundle that defines the base agent behavior."""
-
-    sections: list[str] = []
-    for file_name in PROMPT_FILES:
-        file_path = PROMPT_DIR / file_name
-        if file_path.exists():
-            sections.append(file_path.read_text(encoding="utf-8").strip())
-    return "\n\n".join(section for section in sections if section)
+from core.nodes import build_activity_event, build_runtime_events, build_runtime_headers
 
 
 class DeepAgentRuntime:
@@ -95,47 +59,17 @@ class DeepAgentRuntime:
     Runtime flow for each request:
     1. Resolve or create a backend-owned session state by `session_uid`.
     2. Build planning/context/memory snapshots from that state.
-    3. Merge the markdown prompt files with the live runtime snapshot.
+    3. Ask the active agent profile to build the current invocation config.
     4. Create a DeepAgent harness backed by the selected provider/model.
     5. Stream plain text to the client while emitting snapshot meta events.
-    6. Persist the finished turn and extract durable memory facts.
+    6. Persist the finished turn; session memory changes only via agent tools.
     """
 
     def __init__(self, model_registry: ModelRegistry):
         self._model_registry = model_registry
         self._sessions: dict[str, GatewaySessionState] = {}
-        self._base_system_prompt = _load_markdown_prompts()
         self._coordinator_profile = build_coordinator_profile()
         self._executor_profile = build_executor_profile()
-
-    def _get_session_state(
-        self,
-        provider: str,
-        model: str,
-        session_uid: str | None,
-        ace_tools: object | None = None,
-    ) -> GatewaySessionState:
-        """Return the backend session object that owns history and memory.
-
-        This keeps conversation continuity in Python instead of rebuilding it in
-        the frontend on every request.
-        """
-
-        resolved_uid = session_uid or f"ephemeral:{provider}:{model}"
-        session_state = self._sessions.get(resolved_uid)
-        if session_state is None:
-            session_state = GatewaySessionState(
-                session_uid=resolved_uid,
-                provider=provider,
-                model=model,
-            )
-            self._sessions[resolved_uid] = session_state
-
-        session_state.provider = provider
-        session_state.model = model
-        if ace_tools is not None:
-            session_state.available_ace_tools = normalize_ace_tools(ace_tools)
-        return session_state
 
     def _encode_meta_event(self, payload: dict[str, object]) -> str:
         """Encode a runtime snapshot as an RS-prefixed transport frame.
@@ -146,68 +80,10 @@ class DeepAgentRuntime:
 
         return f"\x1e{json.dumps(payload, separators=(',', ':'), ensure_ascii=True)}\n"
 
-    def _build_system_prompt(self, session_state: GatewaySessionState, prompt: str) -> str:
-        """Compose the final system prompt passed into DeepAgent.
-
-        `core.nodes` produces the current planning/context/memory snapshot. This
-        method injects those snapshots beneath the markdown prompt bundle so the
-        agent receives live backend state without the frontend assembling it.
-        """
-
-        snapshot_headers = build_runtime_headers(
-            session_state.provider,
-            session_state.model,
-            prompt,
-            session_uid=session_state.session_uid,
-            prior_turns=session_state.turns,
-            memory_bank=session_state.memory_bank,
-        )
-
-        planning = json.loads(snapshot_headers["x-ace-deepagent-planning"])
-        context = json.loads(snapshot_headers["x-ace-deepagent-context"])
-        memory = json.loads(snapshot_headers["x-ace-deepagent-memory"])
-
-        sections = [
-            self._base_system_prompt,
-            "Runtime snapshot:",
-            "Planning:\n- " + "\n- ".join(planning) if planning else "Planning:\n- No active planning items.",
-            "Context:\n- " + "\n- ".join(context) if context else "Context:\n- No active context items.",
-            "Memory:\n- " + "\n- ".join(memory) if memory else "Memory:\n- No retained memory items.",
-            self._build_tooling_prompt(session_state),
-        ]
-        return "\n\n".join(section for section in sections if section)
-
-    def _build_tooling_prompt(self, session_state: GatewaySessionState) -> str:
-        """Render the current gateway_tool and ace_tool catalog into the system prompt."""
-
-        gateway_tool_lines = [
-            f"- {item['name']} ({item['kind']}): {item['description']}"
-            for item in build_gateway_tool_descriptors()
-        ]
-        ace_tool_lines = [
-            f"- {item.get('package_ref', 'unknown')}/{item.get('slug', 'unknown')} (ace_tool): {item.get('description', '')}"
-            for item in session_state.available_ace_tools[:40]
-        ]
-
-        return "\n\n".join([
-            "Available gateway tools:\n" + ("\n".join(gateway_tool_lines) if gateway_tool_lines else "- No gateway tools."),
-            "Available ACE tools mirrored from the app:\n" + ("\n".join(ace_tool_lines) if ace_tool_lines else "- No ACE tools mirrored for this session."),
-        ])
-
-    def _create_agent(self, provider: str, model: str, session_state: GatewaySessionState, prompt: str):
-        """Create one DeepAgent harness instance for the current request."""
-
-        chat_model = self._model_registry.build_chat_model(provider, model)
-        final_system_prompt = self._build_system_prompt(session_state, prompt)
-        agent = create_deep_agent(
-            model=chat_model,
-            tools=build_gateway_tools(session_state.available_ace_tools),
-            system_prompt=final_system_prompt,
-            memory=list(session_state.memory_bank),
-            permissions=[],
-            name="ace-deepagent-runtime",
-        )
-        return agent, final_system_prompt
+    def _apply_agent_transfer(self, session_state: GatewaySessionState, target_agent: str, reason: str, context_summary: str) -> None:
+        session_state.active_agent = target_agent
+        session_state.handoff_reason = reason
+        session_state.handoff_context_summary = context_summary
 
     def _resolve_activity_profile(self, event_type: str | None) -> dict[str, object]:
         """Map runtime events to the current role profile contract.
@@ -230,32 +106,127 @@ class DeepAgentRuntime:
             "allowed_event_types": list(profile.event_types),
         }
 
-    def _build_messages(self, session_state: GatewaySessionState, prompt: str) -> list[tuple[str, str]]:
-        """Convert the retained session turns into a compact message history.
+    def _build_agent_invocation(
+        self,
+        provider: str,
+        model: str,
+        prompt: str,
+        session_state: GatewaySessionState,
+    ):
+        """Resolve the active profile, invocation config, and harness instance."""
 
-        We intentionally keep this small so the gateway can preserve continuity
-        without blindly replaying the entire session transcript.
-        """
+        active_profile = get_active_profile(self._coordinator_profile, self._executor_profile, session_state)
+        current_context = build_current_context(session_state, prompt)
+        invocation_config = active_profile.build_invocation_config(current_context)
+        agent = create_deep_agent(
+            model=self._model_registry.build_chat_model(provider, model),
+            tools=build_session_tools(
+                session_state,
+                invocation_config.tools,
+                lambda target, reason, summary: self._apply_agent_transfer(session_state, target, reason, summary),
+            ),
+            system_prompt=invocation_config.system_prompt,
+            memory=invocation_config.memory,
+            permissions=[],
+            name=f"ace-deepagent-runtime:{invocation_config.profile_name}",
+        )
+        return invocation_config, agent
 
-        messages: list[tuple[str, str]] = []
-        for turn in session_state.turns[-4:]:
-            if turn.get("prompt"):
-                messages.append(("user", turn["prompt"]))
-            if turn.get("response"):
-                messages.append(("assistant", turn["response"]))
-        messages.append(("user", prompt))
-        return messages
+    def _build_debug_prompt_event(
+        self,
+        provider: str,
+        model: str,
+        prompt: str,
+        session_state: GatewaySessionState,
+        invocation_config,
+    ) -> dict[str, object]:
+        """Build the pre-stream debug payload mirrored into the session inspector."""
 
-    def _store_turn_result(self, session_state: GatewaySessionState, prompt: str, response_text: str) -> None:
-        """Persist the finished turn and refresh the durable memory bank."""
+        return {
+            "type": "deepagent_debug_prompt",
+            "event_type": "agent_request",
+            "status": "completed",
+            "session_state": "reasoning",
+            "payload": {
+                "gateway_agent_profile": invocation_config.profile_name,
+                "gateway_agent_system_prompt": invocation_config.system_prompt,
+                "gateway_agent_messages": build_messages(session_state, prompt),
+                "gateway_agent_tools": list(invocation_config.tools),
+                "gateway_agent_memory": invocation_config.memory,
+                "provider": provider,
+                "model": model,
+                **invocation_config.debug_payload,
+            },
+        }
 
-        session_state.turns.append({
-            "prompt": prompt,
-            "response": response_text,
-        })
-        session_state.turns = session_state.turns[-12:]
-        session_state.memory_bank.extend(extract_memory_facts(prompt, response_text))
-        session_state.memory_bank = session_state.memory_bank[-12:]
+    async def _stream_agent_events(
+        self,
+        provider: str,
+        model: str,
+        prompt: str,
+        session_state: GatewaySessionState,
+        agent,
+        stream_state: dict[str, object],
+    ) -> AsyncIterator[str]:
+        """Stream model and activity events from the live DeepAgent harness."""
+
+        async for event in agent.astream_events(
+            {"messages": build_messages(session_state, prompt)},
+            version="v2",
+        ):
+            emitted_event_index = int(stream_state["emitted_event_index"])
+            activity_event = build_activity_event(
+                provider,
+                model,
+                session_state.session_uid,
+                event,
+                emitted_event_index,
+            )
+            if activity_event:
+                profile_payload = self._resolve_activity_profile(activity_event.get("event_type"))
+                activity_event["payload"] = {
+                    **profile_payload,
+                    **(activity_event.get("payload") or {}),
+                }
+                stream_state["emitted_event_index"] = emitted_event_index + 1
+                yield self._encode_meta_event(activity_event)
+
+            if event.get("event") != "on_chat_model_stream":
+                continue
+
+            chunk = ((event.get("data") or {}).get("chunk"))
+            text = chunk_to_text(chunk)
+            if text:
+                response_parts = stream_state["response_parts"]
+                assert isinstance(response_parts, list)
+                response_parts.append(text)
+                yield text
+
+    def _build_final_snapshot_event(
+        self,
+        provider: str,
+        model: str,
+        prompt: str,
+        session_state: GatewaySessionState,
+        response_text: str,
+        emitted_event_index: int,
+    ) -> str | None:
+        """Build the post-response snapshot event mirrored after persistence."""
+
+        final_events = build_runtime_events(
+            provider,
+            model,
+            prompt,
+            session_uid=session_state.session_uid,
+            prior_turns=session_state.turns,
+            context_bank=session_state.context_bank,
+            memory_bank=session_state.memory_bank,
+            planning_override=session_state.orchestrator_plan,
+            answer=response_text,
+        )
+        if not final_events:
+            return None
+        return self._encode_meta_event({**final_events[-1], "event_index": emitted_event_index})
 
     def build_stream_headers(
         self,
@@ -271,14 +242,16 @@ class DeepAgentRuntime:
         before the first streamed token arrives.
         """
 
-        session_state = self._get_session_state(provider, model, session_uid, ace_tools)
+        session_state = get_or_create_session_state(self._sessions, provider, model, session_uid, ace_tools)
         return build_runtime_headers(
             provider,
             model,
             prompt,
             session_uid=session_state.session_uid,
             prior_turns=session_state.turns,
+            context_bank=session_state.context_bank,
             memory_bank=session_state.memory_bank,
+            planning_override=session_state.orchestrator_plan,
         )
 
     async def test_response(
@@ -293,13 +266,13 @@ class DeepAgentRuntime:
 
         started_at = time.perf_counter()
         try:
-            session_state = self._get_session_state(provider, model, session_uid, ace_tools)
-            agent, _ = self._create_agent(provider, model, session_state, prompt or "ping")
-            result = await agent.ainvoke({"messages": self._build_messages(session_state, prompt or "ping")})
+            session_state = get_or_create_session_state(self._sessions, provider, model, session_uid, ace_tools)
+            invocation_config, agent = self._build_agent_invocation(provider, model, prompt or "ping", session_state)
+            result = await agent.ainvoke({"messages": build_messages(session_state, prompt or "ping")})
             messages = result.get("messages", []) if isinstance(result, dict) else []
             response_text = ""
             if messages:
-                response_text = _chunk_to_text(messages[-1])
+                response_text = chunk_to_text(messages[-1])
             latency_ms = int((time.perf_counter() - started_at) * 1000)
             return TestResponseResult(ok=True, response=response_text, latency_ms=latency_ms, status_code=200)
         except Exception as error:
@@ -323,29 +296,19 @@ class DeepAgentRuntime:
         """
 
         try:
-            session_state = self._get_session_state(provider, model, session_uid, ace_tools)
-            agent, final_system_prompt = self._create_agent(provider, model, session_state, prompt)
-            debug_prompt_event = {
-                "type": "deepagent_debug_prompt",
-                "event_type": "final_prompt",
-                "status": "completed",
-                "session_state": "reasoning",
-                "payload": {
-                    "gateway_final_system_prompt": final_system_prompt,
-                    "gateway_final_messages": self._build_messages(session_state, prompt),
-                    "provider": provider,
-                    "model": model,
-                },
-            }
+            session_state = get_or_create_session_state(self._sessions, provider, model, session_uid, ace_tools)
+            invocation_config, agent = self._build_agent_invocation(provider, model, prompt, session_state)
+            debug_prompt_event = self._build_debug_prompt_event(provider, model, prompt, session_state, invocation_config)
             snapshot_events = build_runtime_events(
                 provider,
                 model,
                 prompt,
                 session_uid=session_state.session_uid,
                 prior_turns=session_state.turns,
+                context_bank=session_state.context_bank,
                 memory_bank=session_state.memory_bank,
+                planning_override=session_state.orchestrator_plan,
             )
-            response_parts: list[str] = []
             emitted_event_index = len(snapshot_events)
 
             yield self._encode_meta_event(debug_prompt_event)
@@ -353,47 +316,34 @@ class DeepAgentRuntime:
             for event in snapshot_events[:-1]:
                 yield self._encode_meta_event(event)
 
-            async for event in agent.astream_events(
-                {"messages": self._build_messages(session_state, prompt)},
-                version="v2",
-            ):
-                activity_event = build_activity_event(
-                    provider,
-                    model,
-                    session_state.session_uid,
-                    event,
-                    emitted_event_index,
-                )
-                if activity_event:
-                    profile_payload = self._resolve_activity_profile(activity_event.get("event_type"))
-                    activity_event["payload"] = {
-                        **profile_payload,
-                        **(activity_event.get("payload") or {}),
-                    }
-                    emitted_event_index += 1
-                    yield self._encode_meta_event(activity_event)
-
-                if event.get("event") != "on_chat_model_stream":
-                    continue
-                chunk = ((event.get("data") or {}).get("chunk"))
-                text = _chunk_to_text(chunk)
-                if text:
-                    response_parts.append(text)
-                    yield text
-
-            response_text = "".join(response_parts)
-            self._store_turn_result(session_state, prompt, response_text)
-
-            final_events = build_runtime_events(
+            stream_state: dict[str, object] = {
+                "response_parts": [],
+                "emitted_event_index": emitted_event_index,
+            }
+            async for chunk in self._stream_agent_events(
                 provider,
                 model,
                 prompt,
-                session_uid=session_state.session_uid,
-                prior_turns=session_state.turns,
-                memory_bank=session_state.memory_bank,
-                answer=response_text,
+                session_state,
+                agent,
+                stream_state,
+            ):
+                yield chunk
+
+            response_parts = stream_state["response_parts"]
+            assert isinstance(response_parts, list)
+            emitted_event_index = int(stream_state["emitted_event_index"])
+            response_text = "".join(response_parts)
+            store_turn_result(session_state, prompt, response_text)
+            final_event = self._build_final_snapshot_event(
+                provider,
+                model,
+                prompt,
+                session_state,
+                response_text,
+                emitted_event_index,
             )
-            if final_events:
-                yield self._encode_meta_event({**final_events[-1], "event_index": emitted_event_index})
+            if final_event is not None:
+                yield final_event
         except Exception as error:
             yield f"[error: {str(error)}]"
