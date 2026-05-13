@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AISession, AITurn, AIEntry, AIBlock, AIContextEntry, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
+import type { AISessionRuntime, AITurn, AIEntry, AIBlock, AIContextEntry, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 
 // ============================================================
@@ -87,6 +87,106 @@ function formatMaybeTs(value?: number) {
     return typeof value === 'number' ? ts(value) : 'n/a';
 }
 
+function readSessionsFromMemory(): AISessionRuntime[] {
+    const all = KernelEngine.getAllMemoryKeys();
+    const sessionKeys = all.filter((key: string) =>
+        key.startsWith('system:ai_session:') && key.endsWith(':state')
+    );
+
+    return sessionKeys
+        .map((key: string) => KernelEngine.readMemory(key) as AISessionRuntime)
+        .filter(Boolean);
+}
+
+function parseTraceJsonArray(value?: string): string[] {
+    if (!value) return [];
+
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+function LangGraphTracePanel({ entry }: { entry: AIEntry }) {
+    const headers = entry.network_trace?.response?.headers;
+    const activeNode = headers?.['x-ace-langgraph-active-node'];
+    const responseNode = headers?.['x-ace-langgraph-response-node'];
+    const sessionState = headers?.['x-ace-langgraph-session-state'];
+    const nodePath = parseTraceJsonArray(headers?.['x-ace-langgraph-node-path']);
+    const statePath = parseTraceJsonArray(headers?.['x-ace-langgraph-state-path']);
+    const planning = parseTraceJsonArray(headers?.['x-ace-langgraph-planning']);
+    const context = parseTraceJsonArray(headers?.['x-ace-langgraph-context']);
+    const memory = parseTraceJsonArray(headers?.['x-ace-langgraph-memory']);
+
+    if (!activeNode && !responseNode && !sessionState && nodePath.length === 0 && statePath.length === 0 && planning.length === 0 && context.length === 0 && memory.length === 0) {
+        return null;
+    }
+
+    const sections = [
+        { label: 'Planning', items: planning },
+        { label: 'Context', items: context },
+        { label: 'Memory', items: memory },
+    ];
+
+    return (
+        <div className="border border-cyan-900/50 rounded overflow-hidden">
+            <div className="px-3 py-2 bg-cyan-950/20 space-y-3">
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-cyan-300 uppercase tracking-wide font-semibold">LangGraph Snapshot</span>
+                    {activeNode && badge(`active:${activeNode}`, 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30')}
+                    {responseNode && badge(`response:${responseNode}`, 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30')}
+                    {sessionState && badge(`phase:${sessionState}`, 'bg-amber-500/20 text-amber-200 border border-amber-500/30')}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
+                    <div className="bg-zinc-900 rounded p-2 space-y-1">
+                        <div className="text-zinc-500 uppercase tracking-wide">Node Path</div>
+                        {nodePath.length > 0
+                            ? <div className="text-zinc-200 break-all">{nodePath.join(' -> ')}</div>
+                            : <div className="text-zinc-600 italic">no node path snapshot</div>
+                        }
+                    </div>
+                    <div className="bg-zinc-900 rounded p-2 space-y-1">
+                        <div className="text-zinc-500 uppercase tracking-wide">Response Source</div>
+                        <div><span className="text-zinc-500">active node:</span> <span className="text-zinc-200">{activeNode ?? 'n/a'}</span></div>
+                        <div><span className="text-zinc-500">response node:</span> <span className="text-zinc-200">{responseNode ?? 'n/a'}</span></div>
+                        <div><span className="text-zinc-500">session phase:</span> <span className="text-zinc-200">{sessionState ?? 'n/a'}</span></div>
+                    </div>
+                    <div className="bg-zinc-900 rounded p-2 space-y-1 md:col-span-2">
+                        <div className="text-zinc-500 uppercase tracking-wide">State Path</div>
+                        {statePath.length > 0
+                            ? <div className="text-zinc-200 break-all">{statePath.join(' -> ')}</div>
+                            : <div className="text-zinc-600 italic">no phase path snapshot</div>
+                        }
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[10px]">
+                    {sections.map((section) => (
+                        <div key={section.label} className="bg-zinc-900 rounded p-2 space-y-1">
+                            <div className="text-zinc-500 uppercase tracking-wide">{section.label}</div>
+                            {section.items.length > 0
+                                ? (
+                                    <div className="space-y-1">
+                                        {section.items.map((item, index) => (
+                                            <div key={`${section.label}-${index}`} className="text-zinc-200 break-all">
+                                                {index + 1}. {item}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                                : <div className="text-zinc-600 italic">empty</div>
+                            }
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function NetworkTracePanel({ entry }: { entry: AIEntry }) {
     const [open, setOpen] = useState(false);
     const trace = entry.network_trace;
@@ -124,6 +224,8 @@ function NetworkTracePanel({ entry }: { entry: AIEntry }) {
             {open && (
                 <div className="px-3 py-2 bg-zinc-950/60 space-y-3">
                     <div className="text-[10px] text-zinc-500">This trace captures the app-to-gateway request for this entry. Provider-side HTTP details are not yet mirrored here.</div>
+
+                    <LangGraphTracePanel entry={entry} />
 
                     <div className="grid grid-cols-2 gap-2 text-[10px]">
                         <div className="bg-zinc-900 rounded p-2 space-y-1">
@@ -381,8 +483,12 @@ function ContextSection({ entries, label, startIdx, endIdx }: {
                                         <span className="text-zinc-500">#{ei}</span>
                                         <StatusBadge status={entry.status} />
                                         <span className="text-zinc-200 font-semibold">{entry.title}</span>
+                                        {entry.source && badge(entry.source, 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30')}
                                         {entry.lifecycle_turn !== undefined && (
                                             <span className="text-zinc-600">turn:{entry.lifecycle_turn}</span>
+                                        )}
+                                        {entry.mirrored_at !== undefined && (
+                                            <span className="text-zinc-600">mirrored:{ts(entry.mirrored_at)}</span>
                                         )}
                                         <span className="ml-auto text-zinc-600">{ts(entry.at)}</span>
                                         {!inWindow && <span className="text-zinc-600 italic">outside window</span>}
@@ -519,8 +625,12 @@ function WorkingMemorySection({ entries }: {
                                 <div className="flex items-center gap-2 mb-1">
                                     <span className="text-zinc-500">#{idx}</span>
                                     <span className="text-fuchsia-300 font-semibold">{entry.uid}</span>
+                                    {entry.source && badge(entry.source, 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30')}
                                     {entry.lifecycle_turn !== undefined && (
                                         <span className="text-zinc-600">turn:{entry.lifecycle_turn}</span>
+                                    )}
+                                    {entry.mirrored_at !== undefined && (
+                                        <span className="text-zinc-600">mirrored:{ts(entry.mirrored_at)}</span>
                                     )}
                                     <span className="ml-auto text-zinc-600">{ts(entry.created_at)}</span>
                                 </div>
@@ -537,7 +647,7 @@ function WorkingMemorySection({ entries }: {
 }
 
 // Flat panel: all parsed blocks across every turn/entry in linear order
-function AllBlocksPanel({ session }: { session: AISession }) {
+function AllBlocksPanel({ session }: { session: AISessionRuntime }) {
     const [open, setOpen] = useState(false);
 
     // Collect all blocks from all turns / entries
@@ -602,7 +712,7 @@ function AllBlocksPanel({ session }: { session: AISession }) {
     );
 }
 
-function SessionCard({ session }: { session: AISession }) {
+function SessionCard({ session }: { session: AISessionRuntime }) {
     const [open, setOpen] = useState(true);
 
     return (
@@ -647,17 +757,31 @@ function SessionCard({ session }: { session: AISession }) {
                     </div>
 
                     {/* Plan */}
-                    {session.plan && session.plan.length > 0 && (
-                        <div>
-                            <div className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1">Plan ({session.plan.length})</div>
-                            {session.plan.map((p, pi) => (
-                                <div key={pi} className={`flex items-start gap-2 text-[10px] px-2 py-1 rounded mb-1 ${p.is_complete ? 'bg-emerald-950/20 text-zinc-300' : 'bg-zinc-900 text-zinc-400'}`}>
-                                    <span>{p.is_complete ? '✓' : '○'}</span>
-                                    <span>{p.detail as string ?? JSON.stringify(p)}</span>
+                    <div>
+                        <div className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1">Plan ({session.plan?.length ?? 0})</div>
+                        {session.plan && session.plan.length > 0
+                            ? session.plan.map((p, pi) => (
+                                <div key={pi} className={`px-2 py-1 rounded mb-1 text-[10px] ${p.is_complete ? 'bg-emerald-950/20 text-zinc-300' : 'bg-zinc-900 text-zinc-400'}`}>
+                                    <div className="flex items-start gap-2">
+                                        <span>{p.is_complete ? '✓' : '○'}</span>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-zinc-200 font-semibold">{p.title}</span>
+                                                <span className="text-zinc-500">state:{p.state}</span>
+                                                {p.source && badge(p.source, 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30')}
+                                                {p.step_index !== undefined && <span className="text-zinc-600">step:{p.step_index}</span>}
+                                                {p.lifecycle_cycle !== undefined && <span className="text-zinc-600">cycle:{p.lifecycle_cycle}</span>}
+                                                {p.lifecycle_turn !== undefined && <span className="text-zinc-600">turn:{p.lifecycle_turn}</span>}
+                                                {p.mirrored_at !== undefined && <span className="text-zinc-600">mirrored:{ts(p.mirrored_at)}</span>}
+                                            </div>
+                                            <div className="mt-1 break-all">{p.detail as string ?? JSON.stringify(p)}</div>
+                                        </div>
+                                    </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                            ))
+                            : <div className="text-[10px] text-zinc-600 italic">no plan snapshot mirrored yet</div>
+                        }
+                    </div>
 
                     {/* Active Parser Blocks */}
                     {session.active_parser_blocks && session.active_parser_blocks.length > 0 && (
@@ -717,6 +841,7 @@ function SessionCard({ session }: { session: AISession }) {
 // Main Inspector Component
 // ============================================================
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const registry = {
     name: 'ai_session_inspector',
     slug: 'ai-session-inspector',
@@ -724,21 +849,14 @@ export const registry = {
 };
 
 export default function AISessionInspector() {
-    const [sessions, setSessions] = useState<AISession[]>([]);
+    const [sessions, setSessions] = useState<AISession[]>(() => readSessionsFromMemory());
     const [filter, setFilter] = useState('');
     const [refreshRate, setRefreshRate] = useState(2000);
-    const [lastRefresh, setLastRefresh] = useState(Date.now());
+    const [lastRefresh, setLastRefresh] = useState(0);
 
     const refresh = () => {
         try {
-            const all = KernelEngine.getAllMemoryKeys();
-            const sessionKeys = all.filter((k: string) =>
-                k.startsWith('system:ai_session:') && k.endsWith(':state')
-            );
-            const loaded: AISession[] = sessionKeys
-                .map((k: string) => KernelEngine.readMemory(k) as AISession)
-                .filter(Boolean);
-            setSessions(loaded);
+            setSessions(readSessionsFromMemory());
             setLastRefresh(Date.now());
         } catch (err) {
             console.error('[AISessionInspector] refresh error:', err);
@@ -746,7 +864,6 @@ export default function AISessionInspector() {
     };
 
     useEffect(() => {
-        refresh();
         const id = setInterval(refresh, refreshRate);
         return () => clearInterval(id);
     }, [refreshRate]);

@@ -22,13 +22,21 @@
  *   stream loop stop/continue decision
  */
 
-import { AIParserProtocolState, type AIBlock, type AISession } from '#/schemas/ai';
+import { AIParserProtocolState, type AIBlock, type AISessionRuntime } from '#/schemas/ai';
 import type { ParserBlockLifecycle } from '#/schemas/parser';
-import { AIGatewayEngine } from '#/services/aiGatewayEngine';
+import { allocateHistoryEventSlot, writeHistoryEventSummary } from '#/services/aiGateway/historyEvents';
 import { KernelEngine } from '#/services/kernelEngine';
 import { RegistryEngine } from '#/services/registryEngine';
 import { AISessionBlockBus, type StreamRuntimeState } from './shared';
 import { getActiveBlockFromRuntime, persistBlock } from './persistence';
+
+const FRONTEND_DELEGATED_COGNITIVE_BLOCKS = new Set([
+    'context',
+    'working_memory',
+    'planning',
+    'parser_registry',
+    'summarize_prompt',
+]);
 
 export async function abortActiveBlock(
     session_uid: string,
@@ -62,7 +70,7 @@ export async function invokeBlockLifecycleHandler(
     abortController: AbortController,
     chunkText?: string,
 ): Promise<AIParserProtocolState> {
-    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
     const historyEventIndex = ensureBlockHistoryEventIndex(session_uid, currentSessionState, block);
     const runtimeBlock = RegistryEngine.getParserBlock(block.block_slug);
     const lifecycleHandler = lifecycle === 'start'
@@ -121,7 +129,11 @@ export function shouldStopForParserProtocol(protocolState: AIParserProtocolState
         || protocolState === AIParserProtocolState.ERROR;
 }
 
-function ensureBlockHistoryEventIndex(session_uid: string, sessionState: AISession, block: AIBlock): number | undefined {
+function ensureBlockHistoryEventIndex(session_uid: string, sessionState: AISessionRuntime, block: AIBlock): number | undefined {
+    if (isFrontendDelegatedCognitiveBlock(block.block_slug)) {
+        return undefined;
+    }
+
     const existingIndex = typeof block.runtime_context?.history_event_index === 'number'
         ? block.runtime_context.history_event_index
         : undefined;
@@ -130,7 +142,7 @@ function ensureBlockHistoryEventIndex(session_uid: string, sessionState: AISessi
         return existingIndex;
     }
 
-    const { history, historyEventIndex } = AIGatewayEngine.allocateHistoryEventSlot(sessionState, block.turn_index, {
+    const { history, historyEventIndex } = allocateHistoryEventSlot(sessionState, block.turn_index, {
         block_slug: block.block_slug,
         entry_index: block.entry_index,
         block_index: block.block_index,
@@ -155,11 +167,15 @@ function finalizeBlockHistoryEvent(
     lifecycle: ParserBlockLifecycle,
     historyEventIndex: number | undefined,
 ): void {
+    if (isFrontendDelegatedCognitiveBlock(block.block_slug)) {
+        return;
+    }
+
     if (historyEventIndex === undefined || (lifecycle !== 'complete' && lifecycle !== 'abort')) {
         return;
     }
 
-    const sessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const sessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
     const historyEntry = sessionState.history?.[block.turn_index];
     const events = historyEntry?.responses ?? [];
     const event = events.find((item) => item.index === historyEventIndex);
@@ -177,7 +193,7 @@ function finalizeBlockHistoryEvent(
         return;
     }
 
-    const history = AIGatewayEngine.writeHistoryEventSummary(
+    const history = writeHistoryEventSummary(
         sessionState,
         block.turn_index,
         historyEventIndex,
@@ -190,4 +206,8 @@ function finalizeBlockHistoryEvent(
         history,
         history_end_index: Math.max(sessionState.history_end_index ?? 0, block.turn_index + 1),
     } as Partial<AISession>);
+}
+
+function isFrontendDelegatedCognitiveBlock(blockSlug: string): boolean {
+    return FRONTEND_DELEGATED_COGNITIVE_BLOCKS.has(blockSlug);
 }

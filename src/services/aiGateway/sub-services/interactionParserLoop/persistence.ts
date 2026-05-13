@@ -15,7 +15,7 @@
  * - this module is intentionally memory-centric; it is the write boundary for stream state
  */
 
-import { AIBlockLifecycleStatus, type AIBlock, type AIEntry, type AINetworkTrace, type AISession, type AITurn } from '#/schemas/ai';
+import { AIBlockLifecycleStatus, type AIBlock, type AIEntry, type AINetworkTrace, type AISessionRuntime, type AITurn } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';
 import type { StreamRuntimeState } from './shared';
@@ -29,7 +29,7 @@ export function initializeStreamingEntry(session_uid: string, prompt: string, co
         status: 'streaming',
     });
 
-    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
     const currentTurn = currentSessionState.turns[currentSessionState.turn_index];
 
     currentTurn.entries.push(newAIEntry);
@@ -44,7 +44,7 @@ export function initializeStreamingEntry(session_uid: string, prompt: string, co
 }
 
 export function appendChunkToCurrentEntry(session_uid: string, chunk: string): void {
-    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index] as AITurn;
     const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
     const now = Date.now();
@@ -154,11 +154,11 @@ export function markBlockCompleted(session_uid: string, block: AIBlock): AIBlock
 }
 
 export function getCurrentEntryRefs(session_uid: string): {
-    currentSessionState: AISession;
+    currentSessionState: AISessionRuntime;
     currentTurn: AITurn;
     currentEntry: AIEntry;
 } {
-    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index] as AITurn;
     const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
 
@@ -169,7 +169,7 @@ export function getCurrentEntryRefs(session_uid: string): {
     return { currentSessionState, currentTurn, currentEntry };
 }
 
-export function persistCurrentEntry(session_uid: string, currentSessionState: AISession, currentTurn: AITurn, currentEntry: AIEntry): void {
+export function persistCurrentEntry(session_uid: string, currentSessionState: AISessionRuntime, currentTurn: AITurn, currentEntry: AIEntry): void {
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         ...currentSessionState,
         turns: [

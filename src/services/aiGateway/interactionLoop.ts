@@ -58,7 +58,7 @@
 // in-memory session object with periodic persistence, or sending diffs instead of
 // full session snapshots to reduce overhead.
 
-import { AIAutonomousFollowUpLoopStatus, AISessionStatus, type AISession } from '#/schemas/ai';
+import { AIAutonomousFollowUpLoopStatus, AISessionStatus, type AISessionRuntime } from '#/schemas/ai';
 
 import { KernelEngine } from '../kernelEngine';
 import * as TurnRenderer from './turnManager';
@@ -72,7 +72,7 @@ import { sendPromptToGateway, AISessionBlockBus } from './sub-services/interacti
 // main session process in the kernel hierarchy.
 
 export interface SessionInteractionLoopInput {
-    session: AISession;
+    session: AISessionRuntime;
     prompt: string;
 }
 
@@ -114,15 +114,15 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
         turns: [...session.turns, TurnRenderer.initTurn(prompt)],
         turn_index: session.turns.length, // Point to the newl y added turn
         autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.ACTIVE,
-    } as AISession);
+    } as AISessionRuntime);
 
     // -- Run a single backend graph request for the session and wait for the stream to finish.
 
     try {
-        const loopPromise = new Promise((resolve) => {
+        const loopPromise = new Promise<string>((resolve) => {
             AISessionBlockBus.addEventListener(
                 `system:ai_session:${session.session_uid}:response`,
-                (e: any) => resolve(e.detail),
+                (event: Event) => resolve((event as CustomEvent<string>).detail),
                 { once: true },
             );
         });
@@ -146,7 +146,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
             KernelEngine.updateMemory(`system:ai_session:${session.session_uid}:state`, {
                 status: AISessionStatus.IDLE,
                 active_abort_controller: undefined,
-            } as AISession);
+            } as AISessionRuntime);
             console.log(`[AIGatewayEngine] Graph run for session ${session.session_uid} completed and marked as IDLE.`);
             return;
         }
@@ -159,7 +159,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
             status: AISessionStatus.IDLE,
             autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.COMPLETED,
             active_abort_controller: undefined,
-        } as AISession);
+        } as AISessionRuntime);
         console.log(`[AIGatewayEngine] Graph run for session ${session.session_uid} completed and marked as IDLE.`);
         return;
 
@@ -171,7 +171,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
             autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus.COMPLETED,
             active_abort_controller: undefined,
             error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) },
-        } as Partial<AISession>);
+        } as Partial<AISessionRuntime>);
     }
 }
 

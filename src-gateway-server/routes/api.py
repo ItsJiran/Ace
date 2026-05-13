@@ -171,6 +171,7 @@ async def test_response(sdk: str, request: Request) -> JSONResponse:
 
     model = body.get("model", "")
     prompt = body.get("prompt", "")
+    session_uid = body.get("session_uid") or None
 
     if not model:
         return JSONResponse(
@@ -232,7 +233,8 @@ async def chat_stream(sdk: str, request: Request) -> StreamingResponse:
         return StreamingResponse(error_gen(), media_type="text/plain", status_code=400)
 
     async def generate():
-        async for chunk in gateway.stream_response(sdk, model, prompt):
+        async for chunk in gateway.stream_response(sdk, model, prompt, session_uid):
             yield chunk
 
-    return StreamingResponse(generate(), media_type="text/plain")
+    response_headers = gateway.build_stream_headers(sdk, model, prompt, session_uid)
+    return StreamingResponse(generate(), media_type="text/plain", headers=response_headers)

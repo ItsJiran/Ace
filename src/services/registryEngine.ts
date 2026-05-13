@@ -360,7 +360,7 @@ class RegistryEngineSingleton {
 
     /**
      * Returns a lightweight summary of all registered parser blocks.
-     * Used by buildBlockParserPrompt() for Tier 1 (catalog-only) rendering.
+    * Used by parser catalog rendering for catalog-only summaries.
      */
     listParserBlockSummaries(): Array<{
         slug: string;
@@ -379,7 +379,7 @@ class RegistryEngineSingleton {
 
     /**
      * Renders the full prompt detail string for a single parser block.
-     * Used by buildBlockParserPrompt() for Tier 2 (full detail) rendering.
+    * Used by parser catalog rendering for full block detail output.
      */
     renderParserBlockDetail(slugOrNamespaceRef: string): string | null {
         this.ensureParserBlockIndexes();

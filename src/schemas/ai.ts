@@ -56,6 +56,47 @@ export type AISessionState =
 // Packaging the result for the user, this can include formatting the response, ensuring that all necessary 
 // information is included, and preparing the final output for delivery to the user.
 
+export interface AISessionGraphState {
+    // LangGraph-owned execution phase mirrored into client memory for observability.
+    state: AISessionState;
+    state_cycle_index: number;
+
+    // Compatibility mirror for backend-run lifecycle. The frontend no longer owns autonomous continuation.
+    autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus;
+}
+
+export interface AIActiveParserBlock {
+    block_slug: string;
+    package_ref?: string;
+    lifecycle_turn?: number;
+}
+
+export interface AISessionContextState {
+    // Contexting information that can be used for building the session context, such as summaries, relevant history,
+    // and other contextual data that can be fed back into the model for better responses.
+    plan: Array<AIPlanEntry>;
+
+    // Parser block list parser that currently active in the session, this can be used to
+    // efficiently load block context, schema used cased and etc.
+    active_parser_blocks: Array<AIActiveParserBlock>;
+
+    // Context entries are lightweight chaining-knowledge notes produced during the turn,
+    // such as user intent, observed results, next plan, or other short-lived reasoning anchors.
+    context: Array<AIContextEntry>;
+    context_start_index: number;
+    context_end_index: number;
+
+    // Working memory ("The Workbench") stores massive raw payloads (like entire files or tool results)
+    // without polluting the conversational thread.
+    working_memory: Array<AIWorkingMemoryEntry>;
+
+    // Turn-level history summaries keyed by turn index. When present, these replace raw
+    // prompt/response replay in the prompt builder for the matching turn window.
+    history: Record<number, AIHistoryEntry>;
+    history_start_index: number;
+    history_end_index: number;
+}
+
 /**
  * A live session bound to a specific provider + model combination.
  * Multiple sessions can run concurrently, each with independent stream buffers.
@@ -74,11 +115,6 @@ export interface AISession {
     // Current status of the session, which can be used to track 
     // its lifecycle and handle UI state accordingly.
     status: AISessionStatus;
-    state: AISessionState;
-    state_cycle_index: number;
-
-    // Compatibility mirror for backend-run lifecycle. The frontend no longer owns autonomous continuation.
-    autonomous_follow_up_loop_status: AIAutonomousFollowUpLoopStatus;
     error_payload?: Record<string, unknown>;
 
     // Turn is what the user sees as a single prompt/response pair, 
@@ -86,45 +122,15 @@ export interface AISession {
     turn_index: number;
     turns: Array<AITurn>; // We can have null entries for turns that haven't started yet or are in the process of being created.
 
-    // Contexting information that can be used for building the session context, such as summaries, relevant history, 
-    // and other contextual data that can be fed back into the model for better responses. 
-    // This is optional and can be populated based on the application's needs.
-    plan: Array<AIPlanEntry>;
-
-    // Parser block list parser that currently active in the session, this can be used to 
-    // efficiently load block context, schema used cased and etc.
-    active_parser_blocks: Array<{
-        block_slug: string;
-        package_ref?: string;
-        lifecycle_turn?: number;
-    }>;
-
-    // Context entries are lightweight chaining-knowledge notes produced during the turn,
-    // such as user intent, observed results, next plan, or other short-lived reasoning anchors.
-    context: Array<AIContextEntry>;
-    context_start_index: number;
-    context_end_index: number;
-
-    // Working memory ("The Workbench") stores massive raw payloads (like entire files or tool results)
-    // without polluting the conversational thread. Items here are explicitly added and removed by the AI
-    // via blocks like <working_memory> to conserve tokens.
-    working_memory: Array<AIWorkingMemoryEntry>;
-
-    // Turn-level history summaries keyed by turn index. When present, these replace raw
-    // prompt/response replay in the prompt builder for the matching turn window.
-    history: Record<number, AIHistoryEntry>;
-    history_start_index: number;
-    history_end_index: number;
-
     // Protocol state for the current request, if applicable. This is used to track the lifecycle of 
     // prompt/response summaries and other context-building mechanisms.
     termination_requested?: boolean;
     active_abort_controller?: AbortController;
 }
 
-export interface AIParserBlock {
+export type AISessionRuntime = AISession & AISessionGraphState & AISessionContextState;
 
-}
+export type AIParserBlock = Record<string, never>;
 
 export interface AITurn {
     at: number; // Timestamp for when the turn started, useful for ordering and time-based logic.
@@ -233,6 +239,8 @@ export interface AIContextEntry {
     // The turn index at which this context was generated, 
     // useful for determining relevance and when to refresh the context
     lifecycle_turn?: number;
+    source?: 'langgraph-header' | 'langgraph-stream' | (string & {});
+    mirrored_at?: number;
     payload?: Record<string, unknown>;
 }
 
@@ -264,6 +272,8 @@ export interface AIWorkingMemoryEntry {
     content: string; // The potentially massive payload
     created_at: number;
     lifecycle_turn?: number;
+    source?: 'langgraph-header' | 'langgraph-stream' | (string & {});
+    mirrored_at?: number;
 }
 
 export interface AIPlanEntry {
@@ -274,6 +284,8 @@ export interface AIPlanEntry {
     step_index?: number;
     lifecycle_turn?: number;
     lifecycle_cycle?: number;
+    source?: 'langgraph-header' | (string & {});
+    mirrored_at?: number;
 }
 
 export interface AIRenderer {
@@ -292,23 +304,6 @@ export interface AIRenderer {
 // + ========================================================== +
 // |                    AI Gateway Constants                    |         
 // + =========================================================== +
-
-// =========================================================================
-// AI Interaction Loop Protocol State (OVERALL TURN CYCLE)
-// =========================================================================
-// This protocol state is retained as a compatibility contract for older loop-oriented code.
-// The backend LangGraph runtime is now the source of truth for autonomous continuation.
-export const AIInteractionLoopProtocolState = {
-    // End the current run without requesting additional client-driven continuation.
-    // In the LangGraph architecture this is the default client-visible end-of-run signal.
-    STOP: 'stop',
-
-    // Compatibility-only signal from older client-controlled loop behavior.
-    // New graph-driven flows should not rely on the frontend to trigger the next pass.
-    CONTINUE: 'continue',
-} as const;
-
-export type AIInteractionLoopProtocolState = typeof AIInteractionLoopProtocolState[keyof typeof AIInteractionLoopProtocolState];
 
 // =========================================================================
 // AI Parser Protocol State (STREAMING PARSER CYCLE)
@@ -391,18 +386,6 @@ export const AIResponseStatus = {
 } as const;
 
 export type AIResponseStatus = typeof AIResponseStatus[keyof typeof AIResponseStatus];
-
-
-// This schema defines the structure of the SDK target configuration for each provider, allowing for flexible
-export const AIBlockHandlerStatus = {
-    IDLE: 'idle',
-    RUNNING: 'running',
-    PARSING: 'parsing',
-    FAILED: 'failed',
-} as const;
-
-export type AIBlockHandlerStatus = typeof AIBlockHandlerStatus[keyof typeof AIBlockHandlerStatus];
-
 // This constant can be used to identify the type of process that is responsible for managing AI sessions, 
 // allowing for more organized process management and easier debugging.
 export const AIProcessType = {

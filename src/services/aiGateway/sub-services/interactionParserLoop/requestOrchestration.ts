@@ -2,7 +2,7 @@
  * Interaction Parser Loop Request Orchestration
  *
  * Summary:
- * - builds the composed prompt and opens the gateway stream request
+ * - forwards the prompt payload and opens the gateway stream request
  * - validates gateway availability, SDK config, and per-session abort wiring
  * - finalizes the streaming entry into `stop`, `interrupted`, or `error`
  *
@@ -11,7 +11,7 @@
  *   prompt
  *     |
  *     v
- *   buildPrompt()
+ *   raw prompt passthrough
  *     |
  *     v
  *   validate gateway + attach abort controller
@@ -26,16 +26,18 @@
  * - this file owns request-level control flow; it should not parse stream content directly
  */
 
-import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIEntry, type AISession, type AITurn } from '#/schemas/ai';
+import { AIBlockLifecycleStatus, AIParserProtocolState, AISessionStatus, type AIEntry, type AISessionRuntime, type AITurn } from '#/schemas/ai';
 import type { AIGatewayConfig, AIGatewaySDKTarget } from '#/schemas/ai_gateway';
 import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { HealthProbe } from '#/services/aiGateway/healthProbe';
-import { buildPrompt, type AIPromptKind } from '#/services/aiGateway/promptBuilder';
 import { KernelEngine } from '#/services/kernelEngine';
 import { invokeBlockLifecycleHandler } from './blockLifecycle';
+import { mirrorLangGraphSessionSnapshotFromHeaders } from './langGraphMirror';
 import { initializeStreamingEntry, patchCurrentEntryNetworkTrace, persistBlock } from './persistence';
 import { AISessionBlockBus, type GatewayTargetConfig } from './shared';
 import { processGatewayStream } from './streamProcessor';
+
+type AIPromptKind = 'user_prompt' | 'autonomous_follow_up';
 
 export async function sendPromptToGateway(
     prompt: string,
@@ -62,7 +64,11 @@ async function runGatewayStreamRequest(
     sdk?: string,
     model?: string,
 ): Promise<void> {
-    const composed_prompt = buildPrompt(prompt, session_uid, promptKind);
+    void session_uid;
+    void promptKind;
+
+    // LangGraph owns context, memory, and planning assembly.
+    const composed_prompt = prompt;
     initializeStreamingEntry(session_uid, prompt, composed_prompt);
 
     const { activeGatewayUrl, sdkConfig } = await validateGatewayTarget(session_uid, sdk, model);
@@ -94,9 +100,8 @@ async function validateGatewayTarget(session_uid: string, sdk?: string, model?: 
         throw new Error('SDK and model must be specified to send prompt to gateway');
     }
 
-    const AIGatewayConfig = AIGatewayEngine.getConfig() as AIGatewayConfig;
-    // @ts-expect-error
-    const sdkConfig = AIGatewayConfig.sdks[sdk];
+    const gatewayConfig = AIGatewayEngine.getConfig() as AIGatewayConfig;
+    const sdkConfig = gatewayConfig.sdks?.[sdk as keyof NonNullable<AIGatewayConfig['sdks']>];
 
     if (!sdkConfig?.api_key) {
         AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
@@ -111,7 +116,7 @@ function attachAbortControllerToSession(session_uid: string): AbortController {
 
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         active_abort_controller: abortController,
-    } as Partial<AISession>);
+    } as Partial<AISessionRuntime>);
 
     return abortController;
 }
@@ -131,7 +136,7 @@ async function openGatewayResponseStream(
         Authorization: sanitizeAuthorizationHeader(`Bearer ${sdkConfig.api_key}`),
         'Content-Type': 'application/json',
     };
-    const requestBody = { model, prompt: composed_prompt };
+    const requestBody = { model, prompt: composed_prompt, session_uid };
 
     patchCurrentEntryNetworkTrace(session_uid, {
         request: {
@@ -152,11 +157,12 @@ async function openGatewayResponseStream(
             Authorization: `Bearer ${sdkConfig.api_key}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model, prompt: composed_prompt }),
+        body: JSON.stringify(requestBody),
         signal: abortController?.signal,
     });
 
     const responseHeaders = serializeHeaders(response.headers);
+    mirrorLangGraphSessionSnapshotFromHeaders(session_uid, responseHeaders);
     patchCurrentEntryNetworkTrace(session_uid, {
         response: {
             at: Date.now(),
@@ -187,7 +193,7 @@ async function openGatewayResponseStream(
 }
 
 function finalizeStreamingEntry(session_uid: string, terminalProtocolState?: AIParserProtocolState): void {
-    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index];
     const currentEntry = currentTurn.entries?.[currentTurn.active_entry_index as number] as AIEntry;
 
@@ -217,14 +223,14 @@ function finalizeStreamingEntry(session_uid: string, terminalProtocolState?: AIP
 
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
         autonomous_follow_up_loop_status: terminalProtocolState === AIParserProtocolState.INTERRUPTED ? 'interrupted' : 'completed',
-    } as Partial<AISession>);
+    } as Partial<AISessionRuntime>);
     AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
 }
 
 async function failStreamingEntry(session_uid: string, error: unknown): Promise<void> {
     AISessionBlockBus.dispatchEvent(new CustomEvent(`system:ai_session:${session_uid}:response`, { detail: 'stop' }));
 
-    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
     const isInterrupted = currentSessionState?.termination_requested === true
         || (error instanceof Error && error.name === 'AbortError');
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index] as AITurn;
@@ -278,7 +284,7 @@ async function failStreamingEntry(session_uid: string, error: unknown): Promise<
             autonomous_follow_up_loop_status: 'interrupted',
             active_abort_controller: undefined,
             termination_requested: false,
-        } as Partial<AISession>);
+        } as Partial<AISessionRuntime>);
         return;
     }
 
@@ -286,7 +292,7 @@ async function failStreamingEntry(session_uid: string, error: unknown): Promise<
         status: AISessionStatus.ERROR,
         active_abort_controller: undefined,
         error_payload: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) },
-    } as Partial<AISession>);
+    } as Partial<AISessionRuntime>);
 }
 
 function sanitizeAuthorizationHeader(value: string): string {

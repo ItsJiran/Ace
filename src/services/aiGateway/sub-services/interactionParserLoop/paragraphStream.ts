@@ -11,7 +11,7 @@
  * - leading whitespace-only chunks are ignored until a paragraph renderer is actually opened
  */
 
-import type { AISession, AITurn } from '#/schemas/ai';
+import type { AISessionRuntime, AITurn } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';
 import type { StreamRuntimeState } from './shared';
@@ -61,7 +61,7 @@ function ensureStreamingParagraphRenderer(
         };
     }
 
-    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+    const currentSessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
     const currentTurn = currentSessionState.turns?.[currentSessionState.turn_index] as AITurn;
     const currentEntryIndex = currentTurn.active_entry_index as number;
     const rendererIndex = currentTurn.assistant_renderers.length;

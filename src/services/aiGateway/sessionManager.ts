@@ -3,7 +3,7 @@ import { KernelState } from '../kernelEngine/kernelState';
 
 import { PROCESS_KIND } from '#/schemas/process';
 import { AIAutonomousFollowUpLoopStatus, AISessionStatus } from '#/schemas/ai';
-import type { AISession, SDKProvider } from '#/schemas/ai';
+import type { AISessionRuntime, SDKProvider } from '#/schemas/ai';
 import type { KernelAISessionEntry } from '../kernelEngine/types';
 
 // + ======== Session Management Orchestration ============== +
@@ -20,7 +20,7 @@ class AISessionManagerSingleton {
 
     // + ======== Session Management Orchestration ============== +
 
-    get(sessionUID: string): AISession | undefined {
+    get(sessionUID: string): AISessionRuntime | undefined {
         const aiSessionEntry = KernelState.ai_gateway_sessions.get(sessionUID) as KernelAISessionEntry | undefined;
 
         if (!aiSessionEntry) {
@@ -28,7 +28,7 @@ class AISessionManagerSingleton {
             return undefined;
         }
 
-        return KernelEngine.readMemory( aiSessionEntry.memory_uid as string ) as AISession | undefined;
+        return KernelEngine.readMemory( aiSessionEntry.memory_uid as string ) as AISessionRuntime | undefined;
     }
 
     has(sessionUID: string): boolean {
@@ -36,10 +36,10 @@ class AISessionManagerSingleton {
         return !!aiSessionEntry;
     }
 
-    list(): AISession[] {
-        const sessions: AISession[] = [];
+    list(): AISessionRuntime[] {
+        const sessions: AISessionRuntime[] = [];
         for (const aiSessionEntry of KernelState.ai_gateway_sessions.values() as Iterable<KernelAISessionEntry>) {
-            const sessionState = KernelEngine.readMemory( aiSessionEntry.memory_uid as string ) as AISession | undefined;
+            const sessionState = KernelEngine.readMemory( aiSessionEntry.memory_uid as string ) as AISessionRuntime | undefined;
             if (sessionState) {
                 sessions.push(sessionState);
             }
@@ -53,7 +53,7 @@ class AISessionManagerSingleton {
 
     // + ============== Session Management API ============== +
 
-    create(sdk?: SDKProvider | undefined, model?: string | undefined): AISession {
+    create(sdk?: SDKProvider | undefined, model?: string | undefined): AISessionRuntime {
 
         // Generate unique session ID and associated process
         const sessionUID = `${crypto.randomUUID()}`;
@@ -72,7 +72,7 @@ class AISessionManagerSingleton {
         });
 
         // Create session in AISessionManager and spawn a new process for it.
-        const session: AISession = {
+        const session: AISessionRuntime = {
             session_uid: sessionUID,
             process_uid: processUid,
 
@@ -122,7 +122,7 @@ class AISessionManagerSingleton {
     close(sessionId: string): void {
         const sessionEntry = KernelState.ai_gateway_sessions.get(sessionId) as KernelAISessionEntry | undefined;
         const sessionStateMemory = sessionEntry?.memory_uid ?? `system:ai_session:${sessionId}:state`;
-        const sessionState = KernelEngine.readMemory(sessionStateMemory) as AISession | undefined;
+        const sessionState = KernelEngine.readMemory(sessionStateMemory) as AISessionRuntime | undefined;
 
         // Remove the session from the system registry first so any termination hooks
         // see a consistent "already detached" registry view.

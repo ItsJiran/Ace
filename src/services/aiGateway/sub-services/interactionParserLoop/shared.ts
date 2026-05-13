@@ -11,13 +11,13 @@
  * - avoid importing heavy runtime services here to prevent circular dependencies
  */
 
-import type { AISession } from '#/schemas/ai';
+import type { AISessionRuntime } from '#/schemas/ai';
 import type { AIGatewaySDKTarget } from '#/schemas/ai_gateway';
 
 export const AISessionBlockBus = new EventTarget();
 
 export interface SessionInteractionLoopInput {
-    session: AISession;
+    session: AISessionRuntime;
     prompt: string;
 }
 
@@ -33,6 +33,7 @@ export interface ActiveStreamBlock {
 }
 
 export interface StreamRuntimeState {
+    transport_buffer: string;
     pending_buffer: string;
     tmp_paragraph_renderer_index: number;
     tmp_paragraph_memory_uid?: string;
@@ -41,3 +42,4 @@ export interface StreamRuntimeState {
 
 export const ACE_BLOCK_START_PREFIX = '@@ace:start';
 export const ACE_BLOCK_END_LINE = '@@ace:end';
+export const LANGGRAPH_STREAM_META_PREFIX = '\u001e';

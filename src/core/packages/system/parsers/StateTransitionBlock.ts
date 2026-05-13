@@ -1,7 +1,7 @@
-import { AIParserProtocolState, type AISession, type AISessionState } from '#/schemas/ai';
+import { AIParserProtocolState, type AISessionRuntime, type AISessionState } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
-import { AIGatewayEngine } from '#/services/aiGatewayEngine';
+import { appendHistoryResponseSummary, writeHistoryEventSummary } from '#/services/aiGateway/historyEvents';
 import { KernelEngine } from '#/services/kernelEngine';
 
 const ALLOWED_NEXT_STATES: Record<AISessionState, AISessionState[]> = {
@@ -78,7 +78,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 : undefined;
         const session_uid = block.session_uid;
 
-        const sessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISession;
+        const sessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime;
         if (!sessionState) {
             dispatchParserResponse(AIParserProtocolState.ERROR);
             return;
@@ -117,7 +117,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
             ? `State transitioned from ${currentState} to ${nextState} for cycle ${nextCycleIndex + 1}. Reason: ${note.trim()}`
             : `State transitioned from ${currentState} to ${nextState} for cycle ${nextCycleIndex + 1}.`;
         const history = typeof history_event_index === 'number'
-            ? AIGatewayEngine.writeHistoryEventSummary(
+            ? writeHistoryEventSummary(
                 sessionState,
                 sessionState.turn_index,
                 history_event_index,
@@ -125,7 +125,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
                 { action: 'state_transition', from: currentState, to: nextState, state_cycle_index: nextCycleIndex },
                 { block_slug: 'state_transition' },
             )
-            : AIGatewayEngine.appendHistoryResponseSummary(
+            : appendHistoryResponseSummary(
                 sessionState,
                 sessionState.turn_index,
                 historySummary,

@@ -47,7 +47,7 @@ import type {
     AIGatewayConfig,
 } from '../schemas/ai_gateway';
 
-import type { AIProvider, SDKProvider, AISession, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
+import type { AIProvider, SDKProvider, AISession, AISessionRuntime } from '#/schemas/ai';
 import { AIProcessType } from '#/schemas/ai';
 
 import { KernelState } from './kernelEngine/kernelState';
@@ -182,8 +182,8 @@ class AIGatewayEngineSingleton {
     /** Creates a new isolated session bound to a specific SDK + model. */
     // Future implementation subprocess agnetic using parent process_uid from the send_gateway route call, 
     // which allows subprocesses to be properly linked in the process tree without needing to know session IDs at the call site.
-    createSession(sdk?: SDKProvider | undefined, model?: string | undefined,): AISession {    
-        const session : AISession = AISessionManager.create(sdk, model);
+    createSession(sdk?: SDKProvider | undefined, model?: string | undefined,): AISessionRuntime {    
+        const session : AISessionRuntime = AISessionManager.create(sdk, model);
         return session;
     }
 
@@ -193,7 +193,7 @@ class AIGatewayEngineSingleton {
         // First, attempt to retrieve the session entry from KernelState to 
         // ensure it exists before proceeding with cleanup.
         const session_kernel_entry = KernelState.ai_gateway_sessions.get(sessionUid) as KernelAISessionEntry | undefined;
-        const session = KernelEngine.readMemory(session_kernel_entry?.memory_uid as string) as AISession | undefined;
+        const session = KernelEngine.readMemory(session_kernel_entry?.memory_uid as string) as AISessionRuntime | undefined;
         
         if(!session) {
             console.warn(`[AIGatewayEngine] Attempted to close non-existent session ${sessionUid}`);
@@ -223,7 +223,7 @@ class AIGatewayEngineSingleton {
      * Returns read-only snapshots for all active sessions.
      * Intended for Dev Menu monitoring panels — not for runtime logic.
      */
-    listSessions(): AISession[] {
+    listSessions(): AISessionRuntime[] {
         return AISessionManager.list();
     }
 
@@ -335,156 +335,6 @@ class AIGatewayEngineSingleton {
         return _testResponse(provider, model, prompt, AIConfigManager.get(), () => HealthProbe.ensure());
     }
 
-    appendHistoryResponseSummary(
-        sessionState: AISession,
-        turnIndex: number,
-        summary: string,
-        payload?: Record<string, unknown>,
-    ): Record<number, AIHistoryEntry> {
-        const history = { ...(sessionState.history ?? {}) };
-        const existingEntry = history[turnIndex];
-        const nextResponses = [...(existingEntry?.responses ?? [])];
-        const nextIndex = nextResponses.reduce((max, event) => Math.max(max, event.index), -1) + 1;
-        const now = Date.now();
-        nextResponses.push({
-            index: nextIndex,
-            block_slug: typeof payload?.action === 'string' ? String(payload.action).split(':')[0].replace(/_/g, '-') : 'system',
-            status: 'completed',
-            summary: summary.trim(),
-            at: now,
-            updated_at: now,
-            payload,
-        });
-
-        history[turnIndex] = {
-            at: now,
-            turn_index: turnIndex,
-            status: 'active',
-            lifecycle_turn: sessionState.turn_index,
-            prompt: existingEntry?.prompt,
-            responses: nextResponses,
-            payload: existingEntry?.payload,
-        };
-
-        return history;
-    }
-
-    allocateHistoryEventSlot(
-        sessionState: AISession,
-        turnIndex: number,
-        input: {
-            block_slug: string;
-            entry_index?: number;
-            block_index?: number;
-        },
-    ): { history: Record<number, AIHistoryEntry>; historyEventIndex: number } {
-        const history = { ...(sessionState.history ?? {}) };
-        const existingEntry = history[turnIndex];
-        const payload = { ...(existingEntry?.payload ?? {}) };
-        const events = [...(existingEntry?.responses ?? [])];
-
-        const existingEvent = events.find((event) => (
-            event.block_slug === input.block_slug
-            && event.entry_index === input.entry_index
-            && event.block_index === input.block_index
-        ));
-
-        if (existingEvent) {
-            return { history, historyEventIndex: existingEvent.index };
-        }
-
-        const now = Date.now();
-        const historyEventIndex = events.reduce((max, event) => Math.max(max, event.index), -1) + 1;
-        events.push({
-            index: historyEventIndex,
-            block_slug: input.block_slug,
-            entry_index: input.entry_index,
-            block_index: input.block_index,
-            status: 'allocated',
-            at: now,
-            updated_at: now,
-        });
-
-        history[turnIndex] = {
-            at: now,
-            turn_index: turnIndex,
-            status: 'active',
-            lifecycle_turn: sessionState.turn_index,
-            prompt: existingEntry?.prompt,
-            responses: events,
-            payload,
-        };
-
-        return { history, historyEventIndex };
-    }
-
-    writeHistoryEventSummary(
-        sessionState: AISession,
-        turnIndex: number,
-        historyEventIndex: number,
-        summary: string,
-        payload?: Record<string, unknown>,
-        options?: { mirrorToResponse?: boolean; status?: 'completed' | 'aborted'; block_slug?: string },
-    ): Record<number, AIHistoryEntry> {
-        const history = { ...(sessionState.history ?? {}) };
-        const existingEntry = history[turnIndex];
-        const nextPayload = { ...(existingEntry?.payload ?? {}) };
-        const events = [...(existingEntry?.responses ?? [])];
-        const eventIndex = events.findIndex((event) => event.index === historyEventIndex);
-        const now = Date.now();
-        const nextEvent = {
-            ...(eventIndex >= 0 ? events[eventIndex] : {
-                index: historyEventIndex,
-                block_slug: options?.block_slug ?? 'unknown',
-                status: 'allocated' as const,
-                at: now,
-                updated_at: now,
-            }),
-            status: options?.status ?? 'completed',
-            summary: summary.trim(),
-            updated_at: now,
-            payload: {
-                ...((eventIndex >= 0 ? events[eventIndex]?.payload : {}) ?? {}),
-                ...(payload ?? {}),
-            },
-        };
-
-        if (eventIndex >= 0) {
-            events[eventIndex] = nextEvent;
-        } else {
-            events.push(nextEvent);
-        }
-
-        history[turnIndex] = {
-            at: now,
-            turn_index: turnIndex,
-            status: 'active',
-            lifecycle_turn: sessionState.turn_index,
-            prompt: existingEntry?.prompt,
-            responses: events,
-            payload: nextPayload,
-        };
-
-        return history;
-    }
-
-    upsertWorkingMemoryEntry(
-        sessionState: AISession,
-        entry: AIWorkingMemoryEntry,
-    ): AIWorkingMemoryEntry[] {
-        const workingMemory = [...(sessionState.working_memory ?? [])]
-            .filter((existingEntry) => existingEntry.uid !== entry.uid);
-        workingMemory.push(entry);
-        return workingMemory;
-    }
-
-    dropWorkingMemoryEntry(
-        sessionState: AISession,
-        uid: string,
-    ): AIWorkingMemoryEntry[] {
-        return [...(sessionState.working_memory ?? [])]
-            .filter((entry) => entry.uid !== uid);
-    }
 }
 
 export const AIGatewayEngine = new AIGatewayEngineSingleton();

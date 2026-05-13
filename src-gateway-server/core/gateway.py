@@ -41,10 +41,13 @@ class GatewayFacade:
 
         return await self._graph_runtime.test_response(sdk, model, prompt)
 
-    async def stream_response(self, sdk: str, model: str, prompt: str):
+    async def stream_response(self, sdk: str, model: str, prompt: str, session_uid: str | None = None):
         if not self._model_registry.has_provider(sdk):
             yield f"[error: SDK '{sdk}' not loaded. Load it first with an API key.]"
             return
 
-        async for chunk in self._graph_runtime.stream_response(sdk, model, prompt):
+        async for chunk in self._graph_runtime.stream_response(sdk, model, prompt, session_uid):
             yield chunk
+
+    def build_stream_headers(self, sdk: str, model: str, prompt: str, session_uid: str | None = None) -> dict[str, str]:
+        return self._graph_runtime.build_stream_headers(sdk, model, prompt, session_uid)

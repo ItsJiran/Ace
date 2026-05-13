@@ -15,11 +15,12 @@
 
 import { AIParserProtocolState } from '#/schemas/ai';
 import { RegistryEngine } from '#/services/registryEngine';
+import { mirrorLangGraphSessionSnapshot, type LangGraphSnapshotPayload } from './langGraphMirror';
 import { appendChunkToCurrentEntry, appendContentToBlock, createStreamingBlock, getActiveBlockFromRuntime, markBlockCompleted } from './persistence';
 import { abortActiveBlock, invokeBlockLifecycleHandler, shouldStopForParserProtocol } from './blockLifecycle';
 import { flushPlainTextBufferToRenderer, renderStrippedPrefix, resetStreamingParagraphRuntime } from './paragraphStream';
 import { findFirstAceStartSentinelIndex, parseAceStartHeader, scanActiveBlockBuffer, splitTrailingAceStartCandidate } from './bufferParsing';
-import type { StreamRuntimeState } from './shared';
+import { LANGGRAPH_STREAM_META_PREFIX, type StreamRuntimeState } from './shared';
 
 export async function processGatewayStream(
     session_uid: string,
@@ -28,6 +29,7 @@ export async function processGatewayStream(
 ): Promise<AIParserProtocolState | undefined> {
     const decoder = new TextDecoder();
     const runtimeState: StreamRuntimeState = {
+        transport_buffer: '',
         pending_buffer: '',
         tmp_paragraph_renderer_index: -1,
         tmp_paragraph_memory_uid: undefined,
@@ -85,6 +87,35 @@ export async function processGatewayChunk(
     runtimeState: StreamRuntimeState,
     abortController: AbortController,
 ): Promise<AIParserProtocolState> {
+    runtimeState.transport_buffer += chunk;
+    const extracted = extractTransportSegments(runtimeState.transport_buffer);
+    runtimeState.transport_buffer = extracted.remainder;
+
+    for (const segment of extracted.segments) {
+        if (segment.kind === 'langgraph-meta') {
+            mirrorLangGraphSessionSnapshot(session_uid, segment.payload, 'langgraph-stream');
+            continue;
+        }
+
+        const protocolState = await processPlainTextChunk(session_uid, segment.text, runtimeState, abortController);
+        if (protocolState !== AIParserProtocolState.CONTINUE_NEXT_BLOCK) {
+            return protocolState;
+        }
+    }
+
+    return AIParserProtocolState.CONTINUE_NEXT_BLOCK;
+}
+
+async function processPlainTextChunk(
+    session_uid: string,
+    chunk: string,
+    runtimeState: StreamRuntimeState,
+    abortController: AbortController,
+): Promise<AIParserProtocolState> {
+    if (chunk === '') {
+        return AIParserProtocolState.CONTINUE_NEXT_BLOCK;
+    }
+
     appendChunkToCurrentEntry(session_uid, chunk);
     runtimeState.pending_buffer += chunk;
 
@@ -191,4 +222,48 @@ export async function processGatewayChunk(
     }
 
     return AIParserProtocolState.CONTINUE_NEXT_BLOCK;
+}
+
+type TransportSegment =
+    | { kind: 'text'; text: string }
+    | { kind: 'langgraph-meta'; payload: LangGraphSnapshotPayload };
+
+function extractTransportSegments(buffer: string): { segments: TransportSegment[]; remainder: string } {
+    const segments: TransportSegment[] = [];
+    let cursor = 0;
+
+    while (cursor < buffer.length) {
+        const metaStart = buffer.indexOf(LANGGRAPH_STREAM_META_PREFIX, cursor);
+        if (metaStart === -1) {
+            if (cursor < buffer.length) {
+                segments.push({ kind: 'text', text: buffer.slice(cursor) });
+            }
+            return { segments, remainder: '' };
+        }
+
+        if (metaStart > cursor) {
+            segments.push({ kind: 'text', text: buffer.slice(cursor, metaStart) });
+        }
+
+        const metaEnd = buffer.indexOf('\n', metaStart + LANGGRAPH_STREAM_META_PREFIX.length);
+        if (metaEnd === -1) {
+            return { segments, remainder: buffer.slice(metaStart) };
+        }
+
+        const rawPayload = buffer.slice(metaStart + LANGGRAPH_STREAM_META_PREFIX.length, metaEnd);
+        try {
+            const parsed = JSON.parse(rawPayload) as LangGraphSnapshotPayload & { type?: string };
+            if (parsed.type === 'langgraph_snapshot') {
+                segments.push({ kind: 'langgraph-meta', payload: parsed });
+            } else {
+                segments.push({ kind: 'text', text: buffer.slice(metaStart, metaEnd + 1) });
+            }
+        } catch {
+            segments.push({ kind: 'text', text: buffer.slice(metaStart, metaEnd + 1) });
+        }
+
+        cursor = metaEnd + 1;
+    }
+
+    return { segments, remainder: '' };
 }

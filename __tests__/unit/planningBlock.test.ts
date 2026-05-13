@@ -37,8 +37,8 @@ describe('PlanningBlock', () => {
         KernelEngine.resetKernelSpace();
     });
 
-    it('lets Reason create a downstream Act plan without forcing a loop boundary', async () => {
-        const session = createSession('Reason');
+    it('keeps parser flow open while delegating plan creation to LangGraph', async () => {
+        const session = createSession('reasoning');
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
 
         const responses: string[] = [];
@@ -50,7 +50,7 @@ describe('PlanningBlock', () => {
                 entry_index: 0,
                 block_index: 0,
                 block_slug: 'planning',
-                payload: { content: JSON.stringify({ action: 'set', target_state: 'Act', steps: ['Inspect result', 'Choose next state'] }) },
+                payload: { content: JSON.stringify({ action: 'set', target_state: 'acting', steps: ['Inspect result', 'Choose next state'] }) },
             },
             lifecycle: 'complete',
             history_event_index: 0,
@@ -61,24 +61,15 @@ describe('PlanningBlock', () => {
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
 
         expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
-        expect(stored.plan).toHaveLength(2);
-        expect(stored.plan[0]).toMatchObject({ state: 'Act', title: 'Inspect result', is_complete: false, step_index: 0, lifecycle_cycle: 0 });
-        expect(stored.plan[1]).toMatchObject({ state: 'Act', title: 'Choose next state', is_complete: false, step_index: 1, lifecycle_cycle: 0 });
-        expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
-            expect.objectContaining({
-                index: 0,
-                block_slug: 'planning',
-                status: 'completed',
-                summary: 'Planning created 2 step(s) for state Act in cycle 1.',
-            }),
-        ]));
+        expect(stored.plan).toEqual([]);
+        expect(stored.history).toEqual({});
     });
 
-    it('lets Act mark an Act plan step complete and keeps parser flow open', async () => {
-        const session = createSession('Act');
+    it('does not mutate an existing plan when completion is delegated to LangGraph', async () => {
+        const session = createSession('acting');
         session.plan = [
             {
-                state: 'Act',
+                state: 'acting',
                 title: 'Run the command',
                 is_complete: false,
                 step_index: 0,
@@ -86,7 +77,7 @@ describe('PlanningBlock', () => {
                 lifecycle_cycle: 0,
             },
             {
-                state: 'Act',
+                state: 'acting',
                 title: 'Store the result',
                 is_complete: false,
                 step_index: 1,
@@ -116,23 +107,16 @@ describe('PlanningBlock', () => {
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
 
         expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
-        expect(stored.plan[0]?.is_complete).toBe(true);
+        expect(stored.plan[0]?.is_complete).toBe(false);
         expect(stored.plan[1]?.is_complete).toBe(false);
-        expect(stored.history[0]?.responses).toEqual(expect.arrayContaining([
-            expect.objectContaining({
-                index: 0,
-                block_slug: 'planning',
-                status: 'completed',
-                summary: 'Planning marked step complete in state Act for cycle 1: Run the command.',
-            }),
-        ]));
+        expect(stored.history).toEqual({});
     });
 
-    it('rejects complete outside Act', async () => {
-        const session = createSession('Observe');
+    it('still continues on invalid target state because frontend no longer arbitrates plan rules', async () => {
+        const session = createSession('observing');
         session.plan = [
             {
-                state: 'Act',
+                state: 'acting',
                 title: 'Run the command',
                 is_complete: false,
                 step_index: 0,
@@ -151,7 +135,7 @@ describe('PlanningBlock', () => {
                 entry_index: 0,
                 block_index: 0,
                 block_slug: 'planning',
-                payload: { content: JSON.stringify({ action: 'complete', target_state: 'Act', step_index: 0 }) },
+                payload: { content: JSON.stringify({ action: 'complete', target_state: 'invalid', step_index: 0 }) },
             },
             lifecycle: 'complete',
             history_event_index: 0,
@@ -162,10 +146,11 @@ describe('PlanningBlock', () => {
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
         expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
         expect(stored.plan[0]?.is_complete).toBe(false);
+        expect(stored.history).toEqual({});
     });
 
-    it('rejects set outside Reason', async () => {
-        const session = createSession('Act');
+    it('returns parser error only when the payload is invalid JSON', async () => {
+        const session = createSession('acting');
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
 
         const responses: string[] = [];
@@ -177,7 +162,7 @@ describe('PlanningBlock', () => {
                 entry_index: 0,
                 block_index: 0,
                 block_slug: 'planning',
-                payload: { content: JSON.stringify({ action: 'set', target_state: 'Act', steps: ['Do work'] }) },
+                payload: { content: '{"action":"set"' },
             },
             lifecycle: 'complete',
             history_event_index: 0,
@@ -186,7 +171,7 @@ describe('PlanningBlock', () => {
         });
 
         const stored = KernelEngine.readMemory(`system:ai_session:${session.session_uid}:state`) as AISession;
-        expect(responses).toEqual([AIParserProtocolState.CONTINUE_NEXT_BLOCK]);
+        expect(responses).toEqual([AIParserProtocolState.ERROR]);
         expect(stored.plan).toEqual([]);
     });
 });

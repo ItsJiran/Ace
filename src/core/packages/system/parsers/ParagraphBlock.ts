@@ -1,4 +1,4 @@
-import { AIParserProtocolState, type AISession } from '#/schemas/ai';
+import { AIParserProtocolState, type AISessionRuntime } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import type { ParserBlockArgs, ParserBlockHandler } from '#/schemas/parser';
 import { KernelEngine } from '#/services/kernelEngine';
@@ -38,7 +38,7 @@ function buildParagraphMemoryUid(block: ParserBlockArgs['block']): string {
 }
 
 export const handlerStart: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
-    const sessionState = KernelEngine.readMemory(`system:ai_session:${block.session_uid}:state`) as AISession;
+    const sessionState = KernelEngine.readMemory(`system:ai_session:${block.session_uid}:state`) as AISessionRuntime;
     if (!sessionState) {
         dispatchParserResponse(AIParserProtocolState.ERROR);
         return;
@@ -80,7 +80,7 @@ export const handlerChunk: ParserBlockHandler = async ({ block, chunk_text, disp
 };
 
 export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
-    const sessionState = KernelEngine.readMemory(`system:ai_session:${block.session_uid}:state`) as AISession;
+    const sessionState = KernelEngine.readMemory(`system:ai_session:${block.session_uid}:state`) as AISessionRuntime;
     if (!sessionState) {
         dispatchParserResponse(AIParserProtocolState.ERROR);
         return;
