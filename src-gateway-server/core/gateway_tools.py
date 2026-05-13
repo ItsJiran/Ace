@@ -151,15 +151,12 @@ def build_gateway_tools(ace_tools: list[AceToolDescriptor]) -> list[Callable]:
     def inspect_ace_tool(tool_slug: str, package_ref: str = "") -> dict[str, object]:
         """Inspect one available ACE registry tool mirrored from the frontend session."""
 
-        for item in ace_tools:
-            if item.get("slug") != tool_slug:
-                continue
-            if package_ref and item.get("package_ref") != package_ref:
-                continue
+        selected_tool = _find_ace_tool(ace_tools, tool_slug, package_ref)
+        if selected_tool is not None:
             return {
                 "kind": "gateway_tool_result",
                 "tool_name": "inspect_ace_tool",
-                "ace_tool": item,
+                "ace_tool": selected_tool,
             }
 
         return {
@@ -259,6 +256,59 @@ def build_gateway_tools(ace_tools: list[AceToolDescriptor]) -> list[Callable]:
         }
 
     return [list_ace_tools, search_ace_tools, inspect_ace_tool, suggest_missing_ace_tools, request_ace_tool_execution]
+
+
+def _find_ace_tool(
+    ace_tools: list[AceToolDescriptor],
+    tool_slug: str,
+    package_ref: str = "",
+) -> AceToolDescriptor | None:
+    """Resolve a mirrored ACE tool using tolerant name/slug matching.
+
+    The agent sometimes refers to the human-facing name (`fs_tool`) while the
+    mirrored catalog stores the registry slug (`fs-tool`). We accept both and
+    only use exact package matching when it remains consistent with a candidate.
+    """
+
+    normalized_query = _normalize_tool_identity(tool_slug)
+    normalized_package = package_ref.strip().lower()
+
+    exact_package_matches: list[AceToolDescriptor] = []
+    loose_matches: list[AceToolDescriptor] = []
+
+    for item in ace_tools:
+        item_package_ref = str(item.get("package_ref", "")).strip()
+        item_slug = str(item.get("slug", "")).strip()
+        item_name = str(item.get("name", "")).strip()
+
+        candidate_keys = {
+            item_slug,
+            item_name,
+            _normalize_tool_identity(item_slug),
+            _normalize_tool_identity(item_name),
+        }
+
+        if tool_slug not in candidate_keys and normalized_query not in candidate_keys:
+            continue
+
+        if normalized_package:
+            if item_package_ref.lower() == normalized_package:
+                exact_package_matches.append(item)
+            continue
+
+        loose_matches.append(item)
+
+    if exact_package_matches:
+        return exact_package_matches[0]
+    if loose_matches:
+        return loose_matches[0]
+    return None
+
+
+def _normalize_tool_identity(value: str) -> str:
+    """Normalize tool identifiers so `fs_tool` and `fs-tool` compare equally."""
+
+    return value.strip().lower().replace("_", "-").replace(" ", "-")
 
 
 def _tokenize_text(value: str) -> list[str]:

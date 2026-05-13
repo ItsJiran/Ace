@@ -198,14 +198,16 @@ class DeepAgentRuntime:
         """Create one DeepAgent harness instance for the current request."""
 
         chat_model = self._model_registry.build_chat_model(provider, model)
-        return create_deep_agent(
+        final_system_prompt = self._build_system_prompt(session_state, prompt)
+        agent = create_deep_agent(
             model=chat_model,
             tools=build_gateway_tools(session_state.available_ace_tools),
-            system_prompt=self._build_system_prompt(session_state, prompt),
+            system_prompt=final_system_prompt,
             memory=list(session_state.memory_bank),
             permissions=[],
             name="ace-deepagent-runtime",
         )
+        return agent, final_system_prompt
 
     def _resolve_activity_profile(self, event_type: str | None) -> dict[str, object]:
         """Map runtime events to the current role profile contract.
@@ -292,7 +294,7 @@ class DeepAgentRuntime:
         started_at = time.perf_counter()
         try:
             session_state = self._get_session_state(provider, model, session_uid, ace_tools)
-            agent = self._create_agent(provider, model, session_state, prompt or "ping")
+            agent, _ = self._create_agent(provider, model, session_state, prompt or "ping")
             result = await agent.ainvoke({"messages": self._build_messages(session_state, prompt or "ping")})
             messages = result.get("messages", []) if isinstance(result, dict) else []
             response_text = ""
@@ -322,7 +324,19 @@ class DeepAgentRuntime:
 
         try:
             session_state = self._get_session_state(provider, model, session_uid, ace_tools)
-            agent = self._create_agent(provider, model, session_state, prompt)
+            agent, final_system_prompt = self._create_agent(provider, model, session_state, prompt)
+            debug_prompt_event = {
+                "type": "deepagent_debug_prompt",
+                "event_type": "final_prompt",
+                "status": "completed",
+                "session_state": "reasoning",
+                "payload": {
+                    "gateway_final_system_prompt": final_system_prompt,
+                    "gateway_final_messages": self._build_messages(session_state, prompt),
+                    "provider": provider,
+                    "model": model,
+                },
+            }
             snapshot_events = build_runtime_events(
                 provider,
                 model,
@@ -333,6 +347,8 @@ class DeepAgentRuntime:
             )
             response_parts: list[str] = []
             emitted_event_index = len(snapshot_events)
+
+            yield self._encode_meta_event(debug_prompt_event)
 
             for event in snapshot_events[:-1]:
                 yield self._encode_meta_event(event)

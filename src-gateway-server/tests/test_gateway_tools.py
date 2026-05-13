@@ -69,6 +69,27 @@ def test_gateway_tools_can_search_and_inspect_mirrored_ace_tools() -> None:
     assert inspect_result['ace_tool']['kind'] == 'ace_tool'
 
 
+def test_inspect_ace_tool_accepts_name_alias_and_slug_normalization() -> None:
+    ace_tools = normalize_ace_tools([
+        {
+            'slug': 'fs-tool',
+            'name': 'fs_tool',
+            'description': 'Read files',
+            'package_ref': 'itsjiran/ace-system',
+            'parameters': {'type': 'object'},
+        },
+    ])
+
+    _, _, inspect_tool, _, _ = build_gateway_tools(ace_tools)
+
+    by_name = inspect_tool.invoke({'tool_slug': 'fs_tool'})
+    by_normalized_slug = inspect_tool.invoke({'tool_slug': 'fs-tool', 'package_ref': 'itsjiran/ace-system'})
+
+    assert by_name['ace_tool']['slug'] == 'fs-tool'
+    assert by_name['ace_tool']['name'] == 'fs_tool'
+    assert by_normalized_slug['ace_tool']['slug'] == 'fs-tool'
+
+
 def test_gateway_tools_can_list_mirrored_ace_tools() -> None:
     ace_tools = normalize_ace_tools([
         {

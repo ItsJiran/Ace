@@ -21,6 +21,11 @@ export function ingestAgentRuntimeEvent(session_uid: string, snapshot: AgentRunt
     const currentTurn = sessionState.turns?.[sessionState.turn_index];
     if (!currentTurn) return;
 
+    if (snapshot.type === 'deepagent_debug_prompt') {
+        persistGatewayPromptDebug(session_uid, sessionState, currentTurn, snapshot);
+        return;
+    }
+
     const todoItems = toTodoItems(snapshot.todo_items);
     const planningItems = todoItems.length > 0
         ? todoItems.map((item) => item.detail ?? item.title ?? '')
@@ -56,6 +61,66 @@ export function ingestAgentRuntimeEvent(session_uid: string, snapshot: AgentRunt
         turns: [
             ...sessionState.turns.slice(0, sessionState.turn_index),
             nextTurn,
+        ],
+    } as AISessionRuntime);
+}
+
+function persistGatewayPromptDebug(
+    session_uid: string,
+    sessionState: AISessionRuntime,
+    currentTurn: AITurn,
+    snapshot: AgentRuntimeSnapshotPayload,
+): void {
+    const activeEntryIndex = currentTurn.active_entry_index;
+    if (typeof activeEntryIndex !== 'number') {
+        return;
+    }
+
+    const currentEntry = currentTurn.entries?.[activeEntryIndex];
+    if (!currentEntry) {
+        return;
+    }
+
+    const payload = isRecord(snapshot.payload) ? snapshot.payload : {};
+    const requestBody = currentEntry.network_trace?.request?.body;
+    const existingRequestBody = isRecord(requestBody) ? requestBody : {};
+
+    const nextEntry = {
+        ...currentEntry,
+        network_trace: {
+            ...(currentEntry.network_trace ?? {}),
+            request: {
+                ...(currentEntry.network_trace?.request ?? {}),
+                body: {
+                    ...existingRequestBody,
+                    gateway_final_system_prompt: typeof payload.gateway_final_system_prompt === 'string'
+                        ? payload.gateway_final_system_prompt
+                        : existingRequestBody.gateway_final_system_prompt,
+                    gateway_final_messages: Array.isArray(payload.gateway_final_messages)
+                        ? payload.gateway_final_messages
+                        : existingRequestBody.gateway_final_messages,
+                    gateway_prompt_debug_provider: typeof payload.provider === 'string'
+                        ? payload.provider
+                        : existingRequestBody.gateway_prompt_debug_provider,
+                    gateway_prompt_debug_model: typeof payload.model === 'string'
+                        ? payload.model
+                        : existingRequestBody.gateway_prompt_debug_model,
+                },
+            },
+        },
+    };
+
+    const nextEntries = [...currentTurn.entries];
+    nextEntries[activeEntryIndex] = nextEntry;
+
+    KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
+        ...sessionState,
+        turns: [
+            ...sessionState.turns.slice(0, sessionState.turn_index),
+            {
+                ...currentTurn,
+                entries: nextEntries,
+            },
         ],
     } as AISessionRuntime);
 }

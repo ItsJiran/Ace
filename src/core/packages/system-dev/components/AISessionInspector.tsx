@@ -50,6 +50,36 @@ function formatMaybeTs(value?: number) {
     return typeof value === 'number' ? ts(value) : 'n/a';
 }
 
+function extractGatewayRequestPrompt(entry: AIEntry): string | undefined {
+    const requestBody = entry.network_trace?.request?.body;
+    if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+        return undefined;
+    }
+
+    const prompt = (requestBody as Record<string, unknown>).prompt;
+    return typeof prompt === 'string' && prompt.trim() ? prompt : undefined;
+}
+
+function extractGatewayFinalSystemPrompt(entry: AIEntry): string | undefined {
+    const requestBody = entry.network_trace?.request?.body;
+    if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+        return undefined;
+    }
+
+    const prompt = (requestBody as Record<string, unknown>).gateway_final_system_prompt;
+    return typeof prompt === 'string' && prompt.trim() ? prompt : undefined;
+}
+
+function extractGatewayFinalMessages(entry: AIEntry): unknown[] {
+    const requestBody = entry.network_trace?.request?.body;
+    if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+        return [];
+    }
+
+    const messages = (requestBody as Record<string, unknown>).gateway_final_messages;
+    return Array.isArray(messages) ? messages : [];
+}
+
 function readSessionsFromMemory(): AISessionRuntime[] {
     const all = KernelEngine.getAllMemoryKeys();
     const sessionKeys = all.filter((key: string) =>
@@ -263,6 +293,10 @@ function NetworkTracePanel({ entry }: { entry: AIEntry }) {
 
 function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isActive: boolean }) {
     const [open, setOpen] = useState(false);
+    const gatewayRequestPrompt = extractGatewayRequestPrompt(entry);
+    const gatewayFinalSystemPrompt = extractGatewayFinalSystemPrompt(entry);
+    const gatewayFinalMessages = extractGatewayFinalMessages(entry);
+
     return (
         <div className={`border rounded mb-2 overflow-hidden ${isActive ? 'border-amber-500/40' : 'border-zinc-700/40'}`}>
             <button
@@ -296,6 +330,27 @@ function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isAct
                         <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Composed Prompt (sent to model)</div>
                         <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
                             {entry.composed_prompt || <span className="text-zinc-600 italic">empty</span>}
+                        </pre>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Request Prompt</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                            {gatewayRequestPrompt || <span className="text-zinc-600 italic">missing from gateway request trace</span>}
+                        </pre>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Final System Prompt</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-60">
+                            {gatewayFinalSystemPrompt || <span className="text-zinc-600 italic">missing from gateway debug payload</span>}
+                        </pre>
+                    </div>
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">Gateway Final Messages</div>
+                        <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-60">
+                            {gatewayFinalMessages.length > 0 ? JSON.stringify(gatewayFinalMessages, null, 2) : <span className="text-zinc-600 italic">missing from gateway debug payload</span>}
                         </pre>
                     </div>
 

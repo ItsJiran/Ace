@@ -53,14 +53,9 @@ export default function AIChatbarTest() {
         sendPrompt(nextPrompt, selectedSdk, modelToUse);
     };
 
-    // Scroll to bottom when user sends a prompt
+    // ChatMessages now scrolls to the latest turn after it is actually rendered.
     const wrappedSendPrompt = (prompt: string) => {
         onSendPrompt(prompt);
-        try {
-            bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        } catch {
-            // ignore
-        }
     };
 
     return (
