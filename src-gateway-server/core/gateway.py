@@ -35,22 +35,43 @@ class GatewayFacade:
         except Exception as exc:
             return ModelsResponse(ok=False, models=[], error_message=str(exc))
 
-    async def test_response(self, sdk: str, model: str, prompt: str, session_uid: str | None = None) -> TestResponseResult:
+    async def test_response(
+        self,
+        sdk: str,
+        model: str,
+        prompt: str,
+        session_uid: str | None = None,
+        ace_tools: object | None = None,
+    ) -> TestResponseResult:
         if not self._model_registry.has_provider(sdk):
             return TestResponseResult(
                 ok=False,
                 error_message=f"SDK '{sdk}' not loaded. Load it first with an API key.",
             )
 
-        return await self._agent_runtime.test_response(sdk, model, prompt, session_uid)
+        return await self._agent_runtime.test_response(sdk, model, prompt, session_uid, ace_tools)
 
-    async def stream_response(self, sdk: str, model: str, prompt: str, session_uid: str | None = None):
+    async def stream_response(
+        self,
+        sdk: str,
+        model: str,
+        prompt: str,
+        session_uid: str | None = None,
+        ace_tools: object | None = None,
+    ):
         if not self._model_registry.has_provider(sdk):
             yield f"[error: SDK '{sdk}' not loaded. Load it first with an API key.]"
             return
 
-        async for chunk in self._agent_runtime.stream_response(sdk, model, prompt, session_uid):
+        async for chunk in self._agent_runtime.stream_response(sdk, model, prompt, session_uid, ace_tools):
             yield chunk
 
-    def build_stream_headers(self, sdk: str, model: str, prompt: str, session_uid: str | None = None) -> dict[str, str]:
-        return self._agent_runtime.build_stream_headers(sdk, model, prompt, session_uid)
+    def build_stream_headers(
+        self,
+        sdk: str,
+        model: str,
+        prompt: str,
+        session_uid: str | None = None,
+        ace_tools: object | None = None,
+    ) -> dict[str, str]:
+        return self._agent_runtime.build_stream_headers(sdk, model, prompt, session_uid, ace_tools)

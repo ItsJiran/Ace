@@ -4,16 +4,29 @@ import { KernelEngine } from '#/services/kernelEngine';
 export type AgentRuntimeSnapshotSource = 'deepagent-header' | 'deepagent-stream';
 
 export interface AgentRuntimeSnapshotPayload {
+    type?: string;
+    event_type?: string;
+    action?: string;
+    status?: string;
     session_state?: AISessionState | string;
     active_step?: string;
     response_step?: string;
     step_path?: unknown;
     state_path?: unknown;
     planning?: unknown;
+    todo_items?: unknown;
     context?: unknown;
     memory?: unknown;
+    payload?: unknown;
     emitted_at?: number;
     event_index?: number;
+}
+
+interface AgentRuntimeTodoItem {
+    title?: string;
+    detail?: string;
+    step_index?: number;
+    is_complete?: boolean;
 }
 
 const AGENT_SESSION_STATES: AISessionState[] = ['reasoning', 'acting', 'observing', 'finalizing'];
@@ -50,16 +63,24 @@ export function mirrorAgentRuntimeSnapshot(
         ? currentSessionState.state_cycle_index ?? 0
         : (currentSessionState.state_cycle_index ?? 0) + 1;
 
-    const planningItems = toStringArray(snapshot.planning);
+    const todoItems = toTodoItems(snapshot.todo_items);
+    const planningItems = todoItems.length > 0
+        ? todoItems.map((item) => item.detail ?? item.title ?? '')
+        : toStringArray(snapshot.planning);
     const contextItems = toStringArray(snapshot.context);
     const memoryItems = toStringArray(snapshot.memory);
 
-    const mirroredPlan: AIPlanEntry[] = planningItems.map((item, index) => ({
-        state: 'reasoning',
+    const mirroredPlan: AIPlanEntry[] = (todoItems.length > 0 ? todoItems : planningItems.map((item, index) => ({
         title: `DeepAgent plan ${index + 1}`,
         detail: item,
-        is_complete: false,
         step_index: index,
+        is_complete: false,
+    }))).map((item, index) => ({
+        state: 'reasoning',
+        title: item.title ?? `DeepAgent plan ${index + 1}`,
+        detail: item.detail,
+        is_complete: item.is_complete === true,
+        step_index: item.step_index ?? index,
         lifecycle_turn: turnIndex,
         lifecycle_cycle: nextCycleIndex,
         source,
@@ -121,4 +142,19 @@ export function parseAgentRuntimeArray(value?: string): string[] {
 
 function toStringArray(value: unknown): string[] {
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function toTodoItems(value: unknown): AgentRuntimeTodoItem[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value.filter((item): item is AgentRuntimeTodoItem => {
+        if (!item || typeof item !== 'object') {
+            return false;
+        }
+
+        const candidate = item as Record<string, unknown>;
+        return typeof candidate.title === 'string' || typeof candidate.detail === 'string';
+    });
 }

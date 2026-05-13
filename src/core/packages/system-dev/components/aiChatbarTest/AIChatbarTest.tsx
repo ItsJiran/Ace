@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+
+import { useRef } from 'react';
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useAIGateway } from '#/hooks/useAIGateway';
 import { useAIChatSession } from '#/hooks/useAIChatSession';
@@ -15,7 +17,7 @@ export const registry: AceRegistryType.Component = {
 };
 
 export default function AIChatbarTest() {
-    const [prompt, setPrompt] = useState('');
+    const bottomRef = useRef<HTMLDivElement | null>(null);
 
     const {
         selectedSdk,
@@ -40,25 +42,23 @@ export default function AIChatbarTest() {
     // Destructure the values returned from the useAIChatSession hook
     const { session, sessionUid, sendPrompt, interruptSession } = aiChatSessionReturn;
 
-    useEffect(() => {
-        console.log(session, sessionUid, selectedSdk, selectedModel);   
-    }, [session, sessionUid, selectedSdk, selectedModel]);
-
     // Handler for sending a prompt
-    const onSendPrompt = () => {
+    const onSendPrompt = (prompt: string) => {
+        const nextPrompt = prompt.trim();
+        if (!nextPrompt) {
+            return;
+        }
+
         const modelToUse = ensureSelectedModel();
-        sendPrompt(prompt, selectedSdk, modelToUse);
-        setPrompt('');
+        sendPrompt(nextPrompt, selectedSdk, modelToUse);
     };
 
-    const bottomRef = useRef<HTMLDivElement | null>(null);
-
     // Scroll to bottom when user sends a prompt
-    const wrappedSendPrompt = () => {
-        onSendPrompt();
+    const wrappedSendPrompt = (prompt: string) => {
+        onSendPrompt(prompt);
         try {
             bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        } catch (e) {
+        } catch {
             // ignore
         }
     };
@@ -75,12 +75,10 @@ export default function AIChatbarTest() {
             />
 
             <div className="flex-1 overflow-auto px-3 py-3 space-y-2">
-                <ChatMessages session={session} sessionUid={sessionUid ?? undefined} bottomRef={bottomRef} />
+                <ChatMessages sessionUid={sessionUid ?? undefined} bottomRef={bottomRef} />
             </div>
 
             <ControlPanel
-                prompt={prompt}
-                onPromptChange={setPrompt}
                 onSendPrompt={wrappedSendPrompt}
                 onStopPrompt={interruptSession}
                 session_status={session?.status || AISessionStatus.IDLE}

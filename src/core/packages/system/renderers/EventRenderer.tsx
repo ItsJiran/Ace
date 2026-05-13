@@ -5,6 +5,20 @@ export const registry: AceRegistryType.Renderer = {
     name: 'Event Block Renderer',
     slug: 'event-renderer',
     description: 'Renders event/action block data with status and action details',
+    handler_mode: 'event_adapter',
+};
+
+export const handler: AceRegistryType.RendererHandler = ({ payload, status }) => {
+    if (!payload || typeof payload !== 'object') {
+        return { props: { status, payload } };
+    }
+
+    return {
+        props: {
+            ...(payload as Record<string, unknown>),
+            status,
+        },
+    };
 };
 
 interface EventRendererProps {

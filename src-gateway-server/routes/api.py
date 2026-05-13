@@ -172,6 +172,7 @@ async def test_response(sdk: str, request: Request) -> JSONResponse:
     model = body.get("model", "")
     prompt = body.get("prompt", "")
     session_uid = body.get("session_uid") or None
+    ace_tools = body.get("ace_tools")
 
     if not model:
         return JSONResponse(
@@ -182,7 +183,7 @@ async def test_response(sdk: str, request: Request) -> JSONResponse:
             }
         )
 
-    result = await gateway.test_response(sdk, model, prompt, session_uid)
+    result = await gateway.test_response(sdk, model, prompt, session_uid, ace_tools)
     return JSONResponse(content=result.to_dict())
 
 
@@ -227,6 +228,7 @@ async def chat_stream(sdk: str, request: Request) -> StreamingResponse:
     model = body.get("model", "")
     prompt = body.get("prompt", "")
     session_uid = body.get("session_uid") or None
+    ace_tools = body.get("ace_tools")
 
     if not model:
         async def error_gen():
@@ -234,8 +236,8 @@ async def chat_stream(sdk: str, request: Request) -> StreamingResponse:
         return StreamingResponse(error_gen(), media_type="text/plain", status_code=400)
 
     async def generate():
-        async for chunk in gateway.stream_response(sdk, model, prompt, session_uid):
+        async for chunk in gateway.stream_response(sdk, model, prompt, session_uid, ace_tools):
             yield chunk
 
-    response_headers = gateway.build_stream_headers(sdk, model, prompt, session_uid)
+    response_headers = gateway.build_stream_headers(sdk, model, prompt, session_uid, ace_tools)
     return StreamingResponse(generate(), media_type="text/plain", headers=response_headers)

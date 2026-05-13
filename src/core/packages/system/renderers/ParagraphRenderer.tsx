@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { useAceMemory } from '#/hooks/useAceMemory';
 import { Type } from 'lucide-react';
@@ -26,8 +28,6 @@ export default function ParagraphRenderer(props: ParagraphRendererProps) {
     const memoryUid = typeof payload.memory_uid === 'string' ? payload.memory_uid : '';
     const streamedText = useAceMemory<string>(memoryUid);
     const text = streamedText ?? payload.text ?? payload.content ?? payload.markdown ?? payload.value ?? '';
-
-    console.log(`props paragraph renderer`, props, `derived text:`, text);
 
     if (!text || typeof text !== 'string') {
         return (

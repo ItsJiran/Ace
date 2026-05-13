@@ -19,6 +19,20 @@ import type { WindowConfig } from './window';
 export namespace AceRegistryType {
     export type RuntimeSchemaKind = 'json_schema' | 'zod_like' | 'custom';
 
+    export interface RendererHandlerContext {
+        payload: unknown;
+        status?: string;
+        component_slug: string;
+        package_ref?: string;
+    }
+
+    export interface RendererHandlerResult {
+        props?: Record<string, unknown>;
+        suppress_render?: boolean;
+    }
+
+    export type RendererHandler = (context: RendererHandlerContext) => RendererHandlerResult;
+
     export interface RuntimeSchemaMetadata {
         schema_ref: string;
         schema_version: string;
@@ -153,5 +167,8 @@ export namespace AceRegistryType {
     // Resolved by presentation parser blocks via RegistryEngine 'renderers' domain.
     // Default export: React component function
     // -----------------------------------------------------------------------
-    export interface Renderer extends BaseIdentity {}
+    export interface Renderer extends BaseIdentity {
+        event_types?: string[];
+        handler_mode?: 'presentation_only' | 'event_adapter';
+    }
 }

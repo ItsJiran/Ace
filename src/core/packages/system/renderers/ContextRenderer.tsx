@@ -1,5 +1,8 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import type { AceRegistryType } from '#/schemas/registryTypes';
 import { Database, ListTree, ScrollText } from 'lucide-react';
+import RendererDisclosureCard from './RendererDisclosureCard';
 
 export const registry: AceRegistryType.Renderer = {
     name: 'Context Block Renderer',
@@ -9,7 +12,7 @@ export const registry: AceRegistryType.Renderer = {
 
 interface ContextRendererProps {
     payload?: Record<string, unknown>;
-    status?: 'streaming' | 'completed';
+    status?: string;
     action?: string;
     memory_key?: string;
     memory_uid?: string;
@@ -47,96 +50,84 @@ export default function ContextRenderer(props: ContextRendererProps) {
 
     if (action === 'list') {
         return (
-            <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/50 rounded-lg p-3 space-y-2">
-                <div className="flex items-start gap-2">
-                    <ListTree size={16} className="text-sky-600 dark:text-sky-400 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-sky-900 dark:text-sky-100">
-                            Context Window Updated
-                        </div>
-                        <div className="text-xs text-sky-700 dark:text-sky-300 mt-1">
-                            Showing context entries from index {startIndex ?? 0} to {endIndex ?? 0}
-                            {typeof count === 'number' ? ` (${count} item${count === 1 ? '' : 's'})` : ''}.
-                        </div>
-                    </div>
+            <RendererDisclosureCard
+                icon={<ListTree size={14} />}
+                title="Context Window"
+                summary={<span>index {startIndex ?? 0}–{endIndex ?? 0}{typeof count === 'number' ? ` · ${count} item${count === 1 ? '' : 's'}` : ''}</span>}
+                status={props.status}
+                accentClassName="text-sky-400"
+            >
+                <div className="text-xs leading-5 text-zinc-600 dark:text-zinc-300">
+                    Showing context entries from index {startIndex ?? 0} to {endIndex ?? 0}
+                    {typeof count === 'number' ? ` (${count} item${count === 1 ? '' : 's'})` : ''}.
                 </div>
-            </div>
+            </RendererDisclosureCard>
         );
     }
 
     return (
-        <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50 rounded-lg p-3 space-y-2">
-            <div className="flex items-start gap-2">
-                <Database size={16} className="text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">
-                        {title || 'Context Note'}
+        <RendererDisclosureCard
+            icon={<Database size={14} />}
+            title={title || 'Context Note'}
+            summary={<span>{action}{kind ? ` · ${kind}` : ''} · {memoryKey}</span>}
+            status={props.status}
+            accentClassName="text-indigo-400"
+        >
+            <div className="space-y-3 text-xs text-zinc-600 dark:text-zinc-300">
+                {content ? (
+                    <div>
+                        <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                            <ScrollText size={12} />
+                            Content
+                        </div>
+                        <div className="rounded border border-zinc-200/80 bg-white/80 p-2 leading-5 dark:border-white/10 dark:bg-white/5">
+                            {content}
+                        </div>
                     </div>
-                    <div className="text-xs text-indigo-700 dark:text-indigo-300 mt-1 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-white dark:bg-zinc-900 px-2 py-1">{action}</span>
-                        {kind && <span className="rounded-full bg-white dark:bg-zinc-900 px-2 py-1">{kind}</span>}
-                        <span className="truncate font-mono">{memoryKey}</span>
+                ) : null}
+
+                {intent ? (
+                    <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Intent</div>
+                        <div className="rounded border border-zinc-200/80 bg-white/80 p-2 dark:border-white/10 dark:bg-white/5">{intent}</div>
                     </div>
-                </div>
+                ) : null}
+
+                {constraints.length > 0 ? (
+                    <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Constraints</div>
+                        <div className="space-y-1">
+                            {constraints.map((constraint, index) => (
+                                <div key={index} className="rounded border border-zinc-200/80 bg-white/80 px-2 py-1 dark:border-white/10 dark:bg-white/5">
+                                    {constraint}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
+
+                {confidence ? (
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Confidence</span>
+                        <div className="h-1.5 max-w-24 flex-1 rounded-full bg-indigo-200 dark:bg-indigo-900/50">
+                            <div
+                                className="h-full rounded-full bg-indigo-600 transition-all dark:bg-indigo-400"
+                                style={{ width: `${confidence}%` }}
+                            />
+                        </div>
+                        <span className="min-w-fit font-mono text-[11px] text-zinc-700 dark:text-zinc-200">{confidence}%</span>
+                    </div>
+                ) : null}
+
+                {decisions && Object.keys(decisions).length > 0 ? (
+                    <div className="rounded bg-zinc-950/90 p-2 text-zinc-300">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Decisions</div>
+                        <pre className="max-h-40 overflow-auto font-mono text-[10px] whitespace-pre-wrap break-all">
+                            {JSON.stringify(decisions, null, 2)}
+                        </pre>
+                    </div>
+                ) : null}
             </div>
-
-            {content && (
-                <div className="ml-6 text-xs space-y-1">
-                    <div className="text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1">
-                        <ScrollText size={12} />
-                        Content
-                    </div>
-                    <div className="text-indigo-700 dark:text-indigo-300 bg-white dark:bg-zinc-900 rounded p-2 leading-5">
-                        {content}
-                    </div>
-                </div>
-            )}
-
-            {intent && (
-                <div className="ml-6 text-xs space-y-1">
-                    <div className="text-indigo-600 dark:text-indigo-400 font-semibold">Intent:</div>
-                    <div className="text-indigo-700 dark:text-indigo-300 bg-white dark:bg-zinc-900 rounded p-2">
-                        {intent}
-                    </div>
-                </div>
-            )}
-
-            {constraints.length > 0 && (
-                <div className="ml-6 text-xs space-y-1">
-                    <div className="text-indigo-600 dark:text-indigo-400 font-semibold">Constraints:</div>
-                    <div className="space-y-1">
-                        {constraints.map((c, i) => (
-                            <div key={i} className="text-indigo-700 dark:text-indigo-300 bg-white dark:bg-zinc-900 rounded px-2 py-1">
-                                • {c}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {confidence && (
-                <div className="ml-6 flex items-center gap-2">
-                    <span className="text-xs text-indigo-600 dark:text-indigo-400">Confidence:</span>
-                    <div className="flex-1 bg-indigo-200 dark:bg-indigo-900/50 rounded-full h-1.5 max-w-24">
-                        <div
-                            className="bg-indigo-600 dark:bg-indigo-400 h-full rounded-full transition-all"
-                            style={{ width: `${confidence}%` }}
-                        />
-                    </div>
-                    <span className="text-xs font-mono text-indigo-700 dark:text-indigo-300 min-w-fit">
-                        {confidence}%
-                    </span>
-                </div>
-            )}
-
-            {decisions && Object.keys(decisions).length > 0 && (
-                <div className="ml-6 text-xs text-indigo-600 dark:text-indigo-400 bg-white dark:bg-zinc-900 rounded p-2 max-h-40 overflow-auto">
-                    <div className="font-semibold mb-1">Decisions:</div>
-                    <pre className="font-mono text-[10px]">
-                        {JSON.stringify(decisions, null, 2)}
-                    </pre>
-                </div>
-            )}
-        </div>
+        </RendererDisclosureCard>
     );
 }

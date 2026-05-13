@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AISessionRuntime, AITurn, AIEntry, AIBlock, AIContextEntry, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
+import type { AISessionRuntime, AITurn, AIEntry, AIContextEntry, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 
 // ============================================================
@@ -40,43 +40,6 @@ function StatusBadge({ status }: { status: string }) {
 // ============================================================
 // Sub-components
 // ============================================================
-
-function BlockRow({ block, idx }: { block: AIBlock; idx: number }) {
-    const [open, setOpen] = useState(false);
-    return (
-        <div className="border border-zinc-700/50 rounded mb-1 overflow-hidden">
-            <button
-                type="button"
-                onClick={() => setOpen(v => !v)}
-                className="w-full flex items-center gap-2 px-2 py-1 bg-zinc-800/60 hover:bg-zinc-700/40 text-left"
-            >
-                <span className="text-zinc-500">{open ? '▾' : '▸'}</span>
-                <span className="text-purple-300 font-semibold">Block [{idx}]</span>
-                <span className="text-zinc-400">&lt;{block.block_slug}&gt;</span>
-                {block.package_ref && <span className="text-zinc-600 text-[10px]">{block.package_ref}</span>}
-                <span className="ml-auto text-zinc-600 text-[10px]">
-                    t{block.turn_index} · e{block.entry_index} · b{block.block_index}
-                </span>
-            </button>
-            {open && (
-                <div className="px-3 py-2 bg-zinc-900/60 space-y-1">
-                    <div className="flex gap-2 text-[10px]">
-                        <span className="text-zinc-500">session:</span>
-                        <span className="text-zinc-300 font-mono">{block.session_uid}</span>
-                    </div>
-                    <div className="flex gap-2 text-[10px]">
-                        <span className="text-zinc-500">process:</span>
-                        <span className="text-zinc-300 font-mono">{block.process_uid}</span>
-                    </div>
-                    <div className="mt-1 text-[10px] text-zinc-400">Payload:</div>
-                    <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
-                        {JSON.stringify(block.payload, null, 2)}
-                    </pre>
-                </div>
-            )}
-        </div>
-    );
-}
 
 function formatBytes(charCount?: number) {
     if (typeof charCount !== 'number') return 'n/a';
@@ -345,19 +308,6 @@ function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isAct
                     </div>
 
                     <NetworkTracePanel entry={entry} />
-
-                    {/* Blocks — always rendered */}
-                    <div>
-                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">
-                            Parsed Blocks ({entry.blocks?.length ?? 0})
-                        </div>
-                        {(entry.blocks && entry.blocks.length > 0)
-                            ? entry.blocks.map((block, bi) => (
-                                <BlockRow key={bi} block={block} idx={bi} />
-                            ))
-                            : <div className="text-[10px] text-zinc-600 italic px-1">no blocks parsed in this entry</div>
-                        }
-                    </div>
                 </div>
             )}
         </div>
@@ -380,11 +330,37 @@ function TurnRow({ turn, turnIdx, isActive }: { turn: AITurn; turnIdx: number; i
                 <span className="ml-auto text-zinc-500 text-[10px]">
                     {ts(turn.at)} · {turn.entries.length} entr{turn.entries.length !== 1 ? 'ies' : 'y'}
                     {' · '}{turn.assistant_renderers.length} renderer{turn.assistant_renderers.length !== 1 ? 's' : ''}
+                    {' · '}api:{turn.model_api_call_count ?? 0}
                 </span>
             </button>
 
             {open && (
                 <div className="px-3 py-3 space-y-3 bg-zinc-900/30">
+
+                    <div>
+                        <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">
+                            Model API Calls ({turn.model_api_call_count ?? 0})
+                        </div>
+                        {(turn.model_api_calls?.length ?? 0) === 0
+                            ? <div className="text-[10px] text-zinc-600 italic">none</div>
+                            : (
+                                <div className="space-y-1">
+                                    {(turn.model_api_calls ?? []).map((call, index) => (
+                                        <div key={`${call.event_index}-${index}`} className="rounded bg-zinc-950 p-2 text-[10px]">
+                                            <div className="flex items-center gap-2 text-zinc-300">
+                                                <span className="font-semibold text-emerald-300">#{index + 1}</span>
+                                                <span>{call.provider ?? 'unknown-provider'}</span>
+                                                <span className="text-zinc-600">/</span>
+                                                <span>{call.model ?? 'unknown-model'}</span>
+                                                {call.role ? <span className="text-zinc-500">role:{call.role}</span> : null}
+                                                {call.profile_name ? <span className="text-zinc-500">profile:{call.profile_name}</span> : null}
+                                                <span className="ml-auto text-zinc-600">{ts(call.at)}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                    </div>
 
                     {/* User renderers */}
                     <div>
@@ -646,74 +622,9 @@ function WorkingMemorySection({ entries }: {
     );
 }
 
-// Flat panel: all parsed blocks across every turn/entry in linear order
-function AllBlocksPanel({ session }: { session: AISessionRuntime }) {
-    const [open, setOpen] = useState(false);
-
-    // Collect all blocks from all turns / entries
-    const allBlocks: Array<{ block: AIBlock; turnIdx: number; entryIdx: number }> = [];
-    session.turns.forEach((turn, ti) => {
-        turn.entries.forEach((entry, ei) => {
-            (entry.blocks ?? []).forEach(block => {
-                allBlocks.push({ block, turnIdx: ti, entryIdx: ei });
-            });
-        });
-    });
-
-    const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-
-    return (
-        <div className="mb-4">
-            <button
-                type="button"
-                onClick={() => setOpen(v => !v)}
-                className="flex items-center gap-2 text-[11px] text-zinc-400 font-semibold uppercase tracking-wide mb-1 hover:text-zinc-200"
-            >
-                <span>{open ? '▾' : '▸'}</span>
-                All Parsed Blocks
-                <span className="text-zinc-600 font-normal normal-case tracking-normal">
-                    {allBlocks.length === 0 ? '(none yet)' : `(${allBlocks.length} total)`}
-                </span>
-            </button>
-            {open && (
-                <div className="space-y-1 pl-2">
-                    {allBlocks.length === 0
-                        ? <div className="text-[10px] text-zinc-600 italic">no blocks parsed in this session yet</div>
-                        : allBlocks.map(({ block, turnIdx, entryIdx }, i) => {
-                            const exp = expandedIdx === i;
-                            return (
-                                <div key={i} className="border border-zinc-700/40 rounded overflow-hidden">
-                                    <button
-                                        type="button"
-                                        onClick={() => setExpandedIdx(exp ? null : i)}
-                                        className="w-full flex items-center gap-2 px-2 py-1 bg-zinc-800/50 hover:bg-zinc-700/40 text-left"
-                                    >
-                                        <span className="text-zinc-500">{exp ? '▾' : '▸'}</span>
-                                        <span className="text-purple-300 font-semibold">&lt;{block.block_slug}&gt;</span>
-                                        {block.package_ref && <span className="text-zinc-600 text-[10px]">{block.package_ref}</span>}
-                                        <span className="ml-auto text-zinc-600 text-[10px]">
-                                            t{turnIdx} · e{entryIdx} · b{block.block_index}
-                                        </span>
-                                    </button>
-                                    {exp && (
-                                        <div className="px-3 py-2 bg-zinc-900/60">
-                                            <pre className="text-[10px] text-zinc-300 bg-zinc-950 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">
-                                                {JSON.stringify(block.payload, null, 2)}
-                                            </pre>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })
-                    }
-                </div>
-            )}
-        </div>
-    );
-}
-
 function SessionCard({ session }: { session: AISessionRuntime }) {
     const [open, setOpen] = useState(true);
+    const totalModelApiCalls = session.turns.reduce((count, turn) => count + (turn.model_api_call_count ?? 0), 0);
 
     return (
         <div className="border border-zinc-700/50 rounded-lg mb-4 overflow-hidden">
@@ -743,7 +654,7 @@ function SessionCard({ session }: { session: AISessionRuntime }) {
                             <div className="text-zinc-500 uppercase tracking-wide mb-1">Session Meta</div>
                             <div><span className="text-zinc-500">process:</span> <span className="text-zinc-300 font-mono">{session.process_uid}</span></div>
                             <div><span className="text-zinc-500">autonomous_loop:</span> <StatusBadge status={session.autonomous_follow_up_loop_status} /></div>
-                            <div><span className="text-zinc-500">active_parser_blocks:</span> <span className="text-zinc-300">{session.active_parser_blocks?.length ?? 0}</span></div>
+                            <div><span className="text-zinc-500">model_api_calls:</span> <span className="text-zinc-300">{totalModelApiCalls}</span></div>
                             <div><span className="text-zinc-500">ctx window:</span> <span className="text-zinc-300">[{session.context_start_index}–{session.context_end_index}]</span></div>
                             <div><span className="text-zinc-500">hist window:</span> <span className="text-zinc-300">[{session.history_start_index}–{session.history_end_index}]</span></div>
                         </div>
@@ -782,23 +693,6 @@ function SessionCard({ session }: { session: AISessionRuntime }) {
                             : <div className="text-[10px] text-zinc-600 italic">no plan snapshot mirrored yet</div>
                         }
                     </div>
-
-                    {/* Active Parser Blocks */}
-                    {session.active_parser_blocks && session.active_parser_blocks.length > 0 && (
-                        <div>
-                            <div className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1">Active Parser Blocks</div>
-                            {session.active_parser_blocks.map((b, bi) => (
-                                <div key={bi} className="text-[10px] font-mono bg-zinc-900 rounded px-2 py-1 mb-1 flex gap-3">
-                                    <span className="text-purple-300">&lt;{b.block_slug}&gt;</span>
-                                    {b.package_ref && <span className="text-zinc-600">{b.package_ref}</span>}
-                                    {b.lifecycle_turn !== undefined && <span className="text-zinc-600">turn:{b.lifecycle_turn}</span>}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* All Blocks — flat cross-turn scan */}
-                    <AllBlocksPanel session={session} />
 
                     {/* Context */}
                     <ContextSection

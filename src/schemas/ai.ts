@@ -132,9 +132,21 @@ export type AISessionRuntime = AISession & AISessionGraphState & AISessionContex
 
 export type AIParserBlock = Record<string, never>;
 
+export interface AIModelApiCallRecord {
+    event_index: number;
+    event_type: string;
+    provider?: string;
+    model?: string;
+    role?: string;
+    profile_name?: string;
+    at: number;
+}
+
 export interface AITurn {
     at: number; // Timestamp for when the turn started, useful for ordering and time-based logic.
     status: AIResponseStatus;
+    model_api_call_count: number;
+    model_api_calls: AIModelApiCallRecord[];
 
     // Renderers for the user prompt, allowing for flexible UI representation of the prompt content.
     // Renderers for the assistant response, allowing for flexible UI representation of the response content.
@@ -297,7 +309,7 @@ export interface AIRenderer {
     component_slug: string;
     package_ref?: string;
 
-    status?: 'loading' | 'error' | 'completed';
+    status?: 'running' | 'loading' | 'error' | 'completed';
     payload: string | object | unknown;
 }
 

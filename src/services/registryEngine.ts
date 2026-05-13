@@ -279,8 +279,8 @@ class RegistryEngineSingleton {
      * Renderers are React components registered in the 'renderers' domain,
      * intended to be resolved by presentation blocks.
      */
-    listRenderers(): Array<{ package_name: string; slug: string; name: string; description?: string; metadata: Record<string, unknown> }> {
-        const results: Array<{ package_name: string; slug: string; name: string; description?: string; metadata: Record<string, unknown> }> = [];
+    listRenderers(): Array<{ package_name: string; slug: string; name: string; description?: string; metadata: Record<string, unknown>; has_handler: boolean }> {
+        const results: Array<{ package_name: string; slug: string; name: string; description?: string; metadata: Record<string, unknown>; has_handler: boolean }> = [];
 
         for (const runtimePkg of this.runtimeIndex.values()) {
             const domainMap = runtimePkg.domains['renderers'];
@@ -294,6 +294,7 @@ class RegistryEngineSingleton {
                     name: String(meta.name || slug),
                     description: typeof meta.description === 'string' ? meta.description : undefined,
                     metadata: meta,
+                    has_handler: typeof (entry as RegistryDomainEntry & { handler?: unknown }).handler === 'function',
                 });
             }
         }
@@ -301,6 +302,79 @@ class RegistryEngineSingleton {
         return results.sort((a, b) =>
             `${a.package_name}:${a.slug}`.localeCompare(`${b.package_name}:${b.slug}`)
         );
+    }
+
+    resolveRendererRuntime(query: string): {
+        component: unknown;
+        handler?: unknown;
+        metadata?: Record<string, unknown>;
+        package_name?: string;
+    } | null {
+        if (!query) return null;
+        const parts = query.split(':');
+
+        if (parts.length === 3) {
+            const [packageRef, domain, slug] = parts;
+            if (domain !== 'renderers') return null;
+
+            const found = this.getDomainEntry(packageRef, domain, slug);
+            const entry = found?.entry as (RegistryDomainEntry & { handler?: unknown; metadata?: Record<string, unknown> }) | undefined;
+            if (!entry?.implementation) return null;
+
+            return {
+                component: entry.implementation,
+                handler: entry.handler,
+                metadata: entry.metadata,
+                package_name: packageRef,
+            };
+        }
+
+        if (parts.length === 1) {
+            const slug = parts[0]?.trim();
+            if (!slug) return null;
+
+            const matches: Array<{
+                package_name: string;
+                owner_scope?: string;
+                entry: RegistryDomainEntry & { handler?: unknown; metadata?: Record<string, unknown> };
+            }> = [];
+
+            for (const runtimePkg of this.runtimeIndex.values()) {
+                const entry = runtimePkg.domains['renderers']?.get(slug) as (RegistryDomainEntry & { handler?: unknown; metadata?: Record<string, unknown> }) | undefined;
+                if (!entry?.implementation) continue;
+
+                matches.push({
+                    package_name: runtimePkg.metadata.package_name,
+                    owner_scope: runtimePkg.metadata.owner_scope,
+                    entry,
+                });
+            }
+
+            if (matches.length === 0) return null;
+
+            const ownerScopePriority = (ownerScope?: string) => {
+                if (ownerScope === 'core') return 1;
+                if (ownerScope === 'default') return 2;
+                if (ownerScope === 'user') return 3;
+                return 4;
+            };
+
+            matches.sort((a, b) => {
+                const scopeScore = ownerScopePriority(a.owner_scope) - ownerScopePriority(b.owner_scope);
+                if (scopeScore !== 0) return scopeScore;
+                return a.package_name.localeCompare(b.package_name);
+            });
+
+            const match = matches[0];
+            return {
+                component: match.entry.implementation,
+                handler: match.entry.handler,
+                metadata: match.entry.metadata,
+                package_name: match.package_name,
+            };
+        }
+
+        return null;
     }
 
     getSchemaByRef(schemaRef: string) {
@@ -697,6 +771,7 @@ class RegistryEngineSingleton {
                 const exports = moduleNamespace as {
                     default?: any;
                     registry?: any;
+                    handler?: any;
                     handlerStart?: any;
                     handlerChunk?: any;
                     handlerComplete?: any;
@@ -773,6 +848,10 @@ class RegistryEngineSingleton {
                     metadata: normalizedMeta, // The exported registry constant
                     locator: { module_path: path }
                 };
+
+                if (domain === 'renderers' && typeof exports.handler === 'function') {
+                    (entry as RegistryDomainEntry & { handler?: unknown }).handler = exports.handler;
+                }
 
                 if (domain === 'parsers' && typeof exports.validator === 'function') {
                     (entry as RegistryDomainEntry & { validator?: unknown }).validator = exports.validator;

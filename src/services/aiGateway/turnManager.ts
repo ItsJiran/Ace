@@ -4,6 +4,8 @@ const initTurn = (prompt: string): AITurn => {
     return {
         at: Date.now(),
         status: AIResponseStatus.STREAMING,
+        model_api_call_count: 0,
+        model_api_calls: [],
 
         user_renderers: [
             buildRenderer('paragraph_renderer', 'system', { text: prompt }),

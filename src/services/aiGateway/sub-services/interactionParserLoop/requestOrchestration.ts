@@ -31,6 +31,7 @@ import type { AIGatewayConfig, AIGatewaySDKTarget } from '#/schemas/ai_gateway';
 import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { HealthProbe } from '#/services/aiGateway/healthProbe';
 import { KernelEngine } from '#/services/kernelEngine';
+import { ToolEngine, type ToolManifestEntry } from '#/services/toolEngine';
 import { invokeBlockLifecycleHandler } from './blockLifecycle';
 import { mirrorAgentRuntimeSnapshotFromHeaders } from './agentRuntimeMirror';
 import { initializeStreamingEntry, patchCurrentEntryNetworkTrace, persistBlock } from './persistence';
@@ -38,6 +39,15 @@ import { AISessionBlockBus, type GatewayTargetConfig } from './shared';
 import { processGatewayStream } from './streamProcessor';
 
 type AIPromptKind = 'user_prompt' | 'autonomous_follow_up';
+
+interface GatewayAceToolPayload {
+    kind: 'ace_tool';
+    slug: string;
+    name: string;
+    description: string;
+    package_ref: string;
+    parameters?: Record<string, unknown>;
+}
 
 export async function sendPromptToGateway(
     prompt: string,
@@ -136,7 +146,8 @@ async function openGatewayResponseStream(
         Authorization: sanitizeAuthorizationHeader(`Bearer ${sdkConfig.api_key}`),
         'Content-Type': 'application/json',
     };
-    const requestBody = { model, prompt: composed_prompt, session_uid };
+    const aceTools = buildGatewayAceToolPayloads(ToolEngine.getAll());
+    const requestBody = { model, prompt: composed_prompt, session_uid, ace_tools: aceTools };
 
     patchCurrentEntryNetworkTrace(session_uid, {
         request: {
@@ -190,6 +201,17 @@ async function openGatewayResponseStream(
     }
 
     return response;
+}
+
+function buildGatewayAceToolPayloads(tools: ToolManifestEntry[]): GatewayAceToolPayload[] {
+    return tools.map((tool) => ({
+        kind: 'ace_tool',
+        slug: tool.slug,
+        name: tool.name,
+        description: tool.description,
+        package_ref: tool.packageRef,
+        parameters: tool.parameters,
+    }));
 }
 
 function finalizeStreamingEntry(session_uid: string, terminalProtocolState?: AIParserProtocolState): void {
