@@ -30,7 +30,7 @@ export type AIProvider = SDKProvider;
 // |                      AI Gateway Types                       |         
 // + =========================================================== +
 
-// These phase labels are now primarily a backend-graph observability mirror on the client.
+// These phase labels are now primarily a backend agent-runtime observability mirror on the client.
 // They are not a client-owned ReAct controller anymore; they only describe the currently
 // observed execution phase for session planning, prompt assembly, and parser-side tracing.
 export type AISessionState =
@@ -57,7 +57,7 @@ export type AISessionState =
 // information is included, and preparing the final output for delivery to the user.
 
 export interface AISessionGraphState {
-    // LangGraph-owned execution phase mirrored into client memory for observability.
+    // Backend agent-runtime execution phase mirrored into client memory for observability.
     state: AISessionState;
     state_cycle_index: number;
 
@@ -108,7 +108,7 @@ export interface AISession {
     session_uid: string;
     process_uid: string;
     // Compatibility field kept as `sdk` for existing UI/config usage.
-    // Semantically this now means the active provider binding for the backend LangGraph runtime.
+    // Semantically this now means the active provider binding for the backend agent runtime.
     sdk?: SDKProvider | undefined;
     model?: string | undefined;
 
@@ -239,7 +239,7 @@ export interface AIContextEntry {
     // The turn index at which this context was generated, 
     // useful for determining relevance and when to refresh the context
     lifecycle_turn?: number;
-    source?: 'langgraph-header' | 'langgraph-stream' | (string & {});
+    source?: 'deepagent-header' | 'deepagent-stream' | (string & {});
     mirrored_at?: number;
     payload?: Record<string, unknown>;
 }
@@ -272,7 +272,7 @@ export interface AIWorkingMemoryEntry {
     content: string; // The potentially massive payload
     created_at: number;
     lifecycle_turn?: number;
-    source?: 'langgraph-header' | 'langgraph-stream' | (string & {});
+    source?: 'deepagent-header' | 'deepagent-stream' | (string & {});
     mirrored_at?: number;
 }
 
@@ -284,7 +284,7 @@ export interface AIPlanEntry {
     step_index?: number;
     lifecycle_turn?: number;
     lifecycle_cycle?: number;
-    source?: 'langgraph-header' | (string & {});
+    source?: 'deepagent-header' | 'deepagent-stream' | (string & {});
     mirrored_at?: number;
 }
 

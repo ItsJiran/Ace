@@ -109,18 +109,18 @@ function parseTraceJsonArray(value?: string): string[] {
     }
 }
 
-function LangGraphTracePanel({ entry }: { entry: AIEntry }) {
+function AgentRuntimeTracePanel({ entry }: { entry: AIEntry }) {
     const headers = entry.network_trace?.response?.headers;
-    const activeNode = headers?.['x-ace-langgraph-active-node'];
-    const responseNode = headers?.['x-ace-langgraph-response-node'];
-    const sessionState = headers?.['x-ace-langgraph-session-state'];
-    const nodePath = parseTraceJsonArray(headers?.['x-ace-langgraph-node-path']);
-    const statePath = parseTraceJsonArray(headers?.['x-ace-langgraph-state-path']);
-    const planning = parseTraceJsonArray(headers?.['x-ace-langgraph-planning']);
-    const context = parseTraceJsonArray(headers?.['x-ace-langgraph-context']);
-    const memory = parseTraceJsonArray(headers?.['x-ace-langgraph-memory']);
+    const activeStep = headers?.['x-ace-deepagent-active-step'];
+    const responseStep = headers?.['x-ace-deepagent-response-step'];
+    const sessionState = headers?.['x-ace-deepagent-session-state'];
+    const stepPath = parseTraceJsonArray(headers?.['x-ace-deepagent-step-path']);
+    const statePath = parseTraceJsonArray(headers?.['x-ace-deepagent-state-path']);
+    const planning = parseTraceJsonArray(headers?.['x-ace-deepagent-planning']);
+    const context = parseTraceJsonArray(headers?.['x-ace-deepagent-context']);
+    const memory = parseTraceJsonArray(headers?.['x-ace-deepagent-memory']);
 
-    if (!activeNode && !responseNode && !sessionState && nodePath.length === 0 && statePath.length === 0 && planning.length === 0 && context.length === 0 && memory.length === 0) {
+    if (!activeStep && !responseStep && !sessionState && stepPath.length === 0 && statePath.length === 0 && planning.length === 0 && context.length === 0 && memory.length === 0) {
         return null;
     }
 
@@ -134,24 +134,24 @@ function LangGraphTracePanel({ entry }: { entry: AIEntry }) {
         <div className="border border-cyan-900/50 rounded overflow-hidden">
             <div className="px-3 py-2 bg-cyan-950/20 space-y-3">
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-cyan-300 uppercase tracking-wide font-semibold">LangGraph Snapshot</span>
-                    {activeNode && badge(`active:${activeNode}`, 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30')}
-                    {responseNode && badge(`response:${responseNode}`, 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30')}
+                    <span className="text-[10px] text-cyan-300 uppercase tracking-wide font-semibold">DeepAgent Snapshot</span>
+                    {activeStep && badge(`active:${activeStep}`, 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30')}
+                    {responseStep && badge(`response:${responseStep}`, 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30')}
                     {sessionState && badge(`phase:${sessionState}`, 'bg-amber-500/20 text-amber-200 border border-amber-500/30')}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
                     <div className="bg-zinc-900 rounded p-2 space-y-1">
-                        <div className="text-zinc-500 uppercase tracking-wide">Node Path</div>
-                        {nodePath.length > 0
-                            ? <div className="text-zinc-200 break-all">{nodePath.join(' -> ')}</div>
-                            : <div className="text-zinc-600 italic">no node path snapshot</div>
+                        <div className="text-zinc-500 uppercase tracking-wide">Step Path</div>
+                        {stepPath.length > 0
+                            ? <div className="text-zinc-200 break-all">{stepPath.join(' -> ')}</div>
+                            : <div className="text-zinc-600 italic">no step path snapshot</div>
                         }
                     </div>
                     <div className="bg-zinc-900 rounded p-2 space-y-1">
                         <div className="text-zinc-500 uppercase tracking-wide">Response Source</div>
-                        <div><span className="text-zinc-500">active node:</span> <span className="text-zinc-200">{activeNode ?? 'n/a'}</span></div>
-                        <div><span className="text-zinc-500">response node:</span> <span className="text-zinc-200">{responseNode ?? 'n/a'}</span></div>
+                        <div><span className="text-zinc-500">active step:</span> <span className="text-zinc-200">{activeStep ?? 'n/a'}</span></div>
+                        <div><span className="text-zinc-500">response step:</span> <span className="text-zinc-200">{responseStep ?? 'n/a'}</span></div>
                         <div><span className="text-zinc-500">session phase:</span> <span className="text-zinc-200">{sessionState ?? 'n/a'}</span></div>
                     </div>
                     <div className="bg-zinc-900 rounded p-2 space-y-1 md:col-span-2">
@@ -225,7 +225,7 @@ function NetworkTracePanel({ entry }: { entry: AIEntry }) {
                 <div className="px-3 py-2 bg-zinc-950/60 space-y-3">
                     <div className="text-[10px] text-zinc-500">This trace captures the app-to-gateway request for this entry. Provider-side HTTP details are not yet mirrored here.</div>
 
-                    <LangGraphTracePanel entry={entry} />
+                    <AgentRuntimeTracePanel entry={entry} />
 
                     <div className="grid grid-cols-2 gap-2 text-[10px]">
                         <div className="bg-zinc-900 rounded p-2 space-y-1">

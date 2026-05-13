@@ -13,10 +13,10 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'context',
     slug: 'context',
-    description: 'Compatibility block for context directives. LangGraph owns durable context state; the frontend parser keeps this block only for stream compatibility.',
+    description: 'Compatibility block for context directives. The backend agent runtime owns durable context state; the frontend parser keeps this block only for stream compatibility.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'This block is parsed for compatibility, but context storage and retrieval are delegated to LangGraph. The frontend no longer persists or windows context entries from streamed block payloads.',
+        purpose: 'This block is parsed for compatibility, but context storage and retrieval are delegated to the backend agent runtime. The frontend no longer persists or windows context entries from streamed block payloads.',
         requiredFields: '"action" (store | list). For store: one of "content" | "text". For list: "start_index".',
         optionalFields: 'For store: "title", "kind", "payload". For list: "end_index".',
         triggerConditions: [
@@ -58,7 +58,7 @@ export const registry: AceRegistryType.Parser = {
 export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
     try {
         const payload = JSON.parse(block.payload.content);
-        console.info('[ContextBlock] Delegated to LangGraph; frontend context mutations are disabled.', payload);
+        console.info('[ContextBlock] Delegated to backend agent runtime; frontend context mutations are disabled.', payload);
 
         dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
     } catch (e) {

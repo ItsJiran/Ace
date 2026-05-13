@@ -1,4 +1,4 @@
-# ACE LangGraph Gateway Server
+# ACE DeepAgent Gateway Server
 
 ## Related Runtime Docs
 
@@ -6,13 +6,13 @@ Gateway-side behavior documented here is consumed by app-side context compositio
 
 - `docs/GATEWAY_CONTEXT_MECHANISM.md`
 
-LangGraph-backed gateway sidecar that runs the ACE agent runtime across OpenAI, Google Gemini, and Anthropic models.
+DeepAgents-backed gateway sidecar that runs the ACE agent runtime across OpenAI, Google Gemini, and Anthropic models.
 
 ## Overview
 
 The gateway server is a Python-based sidecar that:
 - Exposes a unified HTTP API for the ACE app
-- Hosts the LangGraph runtime that executes agent runs
+- Hosts the DeepAgents runtime that executes agent runs
 - Resolves provider/model bindings through LangChain integrations
 - Streams plain text output that remains compatible with ACE block parsing on the client
 
@@ -26,7 +26,7 @@ The gateway server is a Python-based sidecar that:
             │ HTTP (localhost:8888)
             │
 ┌───────────▼──────────────┐
-│  LangGraph Gateway       │  Python/FastAPI
+│  DeepAgent Gateway       │  Python/FastAPI
 │  ├─ /health            │
 │  ├─ /models/{sdk}      │
 │  ├─ /test/{sdk}        │
@@ -34,7 +34,7 @@ The gateway server is a Python-based sidecar that:
 └───────────┬──────────────┘
             │
     ┌───────▼──────────────────┐
-    │   LangGraph ReAct App    │
+    │   DeepAgent Harness App  │
     └───────┬──────────────────┘
       │
     ┌───────┼───────┐
@@ -58,7 +58,7 @@ cd src-gateway-server
 pip install -r requirements.txt
 ```
 
-2. The runtime uses LangGraph + LangChain provider packages listed in `requirements.txt`.
+2. The runtime uses DeepAgents + LangChain provider packages listed in `requirements.txt`.
 
 ## Running the Server
 
@@ -174,10 +174,10 @@ src-gateway-server/
 ├── models/              # Data Transfer Objects (DTOs)
 │   └── __init__.py      # AIModel, ModelsResponse, TestResponseResult, HealthResponse
 │
-├── core/                # LangGraph orchestration
+├── core/                # DeepAgents orchestration
 │   ├── __init__.py
 │   ├── gateway.py       # GatewayFacade compatibility wrapper
-│   ├── graph_runtime.py # LangGraph runtime execution
+│   ├── deepagent_runtime.py # DeepAgents runtime execution
 │   └── model_registry.py# Provider/model binding resolver
 │
 ├── routes/              # HTTP API endpoints
@@ -193,12 +193,12 @@ src-gateway-server/
 
 ### Facade Pattern
 `GatewayFacade` provides a unified interface:
-- Preserves the old HTTP contract while routing work into LangGraph
+- Preserves the old HTTP contract while routing work into DeepAgents
 - Manages provider credential registration
 - Normalizes errors and health responses
 
-### LangGraph Runtime
-The server creates a LangGraph-based run per request:
+### DeepAgents Runtime
+The server creates a DeepAgents-based run per request:
 - Resolve provider + model through `ModelRegistry`
 - Build a ReAct-capable graph app
 - Run or stream the graph response back to the ACE client

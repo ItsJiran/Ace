@@ -1,6 +1,6 @@
-"""ACE LangGraph Gateway Server Package.
+"""ACE DeepAgent Gateway Server Package.
 
-LangGraph runtime gateway for ACE Assistant.
+DeepAgents runtime gateway for ACE Assistant.
 """
 
 __version__ = "2.0.0"

@@ -13,10 +13,10 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'parser_registry',
     slug: 'parser_registry',
-    description: 'Compatibility block for parser-registry directives. LangGraph owns parser discovery policy; the frontend parser keeps this block only for stream compatibility.',
+    description: 'Compatibility block for parser-registry directives. The backend agent runtime owns parser discovery policy; the frontend parser keeps this block only for stream compatibility.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'This block is parsed for compatibility, but parser-registry hydration is delegated to LangGraph. The frontend no longer writes working memory, context, or hydrated prompt state from streamed registry directives.',
+        purpose: 'This block is parsed for compatibility, but parser-registry hydration is delegated to the backend agent runtime. The frontend no longer writes working memory, context, or hydrated prompt state from streamed registry directives.',
         requiredFields: '"action" (must be "list_names", "list_hydrated", "detail", "activate", or "deactivate")',
         optionalFields: '"target_slug" (required if action is detail, activate, or deactivate)',
         triggerConditions: [
@@ -61,7 +61,7 @@ export const registry: AceRegistryType.Parser = {
 export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
     try {
         const payload = JSON.parse(block.payload.content);
-        console.info('[ParserRegistryBlock] Delegated to LangGraph; frontend parser-registry mutations are disabled.', payload);
+        console.info('[ParserRegistryBlock] Delegated to backend agent runtime; frontend parser-registry mutations are disabled.', payload);
         dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
 
     } catch (e) {

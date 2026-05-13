@@ -15,12 +15,12 @@
 
 import { AIParserProtocolState } from '#/schemas/ai';
 import { RegistryEngine } from '#/services/registryEngine';
-import { mirrorLangGraphSessionSnapshot, type LangGraphSnapshotPayload } from './langGraphMirror';
+import { mirrorAgentRuntimeSnapshot, type AgentRuntimeSnapshotPayload } from './agentRuntimeMirror';
 import { appendChunkToCurrentEntry, appendContentToBlock, createStreamingBlock, getActiveBlockFromRuntime, markBlockCompleted } from './persistence';
 import { abortActiveBlock, invokeBlockLifecycleHandler, shouldStopForParserProtocol } from './blockLifecycle';
 import { flushPlainTextBufferToRenderer, renderStrippedPrefix, resetStreamingParagraphRuntime } from './paragraphStream';
 import { findFirstAceStartSentinelIndex, parseAceStartHeader, scanActiveBlockBuffer, splitTrailingAceStartCandidate } from './bufferParsing';
-import { LANGGRAPH_STREAM_META_PREFIX, type StreamRuntimeState } from './shared';
+import { DEEPAGENT_STREAM_META_PREFIX, type StreamRuntimeState } from './shared';
 
 export async function processGatewayStream(
     session_uid: string,
@@ -92,8 +92,8 @@ export async function processGatewayChunk(
     runtimeState.transport_buffer = extracted.remainder;
 
     for (const segment of extracted.segments) {
-        if (segment.kind === 'langgraph-meta') {
-            mirrorLangGraphSessionSnapshot(session_uid, segment.payload, 'langgraph-stream');
+        if (segment.kind === 'deepagent-meta') {
+            mirrorAgentRuntimeSnapshot(session_uid, segment.payload, 'deepagent-stream');
             continue;
         }
 
@@ -226,14 +226,14 @@ async function processPlainTextChunk(
 
 type TransportSegment =
     | { kind: 'text'; text: string }
-    | { kind: 'langgraph-meta'; payload: LangGraphSnapshotPayload };
+    | { kind: 'deepagent-meta'; payload: AgentRuntimeSnapshotPayload };
 
 function extractTransportSegments(buffer: string): { segments: TransportSegment[]; remainder: string } {
     const segments: TransportSegment[] = [];
     let cursor = 0;
 
     while (cursor < buffer.length) {
-        const metaStart = buffer.indexOf(LANGGRAPH_STREAM_META_PREFIX, cursor);
+        const metaStart = buffer.indexOf(DEEPAGENT_STREAM_META_PREFIX, cursor);
         if (metaStart === -1) {
             if (cursor < buffer.length) {
                 segments.push({ kind: 'text', text: buffer.slice(cursor) });
@@ -245,16 +245,16 @@ function extractTransportSegments(buffer: string): { segments: TransportSegment[
             segments.push({ kind: 'text', text: buffer.slice(cursor, metaStart) });
         }
 
-        const metaEnd = buffer.indexOf('\n', metaStart + LANGGRAPH_STREAM_META_PREFIX.length);
+        const metaEnd = buffer.indexOf('\n', metaStart + DEEPAGENT_STREAM_META_PREFIX.length);
         if (metaEnd === -1) {
             return { segments, remainder: buffer.slice(metaStart) };
         }
 
-        const rawPayload = buffer.slice(metaStart + LANGGRAPH_STREAM_META_PREFIX.length, metaEnd);
+        const rawPayload = buffer.slice(metaStart + DEEPAGENT_STREAM_META_PREFIX.length, metaEnd);
         try {
-            const parsed = JSON.parse(rawPayload) as LangGraphSnapshotPayload & { type?: string };
-            if (parsed.type === 'langgraph_snapshot') {
-                segments.push({ kind: 'langgraph-meta', payload: parsed });
+            const parsed = JSON.parse(rawPayload) as AgentRuntimeSnapshotPayload & { type?: string };
+            if (parsed.type === 'deepagent_snapshot') {
+                segments.push({ kind: 'deepagent-meta', payload: parsed });
             } else {
                 segments.push({ kind: 'text', text: buffer.slice(metaStart, metaEnd + 1) });
             }

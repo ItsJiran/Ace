@@ -1,4 +1,4 @@
-"""HTTP route handlers for the LangGraph gateway server."""
+"""HTTP route handlers for the DeepAgents gateway server."""
 
 from typing import Optional
 from fastapi import APIRouter, Request
@@ -61,7 +61,7 @@ async def health(request: Request) -> dict:
 
     return HealthResponse(
         ok=True,
-        gateway_name="ace-langgraph-gateway-server",
+        gateway_name="ace-deepagent-gateway-server",
         gateway_contract_version="2.0.0",
         base_url=base_url,
         port=runtime_port,
@@ -117,7 +117,7 @@ async def fetch_models(sdk: str, request: Request) -> JSONResponse:
 
 @router.post("/test/{sdk}")
 async def test_response(sdk: str, request: Request) -> JSONResponse:
-    """Test a completion by running the LangGraph runtime once.
+    """Test a completion by running the DeepAgents runtime once.
     
     Expects Bearer token with API key in Authorization header.
     Body should be JSON with "model" and "prompt" fields.
@@ -182,13 +182,13 @@ async def test_response(sdk: str, request: Request) -> JSONResponse:
             }
         )
 
-    result = await gateway.test_response(sdk, model, prompt)
+    result = await gateway.test_response(sdk, model, prompt, session_uid)
     return JSONResponse(content=result.to_dict())
 
 
 @router.post("/chat/{sdk}")
 async def chat_stream(sdk: str, request: Request) -> StreamingResponse:
-    """Stream a LangGraph-backed chat run token-by-token.
+    """Stream a DeepAgents-backed chat run token-by-token.
 
     Expects Bearer token in Authorization header.
     Body: JSON with "model" and "prompt" fields.
@@ -226,6 +226,7 @@ async def chat_stream(sdk: str, request: Request) -> StreamingResponse:
 
     model = body.get("model", "")
     prompt = body.get("prompt", "")
+    session_uid = body.get("session_uid") or None
 
     if not model:
         async def error_gen():

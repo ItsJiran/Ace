@@ -13,10 +13,10 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'summarize_prompt',
     slug: 'summarize_prompt',
-    description: 'Compatibility block for prompt-summary directives. LangGraph owns prompt summarization; the frontend parser keeps this block only for stream compatibility.',
+    description: 'Compatibility block for prompt-summary directives. The backend agent runtime owns prompt summarization; the frontend parser keeps this block only for stream compatibility.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'This block is parsed for compatibility, but prompt summarization is delegated to LangGraph. The frontend no longer writes prompt summaries into local session history.',
+        purpose: 'This block is parsed for compatibility, but prompt summarization is delegated to the backend agent runtime. The frontend no longer writes prompt summaries into local session history.',
         requiredFields: '"action" (store) and "content".',
         optionalFields: '"turn_index" (defaults to current turn) and "payload".',
         triggerConditions: [
@@ -40,7 +40,7 @@ export const registry: AceRegistryType.Parser = {
 export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
     try {
         const payload = JSON.parse(block.payload.content);
-        console.info('[SummarizePromptBlock] Delegated to LangGraph; frontend prompt-summary mutations are disabled.', payload);
+        console.info('[SummarizePromptBlock] Delegated to backend agent runtime; frontend prompt-summary mutations are disabled.', payload);
 
         dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
     } catch (e) {

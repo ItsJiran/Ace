@@ -38,7 +38,7 @@ export type AIGatewaySDKTarget = AIGatewayProviderTarget;
 export const AIGatewayConfigSchema = z.object({
     version: z.literal(2),
     active_provider: z.enum(['openai', 'google', 'anthropic']).nullable().optional(),
-    // Compatibility field name retained while the backend runtime is now LangGraph-first.
+    // Compatibility field name retained while the backend runtime is now DeepAgent-first.
     active_sdk: z.enum(['openai', 'google', 'anthropic']).nullable().optional(),
     active_model: z.string().nullable(),
     providers: z.object({

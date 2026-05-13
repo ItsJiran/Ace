@@ -1,13 +1,13 @@
 import type { AIContextEntry, AIPlanEntry, AISessionRuntime, AISessionState, AIWorkingMemoryEntry } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 
-export type LangGraphSnapshotSource = 'langgraph-header' | 'langgraph-stream';
+export type AgentRuntimeSnapshotSource = 'deepagent-header' | 'deepagent-stream';
 
-export interface LangGraphSnapshotPayload {
+export interface AgentRuntimeSnapshotPayload {
     session_state?: AISessionState | string;
-    active_node?: string;
-    response_node?: string;
-    node_path?: unknown;
+    active_step?: string;
+    response_step?: string;
+    step_path?: unknown;
     state_path?: unknown;
     planning?: unknown;
     context?: unknown;
@@ -16,28 +16,28 @@ export interface LangGraphSnapshotPayload {
     event_index?: number;
 }
 
-const LANGGRAPH_SESSION_STATES: AISessionState[] = ['reasoning', 'acting', 'observing', 'finalizing'];
+const AGENT_SESSION_STATES: AISessionState[] = ['reasoning', 'acting', 'observing', 'finalizing'];
 
-export function mirrorLangGraphSessionSnapshotFromHeaders(session_uid: string, headers: Record<string, string>): void {
-    mirrorLangGraphSessionSnapshot(session_uid, {
-        session_state: headers['x-ace-langgraph-session-state'],
-        active_node: headers['x-ace-langgraph-active-node'],
-        response_node: headers['x-ace-langgraph-response-node'],
-        node_path: parseLangGraphArray(headers['x-ace-langgraph-node-path']),
-        state_path: parseLangGraphArray(headers['x-ace-langgraph-state-path']),
-        planning: parseLangGraphArray(headers['x-ace-langgraph-planning']),
-        context: parseLangGraphArray(headers['x-ace-langgraph-context']),
-        memory: parseLangGraphArray(headers['x-ace-langgraph-memory']),
-    }, 'langgraph-header');
+export function mirrorAgentRuntimeSnapshotFromHeaders(session_uid: string, headers: Record<string, string>): void {
+    mirrorAgentRuntimeSnapshot(session_uid, {
+        session_state: headers['x-ace-deepagent-session-state'],
+        active_step: headers['x-ace-deepagent-active-step'],
+        response_step: headers['x-ace-deepagent-response-step'],
+        step_path: parseAgentRuntimeArray(headers['x-ace-deepagent-step-path']),
+        state_path: parseAgentRuntimeArray(headers['x-ace-deepagent-state-path']),
+        planning: parseAgentRuntimeArray(headers['x-ace-deepagent-planning']),
+        context: parseAgentRuntimeArray(headers['x-ace-deepagent-context']),
+        memory: parseAgentRuntimeArray(headers['x-ace-deepagent-memory']),
+    }, 'deepagent-header');
 }
 
-export function mirrorLangGraphSessionSnapshot(
+export function mirrorAgentRuntimeSnapshot(
     session_uid: string,
-    snapshot: LangGraphSnapshotPayload,
-    source: LangGraphSnapshotSource,
+    snapshot: AgentRuntimeSnapshotPayload,
+    source: AgentRuntimeSnapshotSource,
 ): void {
     const rawState = snapshot.session_state;
-    if (!rawState || !LANGGRAPH_SESSION_STATES.includes(rawState as AISessionState)) {
+    if (!rawState || !AGENT_SESSION_STATES.includes(rawState as AISessionState)) {
         return;
     }
 
@@ -56,7 +56,7 @@ export function mirrorLangGraphSessionSnapshot(
 
     const mirroredPlan: AIPlanEntry[] = planningItems.map((item, index) => ({
         state: 'reasoning',
-        title: `LangGraph plan ${index + 1}`,
+        title: `DeepAgent plan ${index + 1}`,
         detail: item,
         is_complete: false,
         step_index: index,
@@ -68,7 +68,7 @@ export function mirrorLangGraphSessionSnapshot(
 
     const mirroredContext: AIContextEntry[] = contextItems.map((item, index) => ({
         at: now,
-        title: `LangGraph context ${index + 1}`,
+        title: `DeepAgent context ${index + 1}`,
         content: item,
         status: 'active',
         lifecycle_turn: turnIndex,
@@ -77,17 +77,17 @@ export function mirrorLangGraphSessionSnapshot(
         payload: {
             source,
             index,
-            active_node: snapshot.active_node,
-            response_node: snapshot.response_node,
+            active_step: snapshot.active_step,
+            response_step: snapshot.response_step,
             event_index: snapshot.event_index,
             state_path: toStringArray(snapshot.state_path),
-            node_path: toStringArray(snapshot.node_path),
+            step_path: toStringArray(snapshot.step_path),
         },
     }));
 
     const mirroredWorkingMemory: AIWorkingMemoryEntry[] = memoryItems.map((item, index) => ({
-        uid: `langgraph-memory-${turnIndex}-${nextCycleIndex}-${index}`,
-        description: `LangGraph memory snapshot ${index + 1}`,
+        uid: `deepagent-memory-${turnIndex}-${nextCycleIndex}-${index}`,
+        description: `DeepAgent memory snapshot ${index + 1}`,
         content: item,
         created_at: now,
         lifecycle_turn: turnIndex,
@@ -106,7 +106,7 @@ export function mirrorLangGraphSessionSnapshot(
     } as Partial<AISessionRuntime>);
 }
 
-export function parseLangGraphArray(value?: string): string[] {
+export function parseAgentRuntimeArray(value?: string): string[] {
     if (!value) {
         return [];
     }

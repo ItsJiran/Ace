@@ -32,7 +32,7 @@ import { AIGatewayEngine } from '#/services/aiGatewayEngine';
 import { HealthProbe } from '#/services/aiGateway/healthProbe';
 import { KernelEngine } from '#/services/kernelEngine';
 import { invokeBlockLifecycleHandler } from './blockLifecycle';
-import { mirrorLangGraphSessionSnapshotFromHeaders } from './langGraphMirror';
+import { mirrorAgentRuntimeSnapshotFromHeaders } from './agentRuntimeMirror';
 import { initializeStreamingEntry, patchCurrentEntryNetworkTrace, persistBlock } from './persistence';
 import { AISessionBlockBus, type GatewayTargetConfig } from './shared';
 import { processGatewayStream } from './streamProcessor';
@@ -67,7 +67,7 @@ async function runGatewayStreamRequest(
     void session_uid;
     void promptKind;
 
-    // LangGraph owns context, memory, and planning assembly.
+    // The backend agent runtime owns context, memory, and planning assembly.
     const composed_prompt = prompt;
     initializeStreamingEntry(session_uid, prompt, composed_prompt);
 
@@ -162,7 +162,7 @@ async function openGatewayResponseStream(
     });
 
     const responseHeaders = serializeHeaders(response.headers);
-    mirrorLangGraphSessionSnapshotFromHeaders(session_uid, responseHeaders);
+    mirrorAgentRuntimeSnapshotFromHeaders(session_uid, responseHeaders);
     patchCurrentEntryNetworkTrace(session_uid, {
         response: {
             at: Date.now(),

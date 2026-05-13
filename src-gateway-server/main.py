@@ -1,6 +1,6 @@
 """Gateway server - main entry point.
 
-Runs the AI Gateway sidecar server that hosts the LangGraph runtime.
+Runs the AI Gateway sidecar server that hosts the DeepAgents runtime.
 Listens on http://localhost:8888 by default.
 """
 
@@ -49,8 +49,8 @@ def create_app() -> FastAPI:
         Configured FastAPI application
     """
     app = FastAPI(
-        title="ACE LangGraph Gateway Server",
-        description="LangGraph runtime gateway for ACE Assistant",
+        title="ACE DeepAgent Gateway Server",
+        description="DeepAgents runtime gateway for ACE Assistant",
         version="2.0.0",
         lifespan=lifespan,
     )
@@ -102,7 +102,7 @@ def main():
     
     # Run the server
     print("=" * 60)
-    print("Starting ACE LangGraph Gateway Server")
+    print("Starting ACE DeepAgent Gateway Server")
     print("=" * 60)
     print(f"Listening on: http://{preferred_host}:{selected_port}")
     if selected_port != preferred_port:

@@ -4,8 +4,8 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 
-# LangGraph / LangChain runtime
-langgraph>=0.2.56
+# DeepAgents / LangChain runtime
+deepagents>=0.6.1
 langchain-core>=0.3.0
 langchain-openai>=0.2.0
 langchain-google-genai>=2.0.0

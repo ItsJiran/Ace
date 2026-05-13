@@ -42,4 +42,4 @@ export interface StreamRuntimeState {
 
 export const ACE_BLOCK_START_PREFIX = '@@ace:start';
 export const ACE_BLOCK_END_LINE = '@@ace:end';
-export const LANGGRAPH_STREAM_META_PREFIX = '\u001e';
+export const DEEPAGENT_STREAM_META_PREFIX = '\u001e';

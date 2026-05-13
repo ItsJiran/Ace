@@ -13,10 +13,10 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'planning',
     slug: 'planning',
-    description: 'Compatibility block for planning directives. LangGraph owns execution planning; the frontend parser keeps this block only for stream compatibility.',
+    description: 'Compatibility block for planning directives. The backend agent runtime owns execution planning; the frontend parser keeps this block only for stream compatibility.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'This block is parsed for compatibility, but planning state is delegated to LangGraph. The frontend no longer persists or mutates per-cycle plans from streamed block payloads.',
+        purpose: 'This block is parsed for compatibility, but planning state is delegated to the backend agent runtime. The frontend no longer persists or mutates per-cycle plans from streamed block payloads.',
         requiredFields: '"action" (set | complete | reset).',
         optionalFields: '"target_state". Required for reasoning set/reset and must be acting. Optional for complete and defaults to the current session state. For set: "steps" or "plan" array. For complete: "step_index" or "title".',
         triggerConditions: [
@@ -49,7 +49,7 @@ export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParse
     try {
         const payload = JSON.parse(block.payload.content);
         void history_event_index;
-        console.info('[PlanningBlock] Delegated to LangGraph; frontend planning mutations are disabled.', payload);
+        console.info('[PlanningBlock] Delegated to backend agent runtime; frontend planning mutations are disabled.', payload);
         dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
     } catch (e) {
         console.error('[PlanningBlock] Error processing block:', e);

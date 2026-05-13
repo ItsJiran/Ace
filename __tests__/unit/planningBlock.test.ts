@@ -37,7 +37,7 @@ describe('PlanningBlock', () => {
         KernelEngine.resetKernelSpace();
     });
 
-    it('keeps parser flow open while delegating plan creation to LangGraph', async () => {
+    it('keeps parser flow open while delegating plan creation to the backend agent runtime', async () => {
         const session = createSession('reasoning');
         KernelEngine.createMemory(session, session.process_uid, `system:ai_session:${session.session_uid}:state`);
 
@@ -65,7 +65,7 @@ describe('PlanningBlock', () => {
         expect(stored.history).toEqual({});
     });
 
-    it('does not mutate an existing plan when completion is delegated to LangGraph', async () => {
+    it('does not mutate an existing plan when completion is delegated to the backend agent runtime', async () => {
         const session = createSession('acting');
         session.plan = [
             {

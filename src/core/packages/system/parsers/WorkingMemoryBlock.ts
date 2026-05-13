@@ -13,10 +13,10 @@ export const handlerChunk: ParserBlockHandler = async ({ dispatchParserResponse 
 export const registry: AceRegistryType.Parser = {
     name: 'working_memory',
     slug: 'working_memory',
-    description: 'Compatibility block for working-memory directives. LangGraph owns working-memory policy; the frontend parser keeps this block only for stream compatibility.',
+    description: 'Compatibility block for working-memory directives. The backend agent runtime owns working-memory policy; the frontend parser keeps this block only for stream compatibility.',
     block_schema: {
         is_default_detail: true,
-        purpose: 'This block is parsed for compatibility, but working-memory writes are delegated to LangGraph. The frontend no longer persists working-memory entries from streamed block payloads.',
+        purpose: 'This block is parsed for compatibility, but working-memory writes are delegated to the backend agent runtime. The frontend no longer persists working-memory entries from streamed block payloads.',
         requiredFields: '"action" (must be "add" or "drop")',
         optionalFields: 'For "add": "uid", "description", "content". For "drop": "uid".',
         triggerConditions: [
@@ -42,7 +42,7 @@ export const registry: AceRegistryType.Parser = {
 export const handlerComplete: ParserBlockHandler = async ({ block, dispatchParserResponse }: ParserBlockArgs) => {
     try {
         const payload = JSON.parse(block.payload.content);
-        console.info('[WorkingMemoryBlock] Delegated to LangGraph; frontend working-memory mutations are disabled.', payload);
+        console.info('[WorkingMemoryBlock] Delegated to backend agent runtime; frontend working-memory mutations are disabled.', payload);
 
         dispatchParserResponse(AIParserProtocolState.CONTINUE_NEXT_BLOCK);
     } catch (e) {
