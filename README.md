@@ -59,8 +59,8 @@ npm run dev:gateway
 The typical local workflow is:
 1. install npm dependencies
 2. install Python gateway dependencies
-3. run `npm run dev`
-4. run `npm run dev:gateway`
+3. run `npm run dev:gateway`
+4. run `npm run dev`
 
 ## What This Project Is
 
@@ -94,6 +94,106 @@ What is currently done in the repository:
 - a non-trivial automated test surface across backend runtime support, gateway tools, parser behavior, event engine behavior, kernel behavior, and related orchestration slices
 
 In short, the project already has a real runtime skeleton in place: app shell, kernel-like control plane, gateway sidecar, session loop, tool execution path, and debugging infrastructure. What is still evolving is the hardening, cleanup, scalability, and consistency of those pieces.
+
+## Architecture Overview
+
+At a high level, ACE is structured as a layered desktop runtime. The top layer is the overlay UI and package-driven React surface. Under that sits the app runtime, which routes events, manages memory and processes, and coordinates windows, tools, layouts, and sessions. The AI path then bridges into a local Python gateway sidecar, which owns model access and the DeepAgents runtime.
+
+```mermaid
+flowchart TD
+	U[Developer / User]
+
+	subgraph UI[Overlay UI Layer]
+		O[Overlay Shell / Desktop Surface]
+		W[Windows, Widgets, Components]
+		D[Dev Tools and Inspectors]
+	end
+
+	subgraph PKG[Package and Registry Layer]
+		P[Core Packages and Future External Packages]
+		R[RegistryEngine]
+	end
+
+	subgraph APP[App Runtime Layer]
+		K[KernelEngine Control Plane]
+		E[EventBus]
+		WM[WindowEngine]
+		TM[ToolEngine]
+		LM[LayoutEngine]
+		GM[Global State Manager]
+		FS[FSEngine / Local File Persistence]
+	end
+
+	subgraph AI[AI Session Runtime Layer]
+		AG[AIGatewayEngine]
+		SM[AISessionManager]
+		IL[Interaction Loop]
+		SP[Streaming Parser and Runtime Mirroring]
+		TI[HTTP Tool Intent Pump]
+	end
+
+	subgraph GW[Local Gateway Sidecar]
+		API[FastAPI Gateway API]
+		RT[DeepAgent Runtime]
+		GT[Gateway Tools / Session Context]
+	end
+
+	subgraph MODEL[Provider Layer]
+		OA[OpenAI]
+		GG[Google Gemini]
+		AN[Anthropic]
+	end
+
+	U --> O
+	O --> W
+	O --> D
+	W --> P
+	D --> P
+	P --> R
+
+	W --> E
+	D --> E
+	R --> WM
+	R --> TM
+	R --> LM
+	R --> K
+
+	E --> K
+	K --> WM
+	K --> TM
+	K --> LM
+	K --> GM
+	K --> FS
+	K --> AG
+
+	AG --> SM
+	AG --> IL
+	IL --> SP
+	IL --> TI
+	IL --> API
+	TM --> API
+
+	API --> RT
+	RT --> GT
+	RT --> OA
+	RT --> GG
+	RT --> AN
+
+	GT -. mirrored runtime state .-> SP
+	GT -. queued external tool intents .-> TI
+	TI --> E
+	TM -. tool result callback .-> API
+```
+
+### How The Layers Work Together
+
+- The user interacts with the overlay UI, which renders windows, widgets, chat surfaces, and developer monitors.
+- Those surfaces are mounted from package definitions and resolved through the registry layer.
+- Runtime actions are routed through the app control plane, centered around `KernelEngine`, `EventBus`, and the domain engines such as `WindowEngine`, `ToolEngine`, and `LayoutEngine`.
+- AI sessions are managed in the frontend runtime through `AIGatewayEngine`, `AISessionManager`, the interaction loop, and the streaming parser/mirroring layer.
+- The frontend talks to the local gateway sidecar over HTTP for health checks, model discovery, test requests, streaming chat, queued tool intents, and tool result callbacks.
+- The gateway sidecar runs the DeepAgents-based runtime, binds provider models, manages gateway tools, and returns structured runtime state back to the app.
+- External ACE tools are executed inside the app runtime, while the gateway remains the orchestration owner for the AI request lifecycle.
 
 ## Long-Term Roadmap
 
