@@ -113,10 +113,13 @@ def build_current_context(session_state: GatewaySessionState, prompt: str) -> Ag
 def build_session_tools(
     session_state: GatewaySessionState,
     allowed_tool_names: tuple[str, ...],
+    wait_for_ace_tool_result,
+    enqueue_ace_tool_intent,
 ):
     """Bind session-aware gateway tool callables for the active agent."""
 
     return build_gateway_tools(
+        session_state.session_uid,
         session_state.mirrored_ace_tools,
         session_state.known_ace_tools,
         on_known_tools_updated=lambda next_tools: setattr(session_state, "known_ace_tools", next_tools),
@@ -126,6 +129,8 @@ def build_session_tools(
         on_context_updated=lambda next_context: setattr(session_state, "context_bank", next_context),
         memory_bank=session_state.memory_bank,
         on_memory_updated=lambda next_memory: setattr(session_state, "memory_bank", next_memory),
+        wait_for_ace_tool_result=wait_for_ace_tool_result,
+        enqueue_ace_tool_intent=enqueue_ace_tool_intent,
         allowed_tool_names=allowed_tool_names,
     )
 

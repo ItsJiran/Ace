@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
@@ -30,10 +30,13 @@ KnownToolsUpdated = Callable[[list[AceToolDescriptor]], None]
 PlanUpdated = Callable[[list[str]], None]
 MemoryUpdated = Callable[[list[str]], None]
 ContextUpdated = Callable[[list[GatewayContextRecord]], None]
+WaitForAceToolResult = Callable[[str, str, str, str], Awaitable[dict[str, object]]]
+EnqueueAceToolIntent = Callable[[str, dict[str, object]], None]
 
 
 @dataclass
 class GatewayToolContext:
+    session_uid: str
     mirrored_ace_tools: list[AceToolDescriptor]
     known_ace_tools: list[AceToolDescriptor]
     session_plan: list[str]
@@ -43,6 +46,8 @@ class GatewayToolContext:
     on_plan_updated: PlanUpdated | None = None
     on_memory_updated: MemoryUpdated | None = None
     on_context_updated: ContextUpdated | None = None
+    wait_for_ace_tool_result: WaitForAceToolResult | None = None
+    enqueue_ace_tool_intent: EnqueueAceToolIntent | None = None
 
 
 __all__ = [
@@ -54,4 +59,6 @@ __all__ = [
     "KnownToolsUpdated",
     "MemoryUpdated",
     "PlanUpdated",
+    "EnqueueAceToolIntent",
+    "WaitForAceToolResult",
 ]

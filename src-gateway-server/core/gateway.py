@@ -81,3 +81,17 @@ class GatewayFacade:
         context_records: object | None = None,
     ) -> dict[str, str]:
         return self._agent_runtime.build_stream_headers(sdk, model, prompt, session_uid, ace_tools, prompt_kind, context_records)
+
+    def complete_tool_result(
+        self,
+        session_uid: str,
+        request_id: str,
+        payload: dict[str, object],
+    ) -> bool:
+        return self._agent_runtime.complete_ace_tool_result(session_uid, request_id, payload)
+
+    def create_tool_request_id(self) -> str:
+        return self._agent_runtime.create_ace_tool_request_id()
+
+    def take_tool_intents(self, session_uid: str) -> list[dict[str, object]]:
+        return self._agent_runtime.take_ace_tool_intents(session_uid)

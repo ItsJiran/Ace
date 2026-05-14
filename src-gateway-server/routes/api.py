@@ -245,3 +245,72 @@ async def chat_stream(sdk: str, request: Request) -> StreamingResponse:
 
     response_headers = gateway.build_stream_headers(sdk, model, prompt, session_uid, ace_tools, prompt_kind, context_records)
     return StreamingResponse(generate(), media_type="text/plain", headers=response_headers)
+
+
+@router.post("/tool-result")
+async def complete_tool_result(request: Request) -> JSONResponse:
+    if gateway is None:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "error_message": "Gateway not initialized"
+            }
+        )
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error_message": f"Invalid JSON body: {str(e)}"
+            }
+        )
+
+    session_uid = body.get("session_uid") or ""
+    request_id = body.get("request_id") or ""
+    package_ref = body.get("package_ref") or ""
+    tool_slug = body.get("tool_slug") or ""
+
+    if not session_uid or not request_id:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error_message": "Missing required fields: session_uid, request_id"
+            }
+        )
+
+    payload = {
+        "status": body.get("status") or "error",
+        "action": body.get("action") or "execute",
+        "request_id": request_id,
+        "package_ref": package_ref,
+        "tool_slug": tool_slug,
+        "result_memory_uid": body.get("result_memory_uid"),
+        "result": body.get("result"),
+        "error_message": body.get("error_message") or "",
+    }
+    resolved = gateway.complete_tool_result(session_uid, request_id, payload)
+    return JSONResponse(content={"ok": True, "resolved": resolved})
+
+
+@router.get("/tool-intents/{session_uid}")
+async def fetch_tool_intents(session_uid: str) -> JSONResponse:
+    if gateway is None:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "error_message": "Gateway not initialized"
+            }
+        )
+
+    intents = gateway.take_tool_intents(session_uid)
+    return JSONResponse(content={
+        "ok": True,
+        "session_uid": session_uid,
+        "intents": intents,
+    })

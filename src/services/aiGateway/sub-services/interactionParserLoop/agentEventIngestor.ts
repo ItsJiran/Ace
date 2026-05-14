@@ -1,5 +1,4 @@
 import type { AIAceToolDescriptor, AIContextEntry, AIModelApiCallRecord, AIRenderer, AISessionRuntime, AITurn } from '#/schemas/ai';
-import { EventBus } from '#/services/eventEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';
 import type { AgentRuntimeSnapshotPayload } from './agentRuntimeMirror';
@@ -48,8 +47,6 @@ export function ingestAgentRuntimeEvent(session_uid: string, snapshot: AgentRunt
             RUNTIME_TODO_RENDERER_KEY,
         );
     }
-
-    maybeDispatchAceToolExecutionIntent(session_uid, sessionState, snapshot);
 
     const nextSessionState = applyGatewayToolState(sessionState, snapshot);
 
@@ -386,65 +383,6 @@ function toFiniteNumber(value: unknown): number | undefined {
         return value;
     }
     return undefined;
-}
-
-function maybeDispatchAceToolExecutionIntent(
-    session_uid: string,
-    sessionState: AISessionRuntime,
-    snapshot: AgentRuntimeSnapshotPayload,
-): void {
-    if (snapshot.type !== 'deepagent_activity') {
-        return;
-    }
-
-    if (snapshot.event_type !== 'tool_finished' && snapshot.event_type !== 'tool_completed') {
-        return;
-    }
-
-    const payload = isRecord(snapshot.payload) ? snapshot.payload : {};
-    if (payload.node_name !== 'request_ace_tool_execution') {
-        return;
-    }
-
-    const data = isRecord(payload.data) ? payload.data : {};
-    const output = extractToolResultPayload(data);
-    const executionIntent = isRecord(output.execution_intent) ? output.execution_intent : {};
-
-    const packageRef = typeof executionIntent.package_ref === 'string' ? executionIntent.package_ref : '';
-    const toolSlug = typeof executionIntent.tool_slug === 'string' ? executionIntent.tool_slug : '';
-    const toolPayload = isRecord(executionIntent.payload) ? executionIntent.payload : {};
-
-    if (!packageRef || !toolSlug) {
-        return;
-    }
-
-    const dispatchMemoryKey = `system:ai_session:${session_uid}:gateway_tool_dispatch:${snapshot.event_index ?? 'unknown'}:${packageRef}:${toolSlug}`;
-    if (KernelEngine.readMemory(dispatchMemoryKey)) {
-        return;
-    }
-
-    KernelEngine.createMemoryIfNotExist(dispatchMemoryKey, {
-        dispatched_at: Date.now(),
-        package_ref: packageRef,
-        tool_slug: toolSlug,
-    }, sessionState.process_uid);
-
-    EventBus.emit({
-        event_type: 'interaction',
-        action: 'execute_tool',
-        process_uid: sessionState.process_uid,
-        payload: {
-            package_ref: packageRef,
-            tool_slug: toolSlug,
-            payload: toolPayload,
-            source: 'gateway_tool_intent',
-        },
-        preallocated_memory: {
-            parent_process_uid: sessionState.process_uid,
-            session_id: session_uid,
-            gateway_tool_intent_key: dispatchMemoryKey,
-        },
-    });
 }
 
 function extractToolResultPayload(data: Record<string, unknown>): Record<string, unknown> {

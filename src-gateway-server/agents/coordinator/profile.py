@@ -66,7 +66,7 @@ class CoordinatorAgentProfile:
             "Incoming user request:\n" + (current_context.user_prompt.strip() or "- Empty user prompt."),
             (
                 "Agent decision policy:\n"
-                "- If the request is only asking for a direct text reply and needs no tool or state change, answer directly.\n"
+                "- If the request is only asking for a direct text reply and needs no tool execution, answer directly.\n"
                 "- If the request is multi-step, depends on tool discovery/execution, or needs durable session updates, create a compact plan first.\n"
                 "- Keep planning weight proportional to the task. Do not over-plan a simple reply.\n"
                 "- Use one continuous agent flow: discover, inspect, request tool execution, observe the result in session context, then continue.\n"
@@ -99,7 +99,7 @@ class CoordinatorAgentProfile:
                 f"- Discovered ACE tools in session state: {len(current_context.known_ace_tools)}\n"
                 "- Do not plan around undiscovered ACE tools as if they are executable facts.\n"
                 "- Resolve ACE capability discovery before requesting execution.\n"
-                "- After request_ace_tool_execution finishes on the frontend, use the mirrored session context on the next request to continue from the real tool result instead of rediscovering."
+                "- Use the mirrored session context on the next request to continue from the real tool result instead of rediscovering."
             ),
         ]
         return "\n\n".join(section for section in sections if section)

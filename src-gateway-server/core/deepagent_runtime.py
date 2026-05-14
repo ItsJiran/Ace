@@ -31,9 +31,11 @@ the orchestration loop.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import AsyncIterator
+from uuid import uuid4
 
 from deepagents import (
     GeneralPurposeSubagentProfile,
@@ -81,6 +83,69 @@ class DeepAgentRuntime:
         self._sessions: dict[str, GatewaySessionState] = {}
         self._coordinator_profile = build_coordinator_profile()
         self._configured_harness_providers: set[str] = set()
+        self._pending_ace_tool_results: dict[str, asyncio.Future[dict[str, object]]] = {}
+        self._resolved_ace_tool_results: dict[str, dict[str, object]] = {}
+        self._pending_ace_tool_intents: dict[str, list[dict[str, object]]] = {}
+
+    def create_ace_tool_request_id(self) -> str:
+        return f"ace-tool-request:{uuid4()}"
+
+    def enqueue_ace_tool_intent(self, session_uid: str, payload: dict[str, object]) -> None:
+        queue = self._pending_ace_tool_intents.setdefault(session_uid, [])
+        queue.append(dict(payload))
+
+    def take_ace_tool_intents(self, session_uid: str) -> list[dict[str, object]]:
+        pending = self._pending_ace_tool_intents.pop(session_uid, [])
+        return [dict(item) for item in pending]
+
+    @staticmethod
+    def _build_ace_tool_waiter_key(session_uid: str, request_id: str) -> str:
+        return f"{session_uid}:{request_id}"
+
+    async def wait_for_ace_tool_result(self, session_uid: str, request_id: str, package_ref: str, tool_slug: str) -> dict[str, object]:
+        waiter_key = self._build_ace_tool_waiter_key(session_uid, request_id)
+        resolved_payload = self._resolved_ace_tool_results.pop(waiter_key, None)
+        if resolved_payload is not None:
+            return resolved_payload
+
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self._pending_ace_tool_results[waiter_key] = future
+        try:
+            return await asyncio.wait_for(future, timeout=60)
+        except asyncio.TimeoutError:
+            return {
+                "status": "error",
+                "action": "execute",
+                "request_id": request_id,
+                "package_ref": package_ref,
+                "tool_slug": tool_slug,
+                "result_memory_uid": None,
+                "result": None,
+                "error_message": "Timed out waiting for ACE tool execution result. The frontend execute_tool dispatch may not have started or returned a callback.",
+            }
+        finally:
+            current_future = self._pending_ace_tool_results.get(waiter_key)
+            if current_future is future:
+                self._pending_ace_tool_results.pop(waiter_key, None)
+
+    def complete_ace_tool_result(
+        self,
+        session_uid: str,
+        request_id: str,
+        payload: dict[str, object],
+    ) -> bool:
+        waiter_key = self._build_ace_tool_waiter_key(session_uid, request_id)
+        future = self._pending_ace_tool_results.get(waiter_key)
+        if future is None:
+            self._resolved_ace_tool_results[waiter_key] = payload
+            return False
+
+        if future.done():
+            return False
+
+        future.set_result(payload)
+        return True
 
     def _encode_meta_event(self, payload: dict[str, object]) -> str:
         """Encode a runtime snapshot as an RS-prefixed transport frame."""
@@ -133,6 +198,8 @@ class DeepAgentRuntime:
             tools=build_session_tools(
                 session_state,
                 invocation_config.tools,
+                self.wait_for_ace_tool_result,
+                self.enqueue_ace_tool_intent,
             ),
             system_prompt=invocation_config.system_prompt,
             memory=invocation_config.memory,

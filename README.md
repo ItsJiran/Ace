@@ -1,195 +1,110 @@
 # ACE-Agentic-Client-Environment
-A local-first, overlay-based personal assistant powered by Tauri and AI, designed to streamline your daily workflow.
 
-## AI Instructions
-Before writing code, proposing architectural changes, or executing commands, read the context files in `.ai/` first.
+> This project is still very early, but the core idea is an overlaying UI that enhances developer productivity through local-first AI assistance, runtime tooling, and extensible desktop workflows.
 
-## Gateway + Context Mechanism
+ACE is a local-first agentic desktop environment built around an overlay UI, an AI gateway sidecar, and a runtime tool/event architecture.
 
-For the latest end-to-end flow of AI gateway streaming, composed prompt context, parser `context` blocks, and RAG references, read:
+The project is designed to help developers work faster by combining:
+- an always-available overlay interface
+- AI-assisted chat and orchestration
+- local tool execution inside the app
+- session context, memory, and retrieval pipelines
+- an extensible package ecosystem for custom components, tools, and workflows
 
-- `docs/GATEWAY_CONTEXT_MECHANISM.md`
+In practical terms, ACE is an experimental developer assistant platform where the UI layer, runtime orchestration, and gateway backend are all being shaped into one integrated system.
 
-This document is the canonical reference for runtime AI context behavior.
+## Getting Started
 
-Architecture pillars:
-1. `.ai/01_project_overview.md`
-2. `.ai/02_ui_and_registry.md`
-3. `.ai/03_event_lifecycle.md`
-4. `.ai/04_storage_and_memory.md`
-5. `.ai/05_ai_streaming_protocol.md`
-6. `.ai/06_ui_and_window_lifecycle.md`
-7. `.ai/07_app_bootup_lifecycle.md`
-8. `.ai/08_pipeline_pattern.md`
-9. `.ai/09_window_customization_and_layout.md`
-10. `.ai/10_fluid_animation_continuity.md`
-11. `.ai/11_package_ecosystem_and_submission.md`
-12. `.ai/13_core_ui_design_language.md`
-13. `.ai/14_host_guest_architecture.md`
-14. `.ai/15_sdk_gateway_server.md`
-15. `.ai/16_schema_type_flow.md`
-16. `.ai/17_process_engine_orchestration.md`
+### Prerequisites
 
-Notes:
-- This README now tracks active and pending work only.
-- Completed details and long examples are maintained in `.ai/` documentation.
+- Node.js and npm
+- Python 3
 
-## Current Focus
+### Install Frontend Dependencies
 
-### In Progress - Core UI Package
-- [~] Theme System: apply design tokens to core package widgets (System/Prompt/Console)
-- [ ] Turn Renderer component: loop through `TurnRendererMemory.renderers[]`, resolve each component from registry, render in order via `useAceMemory`
-- [ ] Paragraph renderer component: reactive streaming text bubble using `system:turn:{id}:rd:{n}` memory key
-- [ ] Tool renderer component: display tool execution status/result from turn renderer entry
-- [ ] Core widget design token audit: verify all system package components use shared light/dark tokens (no hardcoded colors)
+```bash
+npm install
+```
 
-### In Progress - KernelEngine Migration (Core Packages)
+### Install Gateway Dependencies
 
-Goal: All direct `StorageEngine`, `ProcessEngine`, and `EventBus` call sites inside `src/core/packages/` must be migrated to go through `KernelEngine` (the control-plane facade at `src/services/kernelEngine.ts`). This ensures consistent telemetry, termination handler registration, and memory ownership tracking across all core package code.
+You can either install the Python dependencies directly:
 
-#### Audit
-- [ ] Audit all files under `src/core/packages/system/` for direct `StorageEngine` calls — list call sites
-- [ ] Audit all files under `src/core/packages/system/` for direct `ProcessEngine` calls — list call sites
-- [ ] Audit all files under `src/core/packages/system-dev/` for direct `StorageEngine` / `ProcessEngine` calls
+```bash
+cd src-gateway-server
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
 
-#### Migration — system package
-- [ ] Replace direct `StorageEngine.writeMemory` / `readMemory` / `deleteMemory` calls in system package with `KernelEngine` equivalents
-- [ ] Replace direct `ProcessEngine.spawnProcess` / `terminateProcess` calls in system package with `KernelEngine` equivalents
-- [ ] Ensure all process spawns in system package register termination handlers via `KernelEngine.registerTerminationHandler`
-- [ ] Ensure all memory writes in system package attach correct `owner_process_uid` for lineage tracking
+Or use the helper script from the project root:
 
-#### Migration — system-dev package
-- [ ] Replace direct `StorageEngine` / `ProcessEngine` calls in system-dev package with `KernelEngine` equivalents
-- [ ] Verify dev tools (monitors, playgrounds) read from RAM via `KernelEngine.getMemory` or `useAceMemory` hook, not direct map access
+```bash
+npm run setup:gateway
+```
 
-#### Validation
-- [ ] Run existing unit + feature test suites — 0 regressions after migration
-- [ ] Add targeted tests for migrated call sites: process spawn + termination cascade, memory ownership lineage, telemetry log output
+### Run The App
 
-Sprint 3 - Lifespan + Hardening + Observability
-- [ ] Implement retention worker with default TTL 3-5 turns and configurable override policy.
-- [ ] Add summarize-before-eviction for referenced memories.
-- [ ] Add metrics and monitor fields (retrieval hits/miss, expiry status, pointer usage frequency).
-- [ ] Add feedback-loop hardening for memory retrieval failures and deterministic stop reasons.
-- [ ] Add full E2E regression suite for continuous loop with heavy payload offloading to Context RAG.
+Start the frontend app:
 
-## Development Roadmap
+```bash
+npm run dev
+```
 
-### Phase 3 - Development UI Kit
-- [~] Layout Persistence
-- [ ] Add `save_layout` and `load_layout` actions to WindowEngine
-- [ ] Create UI for managing saved layouts
+Start the gateway server in a separate terminal:
 
-### Phase 4 - Integration Testing (Local Loop)
-- [ ] Simulated tool-call process test
-- [ ] Shake stress test (100 trigger_animation events)
-- [ ] Audit log verification to SQLite
-- [ ] Hydration test: load saved theme into RAM during boot
+```bash
+npm run dev:gateway
+```
 
-Success metric:
-- [ ] 10 concurrent mock streams to 10 RAM keys with stable 60 FPS and no input lag
+The typical local workflow is:
+1. install npm dependencies
+2. install Python gateway dependencies
+3. run `npm run dev`
+4. run `npm run dev:gateway`
 
-### Phase 5 - Core UI Shell (Human-System Integration)
-- [ ] Tauri transparent fullscreen layer
-- [ ] Base dumb components (`CommandInput`, `ChatBubble`, `WindowFrame`)
-- [ ] Settings window for keybind/config/tools/widgets
-- [ ] Theme system for core widgets
-- [ ] Core chat surface styling
-- [ ] Motion polish pass
+## What This Project Is
 
-Core widgets:
-- [ ] Prompt Bar Widget
+ACE is currently an experimental platform for building a local-first AI-native workspace, with a strong focus on developer productivity.
 
-### Phase 6 - AI Gateway, Parser, Chat Surface
+Today, the codebase includes work on:
+- overlay and window-based UI primitives
+- an AI gateway server for model access and orchestration
+- session state, context, memory, and retrieval flows
+- local tool execution through an internal event/runtime system
+- package-driven extensibility for future third-party or internal feature development
 
-#### Step 1.7 - Sidecar Process Manager
-- [ ] Auto-spawn/restart Python sidecar from app binary
-- [ ] Health handshake on boot before enabling gateway UI
-- [ ] Graceful shutdown on app exit
+## What Is Currently Done
 
-#### Step 2 - AI Gateway Runtime and Streaming
-- [~] Session API: create/close/list wired, resume/abort/expire pending
-- [ ] Status key: `system:session:<uid>:status`
-- [~] Error handling and retry policy
+Even though the project is still early, a meaningful amount of the runtime foundation is already implemented.
 
-#### Step 3 - AI Parser
-- [~] Reactive stream reader currently integrated in gateway stream handler
+What is currently done in the repository:
+- a working frontend runtime built with React, Vite, and an Electron/Tauri-oriented desktop shell approach
+- a central KernelEngine-based control plane for memory, process lifecycle, runtime state, and orchestration helpers
+- an EventBus-driven interaction system for routing actions like tool execution and session events across the app
+- a package-oriented architecture with core package domains for components, widgets, tools, windows, and development utilities
+- an AI gateway sidecar built with FastAPI and DeepAgents, including `/health`, `/models/{sdk}`, `/test/{sdk}`, and `/chat/{sdk}` endpoints
+- provider/model integration plumbing for OpenAI, Google Gemini, and Anthropic through the gateway runtime
+- AI session creation, storage, listing, closing, interrupt handling, and per-session state persisted through the frontend runtime
+- a streaming chat/request loop that opens a gateway request, mirrors runtime state, persists turn data, and finalizes session status
+- runtime snapshot mirroring for planning, context, working memory, and active agent state from the backend into the frontend session state
+- a gateway context flow where session context records can be sent to the backend and mirrored back into the live session runtime
+- local ACE tool execution through ToolEngine, including schema-aware execution paths and result write-back into session artifacts
+- an external ACE tool round-trip flow where the backend can queue tool intents, the frontend fetches them over HTTP, dispatches them into EventBus, and returns results back to the gateway with session and request correlation
+- development and debugging surfaces such as session inspection, event monitoring, parser tracing, and tool runner development components
+- a non-trivial automated test surface across backend runtime support, gateway tools, parser behavior, event engine behavior, kernel behavior, and related orchestration slices
 
-#### Step 4 - Prompt Bar and Chat Bar
-- [ ] PromptBar window
-- [ ] ChatBar streaming UI
-- [ ] Reactive token rendering
-- [ ] Input state machine
-- [ ] Timestamped history view
+In short, the project already has a real runtime skeleton in place: app shell, kernel-like control plane, gateway sidecar, session loop, tool execution path, and debugging infrastructure. What is still evolving is the hardening, cleanup, scalability, and consistency of those pieces.
 
-#### Step 5 - Tooling Mechanism
-- [ ] Parser tool-call intercept and full dispatch chain
-- [ ] Tool result write-back and session resume
-- [ ] ToolEngine Pre-Allocation alignment
+## Long-Term Roadmap
 
-#### Step 6 - AI Context Engine (New)
-- [ ] ContextStep6State: finalize stable session context state machine and failure transitions
-- [ ] ContextStep6Retrieve: complete retrieval tooling path (`list_tooling`, `describe_tooling`, `fetch_reference`, `describe_eventbus`)
-- [ ] ContextStep6Build: enforce deterministic build pipeline (planner -> budget -> merge -> assemble)
-- [ ] ContextStep6Harden: strict schema checks + fallback + stale-context guards
-- [ ] ContextStep6Feedback: close loop with structured feedback context on each tool/system result
-- [ ] ContextStep6Observe: complete monitor, trace, and diagnostics for context selection decisions
+The broader direction of the project is no longer just feature expansion. A major part of the roadmap is hardening and cleaning up the architecture that is currently still heavily vibe-coded and experimental.
 
-### Phase 7 - Host-Guest Package Ecosystem
-- [ ] Implement SafeComponentSlot with ErrorBoundary
-- [ ] Core-as-plugin refactor (dogfooding window.ACE contract)
-- [ ] Permission and capability review UI
-- [ ] Launch metadata schema and policy rules
-- [ ] Freeze terminology boundaries: component vs window vs widget
-- [ ] Runtime and registry validation alignment
+Key long-term priorities:
+- harden and simplify the gateway runtime so tool execution, session flow, and orchestration are more deterministic and observable
+- clean up and stabilize the current architecture so core concepts have clearer boundaries and fewer ad hoc flows
+- add stronger windowing and batching systems for context, memory, and retrieval so session state can scale more safely
+- improve memory, retrieval, and context assembly into a more reliable pipeline with better lifecycle control
+- expand the package registry system so developers can extend the app with their own tools, UI modules, workflows, and runtime integrations
 
-## Hook-First Registry API (Pending)
+The end goal is an extensible developer environment where AI, runtime tools, overlay UI, package modules, and session intelligence work together in a clean and durable architecture.
 
-### Registry API Surface
-- [ ] Define per-domain registration APIs:
-  - `useAceComponent.registry(...)`
-  - `useAceWindow.registry(...)`
-  - `useAceTool.registry(...)`
-  - `useAceProcess.registry(...)`
-  - `useAcePipeline.registry(...)`
-- [ ] Shared return contract: `{ ok, id, diagnostics }`
-- [ ] Idempotency rule for repeated registrations
-
-### Runtime Backplane
-- [ ] Singleton registry backplane for all hook calls
-- [ ] Conflict policy: core > default > user
-
-### Manifest and Hook Merge
-- [ ] Define optional fields generated by hooks
-- [ ] Define merge behavior between manifest and hook-declared entries
-
-### Widget Runtime Contract
-- [ ] Define widget composition contract
-- [ ] Add widget runtime classes (`ui_widget`, `headless_widget`, `hybrid_widget`)
-- [ ] Define launch and settings integration flow
-
-### Migration Plan
-- [ ] Phase 1: manifest-only + hook-assisted compatibility mode
-- [ ] Phase 2: optionalize repeated boilerplate fields
-- [ ] Phase 3: publish canonical hook-first package examples
-
----
-
-## Sync Update (2026-03-27)
-
-Latest runtime synchronization applied:
-
-- AI parser now handles split-tag boundaries with a sliding-window carryover approach (e.g. lone `<` and `</` are buffered, not emitted as prose).
-- Parser token tracing now captures raw HTTP chunk input, incoming carryover, output text preview, and carryover output.
-- Stream/runtime memory now persists parser token traces per chunk for monitor consumption (`parser_token_traces`, `parser_token_trace_count`).
-- AI Session Monitor now supports nested response debugging:
-  - grouped by prompt turn
-  - grouped by response attempt inside each prompt turn
-  - token trace export buttons for full JSON and output-only payload
-- Tool execution contract now supports nested payload for discriminated schemas:
-  - `{"action":"execute", ..., "payload": { "action": "list_directory", "path": "~/" } }`
-  - prevents `No matching discriminator for field action` collisions between block action and tool schema action.
-
-Documentation note:
-- Response debugging should be analyzed per prompt turn and per attempt, not as one flat stream.
-- Auto-loop continuations belong to the same prompt turn unless a new user prompt starts a new turn.

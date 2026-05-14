@@ -1,4 +1,5 @@
 from pathlib import Path
+import asyncio
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -76,3 +77,56 @@ def test_prepare_session_for_user_request_resets_active_agent_to_coordinator() -
     DeepAgentRuntime._prepare_session_for_request(session_state, 'user_prompt')
 
     assert session_state.active_agent == 'coordinator'
+
+
+def test_runtime_waiter_resolves_ace_tool_result() -> None:
+    from core.model_registry import ModelRegistry
+
+    runtime = DeepAgentRuntime(ModelRegistry())
+
+    async def run_waiter() -> dict[str, object]:
+        async def resolve_later() -> None:
+            await asyncio.sleep(0)
+            runtime.complete_ace_tool_result(
+                'session-123',
+                'request-123',
+                {
+                    'status': 'ok',
+                    'action': 'execute',
+                    'request_id': 'request-123',
+                    'package_ref': 'itsjiran/ace-system',
+                    'tool_slug': 'fs-tool',
+                    'result_memory_uid': 'mem-1',
+                    'result': {'content': 'README'},
+                    'error_message': '',
+                },
+            )
+
+        asyncio.create_task(resolve_later())
+        return await runtime.wait_for_ace_tool_result('session-123', 'request-123', 'itsjiran/ace-system', 'fs-tool')
+
+    result = asyncio.run(run_waiter())
+
+    assert result['status'] == 'ok'
+    assert result['result_memory_uid'] == 'mem-1'
+
+
+def test_runtime_queue_exposes_pending_ace_tool_intents() -> None:
+    from core.model_registry import ModelRegistry
+
+    runtime = DeepAgentRuntime(ModelRegistry())
+
+    runtime.enqueue_ace_tool_intent('session-123', {
+        'request_id': 'request-123',
+        'package_ref': 'itsjiran/ace-system',
+        'tool_slug': 'fs-tool',
+        'payload': {'path': 'README.md'},
+    })
+
+    assert runtime.take_ace_tool_intents('session-123') == [{
+        'request_id': 'request-123',
+        'package_ref': 'itsjiran/ace-system',
+        'tool_slug': 'fs-tool',
+        'payload': {'path': 'README.md'},
+    }]
+    assert runtime.take_ace_tool_intents('session-123') == []

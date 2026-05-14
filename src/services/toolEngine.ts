@@ -1,6 +1,7 @@
 import { RegistryEngine } from './registryEngine';
 import { KernelEngine } from './kernelEngine';
 import { EventBus } from '#/services/eventEngine';
+import { HealthProbe } from '#/services/aiGateway/healthProbe';
 import type { ToolDefinition } from '#/schemas/tooling';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 import type { CoreEngineHandlerArgs } from '#/schemas/events';
@@ -39,7 +40,7 @@ class ToolEngineSingleton {
         payload?: Record<string, unknown>;
         run: (processUid: string) => Promise<T>;
     }): Promise<T> {
-        const { routeType, sourceProcessUid, metadata, payload, run } = input;
+        const { routeType, sourceProcessUid, metadata, run } = input;
         const proc = sourceProcessUid
             ? KernelEngine.spawnSubprocess(sourceProcessUid, routeType, {
                 metadata: { ...(metadata || {}), source_process_uid: sourceProcessUid },
@@ -198,6 +199,7 @@ class ToolEngineSingleton {
 
     private appendSessionToolArtifacts(input: {
         sessionId?: string;
+        requestId?: string;
         packageRef?: string;
         toolSlug?: string;
         action: 'execute';
@@ -206,7 +208,7 @@ class ToolEngineSingleton {
         result?: unknown;
         errorMessage?: string;
     }) {
-        const { sessionId, packageRef, toolSlug, action, status, resultMemoryUid, result, errorMessage } = input;
+        const { sessionId, requestId, packageRef, toolSlug, action, status, resultMemoryUid, result, errorMessage } = input;
         if (!sessionId) return;
 
         const sessionState = KernelEngine.readMemory(`system:ai_session:${sessionId}:state`) as AISessionRuntime | undefined;
@@ -216,6 +218,7 @@ class ToolEngineSingleton {
         const rawPayload = {
             status,
             action,
+            request_id: requestId,
             package_ref: packageRef,
             tool_slug: toolSlug,
             result_memory_uid: resultMemoryUid,
@@ -235,12 +238,19 @@ class ToolEngineSingleton {
             payload: rawPayload,
         };
 
+        const patchedIntentContextRecords = this.patchGatewayIntentOutput(sessionState.context_records ?? [], {
+            requestId,
+            packageRef,
+            toolSlug,
+            rawPayload,
+        });
+
         const nextContextRecords = resultMemoryUid
             ? [
-                ...(sessionState.context_records ?? []).filter((entry) => entry.payload?.result_memory_uid !== resultMemoryUid),
+                ...patchedIntentContextRecords.filter((entry) => entry.payload?.result_memory_uid !== resultMemoryUid),
                 contextEntry,
             ]
-            : [...(sessionState.context_records ?? []), contextEntry];
+            : [...patchedIntentContextRecords, contextEntry];
 
         const nextWorkingMemory = resultMemoryUid
             ? [
@@ -261,6 +271,139 @@ class ToolEngineSingleton {
             context_records: nextContextRecords,
             working_memory: nextWorkingMemory,
         } as Partial<AISessionRuntime>);
+
+        void this.notifyGatewayToolResult({
+            sessionId,
+            requestId,
+            packageRef,
+            toolSlug,
+            rawPayload,
+        });
+    }
+
+    private async notifyGatewayToolResult(input: {
+        sessionId: string;
+        requestId?: string;
+        packageRef?: string;
+        toolSlug?: string;
+        rawPayload: Record<string, unknown>;
+    }): Promise<void> {
+        const { sessionId, requestId, packageRef, toolSlug, rawPayload } = input;
+        if (!requestId || !packageRef || !toolSlug) {
+            return;
+        }
+
+        const baseUrl = await HealthProbe.ensure();
+        if (!baseUrl) {
+            return;
+        }
+
+        try {
+            await fetch(`${baseUrl}/tool-result`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_uid: sessionId,
+                    request_id: requestId,
+                    package_ref: packageRef,
+                    tool_slug: toolSlug,
+                    ...rawPayload,
+                }),
+            });
+        } catch (error) {
+            console.warn('[ToolEngine] Failed to notify gateway tool result:', error);
+        }
+    }
+
+    private patchGatewayIntentOutput(
+        contextRecords: AIContextEntry[],
+        input: {
+            requestId?: string;
+            packageRef?: string;
+            toolSlug?: string;
+            rawPayload: Record<string, unknown>;
+        },
+    ): AIContextEntry[] {
+        const { requestId, packageRef, toolSlug, rawPayload } = input;
+        if (!requestId || !packageRef || !toolSlug || contextRecords.length === 0) {
+            return contextRecords;
+        }
+
+        let matchedIndex = -1;
+        for (let index = contextRecords.length - 1; index >= 0; index -= 1) {
+            const entry = contextRecords[index];
+            const payload = entry.payload;
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                continue;
+            }
+
+            const payloadRecord = payload as Record<string, unknown>;
+            const rawJson = payloadRecord.raw_json;
+            if (!rawJson || typeof rawJson !== 'object' || Array.isArray(rawJson)) {
+                continue;
+            }
+
+            const rawJsonRecord = rawJson as Record<string, unknown>;
+            const rawToolName = typeof rawJsonRecord.tool_name === 'string' ? rawJsonRecord.tool_name : '';
+            const rawRequestId = typeof rawJsonRecord.request_id === 'string' ? rawJsonRecord.request_id : '';
+            const rawPackageRef = typeof rawJsonRecord.package_ref === 'string' ? rawJsonRecord.package_ref : '';
+            const rawToolSlug = typeof rawJsonRecord.tool_slug === 'string' ? rawJsonRecord.tool_slug : '';
+            const rawOutput = rawJsonRecord.output;
+            const rawOutputRecord = rawOutput && typeof rawOutput === 'object' && !Array.isArray(rawOutput)
+                ? rawOutput as Record<string, unknown>
+                : {};
+            const rawOutputStatus = typeof rawOutputRecord.status === 'string' ? rawOutputRecord.status : '';
+
+            if (rawToolName !== 'request_ace_tool_execution') {
+                continue;
+            }
+
+            if (rawRequestId !== requestId) {
+                continue;
+            }
+
+            if (rawPackageRef !== packageRef || rawToolSlug !== toolSlug) {
+                continue;
+            }
+
+            if (rawOutputStatus && rawOutputStatus !== 'pending') {
+                continue;
+            }
+
+            matchedIndex = index;
+            break;
+        }
+
+        if (matchedIndex < 0) {
+            return contextRecords;
+        }
+
+        const nextContextRecords = [...contextRecords];
+        const matchedEntry = nextContextRecords[matchedIndex];
+        const matchedPayload = matchedEntry.payload as Record<string, unknown>;
+        const matchedRawJson = matchedPayload.raw_json as Record<string, unknown>;
+
+        nextContextRecords[matchedIndex] = {
+            ...matchedEntry,
+            payload: {
+                ...matchedPayload,
+                raw_json: {
+                    ...matchedRawJson,
+                    status: typeof rawPayload.status === 'string' ? rawPayload.status : matchedRawJson.status,
+                    result_memory_uid: rawPayload.result_memory_uid,
+                    output: {
+                        ...(((matchedRawJson.output && typeof matchedRawJson.output === 'object' && !Array.isArray(matchedRawJson.output))
+                            ? matchedRawJson.output
+                            : {}) as Record<string, unknown>),
+                        ...rawPayload,
+                    },
+                },
+            },
+        };
+
+        return nextContextRecords;
     }
 
     private summarizeToolArtifact(payload: {
@@ -744,12 +887,18 @@ class ToolEngineSingleton {
 
         EventBus.registerProcessRoute('execute_tool', async ({ payload, preallocated_memory, source }: CoreEngineHandlerArgs<Record<string, unknown>>) => {
             const raw = (payload ?? {}) as {
+                request_id?: string;
                 package_ref?: string;
                 tool_slug?: string;
                 payload?: unknown;
                 [k: string]: unknown;
             };
 
+            const request_id = typeof raw.request_id === 'string'
+                ? raw.request_id
+                : typeof preallocated_memory?.gateway_tool_request_id === 'string'
+                    ? preallocated_memory.gateway_tool_request_id
+                    : undefined;
             const package_ref = typeof raw.package_ref === 'string' ? raw.package_ref : '';
             const tool_slug = typeof raw.tool_slug === 'string' ? raw.tool_slug : '';
 
@@ -808,6 +957,7 @@ class ToolEngineSingleton {
 
                         this.appendSessionToolArtifacts({
                             sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
+                            requestId: request_id,
                             packageRef: package_ref,
                             toolSlug: tool_slug,
                             action: 'execute',
@@ -818,6 +968,7 @@ class ToolEngineSingleton {
                     } catch (error) {
                         this.appendSessionToolArtifacts({
                             sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
+                            requestId: request_id,
                             packageRef: package_ref,
                             toolSlug: tool_slug,
                             action: 'execute',

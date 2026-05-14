@@ -12,6 +12,8 @@ from .tool_types import (
     KnownToolsUpdated,
     MemoryUpdated,
     PlanUpdated,
+    EnqueueAceToolIntent,
+    WaitForAceToolResult,
 )
 from .inspect_ace_tool import DESCRIPTOR as INSPECT_ACE_TOOL_DESCRIPTOR, create_tool as create_inspect_ace_tool
 from .list_ace_tools import DESCRIPTOR as LIST_ACE_TOOLS_DESCRIPTOR, create_tool as create_list_ace_tools
@@ -39,6 +41,7 @@ def build_gateway_tool_descriptors() -> list[GatewayToolDescriptor]:
 
 
 def build_gateway_tools(
+    session_uid: str,
     mirrored_ace_tools: list[AceToolDescriptor],
     known_ace_tools: list[AceToolDescriptor] | None = None,
     on_known_tools_updated: KnownToolsUpdated | None = None,
@@ -48,9 +51,12 @@ def build_gateway_tools(
     on_context_updated: ContextUpdated | None = None,
     memory_bank: list[str] | None = None,
     on_memory_updated: MemoryUpdated | None = None,
+    wait_for_ace_tool_result: WaitForAceToolResult | None = None,
+    enqueue_ace_tool_intent: EnqueueAceToolIntent | None = None,
     allowed_tool_names: tuple[str, ...] | None = None,
 ) -> list[Callable]:
     context = GatewayToolContext(
+        session_uid=session_uid,
         mirrored_ace_tools=mirrored_ace_tools,
         known_ace_tools=known_ace_tools if known_ace_tools is not None else [],
         session_plan=session_plan if session_plan is not None else [],
@@ -60,6 +66,8 @@ def build_gateway_tools(
         on_plan_updated=on_plan_updated,
         on_context_updated=on_context_updated,
         on_memory_updated=on_memory_updated,
+        wait_for_ace_tool_result=wait_for_ace_tool_result,
+        enqueue_ace_tool_intent=enqueue_ace_tool_intent,
     )
 
     allowed = set(allowed_tool_names or ())

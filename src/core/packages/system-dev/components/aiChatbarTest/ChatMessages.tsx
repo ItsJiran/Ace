@@ -183,7 +183,7 @@ function ActivityAccordion({ renderers }: { renderers: AIRenderer[] }) {
         const status = renderer.status ?? 'loading';
         return status === 'running' || status === 'loading';
     });
-    const [open, setOpen] = useState(isActive);
+    const [open, setOpen] = useState(false);
     const title = buildActivityAccordionTitle(renderers);
     const summary = summarizeActivityRenderers(renderers);
     const previewRenderer = resolveAccordionPreviewRenderer(renderers);
@@ -191,8 +191,8 @@ function ActivityAccordion({ renderers }: { renderers: AIRenderer[] }) {
     const latestKey = previewRenderer && previewIndex >= 0 ? getRendererStableKey(previewRenderer, previewIndex) : 'latest-empty';
 
     useEffect(() => {
-        if (isActive) {
-            setOpen(true);
+        if (!isActive) {
+            setOpen(false);
         }
     }, [isActive]);
 
@@ -218,7 +218,14 @@ function ActivityAccordion({ renderers }: { renderers: AIRenderer[] }) {
             </button>
 
             {!open && previewRenderer && isActive ? (
-                <div className="border-t border-zinc-800/80 px-3 py-2">
+                <motion.div
+                    layout
+                    className="border-t border-zinc-800/80 px-3 py-2"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                >
                     <AnimatePresence mode="wait" initial={false}>
                         <motion.div
                             key={latestKey}
@@ -230,7 +237,7 @@ function ActivityAccordion({ renderers }: { renderers: AIRenderer[] }) {
                             <LatestActivityPreview renderer={previewRenderer} relatedRenderers={renderers} />
                         </motion.div>
                     </AnimatePresence>
-                </div>
+                </motion.div>
             ) : null}
 
             <AnimatePresence initial={false}>

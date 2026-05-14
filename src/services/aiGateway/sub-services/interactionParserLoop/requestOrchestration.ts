@@ -33,6 +33,7 @@ import { HealthProbe } from '#/services/aiGateway/healthProbe';
 import { KernelEngine } from '#/services/kernelEngine';
 import { ToolEngine, type ToolManifestEntry } from '#/services/toolEngine';
 import { invokeBlockLifecycleHandler } from './blockLifecycle';
+import { pumpPendingGatewayToolIntents } from './agentEventToolIngestor';
 import { mirrorAgentRuntimeSnapshotFromHeaders } from './agentRuntimeMirror';
 import { initializeStreamingEntry, patchCurrentEntryNetworkTrace, persistBlock } from './persistence';
 import { AISessionBlockBus, type GatewayTargetConfig } from './shared';
@@ -82,6 +83,7 @@ async function runGatewayStreamRequest(
 
     const { activeGatewayUrl, sdkConfig } = await validateGatewayTarget(session_uid, sdk, model);
     const abortController = attachAbortControllerToSession(session_uid);
+    const toolIntentAbortController = new AbortController();
     const response = await openGatewayResponseStream(
         activeGatewayUrl,
         session_uid,
@@ -92,9 +94,15 @@ async function runGatewayStreamRequest(
         model,
         abortController,
     );
+    const toolIntentPump = pumpPendingGatewayToolIntents(session_uid, toolIntentAbortController.signal);
 
-    const terminalProtocolState = await processGatewayStream(session_uid, response.body!.getReader(), abortController);
-    finalizeStreamingEntry(session_uid, terminalProtocolState);
+    try {
+        const terminalProtocolState = await processGatewayStream(session_uid, response.body!.getReader(), abortController);
+        finalizeStreamingEntry(session_uid, terminalProtocolState);
+    } finally {
+        toolIntentAbortController.abort();
+        await toolIntentPump;
+    }
 }
 
 async function validateGatewayTarget(session_uid: string, sdk?: string, model?: string): Promise<GatewayTargetConfig> {
