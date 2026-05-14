@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import { CheckCircle2, CircleDashed, ListTodo, Sparkles } from 'lucide-react';
+import { CheckCircle2, CircleDashed, Sparkles } from 'lucide-react';
 
 export const registry: AceRegistryType.Renderer = {
     name: 'Todo Renderer',
@@ -38,19 +38,9 @@ interface TodoRendererProps {
     todo_items?: TodoRendererItem[];
 }
 
-export default function TodoRenderer({ title = 'Plan', status = 'loading', todo_items = [] }: TodoRendererProps) {
-    const completedCount = todo_items.filter((item) => item.is_complete === true).length;
+export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
     const currentIndex = todo_items.findIndex((item) => item.is_complete !== true);
     const activeIndex = currentIndex >= 0 ? currentIndex : Math.max(todo_items.length - 1, 0);
-    const activeItem = todo_items[activeIndex];
-    const activeKey = activeItem
-        ? `${activeItem.step_index ?? activeIndex}:${activeItem.title ?? 'step'}:${activeItem.detail ?? ''}:${activeItem.is_complete === true ? 'done' : 'active'}`
-        : 'empty-plan';
-    const statusTone = status === 'error'
-        ? 'text-rose-300'
-        : status === 'completed'
-            ? 'text-emerald-300'
-            : 'text-violet-200';
 
     return (
         <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-black/15">

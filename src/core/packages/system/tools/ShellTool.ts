@@ -1,7 +1,45 @@
 import { z } from 'zod';
 import type { AceRegistryType } from '#/schemas/registryTypes';
-import type { ToolDefinition } from '#/schemas/tooling';
+import type { ToolChatPreview, ToolDefinition } from '#/schemas/tooling';
 import { ShellEngine } from '#/services/shellEngine';
+
+function buildShellToolPreview(result: Record<string, unknown>): ToolChatPreview | null {
+    const action = typeof result.action === 'string' ? result.action : 'run';
+    const command = typeof result.command === 'string' ? result.command : '';
+    const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+    const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+    const exitCode = typeof result.exit_code === 'number' ? result.exit_code : undefined;
+    const success = result.success === true || action === 'check_available' || action === 'output';
+
+    if (action === 'check_available') {
+        return {
+            title: 'shell_tool · check_available',
+            subtitle: command || undefined,
+            lines: [result.available === true ? 'Binary tersedia di PATH.' : 'Binary tidak ditemukan di PATH.'],
+        };
+    }
+
+    const lines: string[] = [];
+    if (exitCode !== undefined) {
+        lines.push(`exit code ${exitCode}${success ? ' · success' : ' · failed'}`);
+    }
+
+    if (stderr.trim()) {
+        lines.push(stderr.trim());
+    }
+
+    return {
+        title: `shell_tool · ${action}`,
+        subtitle: command || undefined,
+        lines,
+        code_block: stdout.trim()
+            ? {
+                content: stdout.trim(),
+                language: 'bash',
+            }
+            : undefined,
+    };
+}
 
 // -----------------------------------------------------------------------
 // Registry identity
@@ -75,6 +113,7 @@ const toolDef: ToolDefinition<typeof Schema> = {
         'output returns trimmed stdout (throws on non-zero exit), ' +
         'check_available checks if a binary is on PATH.',
     schema: Schema,
+    buildChatPreview: ({ result }) => buildShellToolPreview(result),
     handler: async (args) => {
         switch (args.action) {
             case 'run':

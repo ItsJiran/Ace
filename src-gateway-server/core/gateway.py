@@ -42,6 +42,8 @@ class GatewayFacade:
         prompt: str,
         session_uid: str | None = None,
         ace_tools: object | None = None,
+        prompt_kind: str = "user_prompt",
+        context_records: object | None = None,
     ) -> TestResponseResult:
         if not self._model_registry.has_provider(sdk):
             return TestResponseResult(
@@ -49,7 +51,7 @@ class GatewayFacade:
                 error_message=f"SDK '{sdk}' not loaded. Load it first with an API key.",
             )
 
-        return await self._agent_runtime.test_response(sdk, model, prompt, session_uid, ace_tools)
+        return await self._agent_runtime.test_response(sdk, model, prompt, session_uid, ace_tools, prompt_kind, context_records)
 
     async def stream_response(
         self,
@@ -58,12 +60,14 @@ class GatewayFacade:
         prompt: str,
         session_uid: str | None = None,
         ace_tools: object | None = None,
+        prompt_kind: str = "user_prompt",
+        context_records: object | None = None,
     ):
         if not self._model_registry.has_provider(sdk):
             yield f"[error: SDK '{sdk}' not loaded. Load it first with an API key.]"
             return
 
-        async for chunk in self._agent_runtime.stream_response(sdk, model, prompt, session_uid, ace_tools):
+        async for chunk in self._agent_runtime.stream_response(sdk, model, prompt, session_uid, ace_tools, prompt_kind, context_records):
             yield chunk
 
     def build_stream_headers(
@@ -73,5 +77,7 @@ class GatewayFacade:
         prompt: str,
         session_uid: str | None = None,
         ace_tools: object | None = None,
+        prompt_kind: str = "user_prompt",
+        context_records: object | None = None,
     ) -> dict[str, str]:
-        return self._agent_runtime.build_stream_headers(sdk, model, prompt, session_uid, ace_tools)
+        return self._agent_runtime.build_stream_headers(sdk, model, prompt, session_uid, ace_tools, prompt_kind, context_records)

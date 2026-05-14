@@ -59,7 +59,7 @@ def test_gateway_tools_can_search_and_inspect_mirrored_ace_tools() -> None:
         },
     ])
 
-    _, _, _, _, _, search_tool, inspect_tool, _, _ = build_gateway_tools(ace_tools)
+    _, _, _, _, search_tool, inspect_tool, _, _ = build_gateway_tools(ace_tools)
 
     search_result = search_tool.invoke({'query': 'shell'})
     inspect_result = inspect_tool.invoke({'tool_slug': 'fs-tool', 'package_ref': 'itsjiran/ace-system'})
@@ -82,7 +82,7 @@ def test_inspect_ace_tool_accepts_name_alias_and_slug_normalization() -> None:
         },
     ])
 
-    _, _, _, _, _, _, inspect_tool, _, _ = build_gateway_tools(ace_tools)
+    _, _, _, _, _, inspect_tool, _, _ = build_gateway_tools(ace_tools)
 
     by_name = inspect_tool.invoke({'tool_slug': 'fs_tool'})
     by_normalized_slug = inspect_tool.invoke({'tool_slug': 'fs-tool', 'package_ref': 'itsjiran/ace-system'})
@@ -110,7 +110,7 @@ def test_gateway_tools_can_list_mirrored_ace_tools() -> None:
         },
     ])
 
-    _, _, _, _, list_tool, _, _, _, _ = build_gateway_tools(ace_tools)
+    _, _, _, list_tool, _, _, _, _ = build_gateway_tools(ace_tools)
     result = list_tool.invoke({})
 
     assert result['tool_name'] == 'list_ace_tools'
@@ -129,7 +129,7 @@ def test_gateway_tools_can_build_ace_tool_execution_intent() -> None:
         },
     ])
 
-    _, _, _, _, _, inspect_tool, _, _, request_tool = build_gateway_tools(ace_tools, [])
+    _, _, _, _, _, inspect_tool, _, request_tool = build_gateway_tools(ace_tools, [])
     inspect_tool.invoke({'tool_slug': 'fs-tool', 'package_ref': 'itsjiran/ace-system'})
     result = request_tool.invoke({
         'tool_slug': 'fs-tool',
@@ -156,7 +156,7 @@ def test_gateway_tool_execution_requires_discovery_first() -> None:
         },
     ])
 
-    _, _, _, _, _, _, _, _, request_tool = build_gateway_tools(ace_tools, [])
+    _, _, _, _, _, _, _, request_tool = build_gateway_tools(ace_tools, [])
     result = request_tool.invoke({
         'tool_slug': 'fs-tool',
         'package_ref': 'itsjiran/ace-system',
@@ -185,7 +185,7 @@ def test_discovery_tools_populate_known_ace_tool_state() -> None:
     ])
 
     known_tools: list[dict[str, object]] = []
-    _, _, _, _, list_tool, search_tool, _, _, _ = build_gateway_tools(ace_tools, known_tools)
+    _, _, _, list_tool, search_tool, _, _, _ = build_gateway_tools(ace_tools, known_tools)
 
     search_tool.invoke({'query': 'shell'})
     assert len(known_tools) == 1
@@ -264,7 +264,7 @@ def test_gateway_tools_can_suggest_missing_keywords() -> None:
         },
     ])
 
-    _, _, _, _, _, _, _, suggest_tool, _ = build_gateway_tools(ace_tools)
+    _, _, _, _, _, _, suggest_tool, _ = build_gateway_tools(ace_tools)
     result = suggest_tool.invoke({
         'goal': 'search files and read file contents',
         'required_keywords': 'search read files',
@@ -282,7 +282,6 @@ def test_gateway_tool_descriptors_are_labeled_separately() -> None:
         'update_session_plan',
         'update_session_context',
         'update_session_memory',
-        'transfer_to_agent',
         'list_ace_tools',
         'search_ace_tools',
         'inspect_ace_tool',
@@ -295,7 +294,7 @@ def test_update_session_plan_replaces_backend_plan_state() -> None:
     ace_tools = normalize_ace_tools([])
     session_plan: list[str] = []
 
-    update_plan_tool, _, _, _, _, _, _, _, _ = build_gateway_tools(ace_tools, [], session_plan=session_plan)
+    update_plan_tool, _, _, _, _, _, _, _ = build_gateway_tools(ace_tools, [], session_plan=session_plan)
     result = update_plan_tool.invoke({
         'plan_json': '["Inspect required capability", "Search ACE tools", "Execute selected ACE tool"]',
     })
@@ -309,36 +308,42 @@ def test_update_session_plan_replaces_backend_plan_state() -> None:
     assert session_plan == result['plan_items']
 
 
-def test_transfer_to_agent_updates_backend_handoff_state() -> None:
-    ace_tools = normalize_ace_tools([])
-    handoff: dict[str, str] = {}
+def test_request_ace_tool_execution_auto_appends_backend_context() -> None:
+    ace_tools = normalize_ace_tools([
+        {
+            'kind': 'ace_tool',
+            'slug': 'fs-tool',
+            'name': 'fs_tool',
+            'description': 'Read files',
+            'package_ref': 'itsjiran/ace-system',
+            'parameters': {'type': 'object'},
+        },
+    ])
+    context_bank: list[dict[str, object]] = []
 
-    _, _, _, transfer_tool, _, _, _, _, _ = build_gateway_tools(
+    _, _, _, _, _, _, _, request_tool = build_gateway_tools(
         ace_tools,
-        [],
-        on_agent_transferred=lambda target, reason, summary: handoff.update({
-            'target_agent': target,
-            'reason': reason,
-            'context_summary': summary,
-        }),
+        ace_tools,
+        context_bank=context_bank,
     )
-    result = transfer_tool.invoke({
-        'target_agent': 'executor',
-        'reason': 'Plan is ready for tool discovery',
-        'context_summary': 'Need to inspect available file tools then execute the selected one.',
+    result = request_tool.invoke({
+        'tool_slug': 'fs-tool',
+        'package_ref': 'itsjiran/ace-system',
+        'payload_json': '{"path":"README.md"}',
+        'reason': 'Read the README first.',
     })
 
-    assert result['tool_name'] == 'transfer_to_agent'
-    assert result['target_agent'] == 'executor'
-    assert handoff['target_agent'] == 'executor'
-    assert handoff['reason'] == 'Plan is ready for tool discovery'
+    assert result['tool_name'] == 'request_ace_tool_execution'
+    assert result['context_entries'] == context_bank
+    assert context_bank[-1]['name'] == 'ACE Tool Execution Intent'
+    assert 'Prepared execution intent for itsjiran/ace-system/fs-tool' in context_bank[-1]['summary']
 
 
 def test_update_session_memory_replaces_backend_memory_state() -> None:
     ace_tools = normalize_ace_tools([])
     memory_bank: list[str] = ['old fact']
 
-    _, _, update_memory_tool, _, _, _, _, _, _ = build_gateway_tools(ace_tools, [], memory_bank=memory_bank)
+    _, _, update_memory_tool, _, _, _, _, request_tool = build_gateway_tools(ace_tools, [], memory_bank=memory_bank)
     result = update_memory_tool.invoke({
         'memory_json': '["User prefers concise responses", "Workspace is already loaded"]',
     })
@@ -348,34 +353,36 @@ def test_update_session_memory_replaces_backend_memory_state() -> None:
         'User prefers concise responses',
         'Workspace is already loaded',
     ]
+    assert request_tool.name == 'request_ace_tool_execution'
     assert memory_bank == result['memory_items']
 
 
 def test_update_session_context_replaces_backend_context_state() -> None:
     ace_tools = normalize_ace_tools([])
-    context_bank: list[str] = ['old context']
+    context_bank = [{'name': 'Old context', 'summary': 'old context', 'raw_json': {'value': 'old context'}}]
 
-    _, update_context_tool, _, _, _, _, _, _, _ = build_gateway_tools(ace_tools, [], context_bank=context_bank)
+    _, update_context_tool, _, _, _, _, _, _ = build_gateway_tools(ace_tools, [], context_bank=context_bank)
     result = update_context_tool.invoke({
-        'context_json': '["Tool fs-tool read README.md successfully", "Next step is inspect package manifest"]',
+        'context_json': '{"items":[{"name":"README read","summary":"Tool fs-tool read README.md successfully","raw_json":{"path":"README.md","ok":true}},{"name":"Next step","summary":"Inspect package manifest","raw_json":{"path":"package.json"}}]}',
     })
 
     assert result['tool_name'] == 'update_session_context'
     assert result['context_items'] == [
         'Tool fs-tool read README.md successfully',
-        'Next step is inspect package manifest',
+        'Inspect package manifest',
     ]
-    assert context_bank == result['context_items']
+    assert context_bank == result['context_entries']
 
 
 def test_update_session_context_can_append_backend_context_state() -> None:
     ace_tools = normalize_ace_tools([])
-    context_bank: list[str] = ['Tool search_ace_tools found 3 matches']
+    context_bank = [{'name': 'Search result', 'summary': 'Tool search_ace_tools found 3 matches', 'raw_json': {'matches': 3}}]
 
-    _, update_context_tool, _, _, _, _, _, _, _ = build_gateway_tools(ace_tools, [], context_bank=context_bank)
+    _, update_context_tool, _, _, _, _, _, _ = build_gateway_tools(ace_tools, [], context_bank=context_bank)
     result = update_context_tool.invoke({
+        'context_name': 'Inspect result',
         'context_summary': 'Tool inspect_ace_tool confirmed fs-tool parameters',
-        'context_json': '["Next step is request execution for fs-tool"]',
+        'context_json': '{"raw_json":{"tool_slug":"fs-tool","parameters":{"type":"object"}}}',
         'merge_mode': 'append',
     })
 
@@ -384,6 +391,5 @@ def test_update_session_context_can_append_backend_context_state() -> None:
     assert result['context_items'] == [
         'Tool search_ace_tools found 3 matches',
         'Tool inspect_ace_tool confirmed fs-tool parameters',
-        'Next step is request execution for fs-tool',
     ]
-    assert context_bank == result['context_items']
+    assert context_bank == result['context_entries']

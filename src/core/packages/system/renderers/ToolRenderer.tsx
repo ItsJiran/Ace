@@ -1,7 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 
 import type { AceRegistryType } from '#/schemas/registryTypes';
+import type { ToolChatPreview } from '#/schemas/tooling';
 import { Wrench, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { RegistryEngine } from '#/services/registryEngine';
 import RendererDisclosureCard from './RendererDisclosureCard';
 
 export const registry: AceRegistryType.Renderer = {
@@ -43,6 +45,13 @@ export default function ToolRenderer(props: ToolRendererProps) {
     const packageRef = props.package_ref || 'unknown';
     const errorMsg = props.error_message;
     const result = props.result && typeof props.result === 'object' ? props.result : undefined;
+    const preview = buildRegisteredToolPreview({
+        packageRef,
+        toolSlug,
+        action,
+        result: result ?? {},
+        status,
+    });
 
     const statusIcon = {
         completed: <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />,
@@ -74,7 +83,13 @@ export default function ToolRenderer(props: ToolRendererProps) {
                     </div>
                 ) : null}
 
-                {result && Object.keys(result).length > 0 ? (
+                {preview ? (
+                    <div className="rounded bg-black/20 p-2">
+                        {preview}
+                    </div>
+                ) : null}
+
+                {result && Object.keys(result).length > 0 && !preview ? (
                     <div className="rounded bg-zinc-950/90 p-2 text-[10px] text-zinc-300">
                         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Result</div>
                         <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono">
@@ -84,5 +99,69 @@ export default function ToolRenderer(props: ToolRendererProps) {
                 ) : null}
             </div>
         </RendererDisclosureCard>
+    );
+}
+
+function buildRegisteredToolPreview(input: {
+    packageRef: string;
+    toolSlug: string;
+    action?: string;
+    result: Record<string, unknown>;
+    status?: string;
+}): React.ReactNode | null {
+    const { packageRef, toolSlug, action, result, status } = input;
+    if (!packageRef || !toolSlug) {
+        return null;
+    }
+
+    const entry = RegistryEngine.getDomainEntry(packageRef, 'tools', toolSlug)?.entry;
+    const toolDef = entry?.implementation as {
+        buildChatPreview?: (args: {
+            action?: string;
+            packageRef?: string;
+            toolSlug?: string;
+            result: Record<string, unknown>;
+            status?: string;
+        }) => ToolChatPreview | null;
+    } | undefined;
+
+    if (typeof toolDef?.buildChatPreview !== 'function') {
+        return null;
+    }
+
+    return renderToolPreviewModel(toolDef.buildChatPreview({
+        action,
+        packageRef,
+        toolSlug,
+        result,
+        status,
+    }));
+}
+
+function renderToolPreviewModel(preview: ToolChatPreview | null): React.ReactNode | null {
+    if (!preview) {
+        return null;
+    }
+
+    return (
+        <div className="space-y-2 text-[11px] text-zinc-300">
+            {preview.title ? <div className="text-zinc-100">{preview.title}</div> : null}
+            {preview.subtitle ? <div className="text-zinc-400">{preview.subtitle}</div> : null}
+            {preview.lines?.map((line, index) => (
+                <div key={`${index}:${line}`}>{line}</div>
+            ))}
+            {preview.list_items?.map((item, index) => (
+                <div key={`${index}:${item.badge ?? ''}:${item.label}`} className="flex items-start gap-2">
+                    {item.badge ? <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-zinc-400">{item.badge}</span> : null}
+                    <div className="min-w-0 flex-1">
+                        <div className="text-zinc-100">{item.label}</div>
+                        {item.detail ? <div className="text-zinc-400">{item.detail}</div> : null}
+                    </div>
+                </div>
+            ))}
+            {preview.code_block?.content ? (
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-950/90 p-2 text-[10px] text-zinc-300">{preview.code_block.content}</pre>
+            ) : null}
+        </div>
     );
 }

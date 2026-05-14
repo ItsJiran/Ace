@@ -12,8 +12,6 @@ class AgentCurrentContext:
     planning: list[str]
     context: list[str]
     memory: list[str]
-    handoff_reason: str
-    handoff_context_summary: str
     orchestrator_plan: list[str]
     mirrored_ace_tools: list[AceToolDescriptor]
     known_ace_tools: list[AceToolDescriptor]

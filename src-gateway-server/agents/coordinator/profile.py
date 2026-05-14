@@ -13,17 +13,17 @@ _DEFAULT_TOOLS = (
     "update_session_plan",
     "update_session_context",
     "update_session_memory",
-    "transfer_to_agent",
     "list_ace_tools",
     "search_ace_tools",
     "inspect_ace_tool",
     "suggest_missing_ace_tools",
+    "request_ace_tool_execution",
 )
 
 
 def _load_base_prompt() -> str:
     if not _BASE_PROMPT_PATH.exists():
-        return "You are the coordinator agent. Plan the work and hand off when ready."
+        return "You are the ACE agent. Plan, discover tools, request execution, and answer in one continuous run."
     return _BASE_PROMPT_PATH.read_text(encoding="utf-8").strip()
 
 
@@ -36,7 +36,11 @@ class CoordinatorAgentProfile:
     event_types: tuple[str, ...] = (
         "thinking",
         "planning",
-        "handoff",
+        "tool_started",
+        "tool_progress",
+        "tool_completed",
+        "tool_failed",
+        "final_answer",
     )
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -61,25 +65,26 @@ class CoordinatorAgentProfile:
             self.base_prompt,
             "Incoming user request:\n" + (current_context.user_prompt.strip() or "- Empty user prompt."),
             (
-                "Coordinator decision policy:\n"
-                "- If the request is only asking for a direct text reply and needs no tool, no handoff, and no state change, answer directly.\n"
+                "Agent decision policy:\n"
+                "- If the request is only asking for a direct text reply and needs no tool or state change, answer directly.\n"
                 "- If the request is multi-step, depends on tool discovery/execution, or needs durable session updates, create a compact plan first.\n"
                 "- Keep planning weight proportional to the task. Do not over-plan a simple reply.\n"
-                "- Hand off only after the next executor step is concrete and actionable.\n"
-                "- ACE tool discovery belongs to the coordinator. Use list_ace_tools, search_ace_tools, inspect_ace_tool, and suggest_missing_ace_tools before handoff when capability discovery is still unresolved.\n"
+                "- Use one continuous agent flow: discover, inspect, request tool execution, observe the result in session context, then continue.\n"
+                "- ACE tool discovery belongs to this agent. Use list_ace_tools, search_ace_tools, inspect_ace_tool, and suggest_missing_ace_tools before execution when capability discovery is still unresolved.\n"
+                "- If the required ACE tool is already visible in discovered or mirrored session state, do not repeat discovery just to reconfirm it.\n"
+                "- If the current plan is already correct and the needed tool is already visible, do not rewrite the plan or run more discovery; request execution immediately.\n"
+                "- If session state already contains an actionable next step, continue forward instead of restarting orchestration from scratch.\n"
+                "- Complete all gateway-tool calls you already know are required for the current pass in the same request whenever possible; do not spread obvious discovery steps across multiple requests.\n"
                 "- Use update_session_context for execution findings, intermediate results, and live situational facts that should guide the next step.\n"
+                "- Gateway discovery/execution-intent tools already append structured session context automatically. Use update_session_context only when you need to add or manipulate context beyond the automatic tool-result mirroring.\n"
                 "- If you learn a durable preference or reusable fact, update session memory through update_session_memory instead of assuming runtime auto-saves it."
             ),
             (
                 "Runtime constraints:\n"
                 "- Session memory is owned by backend AI session state and DeepAgent memory.\n"
                 "- Never create txt, md, json, or other files just to store memory or notes for later turns.\n"
-                "- Runtime-bound tools are already provided by the harness; do not ask for a separate tool list inside your answer."
-            ),
-            (
-                "Current handoff state:\n"
-                f"- Previous handoff reason: {current_context.handoff_reason or 'n/a'}\n"
-                f"- Previous handoff summary: {current_context.handoff_context_summary or 'n/a'}"
+                "- Runtime-bound tools are already provided by the harness; do not ask for a separate tool list inside your answer.\n"
+                "- request_ace_tool_execution should be used when the next concrete step is to run an already-discovered ACE tool."
             ),
             "Planning snapshot:\n" + self._render_bullets(current_context.planning, "No active planning items."),
             "Context snapshot:\n" + self._render_bullets(current_context.context, "No active context items."),
@@ -93,8 +98,8 @@ class CoordinatorAgentProfile:
                 f"- Backend mirrored ACE catalog size: {len(current_context.mirrored_ace_tools)}\n"
                 f"- Discovered ACE tools in session state: {len(current_context.known_ace_tools)}\n"
                 "- Do not plan around undiscovered ACE tools as if they are executable facts.\n"
-                "- Resolve ACE capability discovery in the orchestrator whenever possible before handing off.\n"
-                "- Use your plan and handoff summary to tell the executor which already-discovered tool should be executed next."
+                "- Resolve ACE capability discovery before requesting execution.\n"
+                "- After request_ace_tool_execution finishes on the frontend, use the mirrored session context on the next request to continue from the real tool result instead of rediscovering."
             ),
         ]
         return "\n\n".join(section for section in sections if section)
@@ -127,14 +132,12 @@ def coordinator_response_handler(raw_response: Any) -> dict[str, Any]:
     if isinstance(raw_response, dict):
         return {
             "role": "coordinator",
-            "handoff_target": raw_response.get("handoff_target", "executor"),
             "summary": raw_response.get("summary") or raw_response.get("text") or "",
             "raw_response": raw_response,
         }
 
     return {
         "role": "coordinator",
-        "handoff_target": "executor",
         "summary": str(raw_response or ""),
         "raw_response": raw_response,
     }

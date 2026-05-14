@@ -7,6 +7,7 @@ agent-owned contracts instead of one monolithic core module.
 
 from agents.tools import (
     AceToolDescriptor,
+    GatewayContextRecord,
     GatewayToolDescriptor,
     build_gateway_tool_descriptors,
     build_gateway_tools,
@@ -17,6 +18,7 @@ from agents.tools import (
 
 __all__ = [
     "AceToolDescriptor",
+    "GatewayContextRecord",
     "GatewayToolDescriptor",
     "build_gateway_tool_descriptors",
     "build_gateway_tools",

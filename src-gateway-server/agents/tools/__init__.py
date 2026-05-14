@@ -5,8 +5,8 @@ from collections.abc import Callable
 from .ace_catalog import merge_ace_tool_catalog, normalize_ace_tools, retain_known_ace_tools
 from .tool_types import (
     AceToolDescriptor,
-    AgentTransferred,
     ContextUpdated,
+    GatewayContextRecord,
     GatewayToolContext,
     GatewayToolDescriptor,
     KnownToolsUpdated,
@@ -18,7 +18,6 @@ from .list_ace_tools import DESCRIPTOR as LIST_ACE_TOOLS_DESCRIPTOR, create_tool
 from .request_ace_tool_execution import DESCRIPTOR as REQUEST_ACE_TOOL_EXECUTION_DESCRIPTOR, create_tool as create_request_ace_tool_execution
 from .search_ace_tools import DESCRIPTOR as SEARCH_ACE_TOOLS_DESCRIPTOR, create_tool as create_search_ace_tools
 from .suggest_missing_ace_tools import DESCRIPTOR as SUGGEST_MISSING_ACE_TOOLS_DESCRIPTOR, create_tool as create_suggest_missing_ace_tools
-from .transfer_to_agent import DESCRIPTOR as TRANSFER_TO_AGENT_DESCRIPTOR, create_tool as create_transfer_to_agent
 from .update_session_context import DESCRIPTOR as UPDATE_SESSION_CONTEXT_DESCRIPTOR, create_tool as create_update_session_context
 from .update_session_memory import DESCRIPTOR as UPDATE_SESSION_MEMORY_DESCRIPTOR, create_tool as create_update_session_memory
 from .update_session_plan import DESCRIPTOR as UPDATE_SESSION_PLAN_DESCRIPTOR, create_tool as create_update_session_plan
@@ -27,7 +26,6 @@ _TOOL_ENTRIES: tuple[tuple[GatewayToolDescriptor, Callable[[GatewayToolContext],
     (UPDATE_SESSION_PLAN_DESCRIPTOR, create_update_session_plan),
     (UPDATE_SESSION_CONTEXT_DESCRIPTOR, create_update_session_context),
     (UPDATE_SESSION_MEMORY_DESCRIPTOR, create_update_session_memory),
-    (TRANSFER_TO_AGENT_DESCRIPTOR, create_transfer_to_agent),
     (LIST_ACE_TOOLS_DESCRIPTOR, create_list_ace_tools),
     (SEARCH_ACE_TOOLS_DESCRIPTOR, create_search_ace_tools),
     (INSPECT_ACE_TOOL_DESCRIPTOR, create_inspect_ace_tool),
@@ -46,11 +44,10 @@ def build_gateway_tools(
     on_known_tools_updated: KnownToolsUpdated | None = None,
     session_plan: list[str] | None = None,
     on_plan_updated: PlanUpdated | None = None,
-    context_bank: list[str] | None = None,
+    context_bank: list[GatewayContextRecord] | None = None,
     on_context_updated: ContextUpdated | None = None,
     memory_bank: list[str] | None = None,
     on_memory_updated: MemoryUpdated | None = None,
-    on_agent_transferred: AgentTransferred | None = None,
     allowed_tool_names: tuple[str, ...] | None = None,
 ) -> list[Callable]:
     context = GatewayToolContext(
@@ -63,7 +60,6 @@ def build_gateway_tools(
         on_plan_updated=on_plan_updated,
         on_context_updated=on_context_updated,
         on_memory_updated=on_memory_updated,
-        on_agent_transferred=on_agent_transferred,
     )
 
     allowed = set(allowed_tool_names or ())
@@ -77,6 +73,7 @@ def build_gateway_tools(
 
 __all__ = [
     "AceToolDescriptor",
+    "GatewayContextRecord",
     "GatewayToolDescriptor",
     "build_gateway_tool_descriptors",
     "build_gateway_tools",

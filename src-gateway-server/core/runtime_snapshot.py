@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 
 class GatewayRuntimeSnapshot(TypedDict, total=False):
@@ -26,12 +26,13 @@ class GatewayRuntimeSnapshot(TypedDict, total=False):
     step_path: list[str]
     state_path: list[str]
     prior_turns: list["GatewayTurnRecord"]
-    context_bank: list[str]
+    context_bank: list["GatewayContextRecord"]
     memory_bank: list[str]
     planning_override: list[str]
     planning: list[str]
     context: list[str]
     memory: list[str]
+    active_agent: str
     answer: str
 
 
@@ -49,6 +50,12 @@ class GatewayTodoItem(TypedDict):
     detail: str
     step_index: int
     is_complete: bool
+
+
+class GatewayContextRecord(TypedDict, total=False):
+    name: str
+    summary: str
+    raw_json: Any
 
 
 STEP_TO_SESSION_STATE: dict[str, Literal["reasoning", "acting", "observing", "finalizing"]] = {
@@ -140,15 +147,12 @@ def context_step(snapshot: GatewayRuntimeSnapshot) -> GatewayRuntimeSnapshot:
     prompt = snapshot.get("prompt") or ""
     session_uid = snapshot.get("session_uid") or "unknown"
     prior_turns = snapshot.get("prior_turns") or []
-    context_bank = snapshot.get("context_bank") or []
     context = [
         f"Session binding: {session_uid}",
         f"Provider binding: {provider}",
         f"Model binding: {model}",
         f"Conversation turns stored: {len(prior_turns)}",
     ]
-    for context_item in context_bank[-6:]:
-        context.append(f"Session context: {_trim_text(context_item, 120)}")
     for turn_index, turn in enumerate(prior_turns[-3:], start=max(0, len(prior_turns) - 3)):
         context.append(f"User[{turn_index}]: {_trim_text(turn.get('prompt') or '', 120)}")
         if turn.get("response"):
@@ -243,9 +247,10 @@ def build_runtime_snapshot(
     *,
     session_uid: str = "ephemeral",
     prior_turns: list[GatewayTurnRecord] | None = None,
-    context_bank: list[str] | None = None,
+    context_bank: list[GatewayContextRecord] | None = None,
     memory_bank: list[str] | None = None,
     planning_override: list[str] | None = None,
+    active_agent: str = "coordinator",
     answer: str | None = None,
 ) -> GatewayRuntimeSnapshot:
     """Execute the runtime steps locally to produce a session snapshot."""
@@ -264,6 +269,7 @@ def build_runtime_snapshot(
         "planning": [],
         "context": [],
         "memory": [],
+        "active_agent": active_agent,
         "response_step": "finalize",
         "session_state": "reasoning",
     }
@@ -287,9 +293,10 @@ def build_runtime_events(
     *,
     session_uid: str = "ephemeral",
     prior_turns: list[GatewayTurnRecord] | None = None,
-    context_bank: list[str] | None = None,
+    context_bank: list[GatewayContextRecord] | None = None,
     memory_bank: list[str] | None = None,
     planning_override: list[str] | None = None,
+    active_agent: str = "coordinator",
     answer: str | None = None,
 ) -> list[dict[str, object]]:
     """Build ordered runtime snapshot events for stream-time observability."""
@@ -308,6 +315,7 @@ def build_runtime_events(
         "planning": [],
         "context": [],
         "memory": [],
+        "active_agent": active_agent,
         "response_step": "finalize",
         "session_state": "reasoning",
     }
@@ -335,9 +343,10 @@ def build_runtime_headers(
     *,
     session_uid: str = "ephemeral",
     prior_turns: list[GatewayTurnRecord] | None = None,
-    context_bank: list[str] | None = None,
+    context_bank: list[GatewayContextRecord] | None = None,
     memory_bank: list[str] | None = None,
     planning_override: list[str] | None = None,
+    active_agent: str = "coordinator",
     answer: str | None = None,
 ) -> dict[str, str]:
     """Encode the live runtime snapshot into response headers."""
@@ -351,6 +360,7 @@ def build_runtime_headers(
         context_bank=context_bank,
         memory_bank=memory_bank,
         planning_override=planning_override,
+        active_agent=active_agent,
         answer=answer,
     )
     compact = lambda value: json.dumps(value, separators=(",", ":"), ensure_ascii=True)
@@ -364,6 +374,8 @@ def build_runtime_headers(
         "x-ace-deepagent-planning": compact(snapshot.get("planning", [])),
         "x-ace-deepagent-context": compact(snapshot.get("context", [])),
         "x-ace-deepagent-memory": compact(snapshot.get("memory", [])),
+        "x-ace-deepagent-active-agent": compact(snapshot.get("active_agent", "coordinator")),
+        "x-ace-deepagent-context-records": compact(snapshot.get("context_bank", [])),
     }
 
 
@@ -388,11 +400,15 @@ def _snapshot_event_payload(snapshot: GatewayRuntimeSnapshot, event_index: int) 
         "todo_items": todo_items,
         "context": list(snapshot.get("context", [])),
         "memory": list(snapshot.get("memory", [])),
+        "active_agent": snapshot.get("active_agent", "coordinator"),
+        "context_records": list(snapshot.get("context_bank", [])),
         "payload": {
             "title": "Current Plan",
             "session_uid": snapshot.get("session_uid", "ephemeral"),
             "provider": snapshot.get("provider", "unknown"),
             "model": snapshot.get("model", "unknown"),
+            "active_agent": snapshot.get("active_agent", "coordinator"),
+            "context_records": list(snapshot.get("context_bank", [])),
             "active_step": active_step,
             "response_step": snapshot.get("response_step", "unknown"),
             "session_state": snapshot.get("session_state", "reasoning"),
@@ -404,16 +420,24 @@ def _snapshot_event_payload(snapshot: GatewayRuntimeSnapshot, event_index: int) 
 
 
 def _build_todo_items(snapshot: GatewayRuntimeSnapshot, planning: list[str]) -> list[GatewayTodoItem]:
-    is_complete = snapshot.get("session_state") == "finalizing"
+    completed_count = _resolve_completed_plan_count(snapshot.get("active_step", "intake"), len(planning))
     return [
         {
             "title": f"Step {index + 1}",
             "detail": item,
             "step_index": index,
-            "is_complete": is_complete,
+            "is_complete": index < completed_count,
         }
         for index, item in enumerate(planning)
     ]
+
+
+def _resolve_completed_plan_count(active_step: str, planning_count: int) -> int:
+    if planning_count <= 0:
+        return 0
+
+    step_index = {step.key: index for index, step in enumerate(STEP_SPECS)}.get(active_step, 0)
+    return min(planning_count, max(0, step_index - 1))
 
 
 def _resolve_event_type(snapshot: GatewayRuntimeSnapshot) -> str:

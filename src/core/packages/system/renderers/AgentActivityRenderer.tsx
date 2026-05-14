@@ -7,7 +7,7 @@ import RendererDisclosureCard from './RendererDisclosureCard';
 export const registry: AceRegistryType.Renderer = {
     name: 'Agent Activity Renderer',
     slug: 'agent-activity-renderer',
-    description: 'Renders coordinator/executor and agent runtime activity events.',
+    description: 'Renders backend agent runtime activity events.',
     handler_mode: 'event_adapter',
     event_types: ['agent_started', 'agent_finished', 'agent_failed', 'chain_started', 'chain_finished', 'chain_failed'],
 };

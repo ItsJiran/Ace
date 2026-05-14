@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { BrainCircuit, Database, ListTodo, Wrench } from 'lucide-react';
 import type { AISession, AIRenderer } from '#/schemas/ai';
 import type { AceRegistryType } from '#/schemas/registryTypes';
+import type { ToolChatPreview } from '#/schemas/tooling';
 import { RegistryEngine } from '#/services/registryEngine';
 import { useAceMemory } from '#/hooks/useAceMemory';
 
@@ -178,35 +179,45 @@ function shouldRenderAssistantActivity(renderer: AIRenderer): boolean {
 }
 
 function ActivityAccordion({ renderers }: { renderers: AIRenderer[] }) {
-    const [open, setOpen] = useState(false);
+    const isActive = renderers.some((renderer) => {
+        const status = renderer.status ?? 'loading';
+        return status === 'running' || status === 'loading';
+    });
+    const [open, setOpen] = useState(isActive);
     const title = buildActivityAccordionTitle(renderers);
     const summary = summarizeActivityRenderers(renderers);
     const previewRenderer = resolveAccordionPreviewRenderer(renderers);
     const previewIndex = previewRenderer ? renderers.indexOf(previewRenderer) : -1;
     const latestKey = previewRenderer && previewIndex >= 0 ? getRendererStableKey(previewRenderer, previewIndex) : 'latest-empty';
 
+    useEffect(() => {
+        if (isActive) {
+            setOpen(true);
+        }
+    }, [isActive]);
+
     return (
-        <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-black/15">
+        <div className={`overflow-hidden border border-zinc-800/80 bg-black/15 ${isActive ? 'rounded-xl' : 'rounded-lg'}`}>
             <button
                 type="button"
                 onClick={() => setOpen((value) => !value)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left"
+                className={`flex w-full items-center gap-2 text-left ${isActive ? 'px-3 py-2' : 'px-2.5 py-1.5'}`}
             >
-                <span className="text-zinc-500">{open ? '▾' : '▸'}</span>
+                <span className={`text-zinc-500 ${isActive ? 'text-sm' : 'text-[11px]'}`}>{open ? '▾' : '▸'}</span>
                 <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
+                    <div className={`${isActive ? 'text-[10px] tracking-[0.22em]' : 'text-[9px] tracking-[0.18em]'} font-semibold uppercase text-zinc-500`}>
                         {title}
                     </div>
-                    <div className="truncate text-[11px] text-zinc-400">
+                    <div className={`truncate text-zinc-400 ${isActive ? 'text-[11px]' : 'text-[10px]'}`}>
                         {summary}
                     </div>
                 </div>
-                <div className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
+                <div className={`rounded bg-white/5 text-zinc-400 ${isActive ? 'px-2 py-0.5 text-[10px]' : 'px-1.5 py-0.5 text-[9px]'}`}>
                     {renderers.length} item{renderers.length === 1 ? '' : 's'}
                 </div>
             </button>
 
-            {!open && previewRenderer ? (
+            {!open && previewRenderer && isActive ? (
                 <div className="border-t border-zinc-800/80 px-3 py-2">
                     <AnimatePresence mode="wait" initial={false}>
                         <motion.div
@@ -652,7 +663,8 @@ function getRendererSummaryLabel(renderer: AIRenderer): string {
 
     if (renderer.component_slug === 'agent-activity-renderer') {
         const payload = toPayloadRecord(renderer.payload);
-        const role = typeof payload.role === 'string' ? payload.role : 'agent';
+        const activeAgent = typeof payload.active_agent === 'string' ? payload.active_agent : '';
+        const role = activeAgent || (typeof payload.role === 'string' ? payload.role : 'agent');
         const action = typeof payload.action === 'string' ? payload.action : undefined;
         return action ? `${capitalize(role)} ${action}` : capitalize(role);
     }
@@ -709,24 +721,25 @@ function buildActivityNarrative(renderer: AIRenderer): string {
     }
 
     if (renderer.component_slug === 'agent-activity-renderer') {
-        const role = typeof payload.role === 'string' ? payload.role : 'agent';
+        const activeAgent = typeof payload.active_agent === 'string' ? payload.active_agent : '';
+        const role = activeAgent || (typeof payload.role === 'string' ? payload.role : 'agent');
         const action = typeof payload.action === 'string' ? payload.action : 'langkah berikutnya';
         const profileName = typeof payload.profile_name === 'string' ? payload.profile_name : role;
 
         if (eventType === 'chain_started' || eventType === 'agent_started') {
-            return `Saya mulai mencoba berpikir melalui ${profileName} untuk ${action}.`;
+            return `Saya mulai menjalankan ${capitalize(role)} untuk ${action}.`;
         }
 
         if (eventType === 'chain_stream' || eventType === 'agent_progress') {
-            return `Saya sedang menimbang kemungkinan berikutnya melalui ${profileName} untuk ${action}.`;
+            return `Saya sedang memproses ${capitalize(role)} untuk ${action}.`;
         }
 
         if (status === 'completed' || eventType === 'chain_finished' || eventType === 'agent_finished') {
-            return `Saya selesai melakukan chaining ${profileName} untuk ${action}.`;
+            return `Saya selesai menjalankan ${capitalize(role)} untuk ${action}.`;
         }
 
         if (status === 'error' || eventType === 'chain_failed' || eventType === 'agent_failed') {
-            return `Saya mengalami kendala saat chaining ${profileName} untuk ${action}.`;
+            return `Saya mengalami kendala saat ${capitalize(role)} menangani ${action}.`;
         }
 
         return `Saya sedang mempertimbangkan langkah berikutnya melalui ${profileName} untuk ${action}.`;
@@ -754,6 +767,19 @@ function buildActivityNarrative(renderer: AIRenderer): string {
 function buildToolPreview(renderer: AIRenderer, result: Record<string, unknown>): React.ReactNode | null {
     const payload = toPayloadRecord(renderer.payload);
     const toolSlug = typeof payload.tool_slug === 'string' ? payload.tool_slug : 'tool';
+    const packageRef = typeof payload.package_ref === 'string' ? payload.package_ref : '';
+
+    const registryPreview = buildRegisteredToolPreview({
+        packageRef,
+        toolSlug,
+        action: typeof payload.action === 'string' ? payload.action : undefined,
+        invocation: toPayloadRecord(payload.payload),
+        result,
+        status: renderer.status,
+    });
+    if (registryPreview) {
+        return registryPreview;
+    }
 
     if (toolSlug === 'update_session_plan') {
         const planItems = Array.isArray(result.plan_items) ? result.plan_items.filter((item): item is string => typeof item === 'string') : [];
@@ -768,19 +794,6 @@ function buildToolPreview(renderer: AIRenderer, result: Record<string, unknown>)
                         {index + 1}. {item}
                     </div>
                 ))}
-            </div>
-        );
-    }
-
-    if (toolSlug === 'transfer_to_agent') {
-        const targetAgent = typeof result.target_agent === 'string' ? result.target_agent : 'unknown';
-        const reason = typeof result.reason === 'string' ? result.reason : '';
-        const summary = typeof result.context_summary === 'string' ? result.context_summary : '';
-        return (
-            <div className="space-y-1 text-[11px] text-zinc-300">
-                <div>Target: <span className="text-zinc-100">{targetAgent}</span></div>
-                {reason ? <div>Reason: {reason}</div> : null}
-                {summary ? <div className="text-zinc-400">{summary}</div> : null}
             </div>
         );
     }
@@ -924,6 +937,97 @@ function resolveToolResultMemoryUid(payload: Record<string, unknown>, result: Re
 function resolveAccordionPreviewRenderer(renderers: AIRenderer[]): AIRenderer | undefined {
     return [...renderers].reverse().find((renderer) => getActivityCategoryKey(renderer) === 'plan')
         ?? renderers[renderers.length - 1];
+}
+
+function buildRegisteredToolPreview(input: {
+    packageRef: string;
+    toolSlug: string;
+    action?: string;
+    invocation?: Record<string, unknown>;
+    result: Record<string, unknown>;
+    status?: string;
+}): React.ReactNode | null {
+    const { packageRef, toolSlug, action, invocation, result, status } = input;
+    if (!packageRef || !toolSlug) {
+        return null;
+    }
+
+    const entry = RegistryEngine.getDomainEntry(packageRef, 'tools', toolSlug)?.entry;
+    const toolDef = entry?.implementation as {
+        buildChatPreview?: (args: {
+            action?: string;
+            packageRef?: string;
+            toolSlug?: string;
+            invocation?: Record<string, unknown>;
+            result: Record<string, unknown>;
+            status?: string;
+        }) => ToolChatPreview | null;
+    } | undefined;
+
+    if (typeof toolDef?.buildChatPreview !== 'function') {
+        return null;
+    }
+
+    const preview = toolDef.buildChatPreview({
+        action,
+        packageRef,
+        toolSlug,
+        invocation,
+        result,
+        status,
+    });
+
+    return renderToolPreviewModel(preview);
+}
+
+function renderToolPreviewModel(preview: ToolChatPreview | null): React.ReactNode | null {
+    if (!preview) {
+        return null;
+    }
+
+    const hasList = Array.isArray(preview.list_items) && preview.list_items.length > 0;
+    const hasLines = Array.isArray(preview.lines) && preview.lines.length > 0;
+    const hasCode = typeof preview.code_block?.content === 'string' && preview.code_block.content.length > 0;
+
+    return (
+        <div className="space-y-2">
+            {preview.title ? <div className="text-[11px] text-zinc-100">{preview.title}</div> : null}
+            {preview.subtitle ? <div className="text-[11px] text-zinc-400">{preview.subtitle}</div> : null}
+            {hasLines ? (
+                <div className="space-y-1 text-[11px] text-zinc-300">
+                    {preview.lines?.map((line, index) => (
+                        <div key={`${index}:${line}`}>{line}</div>
+                    ))}
+                </div>
+            ) : null}
+            {hasList ? (
+                <div className="space-y-1">
+                    {preview.list_items?.map((item, index) => (
+                        <div key={`${index}:${item.badge ?? ''}:${item.label}`} className="flex items-start gap-2 text-[11px] text-zinc-300">
+                            {item.badge ? (
+                                <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-zinc-400">{item.badge}</span>
+                            ) : null}
+                            <div className="min-w-0 flex-1">
+                                <div className="text-zinc-100">{item.label}</div>
+                                {item.detail ? <div className="text-zinc-400">{item.detail}</div> : null}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+            {hasCode ? (
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-950/90 p-2 text-[10px] text-zinc-300">{preview.code_block?.content}</pre>
+            ) : null}
+        </div>
+    );
+}
+
+function resolveAgentActivityIdentity(renderer: AIRenderer): string {
+    const payload = toPayloadRecord(renderer.payload);
+    const role = typeof payload.role === 'string' ? payload.role : '';
+    const profileName = typeof payload.profile_name === 'string' ? payload.profile_name : '';
+    const activeAgent = typeof payload.active_agent === 'string' ? payload.active_agent : '';
+    return [activeAgent, role, profileName].filter(Boolean).join(':');
 }
 
 function resolveLastChainRenderer(renderers: AIRenderer[]): AIRenderer | undefined {

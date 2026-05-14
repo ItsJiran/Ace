@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from langchain_core.tools import tool
 
+from .common import append_tool_context
 from .session_state import remember_tools
 from .text_matching import tokenize_text
 from .tool_types import GatewayToolContext, GatewayToolDescriptor
@@ -43,6 +44,22 @@ def create_tool(context: GatewayToolContext) -> Callable:
         remember_tools(context, [item["ace_tool"] for item in matches])
         matched_keywords = {keyword for item in matches for keyword in item["matched_keywords"]}
         missing_keywords = [token for token in requested_tokens if token not in matched_keywords]
+        context_entries = append_tool_context(
+            context,
+            name="ACE Capability Gap",
+            summary=(
+                f"Capability check for '{goal.strip() or 'unspecified goal'}' found {len(matches[:20])} matching tool(s) "
+                f"and {len(missing_keywords)} missing keyword(s)."
+            ),
+            raw_json={
+                "tool_name": "suggest_missing_ace_tools",
+                "goal": goal,
+                "required_keywords": requested_tokens,
+                "matching_tools": matches[:20],
+                "missing_keywords": missing_keywords,
+                "discovered_total": len(context.known_ace_tools),
+            },
+        )
         return {
             "kind": "gateway_tool_result",
             "tool_name": "suggest_missing_ace_tools",
@@ -51,6 +68,7 @@ def create_tool(context: GatewayToolContext) -> Callable:
             "discovered_total": len(context.known_ace_tools),
             "matching_tools": matches[:20],
             "missing_keywords": missing_keywords,
+            "context_entries": context_entries,
         }
 
     return suggest_missing_ace_tools

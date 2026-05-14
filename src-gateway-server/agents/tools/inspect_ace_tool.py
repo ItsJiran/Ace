@@ -5,6 +5,7 @@ from collections.abc import Callable
 from langchain_core.tools import tool
 
 from .ace_catalog import find_ace_tool
+from .common import append_tool_context
 from .session_state import remember_tools
 from .tool_types import GatewayToolContext, GatewayToolDescriptor
 
@@ -23,11 +24,25 @@ def create_tool(context: GatewayToolContext) -> Callable:
         selected_tool = find_ace_tool(context.mirrored_ace_tools, tool_slug, package_ref)
         if selected_tool is not None:
             remember_tools(context, [selected_tool])
+            context_entries = append_tool_context(
+                context,
+                name="ACE Tool Inspection",
+                summary=(
+                    f"Inspected ACE tool {selected_tool.get('package_ref', package_ref)}/"
+                    f"{selected_tool.get('slug', tool_slug)} for execution planning."
+                ),
+                raw_json={
+                    "tool_name": "inspect_ace_tool",
+                    "ace_tool": selected_tool,
+                    "discovered_total": len(context.known_ace_tools),
+                },
+            )
             return {
                 "kind": "gateway_tool_result",
                 "tool_name": "inspect_ace_tool",
                 "ace_tool": selected_tool,
                 "discovered_total": len(context.known_ace_tools),
+                "context_entries": context_entries,
             }
 
         return {

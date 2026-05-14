@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AISessionRuntime, AITurn, AIEntry, AIContextEntry, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
+import type { AIAceToolDescriptor, AISessionRuntime, AITurn, AIEntry, AIContextEntry, AIHistoryEntry, AIWorkingMemoryEntry } from '#/schemas/ai';
 import { KernelEngine } from '#/services/kernelEngine';
 
 // ============================================================
@@ -152,6 +152,68 @@ function extractGatewayAgentMemory(entry: AIEntry): unknown[] {
 
     const memory = (requestBody as Record<string, unknown>).gateway_agent_memory;
     return Array.isArray(memory) ? memory : [];
+}
+
+function extractGatewayAceTools(entry: AIEntry): unknown[] {
+    const requestBody = entry.network_trace?.request?.body;
+    if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+        return [];
+    }
+
+    const aceTools = (requestBody as Record<string, unknown>).ace_tools;
+    return Array.isArray(aceTools) ? aceTools : [];
+}
+
+function findLatestEntry(session: AISessionRuntime): AIEntry | undefined {
+    for (let turnIndex = session.turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
+        const turn = session.turns[turnIndex];
+        for (let entryIndex = turn.entries.length - 1; entryIndex >= 0; entryIndex -= 1) {
+            const entry = turn.entries[entryIndex];
+            if (entry) {
+                return entry;
+            }
+        }
+    }
+
+    return undefined;
+}
+
+function toAceToolDescriptor(value: unknown): AIAceToolDescriptor | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+
+    const item = value as Record<string, unknown>;
+    const slug = typeof item.slug === 'string' ? item.slug.trim() : '';
+    const packageRef = typeof item.package_ref === 'string' ? item.package_ref.trim() : '';
+    if (!slug || !packageRef) {
+        return null;
+    }
+
+    return {
+        kind: typeof item.kind === 'string' ? item.kind : undefined,
+        slug,
+        name: typeof item.name === 'string' ? item.name : undefined,
+        description: typeof item.description === 'string' ? item.description : undefined,
+        package_ref: packageRef,
+        parameters: item.parameters && typeof item.parameters === 'object' && !Array.isArray(item.parameters)
+            ? item.parameters as Record<string, unknown>
+            : undefined,
+    };
+}
+
+function mergeAceToolDescriptors(...collections: Array<Array<AIAceToolDescriptor | unknown> | undefined>): AIAceToolDescriptor[] {
+    const merged = new Map<string, AIAceToolDescriptor>();
+    for (const collection of collections) {
+        for (const candidate of collection ?? []) {
+            const item = toAceToolDescriptor(candidate);
+            if (!item) {
+                continue;
+            }
+            merged.set(`${item.package_ref}:${item.slug}`, item);
+        }
+    }
+    return [...merged.values()].sort((left, right) => `${left.package_ref}:${left.slug}`.localeCompare(`${right.package_ref}:${right.slug}`));
 }
 
 function readSessionsFromMemory(): AISessionRuntime[] {
@@ -664,6 +726,105 @@ function ContextSection({ entries, label, startIdx, endIdx }: {
     );
 }
 
+function StructuredContextSection({ entries }: { entries: AIContextEntry[] }) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div className="mb-4">
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                className="flex items-center gap-2 text-[11px] text-zinc-400 font-semibold uppercase tracking-wide mb-1 hover:text-zinc-200"
+            >
+                <span>{open ? '▾' : '▸'}</span>
+                Context
+                <span className="text-zinc-600 font-normal normal-case tracking-normal">
+                    {entries.length === 0 ? '(empty)' : `(${entries.length} total)`}
+                </span>
+            </button>
+            {open && (
+                <div className="space-y-2 pl-2">
+                    {entries.length === 0
+                        ? <div className="text-[10px] text-zinc-600 italic">no structured context entries yet</div>
+                        : entries.map((entry, index) => {
+                            const rawJson = entry.payload && typeof entry.payload === 'object' && !Array.isArray(entry.payload)
+                                ? (entry.payload as Record<string, unknown>).raw_json
+                                : undefined;
+                            return (
+                                <div key={`${entry.title}-${index}`} className="border border-emerald-700/30 bg-emerald-950/10 rounded px-2 py-2 text-[10px]">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-zinc-500">#{index}</span>
+                                        <StatusBadge status={entry.status} />
+                                        <span className="text-emerald-300 font-semibold">{entry.title}</span>
+                                        {entry.source && badge(entry.source, 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30')}
+                                        {entry.lifecycle_turn !== undefined && <span className="text-zinc-600">turn:{entry.lifecycle_turn}</span>}
+                                        <span className="ml-auto text-zinc-600">{ts(entry.at)}</span>
+                                    </div>
+                                    <div className="text-zinc-300 mb-1">{entry.content}</div>
+                                    <div className="text-zinc-500 uppercase tracking-wide mb-1">Raw JSON</div>
+                                    <pre className="text-zinc-300 bg-zinc-950 rounded p-1 overflow-x-auto whitespace-pre-wrap break-all max-h-28 overflow-y-auto">
+                                        {rawJson !== undefined ? JSON.stringify(rawJson, null, 2) : 'n/a'}
+                                    </pre>
+                                </div>
+                            );
+                        })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function AceToolsSection({ session }: { session: AISessionRuntime }) {
+    const [open, setOpen] = useState(false);
+    const latestEntry = findLatestEntry(session);
+    const mirroredAceTools = mergeAceToolDescriptors(session.mirrored_ace_tools, extractGatewayAceTools(latestEntry ?? {} as AIEntry));
+    const knownAceTools = mergeAceToolDescriptors(session.known_ace_tools);
+
+    return (
+        <div className="mb-4">
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                className="flex items-center gap-2 text-[11px] text-zinc-400 font-semibold uppercase tracking-wide mb-1 hover:text-zinc-200"
+            >
+                <span>{open ? '▾' : '▸'}</span>
+                ACE Tools
+                <span className="text-zinc-600 font-normal normal-case tracking-normal">
+                    {`${knownAceTools.length} discovered · ${mirroredAceTools.length} mirrored`}
+                </span>
+            </button>
+            {open && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-2">
+                    <div className="space-y-2">
+                        <div className="text-[10px] text-zinc-500 uppercase tracking-wide">Discovered Tools</div>
+                        {knownAceTools.length === 0
+                            ? <div className="text-[10px] text-zinc-600 italic">none discovered yet</div>
+                            : knownAceTools.map((tool, index) => (
+                                <div key={`known-${tool.package_ref}-${tool.slug}-${index}`} className="border border-sky-700/30 bg-sky-950/10 rounded px-2 py-2 text-[10px]">
+                                    <div className="text-sky-300 font-semibold">{tool.package_ref}/{tool.slug}</div>
+                                    <div className="text-zinc-300">{tool.name ?? tool.slug}</div>
+                                    {tool.description ? <div className="text-zinc-400 mt-1">{tool.description}</div> : null}
+                                </div>
+                            ))}
+                    </div>
+                    <div className="space-y-2">
+                        <div className="text-[10px] text-zinc-500 uppercase tracking-wide">Mirrored Catalog From Request</div>
+                        {mirroredAceTools.length === 0
+                            ? <div className="text-[10px] text-zinc-600 italic">no ace_tools payload mirrored in latest request</div>
+                            : mirroredAceTools.map((tool, index) => (
+                                <div key={`mirrored-${tool.package_ref}-${tool.slug}-${index}`} className="border border-emerald-700/30 bg-emerald-950/10 rounded px-2 py-2 text-[10px]">
+                                    <div className="text-emerald-300 font-semibold">{tool.package_ref}/{tool.slug}</div>
+                                    <div className="text-zinc-300">{tool.name ?? tool.slug}</div>
+                                    {tool.description ? <div className="text-zinc-400 mt-1">{tool.description}</div> : null}
+                                </div>
+                            ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function HistorySection({ entriesByTurn, startIdx, endIdx }: {
     entriesByTurn: Record<number, AIHistoryEntry>;
     startIdx: number;
@@ -845,6 +1006,7 @@ function SessionCard({ session }: { session: AISessionRuntime }) {
                             <div className="text-zinc-500 uppercase tracking-wide mb-1">Session Meta</div>
                             <div><span className="text-zinc-500">process:</span> <span className="text-zinc-300 font-mono">{session.process_uid}</span></div>
                             <div><span className="text-zinc-500">autonomous_loop:</span> <StatusBadge status={session.autonomous_follow_up_loop_status} /></div>
+                            <div><span className="text-zinc-500">active_agent:</span> <span className="text-zinc-300">{session.active_agent ?? 'n/a'}</span></div>
                             <div><span className="text-zinc-500">model_api_calls:</span> <span className="text-zinc-300">{totalModelApiCalls}</span></div>
                             <div><span className="text-zinc-500">token input:</span> <span className="text-zinc-300">{formatTokenCount(totalTokenUsage.input)}</span></div>
                             <div><span className="text-zinc-500">token output:</span> <span className="text-zinc-300">{formatTokenCount(totalTokenUsage.output)}</span></div>
@@ -890,12 +1052,16 @@ function SessionCard({ session }: { session: AISessionRuntime }) {
                     </div>
 
                     {/* Context */}
+                    <StructuredContextSection entries={session.context_records ?? []} />
+
                     <ContextSection
                         entries={session.context}
-                        label="Context"
+                        label="Chaining"
                         startIdx={session.context_start_index}
                         endIdx={session.context_end_index}
                     />
+
+                    <AceToolsSection session={session} />
 
                     <WorkingMemorySection entries={session.working_memory} />
 

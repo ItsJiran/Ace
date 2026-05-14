@@ -16,7 +16,7 @@ import { AIParserProtocolState } from '#/schemas/ai';
 import { ingestAgentRuntimeEvent } from './agentEventIngestor';
 import { mirrorAgentRuntimeSnapshot, type AgentRuntimeSnapshotPayload } from './agentRuntimeMirror';
 import { appendChunkToCurrentEntry } from './persistence';
-import { flushPlainTextBufferToRenderer, renderStrippedPrefix } from './paragraphStream';
+import { flushPlainTextBufferToRenderer, renderStrippedPrefix, resetStreamingParagraphRuntime } from './paragraphStream';
 import { DEEPAGENT_STREAM_META_PREFIX, type StreamRuntimeState } from './shared';
 
 export async function processGatewayStream(
@@ -62,6 +62,7 @@ export async function processGatewayChunk(
 
     for (const segment of extracted.segments) {
         if (segment.kind === 'deepagent-meta') {
+            resetStreamingParagraphRuntime(runtimeState);
             mirrorAgentRuntimeSnapshot(session_uid, segment.payload, 'deepagent-stream');
             ingestAgentRuntimeEvent(session_uid, segment.payload);
             continue;

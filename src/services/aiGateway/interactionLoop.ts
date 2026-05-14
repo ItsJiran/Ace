@@ -74,6 +74,7 @@ import { sendPromptToGateway, AISessionBlockBus } from './sub-services/interacti
 export interface SessionInteractionLoopInput {
     session: AISessionRuntime;
     prompt: string;
+    promptKind?: 'user_prompt' | 'autonomous_follow_up';
 }
 
 // Note : Future improvement since we already passing the session object, we can just directly update the session memory in the interaction loop without 
@@ -84,7 +85,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
 
     console.log(`[AIGatewayEngine] Starting interaction loop for session ${input.session.session_uid} with prompt: ${input.prompt}`);
 
-    const { session, prompt } = input;
+    const { session, prompt, promptKind = 'user_prompt' } = input;
 
     // -- Check if session status is currently running. If not, we should not proceed with processing the prompt.
     // unless we already implement drifting sessions where a new prompt can be sent to an existing session even after completion, 
@@ -134,7 +135,7 @@ export async function executeSessionInteractionLoop(input: SessionInteractionLoo
         await sendPromptToGateway(
             prompt,
             session.session_uid,
-            'user_prompt',
+            promptKind,
             session.sdk,
             session.model,
         );

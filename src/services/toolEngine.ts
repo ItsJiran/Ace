@@ -4,6 +4,7 @@ import { EventBus } from '#/services/eventEngine';
 import type { ToolDefinition } from '#/schemas/tooling';
 import { PARSER_RUNTIME_EVENT } from '#/schemas/parserEventNames';
 import type { CoreEngineHandlerArgs } from '#/schemas/events';
+import type { AIContextEntry, AISessionRuntime, AIWorkingMemoryEntry } from '#/schemas/ai';
 
 export interface ToolManifestEntry {
     slug: string;
@@ -193,6 +194,108 @@ class ToolEngineSingleton {
                 ...input.payload,
             },
         });
+    }
+
+    private appendSessionToolArtifacts(input: {
+        sessionId?: string;
+        packageRef?: string;
+        toolSlug?: string;
+        action: 'execute';
+        status: 'ok' | 'error';
+        resultMemoryUid?: string;
+        result?: unknown;
+        errorMessage?: string;
+    }) {
+        const { sessionId, packageRef, toolSlug, action, status, resultMemoryUid, result, errorMessage } = input;
+        if (!sessionId) return;
+
+        const sessionState = KernelEngine.readMemory(`system:ai_session:${sessionId}:state`) as AISessionRuntime | undefined;
+        if (!sessionState) return;
+
+        const toolLabel = [packageRef, toolSlug].filter(Boolean).join('/') || toolSlug || 'tool';
+        const rawPayload = {
+            status,
+            action,
+            package_ref: packageRef,
+            tool_slug: toolSlug,
+            result_memory_uid: resultMemoryUid,
+            result,
+            error_message: errorMessage,
+        };
+        const summary = this.summarizeToolArtifact(rawPayload);
+        const now = Date.now();
+        const contextEntry: AIContextEntry = {
+            at: now,
+            title: `${toolLabel} · ${action}`,
+            content: summary,
+            status: 'active',
+            lifecycle_turn: sessionState.turn_index,
+            source: 'tool-engine',
+            mirrored_at: now,
+            payload: rawPayload,
+        };
+
+        const nextContextRecords = resultMemoryUid
+            ? [
+                ...(sessionState.context_records ?? []).filter((entry) => entry.payload?.result_memory_uid !== resultMemoryUid),
+                contextEntry,
+            ]
+            : [...(sessionState.context_records ?? []), contextEntry];
+
+        const nextWorkingMemory = resultMemoryUid
+            ? [
+                ...(sessionState.working_memory ?? []).filter((entry) => entry.uid !== resultMemoryUid),
+                {
+                    uid: resultMemoryUid,
+                    description: `${toolLabel} raw result`,
+                    content: JSON.stringify(rawPayload, null, 2),
+                    created_at: now,
+                    lifecycle_turn: sessionState.turn_index,
+                    source: 'tool-engine',
+                    mirrored_at: now,
+                } satisfies AIWorkingMemoryEntry,
+            ]
+            : sessionState.working_memory ?? [];
+
+        KernelEngine.updateMemory(`system:ai_session:${sessionId}:state`, {
+            context_records: nextContextRecords,
+            working_memory: nextWorkingMemory,
+        } as Partial<AISessionRuntime>);
+    }
+
+    private summarizeToolArtifact(payload: {
+        status: 'ok' | 'error';
+        action: 'execute';
+        package_ref?: string;
+        tool_slug?: string;
+        result?: unknown;
+        error_message?: string;
+    }): string {
+        if (payload.status === 'error') {
+            return payload.error_message || 'Tool execution failed.';
+        }
+
+        const result = payload.result && typeof payload.result === 'object' && !Array.isArray(payload.result)
+            ? payload.result as Record<string, unknown>
+            : {};
+
+        if (typeof result.summary === 'string' && result.summary.trim()) {
+            return result.summary.trim();
+        }
+
+        if (typeof result.message === 'string' && result.message.trim()) {
+            return result.message.trim();
+        }
+
+        if (typeof result.stdout === 'string' && result.stdout.trim()) {
+            return result.stdout.trim().split('\n')[0] ?? 'Tool execution completed.';
+        }
+
+        if (typeof result.path === 'string' && typeof result.action === 'string') {
+            return `${result.action} on ${result.path}`;
+        }
+
+        return 'Tool execution completed.';
     }
 
     /**
@@ -557,6 +660,16 @@ class ToolEngineSingleton {
                             });
                         }
 
+                        this.appendSessionToolArtifacts({
+                            sessionId,
+                            packageRef: package_ref,
+                            toolSlug: tool_slug,
+                            action: 'execute',
+                            status: 'ok',
+                            resultMemoryUid: resultKey,
+                            result,
+                        });
+
                         this.publishToolActionResult({
                             process_uid: routeProcessUid,
                             sessionId,
@@ -594,6 +707,16 @@ class ToolEngineSingleton {
                                 }),
                             });
                         }
+
+                        this.appendSessionToolArtifacts({
+                            sessionId,
+                            packageRef: package_ref,
+                            toolSlug: tool_slug,
+                            action: 'execute',
+                            status: 'error',
+                            resultMemoryUid: resultKey,
+                            errorMessage: error_message,
+                        });
 
                         this.publishToolActionResult({
                             process_uid: routeProcessUid,
@@ -682,7 +805,26 @@ class ToolEngineSingleton {
                                 }),
                             });
                         }
+
+                        this.appendSessionToolArtifacts({
+                            sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
+                            packageRef: package_ref,
+                            toolSlug: tool_slug,
+                            action: 'execute',
+                            status: 'ok',
+                            resultMemoryUid: resultKey,
+                            result,
+                        });
                     } catch (error) {
+                        this.appendSessionToolArtifacts({
+                            sessionId: typeof preallocated_memory?.session_id === 'string' ? preallocated_memory.session_id : undefined,
+                            packageRef: package_ref,
+                            toolSlug: tool_slug,
+                            action: 'execute',
+                            status: 'error',
+                            resultMemoryUid: resultKey,
+                            errorMessage: error instanceof Error ? error.message : String(error),
+                        });
                         if (resultKey) {
                             this.writeToolResultMemory({
                                 processUid: routeProcessUid,

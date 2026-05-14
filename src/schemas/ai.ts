@@ -86,6 +86,9 @@ export interface AISessionContextState {
     context_start_index: number;
     context_end_index: number;
 
+    // Structured session context records produced by explicit backend tools.
+    context_records: Array<AIContextEntry>;
+
     // Working memory ("The Workbench") stores massive raw payloads (like entire files or tool results)
     // without polluting the conversational thread.
     working_memory: Array<AIWorkingMemoryEntry>;
@@ -95,6 +98,13 @@ export interface AISessionContextState {
     history: Record<number, AIHistoryEntry>;
     history_start_index: number;
     history_end_index: number;
+
+    // Backend-owned active agent label mirrored into the client for observability.
+    active_agent?: 'coordinator';
+
+    // Current ACE tool visibility mirrored from backend-owned session state.
+    mirrored_ace_tools?: AIAceToolDescriptor[];
+    known_ace_tools?: AIAceToolDescriptor[];
 }
 
 /**
@@ -147,6 +157,15 @@ export interface AIModelApiCallRecord {
     completion_tokens?: number;
     cache_creation_input_tokens?: number;
     cache_read_input_tokens?: number;
+}
+
+export interface AIAceToolDescriptor {
+    kind?: string;
+    slug: string;
+    name?: string;
+    description?: string;
+    package_ref: string;
+    parameters?: Record<string, unknown>;
 }
 
 export interface AITurn {

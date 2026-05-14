@@ -6,6 +6,7 @@ from collections.abc import Callable
 from langchain_core.tools import tool
 
 from .ace_catalog import find_ace_tool
+from .common import append_tool_context
 from .tool_types import GatewayToolContext, GatewayToolDescriptor
 
 DESCRIPTOR: GatewayToolDescriptor = {
@@ -53,11 +54,28 @@ def create_tool(context: GatewayToolContext) -> Callable:
                 "error_message": "payload_json must decode to a JSON object.",
             }
 
+        context_entries = append_tool_context(
+            context,
+            name="ACE Tool Execution Intent",
+            summary=(
+                f"Prepared execution intent for {selected_tool.get('package_ref', package_ref)}/"
+                f"{selected_tool.get('slug', tool_slug)}."
+            ),
+            raw_json={
+                "tool_name": "request_ace_tool_execution",
+                "ace_tool": selected_tool,
+                "payload": parsed_payload,
+                "reason": reason,
+                "discovered_total": len(context.known_ace_tools),
+            },
+        )
+
         return {
             "kind": "gateway_tool_result",
             "tool_name": "request_ace_tool_execution",
             "ace_tool": selected_tool,
             "discovered_total": len(context.known_ace_tools),
+            "context_entries": context_entries,
             "execution_intent": {
                 "kind": "ace_tool_execution_intent",
                 "package_ref": selected_tool.get("package_ref", package_ref),

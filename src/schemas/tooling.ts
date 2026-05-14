@@ -16,6 +16,32 @@ export type ProcessId = string;
  */
 export type ToolHandler<T> = (args: T, processId: ProcessId) => Promise<any>;
 
+export interface ToolChatPreviewListItem {
+    label: string;
+    detail?: string;
+    badge?: string;
+}
+
+export interface ToolChatPreview {
+    title?: string;
+    subtitle?: string;
+    lines?: string[];
+    list_items?: ToolChatPreviewListItem[];
+    code_block?: {
+        content: string;
+        language?: string;
+    };
+}
+
+export interface ToolChatPreviewInput {
+    action?: string;
+    packageRef?: string;
+    toolSlug?: string;
+    invocation?: Record<string, unknown>;
+    result: Record<string, unknown>;
+    status?: string;
+}
+
 /**
  * Unified Tool Definition Bundle.
  * Combines metadata, schema validation, and execution logic.
@@ -26,6 +52,7 @@ export interface ToolDefinition<T extends z.ZodTypeAny> {
     description: string;
     schema: T;
     handler: ToolHandler<z.infer<T>>;
+    buildChatPreview?: (input: ToolChatPreviewInput) => ToolChatPreview | null;
 }
 
 // ----------------------------------------------------------------------

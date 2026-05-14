@@ -92,11 +92,16 @@ class AISessionManagerSingleton {
             context : [],
             context_start_index: 0,
             context_end_index: 0,
+            context_records: [],
             working_memory: [],
 
             history : {},
             history_start_index: 0,
             history_end_index: 0,
+
+            active_agent: 'coordinator',
+            mirrored_ace_tools: [],
+            known_ace_tools: [],
         };
 
         // Persist registry metadata separately from the full session state.

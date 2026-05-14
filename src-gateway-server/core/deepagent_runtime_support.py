@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agents.runtime_contract import AgentCurrentContext
-from core.gateway_tools import AceToolDescriptor, build_gateway_tools, normalize_ace_tools, retain_known_ace_tools
+from core.gateway_tools import AceToolDescriptor, GatewayContextRecord, build_gateway_tools, normalize_ace_tools, retain_known_ace_tools
 from core.runtime_snapshot import GatewayTurnRecord, build_runtime_headers
 
 
@@ -20,11 +20,9 @@ class GatewaySessionState:
     model: str
     turns: list[GatewayTurnRecord] = field(default_factory=list)
     memory_bank: list[str] = field(default_factory=list)
-    context_bank: list[str] = field(default_factory=list)
+    context_bank: list[GatewayContextRecord] = field(default_factory=list)
     orchestrator_plan: list[str] = field(default_factory=list)
     active_agent: str = "coordinator"
-    handoff_reason: str = ""
-    handoff_context_summary: str = ""
     mirrored_ace_tools: list[AceToolDescriptor] = field(default_factory=list)
     known_ace_tools: list[AceToolDescriptor] = field(default_factory=list)
 
@@ -54,6 +52,7 @@ def get_or_create_session_state(
     model: str,
     session_uid: str | None,
     ace_tools: object | None = None,
+    context_records: object | None = None,
 ) -> GatewaySessionState:
     """Resolve or create the backend-owned session state for the request."""
 
@@ -75,13 +74,15 @@ def get_or_create_session_state(
             session_state.known_ace_tools,
             session_state.mirrored_ace_tools,
         )
+    if context_records is not None:
+        session_state.context_bank = _normalize_context_records(context_records)
     return session_state
 
 
-def get_active_profile(coordinator_profile: Any, executor_profile: Any, session_state: GatewaySessionState) -> Any:
+def get_active_profile(coordinator_profile: Any) -> Any:
     """Resolve the active logical agent profile for the current session."""
 
-    return executor_profile if session_state.active_agent == "executor" else coordinator_profile
+    return coordinator_profile
 
 
 def build_current_context(session_state: GatewaySessionState, prompt: str) -> AgentCurrentContext:
@@ -101,10 +102,8 @@ def build_current_context(session_state: GatewaySessionState, prompt: str) -> Ag
     return AgentCurrentContext(
         user_prompt=prompt,
         planning=json.loads(snapshot_headers["x-ace-deepagent-planning"]),
-        context=json.loads(snapshot_headers["x-ace-deepagent-context"]),
+        context=_render_context_bank(session_state.context_bank),
         memory=json.loads(snapshot_headers["x-ace-deepagent-memory"]),
-        handoff_reason=session_state.handoff_reason,
-        handoff_context_summary=session_state.handoff_context_summary,
         orchestrator_plan=session_state.orchestrator_plan,
         mirrored_ace_tools=session_state.mirrored_ace_tools,
         known_ace_tools=session_state.known_ace_tools,
@@ -114,7 +113,6 @@ def build_current_context(session_state: GatewaySessionState, prompt: str) -> Ag
 def build_session_tools(
     session_state: GatewaySessionState,
     allowed_tool_names: tuple[str, ...],
-    on_agent_transferred,
 ):
     """Bind session-aware gateway tool callables for the active agent."""
 
@@ -128,9 +126,43 @@ def build_session_tools(
         on_context_updated=lambda next_context: setattr(session_state, "context_bank", next_context),
         memory_bank=session_state.memory_bank,
         on_memory_updated=lambda next_memory: setattr(session_state, "memory_bank", next_memory),
-        on_agent_transferred=on_agent_transferred,
         allowed_tool_names=allowed_tool_names,
     )
+
+
+def _render_context_bank(context_bank: list[GatewayContextRecord]) -> list[str]:
+    rendered: list[str] = []
+    for entry in context_bank[-8:]:
+        name = str(entry.get("name", "Context")).strip() or "Context"
+        summary = str(entry.get("summary", "")).strip()
+        if not summary:
+            continue
+        rendered.append(f"{name}: {summary}")
+    return rendered
+
+
+def _normalize_context_records(context_records: object) -> list[GatewayContextRecord]:
+    if not isinstance(context_records, list):
+        return []
+
+    normalized: list[GatewayContextRecord] = []
+    for item in context_records:
+        if not isinstance(item, dict):
+            continue
+
+        title = item.get("name") or item.get("title") or "Context"
+        summary = item.get("summary") or item.get("content") or ""
+        raw_json = item.get("raw_json")
+        if raw_json is None and isinstance(item.get("payload"), dict):
+            raw_json = item.get("payload")
+
+        normalized.append({
+            "name": str(title).strip() or "Context",
+            "summary": str(summary).strip(),
+            "raw_json": raw_json,
+        })
+
+    return normalized
 
 
 def build_messages(session_state: GatewaySessionState, prompt: str) -> list[tuple[str, str]]:

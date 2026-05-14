@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .ace_catalog import merge_ace_tool_catalog
-from .tool_types import AceToolDescriptor, GatewayToolContext
+from .tool_types import AceToolDescriptor, GatewayContextRecord, GatewayToolContext
 
 
 def remember_tools(context: GatewayToolContext, tools: list[AceToolDescriptor]) -> None:
@@ -28,8 +28,21 @@ def remember_memory(context: GatewayToolContext, items: list[str]) -> None:
         context.on_memory_updated(list(context.memory_bank))
 
 
-def remember_context(context: GatewayToolContext, items: list[str]) -> None:
-    next_context = [item.strip() for item in items if isinstance(item, str) and item.strip()]
+def remember_context(context: GatewayToolContext, items: list[GatewayContextRecord]) -> None:
+    next_context: list[GatewayContextRecord] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        summary = str(item.get("summary", "")).strip()
+        if not name and not summary:
+            continue
+        next_context.append({
+            "name": name or "Context",
+            "summary": summary or name or "Context entry",
+            "raw_json": item.get("raw_json"),
+        })
+
     context.context_bank[:] = next_context
     if context.on_context_updated is not None:
         context.on_context_updated(list(context.context_bank))

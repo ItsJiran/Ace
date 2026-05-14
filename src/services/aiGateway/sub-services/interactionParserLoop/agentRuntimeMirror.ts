@@ -17,6 +17,8 @@ export interface AgentRuntimeSnapshotPayload {
     todo_items?: unknown;
     context?: unknown;
     memory?: unknown;
+    active_agent?: unknown;
+    context_records?: unknown;
     payload?: unknown;
     emitted_at?: number;
     event_index?: number;
@@ -41,6 +43,8 @@ export function mirrorAgentRuntimeSnapshotFromHeaders(session_uid: string, heade
         planning: parseAgentRuntimeArray(headers['x-ace-deepagent-planning']),
         context: parseAgentRuntimeArray(headers['x-ace-deepagent-context']),
         memory: parseAgentRuntimeArray(headers['x-ace-deepagent-memory']),
+        active_agent: parseAgentRuntimeScalar(headers['x-ace-deepagent-active-agent']),
+        context_records: parseAgentRuntimeJson(headers['x-ace-deepagent-context-records']),
     }, 'deepagent-header');
 }
 
@@ -69,6 +73,15 @@ export function mirrorAgentRuntimeSnapshot(
         : toStringArray(snapshot.planning);
     const contextItems = toStringArray(snapshot.context);
     const memoryItems = toStringArray(snapshot.memory);
+    const activeAgent = toActiveAgent(snapshot.active_agent)
+        ?? toActiveAgent(isRecord(snapshot.payload) ? snapshot.payload.active_agent : undefined)
+        ?? currentSessionState.active_agent;
+    const structuredContextRecords = toStructuredContextEntries(
+        snapshot.context_records,
+        turnIndex,
+        now,
+        source,
+    );
 
     const mirroredPlan: AIPlanEntry[] = (todoItems.length > 0 ? todoItems : planningItems.map((item, index) => ({
         title: `DeepAgent plan ${index + 1}`,
@@ -123,8 +136,86 @@ export function mirrorAgentRuntimeSnapshot(
         context: mirroredContext,
         context_start_index: 0,
         context_end_index: mirroredContext.length > 0 ? mirroredContext.length - 1 : 0,
+        active_agent: activeAgent,
+        context_records: structuredContextRecords.length > 0 ? structuredContextRecords : currentSessionState.context_records,
         working_memory: mirroredWorkingMemory,
     } as Partial<AISessionRuntime>);
+}
+
+function parseAgentRuntimeScalar(value?: string): unknown {
+    if (!value) {
+        return undefined;
+    }
+
+    try {
+        return JSON.parse(value);
+    } catch {
+        return value;
+    }
+}
+
+function parseAgentRuntimeJson(value?: string): unknown {
+    if (!value) {
+        return undefined;
+    }
+
+    try {
+        return JSON.parse(value);
+    } catch {
+        return undefined;
+    }
+}
+
+function toActiveAgent(value: unknown): AISessionRuntime['active_agent'] | undefined {
+    return value === 'coordinator' ? value : undefined;
+}
+
+function toStructuredContextEntries(
+    value: unknown,
+    turnIndex: number,
+    now: number,
+    source: AgentRuntimeSnapshotSource,
+): AIContextEntry[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map((item, index): AIContextEntry | null => {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) {
+                return null;
+            }
+
+            const entry = item as Record<string, unknown>;
+            const title = typeof entry.name === 'string' && entry.name.trim()
+                ? entry.name.trim()
+                : `Context ${index + 1}`;
+            const content = typeof entry.summary === 'string' && entry.summary.trim()
+                ? entry.summary.trim()
+                : '';
+            if (!content) {
+                return null;
+            }
+
+            return {
+                at: now,
+                title,
+                content,
+                status: 'active',
+                lifecycle_turn: turnIndex,
+                source,
+                mirrored_at: now,
+                payload: {
+                    raw_json: entry.raw_json,
+                    entry_kind: 'session_context',
+                },
+            };
+        })
+        .filter((entry): entry is AIContextEntry => entry !== null);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 export function parseAgentRuntimeArray(value?: string): string[] {

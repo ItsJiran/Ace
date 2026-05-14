@@ -11,7 +11,7 @@ from .tool_types import GatewayToolContext, GatewayToolDescriptor
 DESCRIPTOR: GatewayToolDescriptor = {
     "kind": "gateway_tool",
     "name": "update_session_plan",
-    "description": "Create or replace the current orchestrator plan stored in backend session state before executor steps run.",
+    "description": "Create or replace the current orchestrator plan stored in backend session state for the active single-agent workflow.",
 }
 
 

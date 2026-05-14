@@ -75,7 +75,6 @@ async function runGatewayStreamRequest(
     model?: string,
 ): Promise<void> {
     void session_uid;
-    void promptKind;
 
     // The backend agent runtime owns context, memory, and planning assembly.
     const composed_prompt = prompt;
@@ -88,6 +87,7 @@ async function runGatewayStreamRequest(
         session_uid,
         sdkConfig,
         composed_prompt,
+        promptKind,
         sdk,
         model,
         abortController,
@@ -136,6 +136,7 @@ async function openGatewayResponseStream(
     session_uid: string,
     sdkConfig: AIGatewaySDKTarget,
     composed_prompt: string,
+    promptKind: AIPromptKind,
     sdk?: string,
     model?: string,
     abortController?: AbortController,
@@ -147,7 +148,15 @@ async function openGatewayResponseStream(
         'Content-Type': 'application/json',
     };
     const aceTools = buildGatewayAceToolPayloads(ToolEngine.getAll());
-    const requestBody = { model, prompt: composed_prompt, session_uid, ace_tools: aceTools };
+    const sessionState = KernelEngine.readMemory(`system:ai_session:${session_uid}:state`) as AISessionRuntime | undefined;
+    const requestBody = {
+        model,
+        prompt: composed_prompt,
+        session_uid,
+        ace_tools: aceTools,
+        prompt_kind: promptKind,
+        context_records: sessionState?.context_records ?? [],
+    };
 
     patchCurrentEntryNetworkTrace(session_uid, {
         request: {

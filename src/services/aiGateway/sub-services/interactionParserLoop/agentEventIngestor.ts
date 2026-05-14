@@ -1,4 +1,4 @@
-import type { AIModelApiCallRecord, AIRenderer, AISessionRuntime, AITurn } from '#/schemas/ai';
+import type { AIAceToolDescriptor, AIContextEntry, AIModelApiCallRecord, AIRenderer, AISessionRuntime, AITurn } from '#/schemas/ai';
 import { EventBus } from '#/services/eventEngine';
 import { KernelEngine } from '#/services/kernelEngine';
 import * as TurnRenderer from '#/services/aiGateway/turnManager';
@@ -51,18 +51,146 @@ export function ingestAgentRuntimeEvent(session_uid: string, snapshot: AgentRunt
 
     maybeDispatchAceToolExecutionIntent(session_uid, sessionState, snapshot);
 
+    const nextSessionState = applyGatewayToolState(sessionState, snapshot);
+
     const nextTurn = applyModelApiMetrics({
         ...currentTurn,
         assistant_renderers: nextRenderers,
     }, snapshot);
 
     KernelEngine.updateMemory(`system:ai_session:${session_uid}:state`, {
-        ...sessionState,
+        ...nextSessionState,
         turns: [
             ...sessionState.turns.slice(0, sessionState.turn_index),
             nextTurn,
         ],
     } as AISessionRuntime);
+}
+
+function applyGatewayToolState(
+    sessionState: AISessionRuntime,
+    snapshot: AgentRuntimeSnapshotPayload,
+): AISessionRuntime {
+    if (snapshot.type !== 'deepagent_activity') {
+        return sessionState;
+    }
+
+    if (snapshot.event_type !== 'tool_finished' && snapshot.event_type !== 'tool_completed') {
+        return sessionState;
+    }
+
+    const payload = isRecord(snapshot.payload) ? snapshot.payload : {};
+    const data = isRecord(payload.data) ? payload.data : {};
+    const output = extractToolResultPayload(data);
+    let nextSessionState = sessionState;
+
+    const nextContextRecords = extractContextRecords(output, nextSessionState.turn_index);
+    if (nextContextRecords.length > 0) {
+        nextSessionState = {
+            ...nextSessionState,
+            context_records: nextContextRecords,
+        };
+    }
+
+    const nextKnownTools = mergeAceToolDescriptors(
+        nextSessionState.known_ace_tools ?? [],
+        extractAceToolDescriptors(output),
+    );
+    if (nextKnownTools.length !== (nextSessionState.known_ace_tools ?? []).length) {
+        nextSessionState = {
+            ...nextSessionState,
+            known_ace_tools: nextKnownTools,
+        };
+    }
+
+    return nextSessionState;
+}
+
+function extractContextRecords(output: Record<string, unknown>, turnIndex: number): AIContextEntry[] {
+    const contextEntries = Array.isArray(output.context_entries) ? output.context_entries : [];
+    const now = Date.now();
+
+    return contextEntries
+        .map((item, index): AIContextEntry | null => {
+            const entry = isRecord(item) ? item : {};
+            const title = typeof entry.name === 'string' && entry.name.trim().length > 0
+                ? entry.name.trim()
+                : `Context ${index + 1}`;
+            const content = typeof entry.summary === 'string' && entry.summary.trim().length > 0
+                ? entry.summary.trim()
+                : '';
+            if (!content) {
+                return null;
+            }
+
+            return {
+                at: now,
+                title,
+                content,
+                status: 'active',
+                lifecycle_turn: turnIndex,
+                source: 'gateway-tool',
+                mirrored_at: now,
+                payload: {
+                    raw_json: entry.raw_json,
+                    entry_kind: 'session_context',
+                },
+            };
+        })
+        .filter((entry): entry is AIContextEntry => entry !== null);
+}
+
+function extractAceToolDescriptors(output: Record<string, unknown>): AIAceToolDescriptor[] {
+    const descriptors: AIAceToolDescriptor[] = [];
+
+    const aceTools = Array.isArray(output.ace_tools) ? output.ace_tools : [];
+    descriptors.push(...aceTools.map(toAceToolDescriptor).filter((item): item is AIAceToolDescriptor => item !== null));
+
+    const matches = Array.isArray(output.matches) ? output.matches : [];
+    descriptors.push(...matches.map(toAceToolDescriptor).filter((item): item is AIAceToolDescriptor => item !== null));
+
+    const matchingTools = Array.isArray(output.matching_tools) ? output.matching_tools : [];
+    descriptors.push(...matchingTools
+        .map((item) => isRecord(item) ? toAceToolDescriptor(item.ace_tool) : null)
+        .filter((item): item is AIAceToolDescriptor => item !== null));
+
+    const aceTool = toAceToolDescriptor(output.ace_tool);
+    if (aceTool) {
+        descriptors.push(aceTool);
+    }
+
+    return descriptors;
+}
+
+function mergeAceToolDescriptors(existing: AIAceToolDescriptor[], next: AIAceToolDescriptor[]): AIAceToolDescriptor[] {
+    const merged = new Map<string, AIAceToolDescriptor>();
+    for (const item of [...existing, ...next]) {
+        const packageRef = typeof item.package_ref === 'string' ? item.package_ref.trim() : '';
+        const slug = typeof item.slug === 'string' ? item.slug.trim() : '';
+        if (!packageRef || !slug) {
+            continue;
+        }
+        merged.set(`${packageRef}:${slug}`, item);
+    }
+    return [...merged.values()].sort((left, right) => `${left.package_ref}:${left.slug}`.localeCompare(`${right.package_ref}:${right.slug}`));
+}
+
+function toAceToolDescriptor(value: unknown): AIAceToolDescriptor | null {
+    const item = isRecord(value) ? value : {};
+    const slug = typeof item.slug === 'string' ? item.slug.trim() : '';
+    const packageRef = typeof item.package_ref === 'string' ? item.package_ref.trim() : '';
+    if (!slug || !packageRef) {
+        return null;
+    }
+
+    return {
+        kind: typeof item.kind === 'string' ? item.kind : undefined,
+        slug,
+        name: typeof item.name === 'string' ? item.name : undefined,
+        description: typeof item.description === 'string' ? item.description : undefined,
+        package_ref: packageRef,
+        parameters: isRecord(item.parameters) ? item.parameters : undefined,
+    };
 }
 
 function persistGatewayPromptDebug(
@@ -84,38 +212,41 @@ function persistGatewayPromptDebug(
     const payload = isRecord(snapshot.payload) ? snapshot.payload : {};
     const requestBody = currentEntry.network_trace?.request?.body;
     const existingRequestBody = isRecord(requestBody) ? requestBody : {};
+    const nextRequest = currentEntry.network_trace?.request
+        ? {
+            ...currentEntry.network_trace.request,
+            body: {
+                ...existingRequestBody,
+                gateway_agent_profile: typeof payload.gateway_agent_profile === 'string'
+                    ? payload.gateway_agent_profile
+                    : existingRequestBody.gateway_agent_profile,
+                gateway_agent_system_prompt: typeof payload.gateway_agent_system_prompt === 'string'
+                    ? payload.gateway_agent_system_prompt
+                    : existingRequestBody.gateway_agent_system_prompt,
+                gateway_agent_messages: Array.isArray(payload.gateway_agent_messages)
+                    ? payload.gateway_agent_messages
+                    : existingRequestBody.gateway_agent_messages,
+                gateway_agent_tools: Array.isArray(payload.gateway_agent_tools)
+                    ? payload.gateway_agent_tools
+                    : existingRequestBody.gateway_agent_tools,
+                gateway_agent_memory: Array.isArray(payload.gateway_agent_memory)
+                    ? payload.gateway_agent_memory
+                    : existingRequestBody.gateway_agent_memory,
+                gateway_prompt_debug_provider: typeof payload.provider === 'string'
+                    ? payload.provider
+                    : existingRequestBody.gateway_prompt_debug_provider,
+                gateway_prompt_debug_model: typeof payload.model === 'string'
+                    ? payload.model
+                    : existingRequestBody.gateway_prompt_debug_model,
+            },
+        }
+        : undefined;
 
     const nextEntry = {
         ...currentEntry,
         network_trace: {
             ...(currentEntry.network_trace ?? {}),
-            request: {
-                ...(currentEntry.network_trace?.request ?? {}),
-                body: {
-                    ...existingRequestBody,
-                    gateway_agent_profile: typeof payload.gateway_agent_profile === 'string'
-                        ? payload.gateway_agent_profile
-                        : existingRequestBody.gateway_agent_profile,
-                    gateway_agent_system_prompt: typeof payload.gateway_agent_system_prompt === 'string'
-                        ? payload.gateway_agent_system_prompt
-                        : existingRequestBody.gateway_agent_system_prompt,
-                    gateway_agent_messages: Array.isArray(payload.gateway_agent_messages)
-                        ? payload.gateway_agent_messages
-                        : existingRequestBody.gateway_agent_messages,
-                    gateway_agent_tools: Array.isArray(payload.gateway_agent_tools)
-                        ? payload.gateway_agent_tools
-                        : existingRequestBody.gateway_agent_tools,
-                    gateway_agent_memory: Array.isArray(payload.gateway_agent_memory)
-                        ? payload.gateway_agent_memory
-                        : existingRequestBody.gateway_agent_memory,
-                    gateway_prompt_debug_provider: typeof payload.provider === 'string'
-                        ? payload.provider
-                        : existingRequestBody.gateway_prompt_debug_provider,
-                    gateway_prompt_debug_model: typeof payload.model === 'string'
-                        ? payload.model
-                        : existingRequestBody.gateway_prompt_debug_model,
-                },
-            },
+            ...(nextRequest ? { request: nextRequest } : {}),
         },
     };
 
@@ -276,7 +407,7 @@ function maybeDispatchAceToolExecutionIntent(
     }
 
     const data = isRecord(payload.data) ? payload.data : {};
-    const output = isRecord(data.output) ? data.output : {};
+    const output = extractToolResultPayload(data);
     const executionIntent = isRecord(output.execution_intent) ? output.execution_intent : {};
 
     const packageRef = typeof executionIntent.package_ref === 'string' ? executionIntent.package_ref : '';
@@ -314,6 +445,42 @@ function maybeDispatchAceToolExecutionIntent(
             gateway_tool_intent_key: dispatchMemoryKey,
         },
     });
+}
+
+function extractToolResultPayload(data: Record<string, unknown>): Record<string, unknown> {
+    const directOutput = parseToolResultValue(data.output);
+    if (directOutput) {
+        return directOutput;
+    }
+
+    const directData = parseToolResultValue(data);
+    if (directData) {
+        return directData;
+    }
+
+    return {};
+}
+
+function parseToolResultValue(value: unknown): Record<string, unknown> | null {
+    if (isRecord(value)) {
+        return value;
+    }
+
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(trimmed);
+        return isRecord(parsed) ? parsed : null;
+    } catch {
+        return null;
+    }
 }
 
 function buildRuntimeEventRenderer(
@@ -388,6 +555,7 @@ function toRendererPayload(snapshot: AgentRuntimeSnapshotPayload, eventPayload: 
             status: eventPayload.status,
             role: typeof payload.role === 'string' ? payload.role : 'runtime',
             profile_name: typeof payload.profile_name === 'string' ? payload.profile_name : payload.role,
+            active_agent: snapshot.active_agent,
             error_message: typeof payload.error_message === 'string' ? payload.error_message : undefined,
             payload,
         };
