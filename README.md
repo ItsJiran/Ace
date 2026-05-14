@@ -1,5 +1,11 @@
 # ACE-Agentic-Client-Environment
 
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-blue)
+![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Stage](https://img.shields.io/badge/stage-experimental-orange)
+
 > This project is still very early, but the core idea is an overlaying UI that enhances developer productivity through local-first AI assistance, runtime tooling, and extensible desktop workflows.
 
 ACE is a local-first agentic desktop environment built around an overlay UI, an AI gateway sidecar, and a runtime tool/event architecture.
@@ -12,6 +18,18 @@ The project is designed to help developers work faster by combining:
 - an extensible package ecosystem for custom components, tools, and workflows
 
 In practical terms, ACE is an experimental developer assistant platform where the UI layer, runtime orchestration, and gateway backend are all being shaped into one integrated system.
+
+## ✨ Key Features
+
+- **🌐 Always-on Overlay:** A seamless UI layer that stays on top of your workflow without interrupting it.
+- **🧠 Local-First Intelligence:** Privacy-centric AI orchestration using a local gateway sidecar.
+- **🛠️ Extensible Toolchain:** Schema-aware tool execution (`ToolEngine`) for local file and system tasks.
+- **📡 Event-Driven Architecture:** Robust communication via a central `EventBus` for decoupled UI and logic.
+- **📦 Package Ecosystem:** Modular architecture allowing custom widgets, tools, and workflows.
+
+## 💡 Why ACE?
+
+Context switching kills user productivity. Modern AI assistants often live in separate browser tabs or restricted IDE sidebars. ACE aims to bridge this gap by providing a **Unified Agentic Surface** that lives where you work, with direct access to your local runtime and tools given the extendability for window, tool and etc.
 
 ## Getting Started
 
@@ -195,6 +213,15 @@ flowchart TD
 - The gateway sidecar runs the DeepAgents-based runtime, binds provider models, manages gateway tools, and returns structured runtime state back to the app.
 - External ACE tools are executed inside the app runtime, while the gateway remains the orchestration owner for the AI request lifecycle.
 
+
+## 🗺️ Current Roadmap
+
+- [x] Core KernelEngine and EventBus Implementation
+- [x] AI Gateway with Multi-Provider Support
+- [ ] **Phase 1:** Hardening the tool execution pipeline
+- [ ] **Phase 2:** Advanced Memory & RAG retrieval systems
+- [ ] **Phase 3:** Public Package Registry for community modules
+
 ## Long-Term Roadmap
 
 The broader direction of the project is no longer just feature expansion. A major part of the roadmap is hardening and cleaning up the architecture that is currently still heavily vibe-coded and experimental.
@@ -208,3 +235,7 @@ Key long-term priorities:
 
 The end goal is an extensible developer environment where AI, runtime tools, overlay UI, package modules, and session intelligence work together in a clean and durable architecture.
 
+## 📄 License
+
+MIT License
+Copyright (c) 2026 [Jibril Gilang Ramadhan]
