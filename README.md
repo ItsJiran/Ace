@@ -6,7 +6,9 @@
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Stage](https://img.shields.io/badge/stage-experimental-orange)
 
-> This project is still very early, but the core idea is an overlaying UI that enhances developer productivity through local-first AI assistance, runtime tooling, and extensible desktop workflows.
+> Project Status: ACE is an active experimental "labor of love" developed as a side project alongside my full-time work, marking my first implementation of AI agents using the DeepAgents framework. To maintain high velocity within a limited timeline, I have heavily leveraged AI-assisted development to scaffold and iterate on core ideas. Although the project is heavily curated and performance is already solid, the high complexity and rapid development pace mean you should expect some architectural awkwardness, volatile schemas, and structural inconsistencies. I’m sharing this early to gather feedback on the vision of a local-first, overlay-driven workspace, and I appreciate your patience as I work to refine these early experimental patterns into a more hardened and elegant architecture.
+
+---------
 
 ACE is a local-first agentic desktop environment built around an overlay UI, an AI gateway sidecar, and a runtime tool/event architecture.
 
@@ -112,6 +114,19 @@ What is currently done in the repository:
 - a non-trivial automated test surface across backend runtime support, gateway tools, parser behavior, event engine behavior, kernel behavior, and related orchestration slices
 
 In short, the project already has a real runtime skeleton in place: app shell, kernel-like control plane, gateway sidecar, session loop, tool execution path, and debugging infrastructure. What is still evolving is the hardening, cleanup, scalability, and consistency of those pieces.
+
+## 🛠 Technical Decisions & AI Implementation
+
+### Why DeepAgents + LangChain?
+The AI agent intelligence in ACE is implemented using **DeepAgents** built on top of **LangChain**. While many frameworks exist, this choice was driven by a need for high-speed delivery without sacrificing orchestration power:
+
+*   **Speed over Boilerplate:** Leveraging a pre-built agentic framework allowed me to focus on ACE's unique overlay logic rather than building a custom **LangGraph** from scratch. Managing complex nodes, edges, and state transitions manually would have significantly delayed the experimental cycle.
+*   **ReAct vs. Custom Loops:** Implementing a reliable **ReAct** (Reasoning and Acting) pattern is non-trivial. DeepAgents provides a battle-tested execution loop that handles tool calling and observation cycles out of the box.
+*   **LangChain Ecosystem:** By using LangChain as the backbone, ACE stays compatible with a vast ecosystem of document loaders, retrievers, and model providers, ensuring the "local-first" vision remains flexible.
+
+### Deep Dive & Developer Logs
+For a more detailed technical breakdown, architectural logs, and the journey of building ACE, check out my blog:
+👉 **[jiran.dev/projects/ace](https://jiran.dev/projects/ace)**
 
 ## Architecture Overview
 
