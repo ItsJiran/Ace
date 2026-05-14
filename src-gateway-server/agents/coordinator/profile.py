@@ -14,6 +14,10 @@ _DEFAULT_TOOLS = (
     "update_session_context",
     "update_session_memory",
     "transfer_to_agent",
+    "list_ace_tools",
+    "search_ace_tools",
+    "inspect_ace_tool",
+    "suggest_missing_ace_tools",
 )
 
 
@@ -62,6 +66,7 @@ class CoordinatorAgentProfile:
                 "- If the request is multi-step, depends on tool discovery/execution, or needs durable session updates, create a compact plan first.\n"
                 "- Keep planning weight proportional to the task. Do not over-plan a simple reply.\n"
                 "- Hand off only after the next executor step is concrete and actionable.\n"
+                "- ACE tool discovery belongs to the coordinator. Use list_ace_tools, search_ace_tools, inspect_ace_tool, and suggest_missing_ace_tools before handoff when capability discovery is still unresolved.\n"
                 "- Use update_session_context for execution findings, intermediate results, and live situational facts that should guide the next step.\n"
                 "- If you learn a durable preference or reusable fact, update session memory through update_session_memory instead of assuming runtime auto-saves it."
             ),
@@ -88,7 +93,8 @@ class CoordinatorAgentProfile:
                 f"- Backend mirrored ACE catalog size: {len(current_context.mirrored_ace_tools)}\n"
                 f"- Discovered ACE tools in session state: {len(current_context.known_ace_tools)}\n"
                 "- Do not plan around undiscovered ACE tools as if they are executable facts.\n"
-                "- Use your plan and handoff summary to tell the executor what capability to discover next."
+                "- Resolve ACE capability discovery in the orchestrator whenever possible before handing off.\n"
+                "- Use your plan and handoff summary to tell the executor which already-discovered tool should be executed next."
             ),
         ]
         return "\n\n".join(section for section in sections if section)

@@ -239,6 +239,11 @@ function ActivityAccordion({ renderers }: { renderers: AIRenderer[] }) {
                                             key={getRendererStableKey(renderer, index)}
                                             renderer={renderer}
                                         />
+                                    ) : getActivityCategoryKey(renderer) === 'tool' ? (
+                                        <ToolActivityRow
+                                            key={getRendererStableKey(renderer, index)}
+                                            renderer={renderer}
+                                        />
                                     ) : (
                                         <NarrativeActivityRow
                                             key={getRendererStableKey(renderer, index)}
@@ -258,6 +263,14 @@ function ActivityAccordion({ renderers }: { renderers: AIRenderer[] }) {
 function LatestActivityPreview({ renderer, relatedRenderers }: { renderer: AIRenderer; relatedRenderers?: AIRenderer[] }) {
     if (getActivityCategoryKey(renderer) === 'plan') {
         return <PlanningPreview renderer={renderer} relatedRenderers={relatedRenderers} />;
+    }
+
+    if (getActivityCategoryKey(renderer) === 'tool') {
+        return (
+            <div className="rounded-lg border border-white/10 bg-white/5 p-2">
+                <Renderer renderer={renderer} />
+            </div>
+        );
     }
 
     const status = renderer.status ?? 'loading';
@@ -387,6 +400,28 @@ function PlanningActivityRow({ renderer }: { renderer: AIRenderer }) {
                 <Renderer renderer={renderer} />
             </div>
         </div>
+    );
+}
+
+function ToolActivityRow({ renderer }: { renderer: AIRenderer }) {
+    const status = renderer.status ?? 'loading';
+    const rowMotion = buildActivityRowMotion(status);
+    const animationSignature = buildRendererAnimationSignature(renderer);
+
+    return (
+        <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+                key={animationSignature}
+                layout
+                initial={rowMotion.initial}
+                animate={rowMotion.animate}
+                exit={rowMotion.exit}
+                transition={{ duration: 0.24, ease: 'easeOut' }}
+                className="rounded-lg"
+            >
+                <Renderer renderer={renderer} />
+            </motion.div>
+        </AnimatePresence>
     );
 }
 

@@ -35,7 +35,12 @@ import json
 import time
 from typing import AsyncIterator
 
-from deepagents import create_deep_agent
+from deepagents import (
+    GeneralPurposeSubagentProfile,
+    HarnessProfile,
+    create_deep_agent,
+    register_harness_profile,
+)
 
 from agents import build_coordinator_profile, build_executor_profile
 from core.deepagent_runtime_support import (
@@ -51,6 +56,19 @@ from core.deepagent_runtime_support import (
 from models import TestResponseResult
 from core.model_registry import ModelRegistry
 from core.nodes import build_activity_event, build_runtime_events, build_runtime_headers
+
+
+_DEEPAGENT_BUILTIN_TOOLS = frozenset({
+    "write_todos",
+    "ls",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
+    "execute",
+    "task",
+})
 
 
 class DeepAgentRuntime:
@@ -70,6 +88,7 @@ class DeepAgentRuntime:
         self._sessions: dict[str, GatewaySessionState] = {}
         self._coordinator_profile = build_coordinator_profile()
         self._executor_profile = build_executor_profile()
+        self._configured_harness_providers: set[str] = set()
 
     def _encode_meta_event(self, payload: dict[str, object]) -> str:
         """Encode a runtime snapshot as an RS-prefixed transport frame.
@@ -106,6 +125,19 @@ class DeepAgentRuntime:
             "allowed_event_types": list(profile.event_types),
         }
 
+    def _ensure_custom_harness_profile(self, provider: str) -> None:
+        if provider in self._configured_harness_providers:
+            return
+
+        register_harness_profile(
+            provider,
+            HarnessProfile(
+                excluded_tools=_DEEPAGENT_BUILTIN_TOOLS,
+                general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
+            ),
+        )
+        self._configured_harness_providers.add(provider)
+
     def _build_agent_invocation(
         self,
         provider: str,
@@ -118,6 +150,7 @@ class DeepAgentRuntime:
         active_profile = get_active_profile(self._coordinator_profile, self._executor_profile, session_state)
         current_context = build_current_context(session_state, prompt)
         invocation_config = active_profile.build_invocation_config(current_context)
+        self._ensure_custom_harness_profile(provider)
         agent = create_deep_agent(
             model=self._model_registry.build_chat_model(provider, model),
             tools=build_session_tools(

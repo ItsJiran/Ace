@@ -50,6 +50,50 @@ function formatMaybeTs(value?: number) {
     return typeof value === 'number' ? ts(value) : 'n/a';
 }
 
+type TokenUsageSummary = {
+    input: number;
+    output: number;
+    total: number;
+    countedCalls: number;
+};
+
+function summarizeTokenUsage(calls: AITurn['model_api_calls'] | undefined): TokenUsageSummary {
+    return (calls ?? []).reduce<TokenUsageSummary>((summary, call) => {
+        const input = typeof call.input_tokens === 'number'
+            ? call.input_tokens
+            : typeof call.prompt_tokens === 'number'
+                ? call.prompt_tokens
+                : 0;
+        const output = typeof call.output_tokens === 'number'
+            ? call.output_tokens
+            : typeof call.completion_tokens === 'number'
+                ? call.completion_tokens
+                : 0;
+        const total = typeof call.total_tokens === 'number' ? call.total_tokens : input + output;
+        const hasTrackedUsage = typeof call.total_tokens === 'number'
+            || typeof call.input_tokens === 'number'
+            || typeof call.output_tokens === 'number'
+            || typeof call.prompt_tokens === 'number'
+            || typeof call.completion_tokens === 'number';
+
+        return {
+            input: summary.input + input,
+            output: summary.output + output,
+            total: summary.total + total,
+            countedCalls: summary.countedCalls + (hasTrackedUsage ? 1 : 0),
+        };
+    }, {
+        input: 0,
+        output: 0,
+        total: 0,
+        countedCalls: 0,
+    });
+}
+
+function formatTokenCount(value: number) {
+    return value.toLocaleString();
+}
+
 function extractGatewayRequestPrompt(entry: AIEntry): string | undefined {
     const requestBody = entry.network_trace?.request?.body;
     if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
@@ -421,6 +465,7 @@ function EntryRow({ entry, idx, isActive }: { entry: AIEntry; idx: number; isAct
 
 function TurnRow({ turn, turnIdx, isActive }: { turn: AITurn; turnIdx: number; isActive: boolean }) {
     const [open, setOpen] = useState(false);
+    const tokenUsage = summarizeTokenUsage(turn.model_api_calls);
     return (
         <div className={`border rounded mb-3 overflow-hidden ${isActive ? 'border-sky-500/50' : 'border-zinc-700/40'}`}>
             <button
@@ -436,11 +481,31 @@ function TurnRow({ turn, turnIdx, isActive }: { turn: AITurn; turnIdx: number; i
                     {ts(turn.at)} · {turn.entries.length} entr{turn.entries.length !== 1 ? 'ies' : 'y'}
                     {' · '}{turn.assistant_renderers.length} renderer{turn.assistant_renderers.length !== 1 ? 's' : ''}
                     {' · '}api:{turn.model_api_call_count ?? 0}
+                    {' · '}tok:{formatTokenCount(tokenUsage.total)}
                 </span>
             </button>
 
             {open && (
                 <div className="px-3 py-3 space-y-3 bg-zinc-900/30">
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-[10px]">
+                        <div className="bg-zinc-900 rounded p-2 space-y-1">
+                            <div className="text-zinc-500 uppercase tracking-wide">Token Input</div>
+                            <div className="text-zinc-200 font-semibold">{formatTokenCount(tokenUsage.input)}</div>
+                        </div>
+                        <div className="bg-zinc-900 rounded p-2 space-y-1">
+                            <div className="text-zinc-500 uppercase tracking-wide">Token Output</div>
+                            <div className="text-zinc-200 font-semibold">{formatTokenCount(tokenUsage.output)}</div>
+                        </div>
+                        <div className="bg-zinc-900 rounded p-2 space-y-1">
+                            <div className="text-zinc-500 uppercase tracking-wide">Token Total</div>
+                            <div className="text-zinc-200 font-semibold">{formatTokenCount(tokenUsage.total)}</div>
+                        </div>
+                        <div className="bg-zinc-900 rounded p-2 space-y-1">
+                            <div className="text-zinc-500 uppercase tracking-wide">Tracked Calls</div>
+                            <div className="text-zinc-200 font-semibold">{tokenUsage.countedCalls}/{turn.model_api_call_count ?? 0}</div>
+                        </div>
+                    </div>
 
                     <div>
                         <div className="text-[10px] text-zinc-500 mb-1 uppercase tracking-wide">
@@ -460,6 +525,13 @@ function TurnRow({ turn, turnIdx, isActive }: { turn: AITurn; turnIdx: number; i
                                                 {call.role ? <span className="text-zinc-500">role:{call.role}</span> : null}
                                                 {call.profile_name ? <span className="text-zinc-500">profile:{call.profile_name}</span> : null}
                                                 <span className="ml-auto text-zinc-600">{ts(call.at)}</span>
+                                            </div>
+                                            <div className="mt-1 text-zinc-500 flex items-center gap-3 flex-wrap">
+                                                <span>input:{formatTokenCount(typeof call.input_tokens === 'number' ? call.input_tokens : (typeof call.prompt_tokens === 'number' ? call.prompt_tokens : 0))}</span>
+                                                <span>output:{formatTokenCount(typeof call.output_tokens === 'number' ? call.output_tokens : (typeof call.completion_tokens === 'number' ? call.completion_tokens : 0))}</span>
+                                                <span>total:{formatTokenCount(typeof call.total_tokens === 'number' ? call.total_tokens : ((typeof call.input_tokens === 'number' ? call.input_tokens : (typeof call.prompt_tokens === 'number' ? call.prompt_tokens : 0)) + (typeof call.output_tokens === 'number' ? call.output_tokens : (typeof call.completion_tokens === 'number' ? call.completion_tokens : 0))))}</span>
+                                                {typeof call.cache_creation_input_tokens === 'number' ? <span>cache-create:{formatTokenCount(call.cache_creation_input_tokens)}</span> : null}
+                                                {typeof call.cache_read_input_tokens === 'number' ? <span>cache-read:{formatTokenCount(call.cache_read_input_tokens)}</span> : null}
                                             </div>
                                         </div>
                                     ))}
@@ -730,6 +802,20 @@ function WorkingMemorySection({ entries }: {
 function SessionCard({ session }: { session: AISessionRuntime }) {
     const [open, setOpen] = useState(true);
     const totalModelApiCalls = session.turns.reduce((count, turn) => count + (turn.model_api_call_count ?? 0), 0);
+    const totalTokenUsage = session.turns.reduce<TokenUsageSummary>((summary, turn) => {
+        const turnUsage = summarizeTokenUsage(turn.model_api_calls);
+        return {
+            input: summary.input + turnUsage.input,
+            output: summary.output + turnUsage.output,
+            total: summary.total + turnUsage.total,
+            countedCalls: summary.countedCalls + turnUsage.countedCalls,
+        };
+    }, {
+        input: 0,
+        output: 0,
+        total: 0,
+        countedCalls: 0,
+    });
 
     return (
         <div className="border border-zinc-700/50 rounded-lg mb-4 overflow-hidden">
@@ -760,6 +846,10 @@ function SessionCard({ session }: { session: AISessionRuntime }) {
                             <div><span className="text-zinc-500">process:</span> <span className="text-zinc-300 font-mono">{session.process_uid}</span></div>
                             <div><span className="text-zinc-500">autonomous_loop:</span> <StatusBadge status={session.autonomous_follow_up_loop_status} /></div>
                             <div><span className="text-zinc-500">model_api_calls:</span> <span className="text-zinc-300">{totalModelApiCalls}</span></div>
+                            <div><span className="text-zinc-500">token input:</span> <span className="text-zinc-300">{formatTokenCount(totalTokenUsage.input)}</span></div>
+                            <div><span className="text-zinc-500">token output:</span> <span className="text-zinc-300">{formatTokenCount(totalTokenUsage.output)}</span></div>
+                            <div><span className="text-zinc-500">token total:</span> <span className="text-zinc-300">{formatTokenCount(totalTokenUsage.total)}</span></div>
+                            <div><span className="text-zinc-500">tracked token calls:</span> <span className="text-zinc-300">{totalTokenUsage.countedCalls}/{totalModelApiCalls}</span></div>
                             <div><span className="text-zinc-500">ctx window:</span> <span className="text-zinc-300">[{session.context_start_index}–{session.context_end_index}]</span></div>
                             <div><span className="text-zinc-500">hist window:</span> <span className="text-zinc-300">[{session.history_start_index}–{session.history_end_index}]</span></div>
                         </div>

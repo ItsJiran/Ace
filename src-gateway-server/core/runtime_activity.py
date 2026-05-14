@@ -62,6 +62,10 @@ def build_activity_event(
     if error_message:
         payload["error_message"] = error_message
 
+    token_usage = _extract_token_usage(raw_event)
+    if token_usage:
+        payload.update(token_usage)
+
     return {
         "type": "deepagent_activity",
         "event_index": event_index,
@@ -121,6 +125,121 @@ def _extract_error_message(raw_event: dict[str, object]) -> str | None:
             if isinstance(value, str) and value.strip():
                 return _trim_text(value, 200)
 
+    return None
+
+
+def _extract_token_usage(raw_event: dict[str, object]) -> dict[str, object]:
+    usage = _find_usage_candidate(raw_event.get("data"))
+    if not usage:
+        return {}
+
+    normalized: dict[str, object] = {}
+
+    input_tokens = _coerce_int(usage.get("input_tokens"))
+    output_tokens = _coerce_int(usage.get("output_tokens"))
+    total_tokens = _coerce_int(usage.get("total_tokens"))
+    prompt_tokens = _coerce_int(usage.get("prompt_tokens"))
+    completion_tokens = _coerce_int(usage.get("completion_tokens"))
+    cache_creation_input_tokens = _coerce_int(usage.get("cache_creation_input_tokens"))
+    cache_read_input_tokens = _coerce_int(usage.get("cache_read_input_tokens"))
+
+    if input_tokens is None:
+        input_tokens = prompt_tokens
+    if output_tokens is None:
+        output_tokens = completion_tokens
+    if total_tokens is None and input_tokens is not None and output_tokens is not None:
+        total_tokens = input_tokens + output_tokens
+
+    if input_tokens is not None:
+        normalized["input_tokens"] = input_tokens
+    if output_tokens is not None:
+        normalized["output_tokens"] = output_tokens
+    if total_tokens is not None:
+        normalized["total_tokens"] = total_tokens
+    if prompt_tokens is not None:
+        normalized["prompt_tokens"] = prompt_tokens
+    if completion_tokens is not None:
+        normalized["completion_tokens"] = completion_tokens
+    if cache_creation_input_tokens is not None:
+        normalized["cache_creation_input_tokens"] = cache_creation_input_tokens
+    if cache_read_input_tokens is not None:
+        normalized["cache_read_input_tokens"] = cache_read_input_tokens
+
+    return normalized
+
+
+def _find_usage_candidate(value: object) -> dict[str, object] | None:
+    candidates = [_to_mapping(value)]
+
+    mapping = _to_mapping(value)
+    if mapping is not None:
+        candidates.extend([
+            _to_mapping(mapping.get("output")),
+            _to_mapping(mapping.get("usage_metadata")),
+            _to_mapping(mapping.get("usage")),
+            _to_mapping(mapping.get("response_metadata")),
+        ])
+        response_metadata = _to_mapping(mapping.get("response_metadata"))
+        if response_metadata is not None:
+            candidates.append(_to_mapping(response_metadata.get("token_usage")))
+
+    for candidate in list(candidates):
+        if candidate is None:
+            continue
+        usage_metadata = _to_mapping(candidate.get("usage_metadata"))
+        if usage_metadata is not None:
+            candidates.append(usage_metadata)
+        usage = _to_mapping(candidate.get("usage"))
+        if usage is not None:
+            candidates.append(usage)
+        response_metadata = _to_mapping(candidate.get("response_metadata"))
+        if response_metadata is not None:
+            candidates.append(response_metadata)
+            token_usage = _to_mapping(response_metadata.get("token_usage"))
+            if token_usage is not None:
+                candidates.append(token_usage)
+
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        if any(key in candidate for key in (
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "prompt_tokens",
+            "completion_tokens",
+        )):
+            return candidate
+
+    return None
+
+
+def _to_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return {str(key): item for key, item in value.items()}
+
+    for attr_name in ("usage_metadata", "usage", "response_metadata", "token_usage"):
+        attr_value = getattr(value, attr_name, None)
+        if isinstance(attr_value, dict):
+            return {str(key): item for key, item in attr_value.items()}
+
+    if hasattr(value, "__dict__"):
+        raw_dict = getattr(value, "__dict__", None)
+        if isinstance(raw_dict, dict):
+            return {str(key): item for key, item in raw_dict.items()}
+
+    return None
+
+
+def _coerce_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
     return None
 
 

@@ -135,11 +135,21 @@ function persistGatewayPromptDebug(
 }
 
 function applyModelApiMetrics(turn: AITurn, snapshot: AgentRuntimeSnapshotPayload): AITurn {
-    if (snapshot.type !== 'deepagent_activity' || snapshot.event_type !== 'agent_started') {
+    if (snapshot.type !== 'deepagent_activity') {
         return turn;
     }
 
     const payload = isRecord(snapshot.payload) ? snapshot.payload : {};
+    const tokenMetrics = extractTokenMetrics(payload);
+
+    if (snapshot.event_type === 'agent_finished') {
+        return applyCompletedModelApiMetrics(turn, payload, tokenMetrics);
+    }
+
+    if (snapshot.event_type !== 'agent_started') {
+        return turn;
+    }
+
     const nextCall: AIModelApiCallRecord = {
         event_index: snapshot.event_index ?? -1,
         event_type: snapshot.event_type,
@@ -148,6 +158,7 @@ function applyModelApiMetrics(turn: AITurn, snapshot: AgentRuntimeSnapshotPayloa
         role: typeof payload.role === 'string' ? payload.role : undefined,
         profile_name: typeof payload.profile_name === 'string' ? payload.profile_name : undefined,
         at: Date.now(),
+        ...tokenMetrics,
     };
 
     const calls = turn.model_api_calls ?? [];
@@ -161,6 +172,89 @@ function applyModelApiMetrics(turn: AITurn, snapshot: AgentRuntimeSnapshotPayloa
         model_api_call_count: (turn.model_api_call_count ?? 0) + 1,
         model_api_calls: [...calls, nextCall],
     };
+}
+
+function applyCompletedModelApiMetrics(
+    turn: AITurn,
+    payload: Record<string, unknown>,
+    tokenMetrics: Partial<AIModelApiCallRecord>,
+): AITurn {
+    const calls = turn.model_api_calls ?? [];
+    if (calls.length === 0) {
+        return {
+            ...turn,
+            model_api_call_count: 1,
+            model_api_calls: [{
+                event_index: -1,
+                event_type: 'agent_finished',
+                provider: typeof payload.provider === 'string' ? payload.provider : undefined,
+                model: typeof payload.model === 'string' ? payload.model : undefined,
+                role: typeof payload.role === 'string' ? payload.role : undefined,
+                profile_name: typeof payload.profile_name === 'string' ? payload.profile_name : undefined,
+                at: Date.now(),
+                ...tokenMetrics,
+            }],
+        };
+    }
+
+    const nextCalls = [...calls];
+    const matchIndex = findLastMatchingModelApiCallIndex(nextCalls, payload);
+    const targetIndex = matchIndex >= 0 ? matchIndex : nextCalls.length - 1;
+    nextCalls[targetIndex] = {
+        ...nextCalls[targetIndex],
+        ...tokenMetrics,
+    };
+
+    return {
+        ...turn,
+        model_api_calls: nextCalls,
+    };
+}
+
+function findLastMatchingModelApiCallIndex(calls: AIModelApiCallRecord[], payload: Record<string, unknown>): number {
+    const provider = typeof payload.provider === 'string' ? payload.provider : undefined;
+    const model = typeof payload.model === 'string' ? payload.model : undefined;
+    const profileName = typeof payload.profile_name === 'string' ? payload.profile_name : undefined;
+
+    for (let index = calls.length - 1; index >= 0; index -= 1) {
+        const call = calls[index];
+        const providerMatches = !provider || call.provider === provider;
+        const modelMatches = !model || call.model === model;
+        const profileMatches = !profileName || call.profile_name === profileName;
+        const alreadyHasTotals = typeof call.total_tokens === 'number'
+            || typeof call.input_tokens === 'number'
+            || typeof call.output_tokens === 'number';
+
+        if (providerMatches && modelMatches && profileMatches && !alreadyHasTotals) {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
+function extractTokenMetrics(payload: Record<string, unknown>): Partial<AIModelApiCallRecord> {
+    const inputTokens = toFiniteNumber(payload.input_tokens) ?? toFiniteNumber(payload.prompt_tokens);
+    const outputTokens = toFiniteNumber(payload.output_tokens) ?? toFiniteNumber(payload.completion_tokens);
+    const totalTokens = toFiniteNumber(payload.total_tokens)
+        ?? ((typeof inputTokens === 'number' && typeof outputTokens === 'number') ? inputTokens + outputTokens : undefined);
+
+    return {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        total_tokens: totalTokens,
+        prompt_tokens: toFiniteNumber(payload.prompt_tokens),
+        completion_tokens: toFiniteNumber(payload.completion_tokens),
+        cache_creation_input_tokens: toFiniteNumber(payload.cache_creation_input_tokens),
+        cache_read_input_tokens: toFiniteNumber(payload.cache_read_input_tokens),
+    };
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+    return undefined;
 }
 
 function maybeDispatchAceToolExecutionIntent(

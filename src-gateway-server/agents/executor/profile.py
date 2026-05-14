@@ -14,10 +14,6 @@ _DEFAULT_TOOLS = (
     "update_session_context",
     "update_session_memory",
     "transfer_to_agent",
-    "list_ace_tools",
-    "search_ace_tools",
-    "inspect_ace_tool",
-    "suggest_missing_ace_tools",
     "request_ace_tool_execution",
 )
 
@@ -85,7 +81,7 @@ class ExecutorAgentProfile:
                 f"- Backend mirrored ACE catalog size: {len(current_context.mirrored_ace_tools)}\n"
                 f"- Discovered ACE tool count: {len(current_context.known_ace_tools)}\n"
                 "- Only request execution for tools already discovered into session state.\n"
-                "- If a needed capability is missing, use list/search/inspect before request_ace_tool_execution."
+                "- If the needed capability is still unclear or undiscovered, transfer back to the coordinator instead of doing tool discovery yourself."
             ),
         ]
         return "\n\n".join(section for section in sections if section)

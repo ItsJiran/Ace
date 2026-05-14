@@ -113,3 +113,38 @@ def test_build_activity_event_maps_runtime_errors() -> None:
     assert activity_event['event_type'] == 'tool_failed'
     assert activity_event['status'] == 'error'
     assert activity_event['payload']['error_message'] == 'permission denied'
+
+
+def test_build_activity_event_extracts_token_usage_from_chat_model_end() -> None:
+    activity_event = build_activity_event(
+        'openai',
+        'gpt-4.1',
+        'session-123',
+        {
+            'event': 'on_chat_model_end',
+            'name': 'ChatOpenAI',
+            'data': {
+                'output': {
+                    'usage_metadata': {
+                        'input_tokens': 128,
+                        'output_tokens': 32,
+                        'total_tokens': 160,
+                    },
+                    'response_metadata': {
+                        'token_usage': {
+                            'prompt_tokens': 128,
+                            'completion_tokens': 32,
+                            'total_tokens': 160,
+                        },
+                    },
+                },
+            },
+        },
+        11,
+    )
+
+    assert activity_event is not None
+    assert activity_event['event_type'] == 'agent_finished'
+    assert activity_event['payload']['input_tokens'] == 128
+    assert activity_event['payload']['output_tokens'] == 32
+    assert activity_event['payload']['total_tokens'] == 160

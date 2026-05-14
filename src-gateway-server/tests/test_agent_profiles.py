@@ -22,7 +22,16 @@ def test_coordinator_profile_owns_tools_and_prompt_injection() -> None:
         known_ace_tools=[],
     ))
 
-    assert profile.tools == ('update_session_plan', 'update_session_context', 'update_session_memory', 'transfer_to_agent')
+    assert profile.tools == (
+        'update_session_plan',
+        'update_session_context',
+        'update_session_memory',
+        'transfer_to_agent',
+        'list_ace_tools',
+        'search_ace_tools',
+        'inspect_ace_tool',
+        'suggest_missing_ace_tools',
+    )
     assert config.tools == profile.tools
     assert config.memory == ['User prefers agentic workflow.']
     assert config.debug_payload['gateway_agent_memory_mode'] == 'deepagent_memory'
@@ -31,6 +40,9 @@ def test_coordinator_profile_owns_tools_and_prompt_injection() -> None:
     assert 'Coordinator ACE catalog snapshot:' in config.system_prompt
     assert 'update_session_context' in config.system_prompt
     assert 'update_session_memory' in config.system_prompt
+    assert 'list_ace_tools' in config.system_prompt
+    assert 'search_ace_tools' in config.system_prompt
+    assert 'inspect_ace_tool' in config.system_prompt
     assert 'Memory snapshot:' not in config.system_prompt
     assert 'Coordinator tool contract:' not in config.system_prompt
     assert 'Current ACE tool state:' not in config.system_prompt
@@ -73,10 +85,6 @@ def test_executor_profile_owns_detailed_ace_tool_injection() -> None:
         'update_session_context',
         'update_session_memory',
         'transfer_to_agent',
-        'list_ace_tools',
-        'search_ace_tools',
-        'inspect_ace_tool',
-        'suggest_missing_ace_tools',
         'request_ace_tool_execution',
     )
     assert config.tools == profile.tools
@@ -87,5 +95,6 @@ def test_executor_profile_owns_detailed_ace_tool_injection() -> None:
     assert 'known={"description":"Read files"' in config.system_prompt
     assert 'update_session_context' in config.system_prompt
     assert 'update_session_memory' in config.system_prompt
+    assert 'transfer back to the coordinator' in config.system_prompt
     assert 'Memory snapshot:' not in config.system_prompt
     assert 'Executor gateway tools:' not in config.system_prompt
