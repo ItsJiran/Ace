@@ -1,7 +1,0 @@
-{
-  "namespace": "example/hello-world",
-  "package_name": "example/hello-world",
-  "owner_scope": "user",
-  "source_scope": "config",
-  "display_name": "Hello World Package"
-}
