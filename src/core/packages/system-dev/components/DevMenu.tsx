@@ -154,6 +154,18 @@ export default function DevMenu() {
         });
     };
 
+    const spawnSystemAIChat = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system',
+            window: 'system-ai-chat-window',
+            title: 'ACE Chat',
+            width: 780,
+            height: 660,
+            x: 430,
+            y: 100,
+        });
+    };
+
     const spawnToolRunner = () => {
         window.ACE.window.spawnWindow({
             package: 'itsjiran/ace-system-dev',
@@ -280,7 +292,7 @@ export default function DevMenu() {
         });
     };
 
-    const buttonClass = 'flex items-center justify-start gap-2 bg-zinc-800/80 hover:bg-zinc-700 active:bg-zinc-600 px-3 py-2 rounded text-sm border border-zinc-700/50 text-zinc-300 w-full mb-2';
+    const buttonClass = 'flex items-center justify-start gap-2 system-btn-primary w-full px-3 py-2 mb-2 rounded-sm';
 
     const menuItems = [
         { label: 'System Settings', icon: <Settings size={14} className="text-blue-400" />, onClick: spawnSystemSettings },
@@ -293,6 +305,7 @@ export default function DevMenu() {
         { label: 'Spawn Stress Test Widget', icon: <Activity size={14} className="text-rose-400" />, onClick: spawnStressTest },
         { label: 'Spawn Prompt Morph', icon: <Wand2 size={14} className="text-fuchsia-400" />, onClick: spawnPromptMorphWindow },
         { label: 'RAM Monitor', icon: <MemoryStick size={14} className="text-cyan-400" />, onClick: spawnRamMonitor },
+        { label: 'ACE Chat', icon: <MessageSquare size={14} className="text-sky-300" />, onClick: spawnSystemAIChat },
         { label: 'AI Chatbar Test Window', icon: <MessageSquare size={14} className="text-emerald-300" />, onClick: spawnAIChatbarTest },
         { label: 'Prompt Chatbar Dev Window', icon: <MessageCircle size={14} className="text-sky-300" />, onClick: spawnPromptChatbarDev },
         { label: 'AI Session Inspector', icon: <Monitor size={14} className="text-lime-300" />, onClick: spawnAISessionInspector },
@@ -307,7 +320,7 @@ export default function DevMenu() {
             label: isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode',
             icon: <Share2 size={14} className={isAmbient ? "text-blue-400" : "text-red-300"} />,
             onClick: toggleOverlayMode,
-            customClass: `flex items-center justify-start gap-2 px-3 py-2 rounded text-sm transition-colors border w-full mb-2 ${isAmbient ? 'bg-zinc-800/80 border-zinc-700/50 text-zinc-400' : 'bg-red-900/40 border-red-500/50 text-red-100 hover:bg-red-800/50'}`
+            customClass: `flex items-center justify-start gap-2 px-3 py-2 rounded text-sm transition-colors border w-full mb-2 ${isAmbient ? 'bg-zinc-800/80 border-zinc-700/50 text-zinc-400' : 'bg-red-900/70 border-red-500 text-red-100 hover:bg-red-800'}`
         }
     ];
 
@@ -315,9 +328,6 @@ export default function DevMenu() {
         <DeferredWindowContent fallback={<div className="text-zinc-500 font-mono text-xs">Loading Dev Tools...</div>}>
             <div className="flex flex-col gap-2 w-full h-full p-2 relative">
                 <RenderCounterBadge componentName="DevMenu" />
-                <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">
-                    Development Kit
-                </div>
 
                 <SpatialVirtualizer className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
                     {menuItems.map((item, idx) => (
@@ -337,7 +347,7 @@ export default function DevMenu() {
 
                 <button
                     onClick={() => void closeCurrentHostWindow()}
-                    className="flex items-center gap-2 px-3 py-2 w-full mx-2 rounded text-sm transition-colors border bg-red-950/60 border-red-800/50 text-red-300 hover:bg-red-900/80 hover:text-red-100"
+                    className="flex items-center system-btn-secondary py-3 gap-2"
                 >
                     <Power size={14} className="text-red-400" />
                     Quit Application

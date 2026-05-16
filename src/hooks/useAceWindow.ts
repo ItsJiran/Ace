@@ -28,8 +28,10 @@ export interface AceWindowRenderProps {
     minimize: () => void;
     focus: () => void;
     isFocused: boolean;
+    isActive: boolean;
     isDragging: boolean;
     isResizing: boolean;
+    isResizeAble: boolean;
     isLocked: boolean;
     canCapturePointer: boolean;
     windowUid: string;
@@ -123,6 +125,10 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         'system:global_state:focused_window',
         (focusedUid) => focusedUid === windowUid
     );
+    const isActive = useAceMemorySelector<string | null, boolean>(
+        'system:global_state:active_window',
+        (activeUid) => activeUid === windowUid
+    );
 
     // ARCHITECTURE: Window position is LOCAL state, not subscribed from global
     // This completely isolates position updates from global cascades.
@@ -173,6 +179,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
     // Keep a renderable `isHovered` derived from state so consumers re-render when hover changes
 
     const isLocked = windowConfig?.is_locked ?? false;
+    const isResizeAble = windowConfig?.is_resizeable ?? true;
     const canCapturePointer = mouseFocusEnabled;
 
     // -------------------------------------------------------------------------
@@ -245,7 +252,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
     );
 
     const beginResize = useCallback((direction: ResizeDirection, event: ResizeStartEvent) => {
-        if (!windowConfig || !canCapturePointer || windowConfig.is_locked) return;
+        if (!windowConfig || !canCapturePointer || windowConfig.is_locked || !isResizeAble) return;
         if (event.button !== 0) return;
         if (elementRef.current?.dataset.isDragging === 'true' || elementRef.current?.dataset.isResizing === 'true') return;
 
@@ -274,7 +281,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         if (elementRef.current) {
             elementRef.current.dataset.isResizing = 'true';
         }
-    }, [canCapturePointer, focus, localHeight, localWidth, localX, localY, windowConfig]);
+    }, [canCapturePointer, focus, isResizeAble, localHeight, localWidth, localX, localY, windowConfig]);
 
     const handleDragStart = useCallback(() => {
         if (!windowConfig) return;
@@ -315,11 +322,15 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
 
     const handlePointerEnter = useCallback(() => {
         setIsHovered(true);
-    }, []);
+        GlobalStateManager.setActiveWindow(windowUid);
+    }, [windowUid]);
 
     const handlePointerLeave = useCallback(() => {
         setIsHovered(false);
-    }, []);
+        if (GlobalStateManager.readActiveWindow() === windowUid) {
+            GlobalStateManager.setActiveWindow(null);
+        }
+    }, [windowUid]);
 
     const dragHandleProps = useMemo<AceWindowRenderProps['dragHandleProps']>(() => ({
         onPointerDown: (event) => {
@@ -487,10 +498,12 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         animationState,
         
         isFocused,
+        isActive,
         isHovered,
         isDragging,
         isResizing,
         isMounted,
+        isResizeAble,
         isLocked,
         canCapturePointer,
 

@@ -1,53 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* For Firefox and W3C Standards */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(86, 86, 133, 0.85) transparent;
+}
+
+/* For Chrome, Edge, Safari, and Opera */
+html::-webkit-scrollbar {
+  width: 3px; /* Matches the "thin" look (usually 3px-3px) */
+  height: 3px; /* For horizontal scrollbars */
+}
 
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-  }
-
   /**
    * GLOBAL HOVER POLICY
    * 
@@ -68,24 +34,7 @@
       transition: none !important;
     }
   }
-}
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  /**
-   * AUTOMATIC HARDWARE ACCELERATION FOR SCROLL CONTAINERS
-   * 
-   * When developers use Tailwind's `overflow-y-auto`, `overflow-auto`, 
-   * or `overflow-x-auto` classes, this CSS intercepts them and enforces
-   * GPU compositing instantly.
-   * 
-   * This solves the 20-40FPS drop that occurs AT THE START of scroll events.
-   * By putting it here globally, frontend developers don't have to remember
-   * to add `transform-gpu will-change-transform` to every list!
-   */
   .overflow-y-auto,
   .overflow-x-auto,
   .overflow-auto,
@@ -100,9 +49,7 @@
     overscroll-behavior: contain;
     contain: paint;
   }
-
 }
-
 
 html,
 body,
@@ -112,11 +59,14 @@ body,
   width: 100vw;
   height: 100vh;
   background-color: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(45, 52, 78, 0.88);
+  letter-spacing: 0.01em;
   /* Di Tauri, transparent biasanya sudah cukup tanpa hack 0.005 */
   overflow: hidden;
 }
 @layer utilities {
-
   /* HARDWARE ACCELERATE ALPHA-BLENDING & COMPOSITING GLOBALLY
      Transparent webviews lag massively when painting DOM nodes with alpha background changes.
      By enforcing zero transition time & paint isolation, we remove 90% of the compositor tax */
@@ -127,9 +77,196 @@ body,
   [class*="transition-"] {
     transition-duration: 0ms !important;
   }
-  
+
   /* Retain smoothness for structural transforms exclusively */
   .transition-transform {
     transition-duration: 150ms !important;
   }
+}
+
+@layer components {
+  /* + ------------------------------------------------------------------------------------------------------+ */
+  /* + -------------------------------------- System Main Styling -------------------------------------------+ */
+  /* + ------------------------------------------------------------------------------------------------------+ */
+
+  .system-shell {
+    position: relative;
+    overflow: hidden;
+    opacity: 20%;
+  }
+
+  .system-shell::before,
+  .system-shell-primary::before {
+    @apply opacity-0;
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transition: opacity 0.3s ease-in-out;
+    z-index: -1;
+  }
+
+  .system-shell:hover,
+  .system-shell.focused,
+  .system-shell.active,
+  .system-shell:hover::before,
+  .system-shell.focused::before,
+  .system-shell.active::before {
+    @apply opacity-100;
+  }
+
+  /* + ------------------------------------------------------------------------------------------------------+ */
+  /* + -------------------------------------- System Shell Shell --------------------------------------------+ */
+  /* + ------------------------------------------------------------------------------------------------------+ */
+
+  .system-shell-primary {
+    @apply backdrop-blur-glass transition shadow-panel-fade duration-300;
+    background: linear-gradient(160deg, #dbe2ec67 0%, #d6ddeb31 100%);
+    color: rgba(252, 253, 255, 0.92);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  .system-shell-primary::before {
+    background: linear-gradient(160deg, #dbe2ec 0%, #d6ddeb 100%);
+  }
+
+  .system-shell:hover.system-shell-primary,
+  .system-shell:hover .system-shell-primary,
+
+  .system-shell.focused.system-shell-primary,
+  .system-shell.focused .system-shell-primary,
+
+  .system-shell.active.system-shell-primary,
+  .system-shell.active .system-shell-primary {
+    @apply border border-glass-border shadow-panel;
+    color: rgba(66, 75, 102, 0.92);
+  }
+
+  .system-shell:hover .system-shell-primary::before,
+  .system-shell.focused .system-shell-primary::before,
+  .system-shell.active .system-shell-primary::before {
+    @apply opacity-100;
+  }
+
+  /* + ------------------------------------------------------------------------------------------------------+ */
+  /* + -------------------------------------- System Container Shell ----------------------------------------+ */
+  /* + ------------------------------------------------------------------------------------------------------+ */
+
+  .system-container-primary {
+    background: linear-gradient(
+      150deg,
+      rgba(255, 255, 255, 0.26),
+      rgba(228, 234, 250, 0.1)
+    );
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    border-bottom-color: rgba(255, 255, 255, 0.62);
+    border-bottom-color: rgba(165, 178, 210, 0.28);
+    border-radius: 14px 14px 14px 4px;
+    box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1);
+  }
+
+  .system-container-secondary {
+    background: linear-gradient(
+      145deg,
+      rgba(130, 148, 210, 0.55),
+      rgba(100, 120, 185, 0.45)
+    );
+    border: 1px solid rgba(160, 175, 225, 0.5);
+    box-shadow:
+      0 2px 6px rgba(90, 110, 170, 0.2),
+      0 1px 0 rgba(255, 255, 255, 0.5) inset;
+  }
+
+  /* + ------------------------------------------------------------------------------------------------------+ */
+  /* + -------------------------------------- System Head Shell -------------------------------------------+ */
+  /* + ------------------------------------------------------------------------------------------------------+ */
+
+  /* Keeping your header styling intact */
+  .system-shell-head-primary {
+    @apply flex cursor-grab items-center 
+  justify-between border-b 
+  bg-white/5 px-4 py-3 active:cursor-grabbing;
+    border-color: rgba(155, 168, 200, 0.32);
+  }
+
+  /* + ------------------------------------------------------------------------------------------------------+ */
+  /* + -------------------------------------- System Border Styling -----------------------------------------+ */
+  /* + ------------------------------------------------------------------------------------------------------+ */
+
+  .system-btn,
+  .system-btn-primary,
+  .system-btn-secondary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  /* PRIMARY */
+  .system-btn-primary {
+    border-radius: 8px;
+    border: 1px solid rgba(160, 170, 195, 0.3);
+    background: rgba(255, 255, 255, 0.3);
+    color: rgba(252, 253, 255, 0.92);
+    padding: 4px;
+    transition: background 0.15s;
+  }
+
+  .system-btn-primary:hover {
+    background: rgba(255, 255, 255, 0.5);
+  }
+
+  .system-shell:hover.system-btn-primary,
+  .system-shell:hover .system-btn-primary,
+
+  .system-shell.focused.system-btn-primary,
+  .system-shell.focused .system-btn-primary,
+
+  .system-shell.active.system-btn-primary,
+  .system-shell.active .system-btn-primary {
+    color: rgba(66, 75, 102, 0.92);
+  }
+
+  /* SECONDARY */
+  .system-btn-secondary {
+    border-radius: 8px;
+    border: 1px solid rgba(160,175,225,0.5);
+    background: linear-gradient(145deg, rgba(130,148,210,0.55), rgba(100,120,185,0.45));
+    box-shadow:0 2px 6px rgba(90,110,170,0.2), 0 1px 0 rgba(255,255,255,0.5) inset;
+    padding: 4px;
+    color: rgba(252, 253, 255, 0.92);
+    transition: background 0.15s;
+  }
+
+  .system-btn-secondary:hover {
+    background: linear-gradient(145deg, rgba(140,158,220,0.68), rgba(110,130,195,0.58));
+  }
+
+  .system-shell:hover.system-btn-secondary,
+  .system-shell:hover .system-btn-secondary,
+
+  .system-shell.focused.system-btn-secondary,
+  .system-shell.focused .system-btn-secondary,
+
+  .system-shell.active.system-btn-secondary,
+  .system-shell.active .system-btn-secondary {
+    color: rgba(35,45,85,0.85);
+  }
+
+  /* + ------------------------------------------------------------------------------------------------------+ */
+  /* + --------------------------------------- System Input Styling -----------------------------------------+ */
+  /* + ------------------------------------------------------------------------------------------------------+ */
+
+  .system-input-primary{
+    background: rgba(255,255,255,0.28);
+    border: 1px solid rgba(160,172,200,0.38);
+    border-radius: 12px;
+    color: rgba(40,48,72,0.85);
+    transition: background 0.15s, border-color 0.15s;
+  }
+
 }

@@ -36,6 +36,7 @@ class GlobalStateManagerSingleton {
     public readonly runtimeStateUid = 'system:global_state:runtime';
     public readonly mouseFocusMemoryUid = 'system:global_state:mouse_focus_enabled';
     public readonly focusedWindowMemoryUid = 'system:global_state:focused_window';
+    public readonly activeWindowMemoryUid = 'system:global_state:active_window';
 
     setupKernelSpace() {
         KernelEngine.registerSystemMemory(this.cursorStateUid, DEFAULT_CURSOR_STATE);
@@ -43,6 +44,7 @@ class GlobalStateManagerSingleton {
         KernelEngine.registerSystemMemory(this.runtimeStateUid, DEFAULT_RUNTIME_STATE);
         KernelEngine.registerSystemMemory(this.mouseFocusMemoryUid, true);
         KernelEngine.registerSystemMemory(this.focusedWindowMemoryUid, null);
+        KernelEngine.registerSystemMemory(this.activeWindowMemoryUid, null);
     }
 
     readCursorState(): CursorState {
@@ -55,6 +57,10 @@ class GlobalStateManagerSingleton {
 
     readRuntimeState(): RuntimeState {
         return (KernelEngine.readMemory(this.runtimeStateUid) as RuntimeState | undefined) ?? DEFAULT_RUNTIME_STATE;
+    }
+
+    readActiveWindow(): string | null {
+        return (KernelEngine.readMemory(this.activeWindowMemoryUid) as string | null | undefined) ?? null;
     }
 
     setCursorPosition(x: number, y: number) {
@@ -141,6 +147,13 @@ class GlobalStateManagerSingleton {
         if (current === focused_window_uid) return;
 
         KernelEngine.updateMemory(this.focusedWindowMemoryUid, focused_window_uid);
+    }
+
+    setActiveWindow(active_window_uid: string | null) {
+        const current = KernelEngine.readMemory(this.activeWindowMemoryUid);
+        if (current === active_window_uid) return;
+
+        KernelEngine.updateMemory(this.activeWindowMemoryUid, active_window_uid);
     }
 
     setFocusedWindowInteractive(focused_window_uid: string) {

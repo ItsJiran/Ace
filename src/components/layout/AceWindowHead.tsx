@@ -19,7 +19,6 @@ export function AceWindowHead({
   onClose,
   onMinimize,
 }: AceWindowHeadProps) {
-  const buttonClass = "flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 transition-colors hover:text-white hover:bg-white/10";
   const stopDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
   };
@@ -28,21 +27,19 @@ export function AceWindowHead({
     <div
       {...dragHandleProps}
       className={[
-        "flex items-center justify-between px-3 py-2 border-b bg-white/5 cursor-grab active:cursor-grabbing",
-        isFocused ? "border-white/10" : "border-white/5",
+        "system-shell-head-primary",
       ].join(" ")}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <span className={isFocused ? "text-zinc-300" : "text-zinc-500"}>
+        <span>
           {icon ?? <GripHorizontal size={14} />}
         </span>
         <span
           className={[
-            "truncate text-[10px] uppercase font-bold tracking-widest",
-            isFocused ? "text-zinc-400" : "text-zinc-600",
+            "truncate",
           ].join(" ")}
         >
-          {title || "Window"}
+          {title || "Agentic Assistant"}
         </span>
       </div>
 
@@ -52,7 +49,7 @@ export function AceWindowHead({
             type="button"
             onPointerDown={stopDrag}
             onClick={onMinimize}
-            className={buttonClass}
+            className="system-btn-secondary"
             aria-label="Minimize window"
           >
             <Minus size={14} />
@@ -62,7 +59,7 @@ export function AceWindowHead({
           type="button"
           onPointerDown={stopDrag}
           onClick={onClose}
-          className={buttonClass}
+          className="system-btn-secondary"
           aria-label="Close window"
         >
           <X size={14} />

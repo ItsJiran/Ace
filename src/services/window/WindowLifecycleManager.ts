@@ -118,6 +118,7 @@ export class WindowLifecycleManager {
             z_index,
             opacity: options.opacity ?? defaultConfig.opacity ?? 1,
             is_locked: options.is_locked ?? defaultConfig.is_locked ?? false,
+            is_resizeable: options.is_resizeable ?? defaultConfig.is_resizeable ?? true,
             always_on_top: options.always_on_top ?? defaultConfig.always_on_top ?? false,
             window_style: options.window_style ?? defaultConfig.window_style ?? 'standard', 
             is_minimized: false
@@ -173,6 +174,11 @@ export class WindowLifecycleManager {
         const focusedWindowUid = KernelEngine.readMemory('system:global_state:focused_window') as string | null | undefined;
         if (focusedWindowUid === window_uid) {
             GlobalStateManager.setFocusedWindow(null);
+        }
+
+        const activeWindowUid = KernelEngine.readMemory('system:global_state:active_window') as string | null | undefined;
+        if (activeWindowUid === window_uid) {
+            GlobalStateManager.setActiveWindow(null);
         }
 
         KernelEngine.unregisterWindow(window_uid);

@@ -43,8 +43,13 @@ const resizeHandleDefinitions = [
 
 function renderResizeHandles(
   getResizeHandleProps: AceWindowRenderProps["getResizeHandleProps"],
+  isResizeAble: boolean,
   showCornerGrip: boolean,
 ) {
+  if (!isResizeAble) {
+    return null;
+  }
+
   return (
     <>
       {resizeHandleDefinitions.map((handle) => (
@@ -93,8 +98,10 @@ function AceWindowComponent({
     minimize,
     focus,
     isFocused,
+    isActive,
     isDragging,
     isResizing,
+    isResizeAble,
     isLocked,
     canCapturePointer,
     position,
@@ -127,8 +134,10 @@ function AceWindowComponent({
     minimize,
     focus,
     isFocused,
+    isActive,
     isDragging,
     isResizing,
+    isResizeAble,
     isLocked,
     canCapturePointer,
     windowUid: resolvedWindowUid,
@@ -141,11 +150,9 @@ function AceWindowComponent({
   ) : (
     <div
       className={[
-        "flex h-full w-full flex-col overflow-hidden rounded-xl transition-colors",
-        isDragging ? "bg-zinc-950/95" : "",
-        isFocused
-          ? "bg-zinc-950/90 shadow-black/50 ring-1 ring-white/10"
-          : "bg-zinc-950/70 shadow-black/20 ring-1 ring-white/5",
+        "system-shell system-shell-primary flex h-full w-full flex-col overflow-hidden rounded-xl pointer-events-auto",
+        isDragging ? "focused" : "",
+        isFocused ? "focused" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -233,9 +240,12 @@ function AceWindowComponent({
       }}
       data-window-shell="ace-empty"
       data-window-uid={resolvedConfig.window_uid}
+      data-window-active={isActive ? "true" : "false"}
+      data-window-focused={isFocused ? "true" : "false"}
+      data-window-resizeable={isResizeAble ? "true" : "false"}
     >
       {contentNode}
-      {renderResizeHandles(aceWindow.getResizeHandleProps, !headless)}
+      {renderResizeHandles(aceWindow.getResizeHandleProps, isResizeAble, !headless)}
     </motion.div>
   );
 }

@@ -25,6 +25,7 @@ export const WindowConfigSchema = z.object({
     // Visual State
     opacity: z.number().optional().default(1),
     is_locked: z.boolean().optional().default(false),
+    is_resizeable: z.boolean().optional().default(true),
     always_on_top: z.boolean().optional().default(false),
     is_minimized: z.boolean(),
 });
@@ -42,6 +43,7 @@ export interface SpawnWindowOptions {
     height?: number;
     opacity?: number;
     is_locked?: boolean;
+    is_resizeable?: boolean;
     always_on_top?: boolean;
     z_index?: number;
     animation_sequence?: AnimationSequence;

@@ -140,6 +140,13 @@ class WindowEngineSingleton {
         if (focusedWindowUid === window_uid) {
             GlobalStateManager.setFocusedWindow(null);
         }
+
+        const activeWindowUid = KernelEngine.readMemory(
+            "system:global_state:active_window",
+        ) as string | null | undefined;
+        if (activeWindowUid === window_uid) {
+            GlobalStateManager.setActiveWindow(null);
+        }
     }
 
     restoreWindow(window_uid: string) {
