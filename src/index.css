@@ -577,4 +577,13 @@ body,
     color: rgba(130, 148, 210, 0.92);
   }
 
+  .semi-transparent {
+    opacity: 0.5;
+  }
+
+  .transparent {
+    opacity: 0;
+    pointer-events: none;
+  }
+
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import type { PanInfo } from 'framer-motion';
+import type { DesktopState } from '#/schemas/globalState';
 import type { WindowConfig } from '#/schemas/window';
 import { WindowEngine } from '#/services/windowEngine';
 import { GlobalStateManager } from '#/services/globalStateManager';
@@ -34,6 +35,7 @@ export interface AceWindowRenderProps {
     isResizeAble: boolean;
     isLocked: boolean;
     canCapturePointer: boolean;
+    resolveWindowStateClass: () => string;
     windowUid: string;
     windowConfig?: WindowConfig;
 }
@@ -109,6 +111,10 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
     // Previously, every AceWindow re-rendered whenever ANY window animated.
     // We now fetch animation state on-demand during interactions, or rely on specific visual keys if needed.
     const mouseFocusEnabled = useAceMemory<boolean>('system:global_state:mouse_focus_enabled') ?? true;
+    const windowDisplayMode = useAceMemorySelector<DesktopState | undefined, DesktopState['window_display_mode']>(
+        'system:global_state:desktop',
+        (state) => state?.window_display_mode ?? 'all_visible',
+    );
 
     // -------------------------------------------------------------------------
     const elementRef = useRef<HTMLDivElement | null>(null);
@@ -181,6 +187,25 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
     const isLocked = windowConfig?.is_locked ?? false;
     const isResizeAble = windowConfig?.is_resizeable ?? true;
     const canCapturePointer = mouseFocusEnabled;
+    const resolveWindowStateClass = useCallback((): string => {
+        if (windowDisplayMode === 'all_visible') {
+            return 'active';
+        }
+
+        if (windowDisplayMode === 'active_and_focused_only') {
+            return (isFocused || isActive || isHovered || isDragging || isResizing) ? 'active' : '';
+        }
+
+        if (windowDisplayMode === 'all_semi_transparent') {
+            return 'semi-transparent';
+        }
+
+        if (windowDisplayMode === 'all_transparent') {
+            return 'transparent';
+        }
+
+        return 'active';
+    }, [isActive, isDragging, isFocused, isHovered, isResizing, windowDisplayMode]);
 
     // -------------------------------------------------------------------------
     // Window Lifecycle Actions
@@ -506,6 +531,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         isResizeAble,
         isLocked,
         canCapturePointer,
+        resolveWindowStateClass,
 
         focus,
         close,

@@ -13,6 +13,7 @@ const DEFAULT_CURSOR_STATE: CursorState = {
 
 const DEFAULT_DESKTOP_STATE: DesktopState = {
     mode: 'ambient',
+    window_display_mode: 'all_visible',
     mouse_x: 0,
     mouse_y: 0,
     debug_bg: false,
@@ -52,7 +53,10 @@ class GlobalStateManagerSingleton {
     }
 
     readDesktopState(): DesktopState {
-        return (KernelEngine.readMemory(this.desktopStateUid) as DesktopState | undefined) ?? DEFAULT_DESKTOP_STATE;
+        return {
+            ...DEFAULT_DESKTOP_STATE,
+            ...((KernelEngine.readMemory(this.desktopStateUid) as Partial<DesktopState> | undefined) ?? {}),
+        };
     }
 
     readRuntimeState(): RuntimeState {
@@ -105,6 +109,30 @@ class GlobalStateManagerSingleton {
             ...state,
             mode: overlay_mode,
         });
+    }
+
+    setWindowDisplayMode(window_display_mode: DesktopState['window_display_mode']) {
+        const state = this.readDesktopState();
+        if (state.window_display_mode === window_display_mode) return;
+
+        KernelEngine.updateMemory(this.desktopStateUid, {
+            ...state,
+            window_display_mode,
+        });
+    }
+
+    cycleWindowDisplayMode() {
+        const orderedModes: DesktopState['window_display_mode'][] = [
+            'all_visible',
+            'active_and_focused_only',
+            'all_semi_transparent',
+            'all_transparent',
+        ];
+        const state = this.readDesktopState();
+        const currentIndex = orderedModes.indexOf(state.window_display_mode);
+        const nextMode = orderedModes[(currentIndex + 1 + orderedModes.length) % orderedModes.length];
+
+        this.setWindowDisplayMode(nextMode);
     }
 
     setDebugBg(debug_bg: boolean) {

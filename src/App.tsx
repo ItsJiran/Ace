@@ -140,6 +140,12 @@ function App() {
 
   if (!isBootReady || !overlayState) return null;
   const isAmbient = overlayState.mode === "ambient";
+  const windowDisplayModeLabel = {
+    all_visible: "All Visible",
+    active_and_focused_only: "Active / Focused Only",
+    all_semi_transparent: "All Semi Transparent",
+    all_transparent: "All Transparent",
+  }[overlayState.window_display_mode];
 
   return (
     <div
@@ -177,6 +183,10 @@ function App() {
           [Interactive Mode] Capturing mouse. Hit ESC to release.
         </div>
       )}
+
+      <div className="absolute top-10 left-2 text-xs text-cyan-200 font-mono pointer-events-none bg-black/50 px-2 py-1 rounded z-50 border border-cyan-400/30">
+        [Window Display] {windowDisplayModeLabel}
+      </div>
     </div>
   );
 }

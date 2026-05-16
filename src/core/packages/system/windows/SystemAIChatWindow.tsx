@@ -26,6 +26,7 @@ function SystemAIChatShell({
     config,
     isDragging,
     isFocused,
+    windowStateClass,
     close,
     minimize,
     dragHandleProps,
@@ -33,6 +34,7 @@ function SystemAIChatShell({
     config: WindowConfig;
     isDragging: boolean;
     isFocused: boolean;
+    windowStateClass: string;
     close: () => void;
     minimize: () => void;
     dragHandleProps: AceWindowRenderProps['dragHandleProps'];
@@ -41,8 +43,8 @@ function SystemAIChatShell({
         <div
             className={[
                 'system-shell flex h-full w-full flex-col overflow-hidden rounded-[24px] pointer-events-auto',
-                isFocused ? 'focused' : '',
-                isDragging ? 'dragging focused' : '',
+                windowStateClass,
+                isDragging ? 'dragging active' : '',
             ].join(' ')}
         >
             <div className="flex-1 overflow-hidden">
@@ -62,14 +64,18 @@ function SystemAIChatShell({
 export default function SystemAIChatWindow({ windowUid }: { windowUid: string }) {
     return (
         <AceWindow windowUid={windowUid} headless>
-            {({ windowConfig, dragHandleProps, isDragging, isFocused, close, minimize }) => {
+            {({ windowConfig, dragHandleProps, isDragging, isFocused, close, minimize, resolveWindowStateClass }) => {
                 if (!windowConfig) return null;
+
+                const windowStateClass = resolveWindowStateClass();
+                const isWindowStateActive = windowStateClass === 'active';
 
                 return (
                     <SystemAIChatShell
                         config={windowConfig}
                         isDragging={isDragging}
-                        isFocused={isFocused}
+                        isFocused={isWindowStateActive || isFocused}
+                        windowStateClass={windowStateClass}
                         close={close}
                         minimize={minimize}
                         dragHandleProps={dragHandleProps}

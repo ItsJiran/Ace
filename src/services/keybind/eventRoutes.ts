@@ -16,6 +16,11 @@ export function registerKeybindEventRoutes() {
             return;
         }
 
+        if (args.sub_action === 'cycle_window_display_mode') {
+            GlobalStateManager.cycleWindowDisplayMode();
+            return;
+        }
+
         if (args.sub_action === 'set_window_mouse_focus' || args.sub_action === 'toggle_window_mouse_focus') {
             const currentEnabled = KernelEngine.readMemory('system:global_state:mouse_focus_enabled') ?? true;
             const rawEnabled = args.payload?.enabled;

@@ -188,6 +188,14 @@ class KeybindEngineSingleton {
         return canonicalizeShortcut(shortcut);
     }
 
+    cycleWindowDisplayMode() {
+        EventBus.emit({
+            action: 'lookup',
+            sub_action: 'cycle_window_display_mode',
+            process_uid: 'system:keybind_engine',
+        });
+    }
+
     registerEventRoutes() {
         if (this.isRouteBound) return;
 

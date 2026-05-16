@@ -56,6 +56,18 @@ export const BASE_KEYBINDS: Keybind[] = [
         }
     },
     {
+        keybind_uid: 'window.cycle_display_mode',
+        shortcut: 'CommandOrControl+Alt+D',
+        description: 'Cycle desktop window display mode between visible, focused-only, semi-transparent, and transparent.',
+        enabled: true,
+        intent: {
+            event_type: 'interaction',
+            action: 'lookup',
+            sub_action: 'cycle_window_display_mode',
+            payload: {}
+        }
+    },
+    {
         keybind_uid: 'window.toggle_mouse_focus',
         shortcut: 'CommandOrControl+Alt+M',
         description: 'Toggle mouse focus on/off for overlay windows.',

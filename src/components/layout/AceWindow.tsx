@@ -104,6 +104,7 @@ function AceWindowComponent({
     isResizeAble,
     isLocked,
     canCapturePointer,
+    resolveWindowStateClass,
     position,
     size,
     handleDragStart,
@@ -115,6 +116,8 @@ function AceWindowComponent({
     windowConfig,
     windowUid: resolvedWindowUid,
   } = aceWindow;
+  const windowStateClass = resolveWindowStateClass();
+  const isWindowStateActive = windowStateClass === "active";
 
   const dragHandleProps: AceWindowRenderProps["dragHandleProps"] = {
     onPointerDown: (event) => {
@@ -140,6 +143,7 @@ function AceWindowComponent({
     isResizeAble,
     isLocked,
     canCapturePointer,
+    resolveWindowStateClass,
     windowUid: resolvedWindowUid,
     windowConfig,
   };
@@ -151,8 +155,7 @@ function AceWindowComponent({
     <div
       className={[
         "system-shell system-shell-primary flex h-full w-full flex-col overflow-hidden rounded-xl pointer-events-auto",
-        isDragging ? "active" : "",
-        isFocused ? "active" : "",
+        windowStateClass,
       ]
         .filter(Boolean)
         .join(" ")}
@@ -160,14 +163,14 @@ function AceWindowComponent({
       <AceWindowHead
         title={windowConfig?.title}
         dragHandleProps={dragHandleProps}
-        isFocused={isFocused}
+        isFocused={isWindowStateActive}
         onMinimize={minimize}
         onClose={close}
       />
       <div
         className={[
           "relative flex-1 overflow-hidden rounded-b-xl border-x border-b",
-          isFocused ? "border-white/10" : "border-white/5",
+          isWindowStateActive ? "border-white/10" : "border-white/5",
         ].join(" ")}
       >
         {renderedChildren}
@@ -240,8 +243,9 @@ function AceWindowComponent({
       }}
       data-window-shell="ace-empty"
       data-window-uid={resolvedConfig.window_uid}
-      data-window-active={isActive ? "true" : "false"}
+      data-window-active={isWindowStateActive ? "true" : "false"}
       data-window-focused={isFocused ? "true" : "false"}
+      data-window-state-class={windowStateClass || "inactive"}
       data-window-resizeable={isResizeAble ? "true" : "false"}
     >
       {contentNode}
