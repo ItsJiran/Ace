@@ -27,11 +27,11 @@ export default function TurnBubble({
     return (
         <div className={`flex ${isRightAligned ? 'justify-end' : 'justify-start'}`}>
             <div className={`flex min-w-0 max-w-[88%] flex-col gap-2 ${isRightAligned ? 'items-end' : 'items-start'}`}>
-                <div className={`px-1 text-[10px] font-semibold uppercase tracking-[0.24em] ${isRightAligned ? 'text-cyan-400' : 'text-zinc-500'}`}>
+                <div className={['system-chat-turn-label', isRightAligned ? 'is-user' : 'is-assistant'].join(' ')}>
                     {label}
                 </div>
 
-                <div className={`w-full rounded-2xl border px-3 py-3 shadow-sm ${isRightAligned ? 'border-cyan-500/20 bg-cyan-500/10' : 'border-zinc-800 bg-zinc-900/70'}`}>
+                <div className={`w-full px-3 py-3 ${isRightAligned ? 'system-container-secondary rounded-[14px_14px_4px_14px]' : 'system-container-primary rounded-[14px_14px_14px_4px]'}`}>
                     {isRightAligned ? (
                         <div className="space-y-2">
                             {renderers.map((renderer, index) => (

@@ -34,36 +34,36 @@ export default function ActivityAccordion({ renderers }: { renderers: AIRenderer
     }, [isActive]);
 
     return (
-        <div className={`overflow-hidden border border-zinc-800/80 bg-black/15 transition-colors ${isActive ? 'rounded-xl border-zinc-700/90' : 'rounded-lg'}`}>
+        <div className={`system-container-primary box-shadow-none overflow-hidden border border-white/20 transition-colors ${isActive ? 'rounded-xl' : 'rounded-lg'}`}>
             <button
                 type="button"
                 onClick={() => setOpen((value) => !value)}
                 className={`flex w-full items-center gap-2 text-left ${isActive ? 'px-3 py-2' : 'px-2.5 py-1.5'}`}
             >
-                <span className={`text-zinc-500 ${isActive ? 'text-sm' : 'text-[11px]'}`}>
+                <span className={`system-chat-icon-muted ${isActive ? 'text-sm' : 'text-[11px]'}`}>
                     {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </span>
                 <div className="min-w-0 flex-1">
-                    <div className={`${isActive ? 'text-[10px] tracking-[0.22em]' : 'text-[9px] tracking-[0.18em]'} font-semibold uppercase text-zinc-500`}>
+                    <div className={`system-chat-label-muted ${isActive ? 'text-[10px] tracking-[0.22em]' : 'text-[9px] tracking-[0.18em]'}`}>
                         {title}
                     </div>
-                    <div className={`truncate text-zinc-400 ${isActive ? 'text-[11px]' : 'text-[10px]'}`}>
+                    <div className={`system-chat-copy-muted truncate ${isActive ? 'text-[11px]' : 'text-[10px]'}`}>
                         {summary}
                     </div>
                 </div>
-                <div className={`rounded bg-white/5 text-zinc-400 ${isActive ? 'px-2 py-0.5 text-[10px]' : 'px-1.5 py-0.5 text-[9px]'}`}>
+                <div className={`system-chat-count-pill ${isActive ? 'px-2 py-0.5 text-[10px]' : 'px-1.5 py-0.5 text-[9px]'}`}>
                     {renderers.length} item{renderers.length === 1 ? '' : 's'}
                 </div>
             </button>
 
             {!open && previewRenderer && isActive ? (
-                <div className="border-t border-zinc-800/80 px-3 py-2 transition-all duration-200 ease-out">
+                <div className="border-t border-white/10 px-3 py-2 transition-all duration-200 ease-out">
                     <LatestActivityPreview renderer={previewRenderer} relatedRenderers={renderers} />
                 </div>
             ) : null}
 
             {open ? (
-                <div className="overflow-hidden border-t border-zinc-800/80 px-3 py-3 transition-all duration-200 ease-out">
+                <div className="overflow-hidden border-t border-white/10 px-3 py-3 transition-all duration-200 ease-out">
                     <div className="space-y-2">
                         {renderers.map((renderer, index) => (
                             getActivityCategoryKey(renderer) === 'plan' ? (

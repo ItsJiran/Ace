@@ -151,8 +151,8 @@ function AceWindowComponent({
     <div
       className={[
         "system-shell system-shell-primary flex h-full w-full flex-col overflow-hidden rounded-xl pointer-events-auto",
-        isDragging ? "focused" : "",
-        isFocused ? "focused" : "",
+        isDragging ? "active" : "",
+        isFocused ? "active" : "",
       ]
         .filter(Boolean)
         .join(" ")}

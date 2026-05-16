@@ -28,30 +28,30 @@ export default function HistorySummaryPromptRenderer(props: HistorySummaryPrompt
     const turnIndex = typeof payload.turn_index === 'number' ? payload.turn_index : undefined;
 
     return (
-        <div className="bg-slate-50 dark:bg-slate-950/30 border border-slate-200 dark:border-slate-900/50 rounded-lg p-3 space-y-2">
+        <div className="system-chat-renderer-surface p-3 space-y-2">
             <div className="flex items-start gap-2">
-                <MessageCircle size={16} className="text-slate-600 dark:text-slate-400 mt-0.5 flex-shrink-0" />
+                <MessageCircle size={16} className="system-chat-tone-info mt-0.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <div className="system-chat-copy-strong text-sm font-semibold">
                         Prompt History Summary
                     </div>
-                    <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                        Source: <span className="font-mono">{source}</span>
-                        {turnIndex !== undefined && <> · Turn <span className="font-mono">{turnIndex}</span></>}
+                    <div className="system-chat-copy-muted mt-0.5 text-xs">
+                        Source: <span className="system-chat-mono font-mono">{source}</span>
+                        {turnIndex !== undefined && <> · Turn <span className="system-chat-mono font-mono">{turnIndex}</span></>}
                     </div>
                 </div>
             </div>
 
-            <div className="ml-6 text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-zinc-900 rounded p-2 max-h-32 overflow-auto leading-relaxed">
+            <div className="system-chat-summary-card ml-6 max-h-32 overflow-auto">
                 {summary}
             </div>
 
-            <div className="ml-6 flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+            <div className="system-chat-stat-row ml-6">
                 <span className="flex items-center gap-1">
                     <span className="font-semibold">{promptCount}</span>
                     <span>prompts</span>
                 </span>
-                <span className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-600" />
+                <span className="system-chat-stat-dot" />
                 <span className="flex items-center gap-1">
                     <span className="font-semibold">{tokenCount}</span>
                     <span>tokens</span>

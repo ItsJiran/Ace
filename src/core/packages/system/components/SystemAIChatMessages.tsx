@@ -26,21 +26,42 @@ function SystemAIChatMessagesInner({ session, sessionUid, className, bottomRef }
     }, [resolvedSession?.turns?.length]);
 
     if (!resolvedSession) {
-        return <div className={className}>No session available</div>;
+        return (
+            <div className={className}>
+                <div className="system-chat-empty-state">
+                    <div className="system-chat-empty-title">No session available</div>
+                    <div className="system-chat-empty-copy">
+                        Start a prompt to open a live conversation stream for plans, tool calls, and assistant output.
+                    </div>
+                </div>
+            </div>
+        );
     }
 
+    const turns = resolvedSession.turns ?? [];
+
     return (
-        <div className={`space-y-5 ${className ?? ''}`}>
-            {resolvedSession.turns?.map((turn, turnIndex) => (
-                <div
-                    key={turnIndex}
-                    ref={turnIndex === resolvedSession.turns.length - 1 ? latestTurnRef : undefined}
-                    className={`space-y-3 scroll-mt-3 ${turnIndex === resolvedSession.turns.length - 1 ? resolveLatestTurnSpacing(turn) : ''}`}
-                >
-                    <TurnBubble align="right" label="You" renderers={turn.user_renderers ?? []} turnIndex={turnIndex} prefix="u" />
-                    <TurnBubble align="left" label="Assistant" renderers={turn.assistant_renderers ?? []} turnIndex={turnIndex} prefix="a" />
-                </div>
-            ))}
+        <div className={className ?? ''}>
+            {turns.map((turn, turnIndex) => {
+                const isLast = turnIndex === turns.length - 1;
+                return (
+                    <div
+                        key={turnIndex}
+                        ref={isLast ? latestTurnRef : undefined}
+                        className={`relative scroll-mt-3 ${isLast ? resolveLatestTurnSpacing(turn) : 'pb-5'}`}
+                    >
+                        {/* vertical chain rail */}
+                        {!isLast && (
+                            <div className="pointer-events-none absolute bottom-0 left-[18px] top-6 w-px bg-white/[0.12]" />
+                        )}
+
+                        <div className="space-y-2.5">
+                            <TurnBubble align="right" label="You" renderers={turn.user_renderers ?? []} turnIndex={turnIndex} prefix="u" />
+                            <TurnBubble align="left" label="Assistant" renderers={turn.assistant_renderers ?? []} turnIndex={turnIndex} prefix="a" />
+                        </div>
+                    </div>
+                );
+            })}
 
             <div ref={bottomRef} aria-hidden style={{ width: 1, height: 1 }} />
         </div>

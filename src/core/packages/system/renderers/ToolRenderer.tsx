@@ -38,6 +38,13 @@ interface ToolRendererProps {
     [key: string]: unknown;
 }
 
+function resolveStatusToneClass(status?: string) {
+    if (status === 'completed') return 'system-chat-tone-success';
+    if (status === 'error') return 'system-chat-tone-error';
+    if (status === 'running') return 'system-chat-tone-active';
+    return 'system-chat-tone-info';
+}
+
 export default function ToolRenderer(props: ToolRendererProps) {
     const toolSlug = props.tool_slug || 'unknown';
     const action = props.action || 'execute';
@@ -52,13 +59,14 @@ export default function ToolRenderer(props: ToolRendererProps) {
         result: result ?? {},
         status,
     });
+    const statusTone = resolveStatusToneClass(status);
 
     const statusIcon = {
-        completed: <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />,
-        error: <AlertCircle size={16} className="text-red-600 dark:text-red-400" />,
-        running: <Clock size={16} className="text-yellow-600 dark:text-yellow-400 animate-pulse" />,
-        pending: <Clock size={16} className="text-blue-600 dark:text-blue-400" />,
-    }[status] || <Clock size={16} className="text-zinc-600 dark:text-zinc-400" />;
+        completed: <CheckCircle2 size={16} className="system-chat-tone-success" />,
+        error: <AlertCircle size={16} className="system-chat-tone-error" />,
+        running: <Clock size={16} className="system-chat-tone-active animate-pulse" />,
+        pending: <Clock size={16} className="system-chat-tone-info" />,
+    }[status] || <Clock size={16} className="system-chat-icon-muted" />;
 
     return (
         <RendererDisclosureCard
@@ -68,31 +76,31 @@ export default function ToolRenderer(props: ToolRendererProps) {
             status={status}
             accentClassName="text-amber-400"
         >
-            <div className="space-y-3 text-xs text-zinc-600 dark:text-zinc-300">
+            <div className="space-y-3">
                 <div className="flex items-center gap-2">
                     {statusIcon}
-                    <span className="font-medium text-zinc-800 dark:text-zinc-100">{action}</span>
-                    <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                    <span className="system-chat-copy-strong text-xs font-medium">{action}</span>
+                    <span className={`system-chat-tone-pill ${statusTone}`}>
                         {packageRef}
                     </span>
                 </div>
 
                 {errorMsg ? (
-                    <div className="rounded border border-red-200 bg-red-50 px-2 py-2 text-red-700 dark:border-red-500/20 dark:bg-red-950/20 dark:text-red-300">
+                    <div className="system-chat-error-box text-xs">
                         {errorMsg}
                     </div>
                 ) : null}
 
                 {preview ? (
-                    <div className="rounded bg-black/20 p-2">
+                    <div className="system-chat-renderer-panel">
                         {preview}
                     </div>
                 ) : null}
 
                 {result && Object.keys(result).length > 0 && !preview ? (
-                    <div className="rounded bg-zinc-950/90 p-2 text-[10px] text-zinc-300">
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Result</div>
-                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono">
+                    <div className="system-chat-renderer-panel">
+                        <div className="system-chat-label-muted mb-1 text-[10px] tracking-wide">Result</div>
+                        <pre className="system-chat-code-block max-h-40 font-mono">
                             {JSON.stringify(result, null, 2)}
                         </pre>
                     </div>
@@ -144,23 +152,23 @@ function renderToolPreviewModel(preview: ToolChatPreview | null): React.ReactNod
     }
 
     return (
-        <div className="space-y-2 text-[11px] text-zinc-300">
-            {preview.title ? <div className="text-zinc-100">{preview.title}</div> : null}
-            {preview.subtitle ? <div className="text-zinc-400">{preview.subtitle}</div> : null}
+        <div className="space-y-2">
+            {preview.title ? <div className="system-chat-preview-title">{preview.title}</div> : null}
+            {preview.subtitle ? <div className="system-chat-preview-subtitle">{preview.subtitle}</div> : null}
             {preview.lines?.map((line, index) => (
-                <div key={`${index}:${line}`}>{line}</div>
+                <div key={`${index}:${line}`} className="system-chat-preview-copy">{line}</div>
             ))}
             {preview.list_items?.map((item, index) => (
                 <div key={`${index}:${item.badge ?? ''}:${item.label}`} className="flex items-start gap-2">
-                    {item.badge ? <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-zinc-400">{item.badge}</span> : null}
+                    {item.badge ? <span className="system-chat-preview-badge">{item.badge}</span> : null}
                     <div className="min-w-0 flex-1">
-                        <div className="text-zinc-100">{item.label}</div>
-                        {item.detail ? <div className="text-zinc-400">{item.detail}</div> : null}
+                        <div className="system-chat-preview-title">{item.label}</div>
+                        {item.detail ? <div className="system-chat-preview-subtitle">{item.detail}</div> : null}
                     </div>
                 </div>
             ))}
             {preview.code_block?.content ? (
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-950/90 p-2 text-[10px] text-zinc-300">{preview.code_block.content}</pre>
+                <pre className="system-chat-code-block">{preview.code_block.content}</pre>
             ) : null}
         </div>
     );

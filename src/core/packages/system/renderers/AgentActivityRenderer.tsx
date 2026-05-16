@@ -37,6 +37,13 @@ interface AgentActivityRendererProps {
     [key: string]: unknown;
 }
 
+function resolveStatusToneClass(status?: string) {
+    if (status === 'completed') return 'system-chat-tone-success';
+    if (status === 'error') return 'system-chat-tone-error';
+    if (status === 'running') return 'system-chat-tone-active';
+    return 'system-chat-tone-info';
+}
+
 export default function AgentActivityRenderer(props: AgentActivityRendererProps) {
     const eventType = props.event_type || 'agent_activity';
     const action = props.action || '-';
@@ -44,20 +51,15 @@ export default function AgentActivityRenderer(props: AgentActivityRendererProps)
     const role = typeof props.role === 'string' ? props.role : 'runtime';
     const profileName = typeof props.profile_name === 'string' ? props.profile_name : role;
     const errorMessage = typeof props.error_message === 'string' ? props.error_message : undefined;
+    const statusTone = resolveStatusToneClass(status);
 
     const icon = eventType.startsWith('chain_')
-        ? <BrainCircuit size={16} className="text-cyan-600 dark:text-cyan-300" />
+        ? <BrainCircuit size={16} className="system-chat-tone-info" />
         : eventType.endsWith('_failed')
-            ? <AlertCircle size={16} className="text-red-600 dark:text-red-300" />
+            ? <AlertCircle size={16} className="system-chat-tone-error" />
             : eventType.endsWith('_finished')
-                ? <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-300" />
-                : <Bot size={16} className="text-sky-600 dark:text-sky-300" />;
-
-    const statusClass = status === 'completed'
-        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-        : status === 'error'
-            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-            : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300';
+                ? <CheckCircle2 size={16} className="system-chat-tone-success" />
+                : <Bot size={16} className="system-chat-tone-info" />;
 
     return (
         <RendererDisclosureCard
@@ -65,30 +67,30 @@ export default function AgentActivityRenderer(props: AgentActivityRendererProps)
             title={eventType}
             summary={<span>{role} · {action}</span>}
             status={status}
-            accentClassName="text-sky-400"
+            accentClassName={statusTone}
         >
-            <div className="space-y-3 text-xs text-zinc-600 dark:text-zinc-300">
+            <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                    <span className={`rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${statusClass}`}>
+                    <span className={`system-chat-tone-pill ${statusTone}`}>
                         {role}
                     </span>
-                    <span className="font-mono text-zinc-800 dark:text-zinc-100">{action}</span>
-                    <span className="text-zinc-500">profile:{profileName}</span>
+                    <span className="system-chat-mono font-mono text-xs">{action}</span>
+                    <span className="system-chat-meta-note">profile:{profileName}</span>
                 </div>
 
                 {errorMessage ? (
-                    <div className="rounded border border-red-200 bg-red-50 px-2 py-2 text-red-700 dark:border-red-500/20 dark:bg-red-950/20 dark:text-red-300">
+                    <div className="system-chat-error-box text-xs">
                         {errorMessage}
                     </div>
                 ) : null}
 
                 {props.payload && typeof props.payload === 'object' && Object.keys(props.payload).length > 0 ? (
-                    <div className="rounded bg-zinc-950/90 p-2 text-zinc-300">
-                        <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    <div className="system-chat-renderer-panel">
+                        <div className="system-chat-label-muted mb-1 text-[10px] tracking-wide">
                             <Activity size={12} />
                             Runtime Payload
                         </div>
-                        <pre className="max-h-36 overflow-auto font-mono text-[10px] whitespace-pre-wrap break-all">{JSON.stringify(props.payload, null, 2)}</pre>
+                        <pre className="system-chat-code-block max-h-36 font-mono">{JSON.stringify(props.payload, null, 2)}</pre>
                     </div>
                 ) : null}
             </div>

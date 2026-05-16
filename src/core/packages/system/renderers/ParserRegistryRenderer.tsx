@@ -143,59 +143,60 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
     const [expanded, setExpanded] = useState(false);
     const sections = parseRegistryData(data);
 
-    let icon = <DatabaseZap size={14} className="text-zinc-500" />;
+    let icon = <DatabaseZap size={14} className="system-chat-icon-muted" />;
     let message = "Loading parser registry data...";
 
     if (action === 'list' || action === 'list_names') {
-        icon = <Search size={14} className="text-blue-500" />;
+        icon = <Search size={14} className="system-chat-tone-info" />;
         message = `Loaded ${count || names.length || 0} registered parser block names from the registry.`;
     } else if (action === 'list_hydrated') {
-        icon = <Blocks size={14} className="text-cyan-500" />;
+        icon = <Blocks size={14} className="system-chat-tone-info" />;
         message = `Loaded ${count || names.length || 0} hydrated parser block names currently injected into the prompt.`;
     } else if (action === 'detail') {
-        icon = <Search size={14} className="text-purple-500" />;
+        icon = <Search size={14} className="system-chat-tone-active" />;
         message = `Inspected details of block \`${target_slug}\` into Working Memory.`;
     } else if (action === 'activate') {
-        icon = <CheckCircle2 size={14} className="text-green-500" />;
+        icon = <CheckCircle2 size={14} className="system-chat-tone-success" />;
         message = `Activated block \`${target_slug}\`. Its instructions are now included in the prompt.`;
     } else if (action === 'deactivate') {
-        icon = <XCircle size={14} className="text-orange-500" />;
+        icon = <XCircle size={14} className="system-chat-tone-error" />;
         message = `Deactivated block \`${target_slug}\` from the prompt.`;
     }
 
     const visibleCount = count || names.length || sections.length;
 
     return (
-        <div className={`rounded-2xl border border-zinc-200 bg-gradient-to-br from-white via-zinc-50 to-slate-100 p-4 shadow-sm dark:border-zinc-700 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-800 ${isStreaming ? 'animate-pulse' : ''} flex flex-col gap-3`}>
+        <div className={`system-chat-renderer-surface flex flex-col gap-3 p-3 ${isStreaming ? 'animate-pulse' : ''}`}>
             <div className="flex items-start gap-3">
-                <div className="rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+                <div className="system-chat-renderer-panel mt-0.5 flex-shrink-0 p-2">
                     {icon}
                 </div>
-                <div className="flex-1 w-0">
-                    <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                <div className="w-0 flex-1">
+                    <p className="system-chat-copy-strong text-sm font-medium">
                         {message}
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full bg-zinc-900 px-2.5 py-1 text-white dark:bg-zinc-100 dark:text-zinc-900">
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        <span className="system-chat-tone-pill system-chat-label-muted">
                             {action ?? 'pending'}
                         </span>
                         {visibleCount > 0 && (
-                            <span className="rounded-full border border-zinc-300 px-2.5 py-1 text-zinc-600 dark:border-zinc-600 dark:text-zinc-300">
+                            <span className="system-chat-count-pill px-2.5 py-1 text-xs">
                                 {visibleCount} blocks
                             </span>
                         )}
                         {target_slug && (
-                            <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+                            <span className="system-chat-tone-pill system-chat-tone-success">
                                 {target_slug}
                             </span>
                         )}
                     </div>
                 </div>
                 {sections.length > 0 && (
-                    <button 
-                        onClick={() => setExpanded(!expanded)} 
-                        className="rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-                        title={expanded ? "Hide Details" : "Show Details"}
+                    <button
+                        type="button"
+                        onClick={() => setExpanded(!expanded)}
+                        className="system-chat-subtle-action mt-0.5 flex-shrink-0 p-1.5"
+                        title={expanded ? 'Hide Details' : 'Show Details'}
                     >
                         {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </button>
@@ -205,31 +206,31 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
             {sections.length > 0 && (
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {sections.map((section) => (
-                        <div key={section.slug} className="rounded-xl border border-zinc-200/80 bg-white/80 p-3 dark:border-zinc-700/80 dark:bg-zinc-900/70">
+                        <div key={section.slug} className="system-chat-renderer-panel flex flex-col gap-2 p-3">
                             <div className="flex items-center gap-2">
-                                <Blocks size={14} className="text-sky-500" />
-                                <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                                <Blocks size={14} className="system-chat-tone-info flex-shrink-0" />
+                                <p className="system-chat-copy-strong text-[12px] font-semibold">
                                     {section.slug}
                                 </p>
                             </div>
                             {section.purpose && (
-                                <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-600 dark:text-zinc-300">
+                                <p className="system-chat-copy-muted line-clamp-3 text-[11px] leading-5">
                                     {section.purpose}
                                 </p>
                             )}
-                            <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+                            <div className="flex flex-wrap gap-1.5">
                                 {section.whenToUse.length > 0 && (
-                                    <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                                    <span className="system-chat-count-pill px-2 py-0.5 text-[10px]">
                                         {section.whenToUse.length} uses
                                     </span>
                                 )}
                                 {section.promptExamples.length > 0 && (
-                                    <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                                    <span className="system-chat-count-pill px-2 py-0.5 text-[10px]">
                                         {section.promptExamples.length} prompts
                                     </span>
                                 )}
                                 {section.exampleLines.length > 0 && (
-                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                    <span className="system-chat-tone-pill system-chat-tone-success px-2 py-0.5 text-[10px]">
                                         example ready
                                     </span>
                                 )}
@@ -242,7 +243,7 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
             {names.length > 0 && sections.length === 0 && (
                 <div className="flex flex-wrap gap-2">
                     {names.map((name: string) => (
-                        <span key={name} className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
+                        <span key={name} className="system-chat-count-pill px-2.5 py-1 text-xs">
                             {name}
                         </span>
                     ))}
@@ -252,48 +253,48 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
             {sections.length > 0 && expanded && (
                 <div className="grid gap-3">
                     {sections.map((section) => (
-                        <div key={`${section.slug}-detail`} className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-950/80">
+                        <div key={`${section.slug}-detail`} className="system-chat-renderer-panel flex flex-col gap-3 p-3">
                             <div className="flex items-center gap-2">
-                                <DatabaseZap size={15} className="text-violet-500" />
-                                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                <DatabaseZap size={15} className="system-chat-tone-active flex-shrink-0" />
+                                <h3 className="system-chat-copy-strong text-[12px] font-semibold">
                                     {section.slug}
                                 </h3>
                             </div>
 
                             {section.purpose && (
-                                <p className="mt-3 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+                                <p className="system-chat-renderer-body p-0 text-xs leading-6">
                                     {section.purpose}
                                 </p>
                             )}
 
-                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                            <div className="grid gap-2 md:grid-cols-2">
                                 {section.requiredFields && (
-                                    <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900">
-                                        <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                                            <BookOpen size={13} />
+                                    <div className="system-chat-renderer-panel p-2">
+                                        <div className="system-chat-label-muted mb-1 flex items-center gap-1 text-[10px] tracking-wide">
+                                            <BookOpen size={12} />
                                             Required
                                         </div>
-                                        <p className="text-xs leading-5 text-zinc-700 dark:text-zinc-300">{section.requiredFields}</p>
+                                        <p className="system-chat-preview-copy leading-5">{section.requiredFields}</p>
                                     </div>
                                 )}
 
                                 {section.optionalFields && (
-                                    <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900">
-                                        <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                                            <Sparkles size={13} />
+                                    <div className="system-chat-renderer-panel p-2">
+                                        <div className="system-chat-label-muted mb-1 flex items-center gap-1 text-[10px] tracking-wide">
+                                            <Sparkles size={12} />
                                             Optional
                                         </div>
-                                        <p className="text-xs leading-5 text-zinc-700 dark:text-zinc-300">{section.optionalFields}</p>
+                                        <p className="system-chat-preview-copy leading-5">{section.optionalFields}</p>
                                     </div>
                                 )}
                             </div>
 
                             {section.whenToUse.length > 0 && (
-                                <div className="mt-4">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">When to use</p>
-                                    <div className="mt-2 flex flex-wrap gap-2">
+                                <div>
+                                    <p className="system-chat-label-muted mb-2 text-[10px] tracking-wide">When to use</p>
+                                    <div className="flex flex-wrap gap-1.5">
                                         {section.whenToUse.map((item) => (
-                                            <span key={item} className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs leading-5 text-sky-800 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
+                                            <span key={item} className="system-chat-count-pill px-2.5 py-1 text-[11px] leading-5">
                                                 {item}
                                             </span>
                                         ))}
@@ -302,11 +303,11 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
                             )}
 
                             {section.promptExamples.length > 0 && (
-                                <div className="mt-4">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Prompt examples</p>
-                                    <div className="mt-2 grid gap-2">
+                                <div>
+                                    <p className="system-chat-label-muted mb-2 text-[10px] tracking-wide">Prompt examples</p>
+                                    <div className="grid gap-1.5">
                                         {section.promptExamples.map((item) => (
-                                            <div key={item} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs leading-5 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                                            <div key={item} className="system-chat-renderer-panel px-2.5 py-2 text-[11px] leading-5">
                                                 {item}
                                             </div>
                                         ))}
@@ -315,11 +316,9 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
                             )}
 
                             {section.exampleLines.length > 0 && (
-                                <div className="mt-4 overflow-auto rounded-lg border border-zinc-200 bg-zinc-950 p-3 dark:border-zinc-800">
-                                    <pre className="text-xs leading-6 text-zinc-200 whitespace-pre-wrap">
-                                        {section.exampleLines.join('\n').trim()}
-                                    </pre>
-                                </div>
+                                <pre className="system-chat-code-block max-h-48 leading-6">
+                                    {section.exampleLines.join('\n').trim()}
+                                </pre>
                             )}
                         </div>
                     ))}
@@ -327,14 +326,12 @@ export default function ParserRegistryRenderer(props: ParserRegistryRendererProp
             )}
 
             {data && sections.length === 0 && expanded && (
-                <div className="rounded-lg border border-zinc-200 bg-zinc-950 p-3 dark:border-zinc-800">
-                    <pre className="text-xs leading-6 text-zinc-200 whitespace-pre-wrap">
-                        {data
-                            .split(/\r?\n/)
-                            .filter((line) => line.trim() !== '@@ace:end')
-                            .join('\n')}
-                    </pre>
-                </div>
+                <pre className="system-chat-code-block max-h-64 leading-6">
+                    {data
+                        .split(/\r?\n/)
+                        .filter((line) => line.trim() !== '@@ace:end')
+                        .join('\n')}
+                </pre>
             )}
         </div>
     );

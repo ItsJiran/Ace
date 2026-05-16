@@ -55,7 +55,7 @@ export default function SystemAIChatbar({
   };
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    <div className="system-ai-chatbar flex h-full flex-col gap-3">
       <SystemAIChatConversationContainer
         title={title}
         selectedSdk={selectedSdk}

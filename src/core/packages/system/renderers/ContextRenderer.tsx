@@ -55,9 +55,9 @@ export default function ContextRenderer(props: ContextRendererProps) {
                 title="Context Window"
                 summary={<span>index {startIndex ?? 0}–{endIndex ?? 0}{typeof count === 'number' ? ` · ${count} item${count === 1 ? '' : 's'}` : ''}</span>}
                 status={props.status}
-                accentClassName="text-sky-400"
+                accentClassName="system-chat-tone-info"
             >
-                <div className="text-xs leading-5 text-zinc-600 dark:text-zinc-300">
+                <div className="system-chat-renderer-body p-0 text-xs">
                     Showing context entries from index {startIndex ?? 0} to {endIndex ?? 0}
                     {typeof count === 'number' ? ` (${count} item${count === 1 ? '' : 's'})` : ''}.
                 </div>
@@ -71,16 +71,16 @@ export default function ContextRenderer(props: ContextRendererProps) {
             title={title || 'Context Note'}
             summary={<span>{action}{kind ? ` · ${kind}` : ''} · {memoryKey}</span>}
             status={props.status}
-            accentClassName="text-indigo-400"
+            accentClassName="system-chat-tone-info"
         >
-            <div className="space-y-3 text-xs text-zinc-600 dark:text-zinc-300">
+            <div className="space-y-3">
                 {content ? (
                     <div>
-                        <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                        <div className="system-chat-label-muted mb-1 text-[10px] tracking-wide">
                             <ScrollText size={12} />
                             Content
                         </div>
-                        <div className="rounded border border-zinc-200/80 bg-white/80 p-2 leading-5 dark:border-white/10 dark:bg-white/5">
+                        <div className="system-chat-renderer-panel leading-5">
                             {content}
                         </div>
                     </div>
@@ -88,17 +88,17 @@ export default function ContextRenderer(props: ContextRendererProps) {
 
                 {intent ? (
                     <div>
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Intent</div>
-                        <div className="rounded border border-zinc-200/80 bg-white/80 p-2 dark:border-white/10 dark:bg-white/5">{intent}</div>
+                        <div className="system-chat-label-muted mb-1 text-[10px] tracking-wide">Intent</div>
+                        <div className="system-chat-renderer-panel">{intent}</div>
                     </div>
                 ) : null}
 
                 {constraints.length > 0 ? (
                     <div>
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Constraints</div>
+                        <div className="system-chat-label-muted mb-1 text-[10px] tracking-wide">Constraints</div>
                         <div className="space-y-1">
                             {constraints.map((constraint, index) => (
-                                <div key={index} className="rounded border border-zinc-200/80 bg-white/80 px-2 py-1 dark:border-white/10 dark:bg-white/5">
+                                <div key={index} className="system-chat-renderer-panel px-2 py-1">
                                     {constraint}
                                 </div>
                             ))}
@@ -108,21 +108,21 @@ export default function ContextRenderer(props: ContextRendererProps) {
 
                 {confidence ? (
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Confidence</span>
-                        <div className="h-1.5 max-w-24 flex-1 rounded-full bg-indigo-200 dark:bg-indigo-900/50">
+                        <span className="system-chat-label-muted text-[10px] tracking-wide">Confidence</span>
+                        <div className="system-chat-meter-track">
                             <div
-                                className="h-full rounded-full bg-indigo-600 transition-all dark:bg-indigo-400"
+                                className="system-chat-meter-fill"
                                 style={{ width: `${confidence}%` }}
                             />
                         </div>
-                        <span className="min-w-fit font-mono text-[11px] text-zinc-700 dark:text-zinc-200">{confidence}%</span>
+                        <span className="system-chat-mono min-w-fit font-mono text-[11px]">{confidence}%</span>
                     </div>
                 ) : null}
 
                 {decisions && Object.keys(decisions).length > 0 ? (
-                    <div className="rounded bg-zinc-950/90 p-2 text-zinc-300">
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Decisions</div>
-                        <pre className="max-h-40 overflow-auto font-mono text-[10px] whitespace-pre-wrap break-all">
+                    <div className="system-chat-renderer-panel">
+                        <div className="system-chat-label-muted mb-1 text-[10px] tracking-wide">Decisions</div>
+                        <pre className="system-chat-code-block max-h-40 font-mono">
                             {JSON.stringify(decisions, null, 2)}
                         </pre>
                     </div>

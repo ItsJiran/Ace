@@ -31,7 +31,7 @@ export default function ParagraphRenderer(props: ParagraphRendererProps) {
 
     if (!text || typeof text !== 'string') {
         return (
-            <div className="text-xs text-white/80 italic">
+            <div className="system-chat-inline-empty">
                 (empty content)
             </div>
         );
@@ -44,14 +44,14 @@ export default function ParagraphRenderer(props: ParagraphRendererProps) {
         // Check for heading
         if (trimmed.startsWith('##')) {
             return (
-                <h3 key={idx} className="text-sm font-semibold text-zinc-900 dark:text-white/80 mt-2 first:mt-0">
+                <h3 key={idx} className="system-chat-paragraph-subheading">
                     {trimmed.replace(/^#+\s*/, '')}
                 </h3>
             );
         }
         if (trimmed.startsWith('# ')) {
             return (
-                <h2 key={idx} className="text-base font-bold text-zinc-900 dark:text-white/80 mt-3 first:mt-0">
+                <h2 key={idx} className="system-chat-paragraph-heading">
                     {trimmed.replace(/^#+\s*/, '')}
                 </h2>
             );
@@ -59,7 +59,7 @@ export default function ParagraphRenderer(props: ParagraphRendererProps) {
 
         // Regular paragraph
         return (
-            <p key={idx} className="text-sm text-white/80 dark:text-white/80 leading-relaxed whitespace-pre-wrap">
+            <p key={idx} className="opacity-80">
                 {line}
             </p>
         );
@@ -68,9 +68,8 @@ export default function ParagraphRenderer(props: ParagraphRendererProps) {
     const isStreaming = props.status === 'streaming';
 
     return (
-        <div className={`rounded-xl border border-zinc-800/80 bg-black/15 p-3 min-h-12 ${isStreaming ? 'ring-1 ring-cyan-500/40' : ''}`}>
+        <div className={`system-chat-paragraph-block ${isStreaming ? 'is-streaming' : ''}`}>
             <div className="flex items-start gap-2">
-                <Type size={14} className={`text-white/80 mt-0.5 flex-shrink-0 ${isStreaming ? 'animate-pulse' : ''}`} />
                 <div className="flex-1 min-w-0 space-y-1">
                     {lines}
                 </div>

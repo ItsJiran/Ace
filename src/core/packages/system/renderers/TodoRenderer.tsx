@@ -43,7 +43,7 @@ export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
     const activeIndex = currentIndex >= 0 ? currentIndex : Math.max(todo_items.length - 1, 0);
 
     return (
-        <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-black/15">
+        <div className="system-chat-renderer-surface">
             {/* <div className="border-b border-zinc-800/80 px-3 py-3">
                 <div className="flex items-start gap-2">
                     <span className={`mt-0.5 ${statusTone}`}><ListTodo size={14} /></span>
@@ -75,7 +75,7 @@ export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
 
             <div className="space-y-2 px-3 py-3">
                 {todo_items.length === 0 ? (
-                    <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-xs text-zinc-400">
+                    <div className="system-chat-renderer-panel system-chat-inline-empty px-3 py-3 not-italic">
                         No todo items emitted yet.
                     </div>
                 ) : todo_items.map((item, index) => {
@@ -95,19 +95,18 @@ export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
                                 scale: isCurrent ? 1.01 : 1,
                             }}
                             transition={{ duration: 0.28, ease: 'easeOut', delay: index * 0.05 }}
-                            className={`relative overflow-hidden rounded-xl border px-3 py-3 ${isCurrent
-                                ? 'border-violet-400/35 bg-violet-500/10'
-                                : isComplete
-                                    ? 'border-emerald-500/20 bg-emerald-500/10'
-                                    : 'border-white/10 bg-white/5'
-                                }`}
+                            className={[
+                                'system-chat-todo-item',
+                                isCurrent ? 'is-current' : '',
+                                isComplete ? 'is-complete' : '',
+                            ].filter(Boolean).join(' ')}
                         >
                             {index < todo_items.length - 1 ? (
                                 <motion.div
                                     initial={false}
                                     animate={{ backgroundColor: index < activeIndex ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)' }}
                                     transition={{ duration: 0.28, ease: 'easeOut' }}
-                                    className="absolute left-[19px] top-10 h-full w-px"
+                                    className="system-chat-todo-rail"
                                 />
                             ) : null}
 
@@ -120,12 +119,11 @@ export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
                                         y: isComplete ? -1 : 0,
                                     }}
                                     transition={{ duration: 0.24, ease: 'easeOut' }}
-                                    className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${isCurrent
-                                        ? 'border-violet-400/50 bg-violet-500/15 text-violet-200'
-                                        : isComplete
-                                            ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-                                            : 'border-white/10 bg-white/5 text-zinc-400'
-                                        }`}
+                                    className={[
+                                        'system-chat-todo-node',
+                                        isCurrent ? 'is-current' : '',
+                                        isComplete ? 'is-complete' : '',
+                                    ].filter(Boolean).join(' ')}
                                 >
                                     <motion.div
                                         key={stateKey}
@@ -135,17 +133,17 @@ export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
                                         transition={{ duration: 0.22, ease: 'easeOut' }}
                                     >
                                         {isComplete
-                                            ? <CheckCircle2 size={15} className="text-emerald-300" />
+                                            ? <CheckCircle2 size={15} className="system-chat-tone-success" />
                                             : isCurrent
-                                                ? <Sparkles size={15} className="text-violet-200" />
-                                                : <CircleDashed size={15} className={isFuture ? 'text-zinc-500' : 'text-violet-300'} />
+                                                ? <Sparkles size={15} className="system-chat-tone-info" />
+                                                : <CircleDashed size={15} className={isFuture ? 'system-chat-icon-muted' : 'system-chat-tone-info'} />
                                         }
                                     </motion.div>
                                 </motion.div>
 
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
-                                        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                                        <div className="system-chat-label-muted text-[10px] tracking-[0.2em]">
                                             Step {index + 1}
                                         </div>
                                         <motion.span
@@ -154,12 +152,14 @@ export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -8 }}
                                             transition={{ duration: 0.2, ease: 'easeOut' }}
-                                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${isComplete
-                                                ? 'bg-emerald-500/15 text-emerald-300'
-                                                : isCurrent
-                                                    ? 'bg-violet-500/15 text-violet-200'
-                                                    : 'bg-white/5 text-zinc-400'
-                                                }`}
+                                            className={[
+                                                'system-chat-tone-pill',
+                                                isComplete
+                                                    ? 'system-chat-tone-success'
+                                                    : isCurrent
+                                                        ? 'system-chat-tone-info'
+                                                        : 'system-chat-icon-muted',
+                                            ].join(' ')}
                                         >
                                             {isComplete ? 'Done' : isCurrent ? 'Current' : 'Next'}
                                         </motion.span>
@@ -170,7 +170,7 @@ export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
                                         initial={false}
                                         animate={{ opacity: isFuture ? 0.78 : 1, y: isComplete ? -1 : 0 }}
                                         transition={{ duration: 0.24, ease: 'easeOut' }}
-                                        className={`mt-1 text-sm font-semibold ${isComplete ? 'text-emerald-100/90' : 'text-zinc-100'}`}
+                                        className="system-chat-todo-title"
                                     >
                                         {item.title ?? `Step ${index + 1}`}
                                     </motion.div>
@@ -181,7 +181,7 @@ export default function TodoRenderer({ todo_items = [] }: TodoRendererProps) {
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ duration: 0.24, ease: 'easeOut', delay: 0.04 + index * 0.05 }}
-                                            className={`mt-1 text-[11px] leading-5 ${isCurrent ? 'text-violet-50/90' : 'text-zinc-300'}`}
+                                            className="system-chat-todo-detail"
                                         >
                                             {item.detail}
                                         </motion.div>

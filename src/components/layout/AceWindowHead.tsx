@@ -28,6 +28,7 @@ export function AceWindowHead({
       {...dragHandleProps}
       className={[
         "system-shell-head-primary",
+        isFocused ? "focused" : "",
       ].join(" ")}
     >
       <div className="flex items-center gap-2 min-w-0">

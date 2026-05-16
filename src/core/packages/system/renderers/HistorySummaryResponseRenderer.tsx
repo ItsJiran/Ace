@@ -28,30 +28,30 @@ export default function HistorySummaryResponseRenderer(props: HistorySummaryResp
     const turnIndex = typeof payload.turn_index === 'number' ? payload.turn_index : undefined;
 
     return (
-        <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-lg p-3 space-y-2">
+        <div className="system-chat-renderer-surface p-3 space-y-2">
             <div className="flex items-start gap-2">
-                <MessageCircle size={16} className="text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+                <MessageCircle size={16} className="system-chat-tone-success mt-0.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                    <div className="system-chat-copy-strong text-sm font-semibold">
                         Response History Summary
                     </div>
-                    <div className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
-                        Source: <span className="font-mono">{source}</span>
-                        {turnIndex !== undefined && <> · Turn <span className="font-mono">{turnIndex}</span></>}
+                    <div className="system-chat-copy-muted mt-0.5 text-xs">
+                        Source: <span className="system-chat-mono font-mono">{source}</span>
+                        {turnIndex !== undefined && <> · Turn <span className="system-chat-mono font-mono">{turnIndex}</span></>}
                     </div>
                 </div>
             </div>
 
-            <div className="ml-6 text-sm text-emerald-900 dark:text-emerald-100 bg-white dark:bg-zinc-900 rounded p-2 max-h-32 overflow-auto leading-relaxed">
+            <div className="system-chat-summary-card ml-6 max-h-32 overflow-auto">
                 {summary}
             </div>
 
-            <div className="ml-6 flex items-center gap-3 text-xs text-emerald-700 dark:text-emerald-300">
+            <div className="system-chat-stat-row ml-6">
                 <span className="flex items-center gap-1">
                     <span className="font-semibold">{responseCount}</span>
                     <span>responses</span>
                 </span>
-                <span className="w-1 h-1 rounded-full bg-emerald-400 dark:bg-emerald-600" />
+                <span className="system-chat-stat-dot" />
                 <span className="flex items-center gap-1">
                     <span className="font-semibold">{tokenCount}</span>
                     <span>tokens</span>

@@ -16,16 +16,16 @@ interface ProcessTreeRendererProps {
     highlight_statuses?: string[];
 }
 
-function statusClass(status: string | undefined) {
-    if (!status) return 'text-zinc-300';
-    if (status === PROCESS_STATUS.DONE) return 'text-emerald-300';
+function statusToneClass(status: string | undefined) {
+    if (!status) return 'system-chat-icon-muted';
+    if (status === PROCESS_STATUS.DONE) return 'system-chat-tone-success';
     if (status === PROCESS_STATUS.FAILED || status === PROCESS_STATUS.TERMINATED || status === PROCESS_STATUS.CANCELLED) {
-        return 'text-rose-300';
+        return 'system-chat-tone-error';
     }
     if (status === PROCESS_STATUS.RUNNING || status === PROCESS_STATUS.CREATED || status === PROCESS_STATUS.WAITING) {
-        return 'text-amber-300';
+        return 'system-chat-tone-active';
     }
-    return 'text-zinc-300';
+    return 'system-chat-icon-muted';
 }
 
 export default function ProcessTreeRenderer(props: ProcessTreeRendererProps) {
@@ -62,15 +62,15 @@ export default function ProcessTreeRenderer(props: ProcessTreeRendererProps) {
     rootCandidates.forEach((uid) => walk(uid, 1));
 
     return (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950/90 p-3 text-xs font-mono text-zinc-200">
-            <div className="mb-2 flex items-center gap-2 text-zinc-300">
-                <GitBranch size={14} className="text-cyan-400" />
-                <span className="font-semibold">Process Tree</span>
-                <span className="ml-auto text-zinc-500">nodes: {rows.length}</span>
+        <div className="system-chat-renderer-surface p-3 font-mono text-xs">
+            <div className="mb-2 flex items-center gap-2">
+                <GitBranch size={14} className="system-chat-tone-info" />
+                <span className="system-chat-copy-strong font-semibold">Process Tree</span>
+                <span className="system-chat-meta-note ml-auto">nodes: {rows.length}</span>
             </div>
 
             {rows.length === 0 ? (
-                <div className="rounded border border-zinc-800 bg-zinc-900/40 px-2 py-2 text-zinc-500">
+                <div className="system-chat-renderer-panel system-chat-inline-empty px-2 py-2 not-italic">
                     No process records to render.
                 </div>
             ) : (
@@ -80,16 +80,16 @@ export default function ProcessTreeRenderer(props: ProcessTreeRendererProps) {
                         return (
                             <div
                                 key={uid}
-                                className={`rounded px-2 py-1 border ${isHighlighted ? 'border-cyan-500/50 bg-cyan-950/20' : 'border-zinc-800 bg-zinc-900/40'}`}
+                                className={`system-chat-renderer-panel px-2 py-1 ${isHighlighted ? 'ring-1 ring-inset ring-white/20' : ''}`}
                                 style={{ marginLeft: `${(depth - 1) * 14}px` }}
                             >
                                 <div className="flex items-center gap-2">
-                                    <span className="text-zinc-500">{depth > 1 ? '↳' : '•'}</span>
-                                    <span className="text-sky-300">{record.type}</span>
-                                    <span className={`ml-1 ${statusClass(record.status)}`}>{record.status}</span>
-                                    <span className="ml-auto text-zinc-500">{new Date(record.updated_at).toLocaleTimeString()}</span>
+                                    <span className="system-chat-icon-muted">{depth > 1 ? '↳' : '•'}</span>
+                                    <span className="system-chat-tone-info">{record.type}</span>
+                                    <span className={`ml-1 ${statusToneClass(record.status)}`}>{record.status}</span>
+                                    <span className="system-chat-meta-note ml-auto">{new Date(record.updated_at).toLocaleTimeString()}</span>
                                 </div>
-                                <div className="mt-0.5 text-[10px] text-zinc-500 break-all">{record.process_uid}</div>
+                                <div className="system-chat-meta-note mt-0.5 break-all text-[10px]">{record.process_uid}</div>
                             </div>
                         );
                     })}

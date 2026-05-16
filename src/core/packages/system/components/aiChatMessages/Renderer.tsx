@@ -47,10 +47,10 @@ const Renderer = memo(function Renderer({ renderer }: { renderer: AIRenderer }) 
     }
 
     const payload = renderer.payload;
-    if (typeof payload === 'string') return <div className="p-2 text-sm">{payload}</div>;
+    if (typeof payload === 'string') return <div className="system-chat-paragraph-copy px-1 py-1">{payload}</div>;
     if (payload && typeof payload === 'object') {
         const text = 'text' in payload && typeof payload.text === 'string' ? payload.text : JSON.stringify(payload);
-        return <div className="p-2 text-sm">{text}</div>;
+        return <div className="system-chat-paragraph-copy px-1 py-1">{text}</div>;
     }
 
     return null;

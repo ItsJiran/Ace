@@ -34,10 +34,12 @@ export function ingestAgentRuntimeEvent(session_uid: string, snapshot: AgentRunt
 
     const nextRenderers = [...(currentTurn.assistant_renderers ?? [])];
     const eventRendererKey = resolveEventRendererKey(snapshot);
+    const nextEventRenderer = buildRuntimeEventRenderer(snapshot, statePath, stepPath, eventRendererKey);
     upsertRenderer(
         nextRenderers,
-        buildRuntimeEventRenderer(snapshot, statePath, stepPath, eventRendererKey),
+        nextEventRenderer,
         eventRendererKey,
+        resolvePreferredRendererIndex(nextRenderers, nextEventRenderer),
     );
 
     if (snapshot.type === 'deepagent_snapshot' && planningItems.length > 0) {
@@ -578,18 +580,65 @@ function buildRuntimeTodoRenderer(
     };
 }
 
-function upsertRenderer(renderers: AIRenderer[], nextRenderer: AIRenderer, eventKey: string): void {
+function upsertRenderer(
+    renderers: AIRenderer[],
+    nextRenderer: AIRenderer,
+    eventKey: string,
+    preferredIndex?: number,
+): void {
     const existingIndex = renderers.findIndex((renderer) => {
         if (!renderer.payload || typeof renderer.payload !== 'object') return false;
         return 'event_key' in renderer.payload && renderer.payload.event_key === eventKey;
     });
 
     if (existingIndex === -1) {
+        if (typeof preferredIndex === 'number') {
+            renderers.splice(clampRendererIndex(preferredIndex, renderers.length), 0, nextRenderer);
+            return;
+        }
+
         renderers.push(nextRenderer);
         return;
     }
 
-    renderers[existingIndex] = nextRenderer;
+    if (typeof preferredIndex !== 'number') {
+        renderers[existingIndex] = nextRenderer;
+        return;
+    }
+
+    renderers.splice(existingIndex, 1);
+    const adjustedIndex = existingIndex < preferredIndex ? preferredIndex - 1 : preferredIndex;
+    renderers.splice(clampRendererIndex(adjustedIndex, renderers.length), 0, nextRenderer);
+}
+
+function resolvePreferredRendererIndex(renderers: AIRenderer[], nextRenderer: AIRenderer): number | undefined {
+    if (!shouldMergeIntoPreviousAgentActivityGroup(nextRenderer)) {
+        return undefined;
+    }
+
+    let insertIndex = renderers.length;
+    while (insertIndex > 0 && renderers[insertIndex - 1]?.component_slug === 'paragraph_renderer') {
+        insertIndex -= 1;
+    }
+
+    if (insertIndex === renderers.length) {
+        return undefined;
+    }
+
+    const previousActivity = renderers[insertIndex - 1];
+    if (!previousActivity || previousActivity.component_slug !== 'agent-activity-renderer') {
+        return undefined;
+    }
+
+    return insertIndex;
+}
+
+function shouldMergeIntoPreviousAgentActivityGroup(renderer: AIRenderer): boolean {
+    return renderer.component_slug === 'agent-activity-renderer';
+}
+
+function clampRendererIndex(index: number, maxLength: number): number {
+    return Math.max(0, Math.min(index, maxLength));
 }
 
 function mapSnapshotStatus(snapshot: AgentRuntimeSnapshotPayload): 'running' | 'loading' | 'error' | 'completed' {

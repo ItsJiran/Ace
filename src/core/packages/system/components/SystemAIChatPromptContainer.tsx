@@ -45,7 +45,7 @@ export default function SystemAIChatPromptContainer({
     return (
         <section
             className={[
-                'system-shell-primary flex shrink-0 flex-col gap-3 rounded-2xl',
+                'system-shell-primary flex shrink-0 flex-col gap-3 rounded-2xl p-4 overflow-hidden',
                 isDragging ? 'dragging focused' : '',
                 !isDragging && isFocused ? 'focused' : '',
             ].filter(Boolean).join(' ')}
@@ -72,7 +72,7 @@ export default function SystemAIChatPromptContainer({
                     ))}
                 </select>
 
-                <span className={[ 'inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.18em] text-zinc-400', isStreaming ? 'text-cyan-300' : '' ].join(' ')}>
+                <span className={['system-chat-status-pill', isStreaming ? 'is-streaming' : ''].filter(Boolean).join(' ')}>
                     {isStreaming ? 'streaming' : 'idle'}
                 </span>
             </div>
@@ -84,7 +84,7 @@ export default function SystemAIChatPromptContainer({
                     onKeyDown={handleKeyDown}
                     placeholder={isStreaming ? 'Streaming... press Stop to interrupt.' : 'Type a prompt... Enter to send, Shift+Enter for newline.'}
                     rows={3}
-                    className="min-h-[88px] flex-1 resize-none system-input-primary px-4 py-3 text-sm leading-6 text-zinc-100 outline-none"
+                    className="flex-1 h-[45px] resize-none system-input-primary px-4 py-3 text-sm leading-6 outline-none"
                     disabled={isStreaming}
                 />
 
@@ -99,10 +99,10 @@ export default function SystemAIChatPromptContainer({
                         onSubmitPrompt();
                     }}
                     className={[
-                        'inline-flex h-[52px] shrink-0 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-medium system-btn-secondary',
+                        'inline-flex h-[45px] shrink-0 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-medium system-btn-secondary',
                         isStreaming
-                            ? 'border border-white/10 bg-white/10 text-zinc-200'
-                            : 'border border-cyan-400/40 bg-cyan-500/80 text-white shadow-lg shadow-cyan-950/30',
+                            ? ''
+                            : '',
                     ].join(' ')}
                 >
                     {isStreaming ? <PauseCircle size={16} /> : <ArrowUp size={16} />}

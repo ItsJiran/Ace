@@ -224,7 +224,7 @@ export function buildToolPreview(renderer: AIRenderer, result: Record<string, un
         return (
             <div className="space-y-1">
                 {planItems.slice(0, 4).map((item, index) => (
-                    <div key={`${index}:${item}`} className="text-[11px] text-zinc-300">
+                    <div key={`${index}:${item}`} className="system-chat-preview-copy">
                         {index + 1}. {item}
                     </div>
                 ))}
@@ -245,9 +245,9 @@ export function buildToolPreview(renderer: AIRenderer, result: Record<string, un
                     const description = typeof item.description === 'string' ? item.description : '';
 
                     return (
-                        <div key={`${index}:${packageRefValue}:${slug}`} className="rounded bg-white/5 px-2 py-1 text-[11px] text-zinc-300">
-                            <div className="text-zinc-100">{packageRefValue}/{slug}</div>
-                            {description ? <div className="text-zinc-400">{description}</div> : null}
+                        <div key={`${index}:${packageRefValue}:${slug}`} className="system-chat-preview-card px-2 py-1">
+                            <div className="system-chat-preview-title">{packageRefValue}/{slug}</div>
+                            {description ? <div className="system-chat-preview-subtitle">{description}</div> : null}
                         </div>
                     );
                 })}
@@ -264,9 +264,9 @@ export function buildToolPreview(renderer: AIRenderer, result: Record<string, un
         const description = typeof aceTool.description === 'string' ? aceTool.description : '';
 
         return (
-            <div className="rounded bg-white/5 px-2 py-2 text-[11px] text-zinc-300">
-                <div className="text-zinc-100">{packageRefValue}/{slug}</div>
-                {description ? <div className="mt-1 text-zinc-400">{description}</div> : null}
+            <div className="system-chat-preview-card px-2 py-2">
+                <div className="system-chat-preview-title">{packageRefValue}/{slug}</div>
+                {description ? <div className="system-chat-preview-subtitle mt-1">{description}</div> : null}
             </div>
         );
     }
@@ -280,9 +280,9 @@ export function buildToolPreview(renderer: AIRenderer, result: Record<string, un
         if (fsPreview) return fsPreview;
 
         return (
-            <div className="rounded bg-white/5 px-2 py-2 text-[11px] text-zinc-300">
-                <div className="text-zinc-100">Intent: {packageRefValue}/{intentToolSlug}</div>
-                <div className="mt-1 text-zinc-400">{JSON.stringify(intentPayload)}</div>
+            <div className="system-chat-preview-card px-2 py-2">
+                <div className="system-chat-preview-title">Intent: {packageRefValue}/{intentToolSlug}</div>
+                <div className="system-chat-preview-subtitle mt-1">{JSON.stringify(intentPayload)}</div>
             </div>
         );
     }
@@ -304,9 +304,9 @@ export function buildFsToolPreview(payload: Record<string, unknown>, packageRef:
         const content = typeof payload.content === 'string' ? payload.content : '';
         return (
             <div className="space-y-2">
-                <div className="text-[11px] text-zinc-100">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · read_file</div>
-                <div className="text-[11px] text-zinc-400">{absolutePath || path}</div>
-                {content ? <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-950/90 p-2 text-[10px] text-zinc-300">{content}</pre> : null}
+                <div className="system-chat-preview-title">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · read_file</div>
+                <div className="system-chat-preview-subtitle">{absolutePath || path}</div>
+                {content ? <pre className="system-chat-code-block">{content}</pre> : null}
             </div>
         );
     }
@@ -315,14 +315,14 @@ export function buildFsToolPreview(payload: Record<string, unknown>, packageRef:
         const items = Array.isArray(payload.items) ? payload.items : [];
         return (
             <div className="space-y-2">
-                <div className="text-[11px] text-zinc-100">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · list_directory</div>
-                <div className="text-[11px] text-zinc-400">{absolutePath || path}</div>
+                <div className="system-chat-preview-title">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · list_directory</div>
+                <div className="system-chat-preview-subtitle">{absolutePath || path}</div>
                 <div className="space-y-1">
                     {items.slice(0, 5).map((item, index) => {
                         const entry = toPayloadRecord(item);
                         const name = typeof entry.name === 'string' ? entry.name : `item-${index + 1}`;
                         const isDirectory = entry.is_directory === true;
-                        return <div key={`${index}:${name}`} className="text-[11px] text-zinc-300">{isDirectory ? 'DIR' : 'FILE'} {name}</div>;
+                        return <div key={`${index}:${name}`} className="system-chat-preview-copy">{isDirectory ? 'DIR' : 'FILE'} {name}</div>;
                     })}
                 </div>
             </div>
@@ -331,9 +331,9 @@ export function buildFsToolPreview(payload: Record<string, unknown>, packageRef:
 
     if (action === 'write_file' || action === 'create_directory' || action === 'delete_file') {
         return (
-            <div className="space-y-1 text-[11px] text-zinc-300">
-                <div className="text-zinc-100">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · {action}</div>
-                <div className="text-zinc-400">{absolutePath || path}</div>
+            <div className="space-y-1">
+                <div className="system-chat-preview-title">{packageRef ? `${packageRef}/` : ''}{toolSlug || 'fs_tool'} · {action}</div>
+                <div className="system-chat-preview-subtitle">{absolutePath || path}</div>
             </div>
         );
     }
@@ -401,29 +401,29 @@ export function renderToolPreviewModel(preview: ToolChatPreview | null): React.R
 
     return (
         <div className="space-y-2">
-            {preview.title ? <div className="text-[11px] text-zinc-100">{preview.title}</div> : null}
-            {preview.subtitle ? <div className="text-[11px] text-zinc-400">{preview.subtitle}</div> : null}
+            {preview.title ? <div className="system-chat-preview-title">{preview.title}</div> : null}
+            {preview.subtitle ? <div className="system-chat-preview-subtitle">{preview.subtitle}</div> : null}
             {hasLines ? (
-                <div className="space-y-1 text-[11px] text-zinc-300">
+                <div className="space-y-1">
                     {preview.lines?.map((line, index) => (
-                        <div key={`${index}:${line}`}>{line}</div>
+                        <div key={`${index}:${line}`} className="system-chat-preview-copy">{line}</div>
                     ))}
                 </div>
             ) : null}
             {hasList ? (
                 <div className="space-y-1">
                     {preview.list_items?.map((item, index) => (
-                        <div key={`${index}:${item.badge ?? ''}:${item.label}`} className="flex items-start gap-2 text-[11px] text-zinc-300">
-                            {item.badge ? <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-zinc-400">{item.badge}</span> : null}
+                        <div key={`${index}:${item.badge ?? ''}:${item.label}`} className="flex items-start gap-2">
+                            {item.badge ? <span className="system-chat-preview-badge">{item.badge}</span> : null}
                             <div className="min-w-0 flex-1">
-                                <div className="text-zinc-100">{item.label}</div>
-                                {item.detail ? <div className="text-zinc-400">{item.detail}</div> : null}
+                                <div className="system-chat-preview-title">{item.label}</div>
+                                {item.detail ? <div className="system-chat-preview-subtitle">{item.detail}</div> : null}
                             </div>
                         </div>
                     ))}
                 </div>
             ) : null}
-            {hasCode ? <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-950/90 p-2 text-[10px] text-zinc-300">{preview.code_block?.content}</pre> : null}
+            {hasCode ? <pre className="system-chat-code-block">{preview.code_block?.content}</pre> : null}
         </div>
     );
 }
