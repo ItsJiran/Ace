@@ -1,7 +1,5 @@
 import { KernelEngine } from './kernel-engine';
 import type { CursorState, DesktopState, RuntimeState } from '#/schemas/global-state';
-import type { ConfigItem } from '#/schemas/config';
-import type { Keybind } from '#/schemas/keybinds';
 
 const DEFAULT_CURSOR_STATE: CursorState = {
     x: 0,
@@ -23,14 +21,6 @@ const DEFAULT_DESKTOP_STATE: DesktopState = {
     active_element_role: null,
 };
 
-const DEFAULT_RUNTIME_STATE: RuntimeState = {
-    active_config_items: [],
-    active_keybinds: [],
-    running_keybind_uids: [],
-    last_triggered_keybind_uid: null,
-    updated_at: Date.now(),
-};
-
 class GlobalStateManagerSingleton {
     public readonly cursorStateUid = 'system:global_state:cursor';
     public readonly desktopStateUid = 'system:global_state:desktop';
@@ -42,7 +32,6 @@ class GlobalStateManagerSingleton {
     setupKernelSpace() {
         KernelEngine.registerSystemMemory(this.cursorStateUid, DEFAULT_CURSOR_STATE);
         KernelEngine.registerSystemMemory(this.desktopStateUid, DEFAULT_DESKTOP_STATE);
-        KernelEngine.registerSystemMemory(this.runtimeStateUid, DEFAULT_RUNTIME_STATE);
         KernelEngine.registerSystemMemory(this.mouseFocusMemoryUid, true);
         KernelEngine.registerSystemMemory(this.focusedWindowMemoryUid, null);
         KernelEngine.registerSystemMemory(this.activeWindowMemoryUid, null);
@@ -58,11 +47,6 @@ class GlobalStateManagerSingleton {
             ...((KernelEngine.readMemory(this.desktopStateUid) as Partial<DesktopState> | undefined) ?? {}),
         };
     }
-
-    readRuntimeState(): RuntimeState {
-        return (KernelEngine.readMemory(this.runtimeStateUid) as RuntimeState | undefined) ?? DEFAULT_RUNTIME_STATE;
-    }
-
     readActiveWindow(): string | null {
         return (KernelEngine.readMemory(this.activeWindowMemoryUid) as string | null | undefined) ?? null;
     }
@@ -200,113 +184,11 @@ class GlobalStateManagerSingleton {
         }
     }
 
-    setFocusedWidget(focused_widget_uid: string | null) {
-        const state = this.readDesktopState();
-        if (state.focused_widget_uid === focused_widget_uid) return;
-
-        KernelEngine.updateMemory(this.desktopStateUid, {
-            ...state,
-            focused_widget_uid,
-        });
-    }
-
-    setActiveElement(element: Element | null) {
-        const active_element_tag = element?.tagName?.toLowerCase() ?? null;
-        const active_element_role = element?.getAttribute('role') ?? null;
-
-        const state = this.readDesktopState();
-        if (
-            state.active_element_tag === active_element_tag &&
-            state.active_element_role === active_element_role
-        ) {
-            return;
-        }
-
-        KernelEngine.updateMemory(this.desktopStateUid, {
-            ...state,
-            active_element_tag,
-            active_element_role,
-        });
-    }
-
-    setActiveConfigItems(items: ConfigItem[]) {
-        const mouseFocusConfig = items.find((item) => item.key === 'window.mouse_focus_enabled');
-        const mouse_focus_enabled = typeof mouseFocusConfig?.value === 'boolean'
-            ? mouseFocusConfig.value
-            : true;
-
-        const state = this.readRuntimeState();
-        KernelEngine.updateMemory(this.runtimeStateUid, {
-            ...state,
-            active_config_items: [...items],
-            updated_at: Date.now(),
-        });
-
-        const existing = KernelEngine.readMemory(this.mouseFocusMemoryUid);
-        if (existing !== mouse_focus_enabled) {
-            KernelEngine.updateMemory(this.mouseFocusMemoryUid, mouse_focus_enabled);
-        }
-    }
-
     setMouseFocusEnabled(mouse_focus_enabled: boolean) {
         const existing = KernelEngine.readMemory(this.mouseFocusMemoryUid);
         if (existing !== mouse_focus_enabled) {
             KernelEngine.updateMemory(this.mouseFocusMemoryUid, mouse_focus_enabled);
         }
-    }
-
-    setActiveKeybinds(keybinds: Keybind[]) {
-        const state = this.readRuntimeState();
-        KernelEngine.updateMemory(this.runtimeStateUid, {
-            ...state,
-            active_keybinds: [...keybinds],
-            updated_at: Date.now(),
-        });
-    }
-
-    markKeybindRunning(keybind_uid: string) {
-        const state = this.readRuntimeState();
-        const running_keybind_uids = state.running_keybind_uids.includes(keybind_uid)
-            ? state.running_keybind_uids
-            : [...state.running_keybind_uids, keybind_uid];
-
-        KernelEngine.updateMemory(this.runtimeStateUid, {
-            ...state,
-            running_keybind_uids,
-            last_triggered_keybind_uid: keybind_uid,
-            updated_at: Date.now(),
-        });
-    }
-
-    clearRunningKeybind(keybind_uid: string) {
-        const state = this.readRuntimeState();
-        KernelEngine.updateMemory(this.runtimeStateUid, {
-            ...state,
-            running_keybind_uids: state.running_keybind_uids.filter((uid) => uid !== keybind_uid),
-            updated_at: Date.now(),
-        });
-    }
-
-    replaceRunningKeybinds(keybind_uids: string[]) {
-        const state = this.readRuntimeState();
-        KernelEngine.updateMemory(this.runtimeStateUid, {
-            ...state,
-            running_keybind_uids: [...keybind_uids],
-            updated_at: Date.now(),
-        });
-    }
-
-    syncOverlayMouse(mouse_x: number, mouse_y: number) {
-        const state = this.readDesktopState();
-        if (state.mouse_x === mouse_x && state.mouse_y === mouse_y) {
-            return;
-        }
-
-        KernelEngine.updateMemory(this.desktopStateUid, {
-            ...state,
-            mouse_x,
-            mouse_y,
-        });
     }
 }
 

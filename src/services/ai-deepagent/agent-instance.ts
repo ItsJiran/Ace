@@ -1,46 +1,48 @@
-import { createDeepAgent, StateBackend } from "deepagents";
+import { CompositeBackend, createDeepAgent, StateBackend, FilesystemBackend, StoreBackend } from "deepagents";
 
-import internalTools from "./agent-internal-tools";
-import internalMiddlewares from "./agent-internal-middlewares";
-
-import type { AgentConfig, AgentConfigurable, AgentRuntime } from "#/schemas/ai";
+import AgentTools from "./agent-tools";
+import AgentMiddlewares from "./agent-middlewares";
+import AgentCheckpointer from "./agent-checkpointer";
 
 const GlobalAceAgent = createDeepAgent({
   /**
-   * Sistem backend kita menggunakan pendekatan hybrid:   
+   * Default Model
    */
   model: 'default-model', 
-
+  
   /**
-   * Sistem backend kita menggunakan pendekatan hybrid:   
+   * Prompts
    */
 
-  tools: internalTools,
+  systemPrompt: `You are an assistant integrated in Ace, a collaborative coding environment. Your task is to assist users with their coding needs, 
+  providing accurate and helpful responses based on the context of the conversation and the code they are working on. 
+  Always consider the user's intent and the current state of their project when formulating your responses.`,
 
   /**
-   * Sistem backend kita menggunakan pendekatan hybrid:   
+   * Tools
    */
 
-  systemPrompt: ``,
+  tools: AgentTools,
 
   /**
-   * Middleware
+   * Middlewares
    */
 
-  middleware: internalMiddlewares,
+  middleware: AgentMiddlewares,
   
   /**
    * Backend for agent runtime storing in file mechanism..
    */
 
-  backend: (runtime) => {
-    return new StateBackend();
-  }
+  backend: ,
+
+  /**
+   * Checkpointer for agent runtime.
+   */
+
+  checkpointer: new AgentCheckpointer(),
 });
 
+export default class SingletonAgentBackend {
 
-// GlobalAceAgent.invoke( {
-//   message
-// }, {
-//   confi
-// } )
+}

@@ -1,12 +1,6 @@
-import { PipelineEngine } from '#/services/pipeline-engine';
 import type { PipelineStep, PipelineContext } from '#/services/pipeline-engine';
 import type { AceRegistryType } from '#/schemas/registry-types';
 import { GlobalStateManager } from '#/services/global-state-manager';
-import {
-  initializeBridgeHooks,
-  registerProcessContextHook,
-} from "#/services/bridge-hooks";
-import { useProcessContext } from '#/hooks/use-process-context';
 import { RegistryEngine } from '#/services/registry-engine';
 
 export const registry: AceRegistryType.Pipeline = {
@@ -166,21 +160,7 @@ const InitAutoStartWidgetsStep: PipelineStep<void, void> = {
 };
 
 /**
- * Phase 6: Layout Engine & Persistence
- */
-const InitLayoutEngineStep: PipelineStep<void, void> = {
-    name: 'Init Layout Engine',
-    execute: async () => {
-        const LayoutEngine = window.ACE.layout;
-        if (LayoutEngine && typeof (LayoutEngine as any).init === 'function') {
-            await (LayoutEngine as any).init();
-        }
-        console.log('[Boot] Phase 6: Layout engine initialized.');
-    }
-};
-
-/**
- * Phase 7: Engine Event Routes
+ * Phase 6: Engine Event Routes
  * Register EventBus routes for engine-backed actions (tool execution, context memory, etc.)
  */
 const InitEngineRoutesStep: PipelineStep<void, void> = {
@@ -205,15 +185,6 @@ const InitEngineRoutesStep: PipelineStep<void, void> = {
     }
 };
 
-const InitializeBridgeHooksStep: PipelineStep<void, void> = {
-    name: 'Initialize Bridge Hooks',
-    execute: async () => {
-        initializeBridgeHooks();
-        registerProcessContextHook(useProcessContext);
-        console.log('[Boot] Bridge hooks initialized and registered to window.ACE.hooks');
-    }
-};
-
 export class BootupPipeline extends PipelineEngine<void, void> {
     constructor() {
         super('Bootup Sequence'); // argument is void
@@ -222,10 +193,10 @@ export class BootupPipeline extends PipelineEngine<void, void> {
         this.addStep(InitGlobalState);
         this.addStep(InitGlobalInputHandlersStep);
         this.addStep(InitAutoStartWidgetsStep);
-        this.addStep(InitLayoutEngineStep);
         this.addStep(InitEngineRoutesStep);
-        this.addStep(InitializeBridgeHooksStep);
     }
 }
 
-export default BootupPipeline;
+export default () => {
+    
+};

@@ -1,7 +1,7 @@
 import { z } from 'zod';
+import { InteractionSchema } from './events';
 
 /**
- * ConfigItemSchema
  * A granular, modular configuration entry.
  * Use this for individual settings that can be added dynamically.
  */
@@ -14,24 +14,42 @@ export const ConfigItemSchema = z.object({
     category: z.string().optional(),
     /** Optional description for the user */
     description: z.string().optional(),
+    /** Whether the configuration is currently active */
+    enabled: z.boolean().default(true).optional(),
+});
+
+export const ConfigItemKeybindSchema = z.object({
+    ...ConfigItemSchema.shape,
+
+    /**
+     * The accelerator string (Tauri/Electron format)
+     * Example: "CommandOrControl+Shift+Space"
+     */
+    value: z.string(),
+
+    /**
+     * The interaction ticket that will be dropped on the EventBus
+     * when this shortcut is triggered.
+     */
+    intent: InteractionSchema,
 });
 
 export type ConfigItem = z.infer<typeof ConfigItemSchema>;
+export type ConfigItemKeybind = z.infer<typeof ConfigItemKeybindSchema>;
 
 /**
- * GlobalConfigSchema
- * The root configuration container for the ACE ecosystem.
+ * A granular, modular configuration entry.
+ * Use this for individual settings that can be added dynamically.
  */
-export const GlobalConfigSchema = z.object({
-    /** Metadata about the config environment */
-    version: z.string().default('1.0.0'),
-    /** 
-     * The flat list of all configuration items.
-     * This allows for extreme modularity as modules just push new items into this list.
-     */
-    items: z.array(ConfigItemSchema),
-    /** Last time the config was synced from SQLite */
-    updated_at: z.number().optional(),
+
+export const ConfigStorageSchema = z.object({
+    memory_uid : z.string(),
+    file_name : z.string(),
+    items: z.array(ConfigItemSchema.or(ConfigItemKeybindSchema)),
 });
 
-export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
+export type ConfigStorage = z.infer<typeof ConfigStorageSchema>;
+
+export type ConfigStorageMap = {
+    [storageKey: string]: ConfigStorage;
+}

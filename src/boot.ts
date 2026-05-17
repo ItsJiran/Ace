@@ -1,17 +1,13 @@
 import { RegistryEngine } from '#/services/registry-engine';
-import { WidgetEngine } from '#/services/widget-engine';
 import { ToolEngine } from '#/services/tool-engine';
 
 import { WindowEngine } from '#/services/window-engine';
 import { EventBus } from '#/services/event-engine';
-import { PipelineEngine } from '#/services/pipeline-engine';
 import { ConfigEngine } from '#/services/config-engine';
-import { LayoutEngine } from '#/services/layout-engine';
 import { KeybindEngine } from '#/services/keybind-engine';
 import { GlobalStateManager } from '#/services/global-state-manager';
 import { LoggerEngine } from '#/services/logger-engine';
 import { AIGatewayEngine } from './services/ai-gateway-engine';
-import { ShellEngine } from '#/services/shell-engine';
 import { KernelEngine } from '#/services/kernel-engine';
 
 // import { ParserEngine } from '#/services/parser-engine';
@@ -39,9 +35,7 @@ export async function bootACE() {
         GlobalStateManager.setupKernelSpace();
         ConfigEngine.setupKernelSpace();
         EventBus.setupKernelSpace();
-        PipelineEngine.setupKernelSpace();
         WidgetEngine.setupKernelSpace();
-        LayoutEngine.setupKernelSpace();
         AIGatewayEngine.setupKernelSpace();
         WindowEngine.setupKernelSpace();
         
@@ -55,21 +49,14 @@ export async function bootACE() {
                 window: WindowEngine,
                 event: EventBus,
                 storage: KernelEngine,
-                pipeline: PipelineEngine,
                 config: ConfigEngine,
-                layout: LayoutEngine,
                 keybind: KeybindEngine,
                 global: GlobalStateManager,
                 logger: LoggerEngine,
                 ai_gateway: AIGatewayEngine,
-                shell: ShellEngine,
                 // context: AIContextEngine,
                 // context_memory: AIContextMemoryEngine,
                 // parser: ParserEngine,
-                hooks: {
-                    // Module lazy-loaded to provide React hooks to packages
-                    // See src/services/bridge-hooks.ts
-                },
             };
             console.log('🔌 ACE Registry Bridge Initialized.');
         }
@@ -96,12 +83,7 @@ export async function bootACE() {
             const bootPipelineEntry = bootPipeline.entry;
             if (!bootPipelineEntry.implementation) throw new Error('CRITICAL: Bootup pipeline implementation missing.');
 
-            // 4. Instantiate & Run
-            const PipelineClass = bootPipelineEntry.implementation as new () => PipelineEngine<void, void>;
-            const pipeline = new PipelineClass();
-            
-            const context: PipelineContext & { startTime: number } = { startTime: Date.now() };
-            await pipeline.run(undefined, context);
+    
             
             console.log('✅ ACE: System Ready.');
         } catch (error) {

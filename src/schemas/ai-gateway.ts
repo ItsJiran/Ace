@@ -63,8 +63,3 @@ export const AIGatewayConfigSchema = z.object({
 // It uses Zod for schema validation and type inference.
 
 export type AIGatewayConfig = z.infer<typeof AIGatewayConfigSchema>;
-export type AIGatewayFetchModelsResult = {
-    ok: boolean;
-    models: AIGatewayModel[];
-    error_message?: string;
-};

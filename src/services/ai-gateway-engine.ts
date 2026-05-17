@@ -1,57 +1,11 @@
 /**
- * AIGatewayEngine
- *
- * Top-level singleton orchestrating all AI gateway functionality.
- *
- * Architecture — sub-module breakdown:
- * ┌──────────────────────────────────────────────────────────┐
- * │                    AIGatewayEngine                       │
- * │  boot() · EventBus route · session API · public surface  │
- * └────┬─────────────┬──────────────┬──────────────┬─────────┘
- *      │             │              │              │
- * AIConfigManager  HealthProbe  ProviderClient  AISessionManager
- * (gateway.json    (sidecar       (/models,       (session
- *  R/W + RAM sync)  discovery)     /test calls)    lifecycle)
- *                                       │
- *                              httpClient → streamHandler
- *                              (SSE stream)  (chunk parsing +
- *                                             EventBus dispatch)
- *
- * Sub-module responsibilities:
- *  - AIConfigManager  → gateway.json persistence + RAM sync
- *  - HealthProbe      → /health probing + port-range radar scan
- *  - ProviderClient   → /models + /test non-streaming HTTP calls
- *  - AISessionManager → session map (create / close / list / get)
- *  - httpClient       → stream a prompt into a RAM key
- *  - streamHandler    → parse SSE chunks + dispatch EventBus interactions
- *
- * This file is intentionally thin: all logic lives in the sub-modules.
- * The engine owns boot ordering, EventBus route binding, and delegates
- * every other concern to the appropriate sub-module.
  */
 
-import { AISessionManager } from './aiGateway/session-manager';
 // import { registerSendGatewayRoute } from './aiGateway/sendGatewayRoute';
 import { AIConfigManager } from './aiGateway/config-manager';
 import { HealthProbe } from './aiGateway/health-probe';
 import { fetchModels as _fetchModels, testResponse as _testResponse } from './aiGateway/provider-client';
-import { executeSessionInteractionLoop } from './aiGateway/interaction-loop';
 import { KernelEngine } from './kernel-engine';
-import { PROCESS_STATUS } from '#/schemas/process';
-
-import type {
-    AIGatewayFetchModelsResult,
-    AIGatewayResponseResult,
-    AIGatewaySidecarHealthResult,
-    AIGatewayRadarScanResult,
-    AIGatewayConfig,
-} from '../schemas/ai-gateway';
-
-import type { AIProvider, SDKProvider, AISession, AISessionRuntime } from '#/schemas/ai';
-import { AIProcessType } from '#/schemas/ai';
-
-import { KernelState } from './kernel-engine/kernel-state';
-import type { KernelAISessionEntry } from './kernel-engine/types';
 
 class AIGatewayEngineSingleton {
     /**
@@ -103,34 +57,9 @@ class AIGatewayEngineSingleton {
         this.isBooted = true;
     }
 
-    private abortSessionStream(sessionId: string): void {
-        const session = AISessionManager.get(sessionId);
-        if (!session) return;
-
-        KernelEngine.updateMemory(`system:ai_session:${sessionId}:state`, {
-            termination_requested: true,
-            autonomous_follow_up_loop_status: 'interrupted',
-        } as Partial<AISession>);
-
-        if (session.active_abort_controller) {
-            session.active_abort_controller.abort();
-            KernelEngine.updateMemory(`system:ai_session:${sessionId}:state`, {
-                active_abort_controller: undefined,
-            } as Partial<AISession>);
-        }
-    }
-
     private registerTerminationHooks() {
         if (this.isTerminationHookBound) return;
 
-        // record is a ProcessRecord that contains metadata and payload from the process that is being terminated.
-        // We can use this information to determine if the termination is related to an AI session or interaction
-        // and perform appropriate cleanup (e.g. aborting streams, closing sessions, etc.).
-
-        // Will automatically trigger when a process is terminated (either gracefully or forcefully) and 
-        // allows us to clean up any associated AI session state to prevent orphaned sessions or memory leaks. 
-
-        // This is especially important for long-running sessions that may still have active streams or context in Kernel.
         KernelEngine.registerTerminationHandler('ai-gateway-engine', ({ record }) => {
 
             const metadata = (record.metadata && typeof record.metadata === 'object')
@@ -141,20 +70,13 @@ class AIGatewayEngineSingleton {
                 ? (record.payload as Record<string, unknown>)
                 : undefined;
 
-            const sessionUid = typeof metadata?.session_uid === 'string' 
-                ? metadata.session_uid
-                : typeof payload?.session_uid === 'string'
-                    ? payload.session_uid
+            const sessionUid = typeof metadata?.thread_id === 'string' 
+                ? metadata.thread_id
+                : typeof payload?.thread_id === 'string'
+                    ? payload.thread_id
                     : undefined;
             
             if (!sessionUid) return;
-
-            if (record.type === AIProcessType.AI_SESSION_INSTANCE) {
-                this.abortSessionStream(sessionUid);
-                this.closeSession(sessionUid, { skipProcessLifecycle: true });
-                return;
-            }
-
         });
 
         this.isTerminationHookBound = true;
@@ -179,74 +101,7 @@ class AIGatewayEngineSingleton {
 
     // ── Session API ───────────────────────────────────────────────────────────
 
-    /** Creates a new isolated session bound to a specific SDK + model. */
-    // Future implementation subprocess agnetic using parent process_uid from the send_gateway route call, 
-    // which allows subprocesses to be properly linked in the process tree without needing to know session IDs at the call site.
-    createSession(sdk?: SDKProvider | undefined, model?: string | undefined,): AISessionRuntime {    
-        const session : AISessionRuntime = AISessionManager.create(sdk, model);
-        return session;
-    }
-
-    /** Closes and removes a session from the active session map. */
-    closeSession(sessionUid: string, options?: { skipProcessLifecycle?: boolean }): void {
-        
-        // First, attempt to retrieve the session entry from KernelState to 
-        // ensure it exists before proceeding with cleanup.
-        const session_kernel_entry = KernelState.ai_gateway_sessions.get(sessionUid) as KernelAISessionEntry | undefined;
-        const session = KernelEngine.readMemory(session_kernel_entry?.memory_uid as string) as AISessionRuntime | undefined;
-        
-        if(!session) {
-            console.warn(`[AIGatewayEngine] Attempted to close non-existent session ${sessionUid}`);
-            return;
-        }
-
-        if (session.process_uid && !options?.skipProcessLifecycle) {
-            KernelEngine.updateProcessStatus(session.process_uid, PROCESS_STATUS.DONE, {
-                live_state: 'closed',
-                session_id: sessionUid,
-                ended_at: Date.now(),
-            });
-        } 
-
-        AISessionManager.close(sessionUid);
-
-        // Skip below for now since we our ai session still containing as one big memory blob without subprocesses or 
-        // shared memory pieces. But once we start spawning subprocesses for tool calls or using shared memory
-        // for context, etc., we'll want to cascade terminate those child processes and clean up associated memory 
-        // to prevent orphaned state and ensure proper lifecycle management.
-
-        // AIContextEngine.evictContext(sessionUid);
-        // AIContextMemoryEngine.deleteMemoriesBySession(sessionUid, { source_ref: 'ai_context_rag' });
-    }
-
-    /**
-     * Returns read-only snapshots for all active sessions.
-     * Intended for Dev Menu monitoring panels — not for runtime logic.
-     */
-    listSessions(): AISessionRuntime[] {
-        return AISessionManager.list();
-    }
-
-    // Sending prompt to session is technically part of the interaction loop logic, but it requires 
-    // direct access to the session's process and memory management, so it lives here in the engine as 
-    // a bridge between the public API and the internal interaction loop implementation.
-
-    async sendToSession(
-        sessionUid: string,
-        prompt: string,
-    ): Promise<void> {
-        const session = AISessionManager.get(sessionUid);
-        if (!session) throw new Error(`Session ${sessionUid} not found.`);
-
-        await executeSessionInteractionLoop({
-            session,
-            prompt,
-        });
-    }
-
-    interruptSession(sessionUid: string): void {
-        this.abortSessionStream(sessionUid);
-    }
+    
 
     // ── Health / Discovery ────────────────────────────────────────────────────
 
@@ -284,10 +139,6 @@ class AIGatewayEngineSingleton {
         return AIConfigManager.getActiveProvider();
     }
 
-    getActiveSDK(): SDKProvider | null {
-        return AIConfigManager.getActiveProvider();
-    }
-
     getActiveModel(): string | null {
         return AIConfigManager.getActiveModel();
     }
@@ -296,20 +147,12 @@ class AIGatewayEngineSingleton {
         return AIConfigManager.setActiveProvider(provider);
     }
 
-    async setActiveSDK(sdk: SDKProvider | null): Promise<boolean> {
-        return AIConfigManager.setActiveProvider(sdk);
-    }
-
     async setActiveModel(model: string | null): Promise<boolean> {
         return AIConfigManager.setActiveModel(model);
     }
 
     async setProviderApiKey(provider: AIProvider, apiKey: string): Promise<boolean> {
         return AIConfigManager.setProviderApiKey(provider, apiKey);
-    }
-
-    async setSDKApiKey(sdk: SDKProvider, apiKey: string): Promise<boolean> {
-        return AIConfigManager.setProviderApiKey(sdk, apiKey);
     }
 
     // ── Provider calls ────────────────────────────────────────────────────────

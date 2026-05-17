@@ -138,8 +138,6 @@ class LoggerEngineSingleton {
     }
 
     private addLog(level: LogLevel, message: string) {
-        return;
-
         const entry: LogEntry = {
             timestamp: Date.now(),
             level,

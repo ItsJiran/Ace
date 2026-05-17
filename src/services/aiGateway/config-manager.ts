@@ -23,9 +23,7 @@
 
 import { FSEngine } from '../fs-engine';
 import { KernelEngine } from '../kernel-engine';
-import { AIGatewayConfigSchema, type AIGatewayConfig } from '../../schemas/ai-gateway';
-import type { AIGatewayModel } from '../../schemas/ai-gateway';
-import type { AIProvider, SDKProvider } from '#/schemas/ai';
+import { AIGatewayConfigSchema, type AIGatewayConfig, type AIGatewayModel } from '#/schemas/ai-gateway';
 
 const GATEWAY_CONFIG_FILE = 'gateway.json';
 const MEMORY_UID = 'system:ai_gateway_config';
@@ -33,7 +31,6 @@ const MEMORY_UID = 'system:ai_gateway_config';
 const DEFAULT_CONFIG: AIGatewayConfig = {
     version: 2,
     active_provider: null,
-    active_sdk: null,
     active_model: null,
     providers: {
         openai: undefined,
@@ -47,7 +44,7 @@ const DEFAULT_CONFIG: AIGatewayConfig = {
     },
 };
 
-class AIConfigManagerSingleton {
+class ConfigManagerSingleton {
     private config: AIGatewayConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 
     // ── Boot ──────────────────────────────────────────────────────────────────
@@ -64,7 +61,6 @@ class AIConfigManagerSingleton {
         const ensured = await FSEngine.ensureFile(GATEWAY_CONFIG_FILE, {
             version: 2,
             active_provider: null,
-            active_sdk: null,
             active_model: null,
             providers: {},
             sdks: {},
@@ -89,85 +85,22 @@ class AIConfigManagerSingleton {
         this.syncToRAM();
     }
 
-    // ── Read API ──────────────────────────────────────────────────────────────
+    // ── API ──────────────────────────────────────────────────────────────
 
-    /** Returns a deep copy so callers cannot accidentally mutate internal state. */
     get(): AIGatewayConfig {
         return JSON.parse(JSON.stringify(this.config));
     }
 
-    getActiveProvider(): AIProvider | null {
-        return this.config.active_provider;
+    getByKey<K extends keyof AIGatewayConfig>(key: K): AIGatewayConfig[K] {
+        return JSON.parse(JSON.stringify(this.config[key]));
     }
 
-    getActiveSDK(): SDKProvider | null {
-        return this.config.active_provider;
-    }
-
-    getActiveModel(): string | null {
-        return this.config.active_model;
-    }
-
-    // ── Write API ─────────────────────────────────────────────────────────────
-
-    /**
-     * Changes the active SDK. If the currently selected model does not exist
-     * in the new SDK's model list, the active model is cleared to prevent
-     * a stale model ID from reaching the gateway server.
-     */
-    async setActiveProvider(provider: AIProvider | null): Promise<boolean> {
-        this.config.active_provider = provider;
-        this.config.active_sdk = provider;
-        if (provider && this.config.active_model) {
-            const models = this.config.providers[provider]?.models ?? [];
-            const stillValid = models.some((m) => m.id === this.config.active_model);
-            if (!stillValid) this.config.active_model = null;
-        }
+    write(config: Partial<AIGatewayConfig>): Promise<boolean> {
+        this.config = {
+            ...this.config,
+            ...config,
+        };
         return this.persist();
-    }
-
-    async setActiveSDK(sdk: SDKProvider | null): Promise<boolean> {
-        return this.setActiveProvider(sdk);
-    }
-
-    async setActiveModel(model: string | null): Promise<boolean> {
-        this.config.active_model = model;
-        return this.persist();
-    }
-
-    /**
-     * Saves an API key for an SDK. Trims surrounding whitespace to avoid
-     * accidental invalid keys from copy-paste. Creates the SDK entry if absent.
-     */
-    async setProviderApiKey(provider: AIProvider, apiKey: string): Promise<boolean> {
-        if (!this.config.providers[provider]) {
-            this.config.providers[provider] = { api_key: '', models: [] };
-        }
-        this.config.providers[provider]!.api_key = apiKey.trim();
-        this.config.sdks[provider] = this.config.providers[provider];
-        return this.persist();
-    }
-
-    async setSDKApiKey(sdk: SDKProvider, apiKey: string): Promise<boolean> {
-        return this.setProviderApiKey(sdk, apiKey);
-    }
-
-    /**
-     * Caches a freshly fetched model list for an SDK.
-     * Called after a successful /models fetch from the gateway sidecar so the
-     * list is available on next boot without re-fetching.
-     */
-    async updateProviderModels(provider: AIProvider, models: AIGatewayModel[]): Promise<boolean> {
-        if (!this.config.providers[provider]) {
-            this.config.providers[provider] = { api_key: '', models: [] };
-        }
-        this.config.providers[provider]!.models = models as any;
-        this.config.sdks[provider] = this.config.providers[provider];
-        return this.persist();
-    }
-
-    async updateSDKModels(sdk: SDKProvider, models: AIGatewayModel[]): Promise<boolean> {
-        return this.updateProviderModels(sdk, models);
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
@@ -192,12 +125,6 @@ class AIConfigManagerSingleton {
      * updates without holding a direct reference to this module.
      */
     syncToRAM(): void {
-        this.config.active_sdk = this.config.active_provider;
-        this.config.sdks = {
-            openai: this.config.providers.openai,
-            google: this.config.providers.google,
-            anthropic: this.config.providers.anthropic,
-        };
         KernelEngine.updateMemory(MEMORY_UID, JSON.parse(JSON.stringify(this.config)));
     }
 }

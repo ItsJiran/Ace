@@ -80,3 +80,4 @@ class KernelEngineSingleton {
 }
 
 export const KernelEngine = new KernelEngineSingleton();
+export default KernelEngine;

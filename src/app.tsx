@@ -70,7 +70,6 @@ function App() {
       GlobalStateManager.setPointerInside(isInsideApp);
 
       if (!isInsideApp) {
-        GlobalStateManager.setActiveElement(null);
         if (!desktopState.is_overlay_locked && !cursorState.is_pointer_down) {
           GlobalStateManager.setOverlayMode("ambient");
         }
@@ -78,7 +77,6 @@ function App() {
       }
 
       const { element, mode } = resolveOverlayModeAtPoint(localX, localY);
-      GlobalStateManager.setActiveElement(element);
 
       if (!desktopState.is_overlay_locked) {
         GlobalStateManager.setOverlayMode(cursorState.is_pointer_down ? "interactive" : mode);
@@ -88,7 +86,6 @@ function App() {
     return () => {
       unsubscribe();
       GlobalStateManager.setPointerInside(false);
-      GlobalStateManager.setActiveElement(null);
     };
   }, [isBootReady]);
 

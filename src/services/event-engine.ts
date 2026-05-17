@@ -10,14 +10,9 @@ class EventEngineSingleton {
      * Maps an `action` (or `action:sub_action` combo) to an array of async handler functions.
      */
     private routes = new Map<string, Array<ProcessCallback | SyncProcessCallback>>();
-    private readonly maxEventLogs = 300;
 
     // Log batching: buffer entries and flush in bulk instead of writing per-emit.
     // Converts 3 StorageEngine writes per emit() → 1 write per LOG_FLUSH_MS interval.
-    private logBuffer: Array<Record<string, unknown>> = [];
-    private logFlushTimer: ReturnType<typeof setTimeout> | null = null;
-    private static readonly LOG_FLUSH_MS = 200;
-    private static readonly LOG_FLUSH_THRESHOLD = 15;
     public readonly eventStreamMemoryUid = 'system:event_stream';
 
     setupKernelSpace() {
@@ -107,11 +102,8 @@ class EventEngineSingleton {
                 `Every event must carry an origin identity. ` +
                 `Use useAceEvent (auto-injects from context) or pass process_uid explicitly.`
             );
-            this.logEvent(normalized, 'rejected');
             return;
         }
-
-        this.logEvent(normalized, 'emitted');
 
         // --- PHASE 2: INGESTION & VALIDATION ---
 
@@ -129,7 +121,6 @@ class EventEngineSingleton {
 
         if (allHandlers.length === 0) {
             console.warn(`[EventBus] No process is listening to action route: ${normalized.action} or ${specificRouteKey}`);
-            this.logEvent(normalized, 'dropped');
             return;
         }
 
@@ -161,49 +152,6 @@ class EventEngineSingleton {
         });
     }
 
-    private logEvent(interaction: Interaction, status: 'emitted' | 'routed' | 'dropped' | 'rejected') {
-        const entry = {
-            id: `evt-${crypto.randomUUID()}`,
-            at: Date.now(),
-            status,
-            action: interaction.action,
-            sub_action: interaction.sub_action ?? null,
-            process_uid: interaction.process_uid ?? null,
-            payload: interaction.payload,
-        };
-
-        this.logBuffer.push(entry);
-
-        // Flush immediately on threshold to prevent unbounded buffer growth
-        if (this.logBuffer.length >= EventEngineSingleton.LOG_FLUSH_THRESHOLD) {
-            this.flushLogBuffer();
-            return;
-        }
-
-        // Schedule a deferred flush if not already pending
-        if (!this.logFlushTimer) {
-            this.logFlushTimer = setTimeout(
-                () => this.flushLogBuffer(),
-                EventEngineSingleton.LOG_FLUSH_MS
-            );
-        }
-    }
-
-    private flushLogBuffer() {
-        if (this.logFlushTimer !== null) {
-            clearTimeout(this.logFlushTimer);
-            this.logFlushTimer = null;
-        }
-
-        if (this.logBuffer.length === 0) return;
-
-        const toFlush = this.logBuffer.splice(0);
-        const raw = KernelEngine.readMemory(this.eventStreamMemoryUid);
-        const current = Array.isArray(raw) ? raw : [];
-        const next = [...current, ...toFlush].slice(-this.maxEventLogs);
-
-        KernelEngine.writeMemory(this.eventStreamMemoryUid, next);
-    }
 }
 
 

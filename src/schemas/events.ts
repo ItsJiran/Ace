@@ -20,17 +20,18 @@ export const Actions = [
     'send_process',
     'send_gateway',
     'send_terminal',
-    'execute_tool',
     'run_shell',
     'read_file',
     'set_overlay_mode',
     'debug_action'
 ] as const;
 
-// ----------------------------------------------------------------------
-// 1. INTERACTION SCHEMA (Initiating Actions)
-// How an entity (UI Widget, Gateway, OS) initiates an action or routes data.
-// ----------------------------------------------------------------------
+/**
+ * Interaction Schema
+ * This is the core schema for all interactions emitted by React components (The Waiter) or Gateways.
+ * It follows the Unified Lifecycle: Ingestion -> Validation -> Allocation.
+ */
+
 export const InteractionSchema = z.object({
     event_type: z.literal('interaction'),
     window_uid: z.string().optional(),
@@ -61,7 +62,7 @@ export interface CoreEngineHandlerArgs<T = any> {
 
     // The shared memory context passed through the chain
     // Defaults to empty object if not provided in Interaction
-    preallocated_memory: Record<string, any>;
+    preallocated_memory?: Record<string, any>;
 
     // Identifying metadata about the origin of this event
     source: {
@@ -94,17 +95,4 @@ export interface Listener<T extends z.ZodType<any, any, any>> {
     reaction: ListenerHandler<z.infer<T>>;
 }
 
-// ----------------------------------------------------------------------
-// 4. EVENT REACTION CONTRACT
-// Used by widget/registry metadata to declare reaction intent mappings.
-// ----------------------------------------------------------------------
-
-export const EventReactionSchema = z.object({
-    reaction_type: z.string(),
-    action: z.string().optional(),
-    sub_action: z.string().optional(),
-    payload_template: z.record(z.string(), z.any()).optional(),
-});
-
-export type EventReaction = z.infer<typeof EventReactionSchema>;
 

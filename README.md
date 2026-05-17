@@ -152,7 +152,6 @@ flowchart TD
 		E[EventBus]
 		WM[WindowEngine]
 		TM[ToolEngine]
-		LM[LayoutEngine]
 		GM[Global State Manager]
 		FS[FSEngine / Local File Persistence]
 	end
@@ -222,7 +221,7 @@ flowchart TD
 
 - The user interacts with the overlay UI, which renders windows, widgets, chat surfaces, and developer monitors.
 - Those surfaces are mounted from package definitions and resolved through the registry layer.
-- Runtime actions are routed through the app control plane, centered around `KernelEngine`, `EventBus`, and the domain engines such as `WindowEngine`, `ToolEngine`, and `LayoutEngine`.
+- Runtime actions are routed through the app control plane, centered around `KernelEngine`, `EventBus`, and the domain engines such as `WindowEngine`, `ToolEngine`.
 - AI sessions are managed in the frontend runtime through `AIGatewayEngine`, `AISessionManager`, the interaction loop, and the streaming parser/mirroring layer.
 - The frontend talks to the local gateway sidecar over HTTP for health checks, model discovery, test requests, streaming chat, queued tool intents, and tool result callbacks.
 - The gateway sidecar runs the DeepAgents-based runtime, binds provider models, manages gateway tools, and returns structured runtime state back to the app.

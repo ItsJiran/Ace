@@ -1,17 +1,13 @@
 import type { RegistryEngine } from './services/registry-engine';
-import type { WidgetEngine } from './services/widget-engine';
 import type { ToolEngine } from './services/tool-engine';
 
 import type { WindowEngine } from './services/window-engine';
 import type { EventBus } from './services/event-engine';
 
-import type { PipelineEngine } from './services/pipeline-engine';
 import type { ConfigEngine } from './services/config-engine';
-import type { LayoutEngine } from './services/layout-engine';
 import type { KeybindEngine } from './services/keybind-engine';
 import type { GlobalStateManager } from './services/global-state-manager';
 import type { LoggerEngine } from './services/logger-engine';
-import type { ShellEngine } from './services/shell-engine';
 import type { AIContextEngine } from './services/aiContextEngine';
 import type { AIContextMemoryEngine } from './services/ai-context-memory-engine';
 import type { KernelEngine } from './services/kernel-engine';
@@ -111,6 +107,9 @@ interface ACEAIGatewayAPI {
 declare global {
   interface Window {
     ACE: {
+      global: GlobalStateManager;
+
+
       registry: RegistryEngine;
       widget: WidgetEngine;
       tool: ToolEngine;
@@ -118,23 +117,14 @@ declare global {
       window: WindowEngine;
       event: EventBus;
       storage: InstanceType<typeof KernelEngine>;
-      pipeline: PipelineEngine;
       config: ConfigEngine;
-      layout: LayoutEngine;
       keybind: KeybindEngine;
-      global: GlobalStateManager;
       logger: LoggerEngine;
       ai_gateway: ACEAIGatewayAPI;
-      shell: ShellEngine;
       context: AIContextEngine;
       context_memory: AIContextMemoryEngine;
       // parser: ParserEngine;
       notification?: ACENotificationAPI;
-      hooks: {
-        // React hooks for external packages
-        // Lazy-loaded via src/services/bridge-hooks.ts
-        useProcessContext?: () => { process_uid?: string; parent_process_uid?: string };
-      };
     };
   }
 }

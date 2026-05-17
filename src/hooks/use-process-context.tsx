@@ -6,7 +6,7 @@ import React, { createContext, useContext, type ReactNode } from 'react';
  * Purpose:
  * 1. Avoid passing process_uid through every component layer
  * 2. Allow deep components to access current process context
- * 3. Enable external packages to retrieve process context via hook
+ * 3. Give deeply nested React components access to current process context
  * 4. Support nested contexts (subprocess spawned in child context)
  *
  * Usage in host application:
@@ -21,10 +21,6 @@ import React, { createContext, useContext, type ReactNode } from 'react';
  * const { process_uid } = useProcessContext();
  * ```
  *
- * External package usage (via window.ACE bridge):
- * ```tsx
- * const { process_uid } = window.ACE.hooks.useProcessContext();
- * ```
  */
 
 interface ProcessContextValue {
