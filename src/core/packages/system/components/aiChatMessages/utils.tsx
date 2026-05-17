@@ -3,7 +3,7 @@ import { BrainCircuit, Database, ListTodo, Wrench } from 'lucide-react';
 
 import type { AIRenderer } from '#/schemas/ai';
 import type { ToolChatPreview } from '#/schemas/tooling';
-import { RegistryEngine } from '#/services/registryEngine';
+import { RegistryEngine } from '#/services/registry-engine';
 
 export type AssistantSegment =
     | { kind: 'paragraph'; renderer: AIRenderer }
@@ -228,61 +228,6 @@ export function buildToolPreview(renderer: AIRenderer, result: Record<string, un
                         {index + 1}. {item}
                     </div>
                 ))}
-            </div>
-        );
-    }
-
-    if (toolSlug === 'list_ace_tools' || toolSlug === 'search_ace_tools') {
-        const tools = Array.isArray(result.matches) ? result.matches : Array.isArray(result.ace_tools) ? result.ace_tools : [];
-        if (tools.length === 0) return null;
-
-        return (
-            <div className="space-y-1">
-                {tools.slice(0, 3).map((tool, index) => {
-                    const item = toPayloadRecord(tool);
-                    const packageRefValue = typeof item.package_ref === 'string' ? item.package_ref : 'unknown';
-                    const slug = typeof item.slug === 'string' ? item.slug : 'tool';
-                    const description = typeof item.description === 'string' ? item.description : '';
-
-                    return (
-                        <div key={`${index}:${packageRefValue}:${slug}`} className="system-chat-preview-card px-2 py-1">
-                            <div className="system-chat-preview-title">{packageRefValue}/{slug}</div>
-                            {description ? <div className="system-chat-preview-subtitle">{description}</div> : null}
-                        </div>
-                    );
-                })}
-            </div>
-        );
-    }
-
-    if (toolSlug === 'inspect_ace_tool') {
-        const aceTool = toPayloadRecord(result.ace_tool);
-        if (Object.keys(aceTool).length === 0) return null;
-
-        const packageRefValue = typeof aceTool.package_ref === 'string' ? aceTool.package_ref : 'unknown';
-        const slug = typeof aceTool.slug === 'string' ? aceTool.slug : 'tool';
-        const description = typeof aceTool.description === 'string' ? aceTool.description : '';
-
-        return (
-            <div className="system-chat-preview-card px-2 py-2">
-                <div className="system-chat-preview-title">{packageRefValue}/{slug}</div>
-                {description ? <div className="system-chat-preview-subtitle mt-1">{description}</div> : null}
-            </div>
-        );
-    }
-
-    if (toolSlug === 'request_ace_tool_execution') {
-        const intent = toPayloadRecord(result.execution_intent);
-        const packageRefValue = typeof intent.package_ref === 'string' ? intent.package_ref : 'unknown';
-        const intentToolSlug = typeof intent.tool_slug === 'string' ? intent.tool_slug : 'tool';
-        const intentPayload = toPayloadRecord(intent.payload);
-        const fsPreview = buildFsToolPreview(intentPayload, packageRefValue, intentToolSlug);
-        if (fsPreview) return fsPreview;
-
-        return (
-            <div className="system-chat-preview-card px-2 py-2">
-                <div className="system-chat-preview-title">Intent: {packageRefValue}/{intentToolSlug}</div>
-                <div className="system-chat-preview-subtitle mt-1">{JSON.stringify(intentPayload)}</div>
             </div>
         );
     }

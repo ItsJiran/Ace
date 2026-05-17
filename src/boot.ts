@@ -1,21 +1,21 @@
-import { RegistryEngine } from '#/services/registryEngine';
-import { WidgetEngine } from '#/services/widgetEngine';
-import { ToolEngine } from '#/services/toolEngine';
+import { RegistryEngine } from '#/services/registry-engine';
+import { WidgetEngine } from '#/services/widget-engine';
+import { ToolEngine } from '#/services/tool-engine';
 
-import { WindowEngine } from '#/services/windowEngine';
-import { EventBus } from '#/services/eventEngine';
-import { PipelineEngine } from '#/services/pipelineEngine';
-import { ConfigEngine } from '#/services/configEngine';
-import { LayoutEngine } from '#/services/layoutEngine';
-import { KeybindEngine } from '#/services/keybindEngine';
-import { GlobalStateManager } from '#/services/globalStateManager';
-import { LoggerEngine } from '#/services/loggerEngine';
-import { AIGatewayEngine } from './services/aiGatewayEngine';
-import { ShellEngine } from '#/services/shellEngine';
-import { KernelEngine } from '#/services/kernelEngine';
+import { WindowEngine } from '#/services/window-engine';
+import { EventBus } from '#/services/event-engine';
+import { PipelineEngine } from '#/services/pipeline-engine';
+import { ConfigEngine } from '#/services/config-engine';
+import { LayoutEngine } from '#/services/layout-engine';
+import { KeybindEngine } from '#/services/keybind-engine';
+import { GlobalStateManager } from '#/services/global-state-manager';
+import { LoggerEngine } from '#/services/logger-engine';
+import { AIGatewayEngine } from './services/ai-gateway-engine';
+import { ShellEngine } from '#/services/shell-engine';
+import { KernelEngine } from '#/services/kernel-engine';
 
-// import { ParserEngine } from '#/services/parserEngine';
-import type { PipelineContext } from '#/services/pipelineEngine';
+// import { ParserEngine } from '#/services/parser-engine';
+import type { PipelineContext } from '#/services/pipeline-engine';
 
 let bootPromise: Promise<void> | null = null;
 
@@ -68,7 +68,7 @@ export async function bootACE() {
                 // parser: ParserEngine,
                 hooks: {
                     // Module lazy-loaded to provide React hooks to packages
-                    // See src/services/bridgeHooks.ts
+                    // See src/services/bridge-hooks.ts
                 },
             };
             console.log('🔌 ACE Registry Bridge Initialized.');

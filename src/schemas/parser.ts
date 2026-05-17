@@ -1,4 +1,16 @@
-import type { AIBlock, AIParserProtocolState } from "./ai";
+export type ParserDispatchDirective =
+    | 'continue'
+    | 'stop'
+    | 'interrupt'
+    | 'error'
+    | (string & {});
+
+export interface ParserBlockRecord {
+    block_slug: string;
+    package_ref?: string;
+    payload: Record<string, unknown>;
+    runtime_context?: Record<string, unknown>;
+}
 
 export interface BlockProtocolSchema {
     /** Canonical runtime block tag. This must match the parser slug. */
@@ -36,7 +48,7 @@ export interface BlockProtocolSchema {
 }
 
 export type ParserBlockArgs = {
-    block: AIBlock;
+    block: ParserBlockRecord;
     lifecycle: ParserBlockLifecycle;
     history_event_index?: number;
 
@@ -45,7 +57,7 @@ export type ParserBlockArgs = {
 
     // Function to send the parsed block response back to the session, 
     // which will then be rendered by the frontend.
-    dispatchParserResponse: (detail: AIParserProtocolState) => void;
+    dispatchParserResponse: (detail: ParserDispatchDirective) => void;
 
     // For aborting current connected stream response 
     // if a new prompt is sent let say our block parser need to wait user confirmation 

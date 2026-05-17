@@ -1,7 +1,7 @@
 // src/types/ace.d.ts
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { useAceMemory } from '../hooks/useAceMemory';
+import { useAceMemory } from '../hooks/use-ace-memory';
 import { EventPattern } from '../schemas/events';
 
 declare global {

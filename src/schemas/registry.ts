@@ -56,7 +56,7 @@ export type RegistryRuntimeSchemaMetadata = z.infer<typeof RegistryRuntimeSchema
 /**
  * Universal Domain Entry Schema
  * Represents any item in a package domain.
- * The specific shape is defined by AceRegistryType (registryTypes.ts) in the package itself.
+ * The specific shape is defined by AceRegistryType (registry-types.ts) in the package itself.
  */
 export const RegistryDomainEntrySchema = z.object({
     /** Code location strategy for the entry */

@@ -1,20 +1,20 @@
-import type { RegistryEngine } from './services/registryEngine';
-import type { WidgetEngine } from './services/widgetEngine';
-import type { ToolEngine } from './services/toolEngine';
+import type { RegistryEngine } from './services/registry-engine';
+import type { WidgetEngine } from './services/widget-engine';
+import type { ToolEngine } from './services/tool-engine';
 
-import type { WindowEngine } from './services/windowEngine';
-import type { EventBus } from './services/eventEngine';
+import type { WindowEngine } from './services/window-engine';
+import type { EventBus } from './services/event-engine';
 
-import type { PipelineEngine } from './services/pipelineEngine';
-import type { ConfigEngine } from './services/configEngine';
-import type { LayoutEngine } from './services/layoutEngine';
-import type { KeybindEngine } from './services/keybindEngine';
-import type { GlobalStateManager } from './services/globalStateManager';
-import type { LoggerEngine } from './services/loggerEngine';
-import type { ShellEngine } from './services/shellEngine';
+import type { PipelineEngine } from './services/pipeline-engine';
+import type { ConfigEngine } from './services/config-engine';
+import type { LayoutEngine } from './services/layout-engine';
+import type { KeybindEngine } from './services/keybind-engine';
+import type { GlobalStateManager } from './services/global-state-manager';
+import type { LoggerEngine } from './services/logger-engine';
+import type { ShellEngine } from './services/shell-engine';
 import type { AIContextEngine } from './services/aiContextEngine';
-import type { AIContextMemoryEngine } from './services/aiContextMemoryEngine';
-import type { KernelEngine } from './services/kernelEngine';
+import type { AIContextMemoryEngine } from './services/ai-context-memory-engine';
+import type { KernelEngine } from './services/kernel-engine';
 import type { Notification, NotificationCreateInput } from './schemas/notification';
 import type { SDKProvider, AISessionStatus } from './services/aiGateway/types';
 import type {
@@ -23,7 +23,7 @@ import type {
   AIGatewayResponseResult,
   AIGatewaySidecarHealthResult,
   AIGatewayRadarScanResult,
-} from './schemas/ai_gateway';
+} from './schemas/ai-gateway';
 
 interface AIGatewaySessionSnapshot {
   sessionId: string;
@@ -132,7 +132,7 @@ declare global {
       notification?: ACENotificationAPI;
       hooks: {
         // React hooks for external packages
-        // Lazy-loaded via src/services/bridgeHooks.ts
+        // Lazy-loaded via src/services/bridge-hooks.ts
         useProcessContext?: () => { process_uid?: string; parent_process_uid?: string };
       };
     };
