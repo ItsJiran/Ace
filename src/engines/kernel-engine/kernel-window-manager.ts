@@ -1,6 +1,5 @@
 import { KernelState } from './kernel-state';
 import { KernelMemoryManager } from './kernel-memory-manager';
-import { PerformanceObserver } from '../performance-observer';
 import type { KernelWindowEntry } from './types';
 
 export class KernelWindowManager {
@@ -8,7 +7,6 @@ export class KernelWindowManager {
     private static readonly WINDOW_SYSTEM_KEY = 'system:window_system';
 
     static registerWindow(window_uid: string, process_uid: string, component: string): void {
-        PerformanceObserver.trackWindowSpawn();
         if (KernelState.window_sys.has(window_uid)) return;
 
         const nextWindowSystem = new Map(KernelState.window_sys);

@@ -1,18 +1,18 @@
-import type { RegistryEngine } from './services/registry-engine';
-import type { ToolEngine } from './services/tool-engine';
+import type { RegistryEngine } from './engines/registry-engine';
+import type { ToolEngine } from './engines/tool-engine';
 
-import type { WindowEngine } from './services/window-engine';
-import type { EventBus } from './services/event-engine';
+import type { WindowEngine } from './engines/window-engine';
+import type { EventBus } from './engines/event-engine';
 
-import type { ConfigEngine } from './services/config-engine';
-import type { KeybindEngine } from './services/keybind-engine';
-import type { GlobalStateManager } from './services/global-state-manager';
-import type { LoggerEngine } from './services/logger-engine';
-import type { AIContextEngine } from './services/aiContextEngine';
-import type { AIContextMemoryEngine } from './services/ai-context-memory-engine';
-import type { KernelEngine } from './services/kernel-engine';
+import type { ConfigEngine } from './engines/config-engine';
+import type { KeybindEngine } from './engines/keybind-engine';
+import type { GlobalStateManager } from './engines/global-state-manager';
+import type { LoggerEngine } from './engines/logger-engine';
+import type { AIContextEngine } from './engines/aiContextEngine';
+import type { AIContextMemoryEngine } from './engines/ai-context-memory-engine';
+import type { KernelEngine } from './engines/kernel-engine';
 import type { Notification, NotificationCreateInput } from './schemas/notification';
-import type { SDKProvider, AISessionStatus } from './services/aiGateway/types';
+import type { SDKProvider, AISessionStatus } from './engines/aiGateway/types';
 import type {
   AIGatewayConfig,
   AIGatewayFetchModelsResult,

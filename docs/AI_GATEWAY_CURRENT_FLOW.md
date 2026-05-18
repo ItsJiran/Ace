@@ -23,17 +23,17 @@ Backend Python gateway menjadi pemilik utama untuk:
 
 ### Frontend
 
-- `src/services/aiGatewayEngine.ts`
+- `src/engines/aiGatewayEngine.ts`
   - facade utama yang dipanggil UI
-- `src/services/aiGateway/healthProbe.ts`
+- `src/engines/aiGateway/healthProbe.ts`
   - menemukan sidecar aktif via `/health`
-- `src/services/aiGateway/providerClient.ts`
+- `src/engines/aiGateway/providerClient.ts`
   - call non-streaming seperti `/models/{sdk}` dan `/test/{sdk}`
-- `src/services/aiGateway/sub-services/interactionParserLoop/requestOrchestration.ts`
+- `src/engines/aiGateway/sub-engines/interactionParserLoop/requestOrchestration.ts`
   - mengirim request chat streaming ke gateway
-- `src/services/aiGateway/sub-services/interactionParserLoop/streamProcessor.ts`
+- `src/engines/aiGateway/sub-engines/interactionParserLoop/streamProcessor.ts`
   - memecah text stream dan deepagent metadata frames
-- `src/services/aiGateway/sub-services/interactionParserLoop/agentRuntimeMirror.ts`
+- `src/engines/aiGateway/sub-engines/interactionParserLoop/agentRuntimeMirror.ts`
   - mirror snapshot runtime backend ke `AISessionRuntime`
 - `src/core/packages/system/components/settings/AIConnectionSettingsTab.tsx`
   - UI fetch model, pilih SDK, pilih model, simpan API key

@@ -8,7 +8,7 @@ import { KeybindActionMap, KeybindButtonCodeMap, KeybindButtons, KeybindCodes } 
  */
 
 export const KeybindButtonSchema = z.enum(KeybindButtons);
-export type KeybindButton = keyof typeof KeybindButtonCodeMap;
+export type KeybindButtonType = keyof typeof KeybindButtonCodeMap;
 
 /**
  * Keybind code represent the standardized code values for keyboard keys based on the KeyboardEvent.code specification.
@@ -16,7 +16,7 @@ export type KeybindButton = keyof typeof KeybindButtonCodeMap;
  * Example: "ShiftLeft", "KeyA", "1" (because Digit1 is mapped to '1')
  */
 export const KeybindCodeSchema = z.enum(KeybindCodes);
-export type KeybindCode = z.infer<typeof KeybindCodeSchema>;
+export type KeybindCodeType = z.infer<typeof KeybindCodeSchema>;
 
 /**
  * Keybind combos represent a sequence of keybind buttons that form a complete shortcut, e.g. "Control+Shift+KeyA".
@@ -25,7 +25,7 @@ export type KeybindCode = z.infer<typeof KeybindCodeSchema>;
  */
 
 export const KeybindCombosSchema = z.array(KeybindButtonSchema);
-export type KeybindCombos = KeybindButton[];
+export type KeybindCombosType = KeybindButtonType[];
 
 /**
  * Keybind actions represent the intent or command that should be executed when a keybind is triggered.
@@ -38,7 +38,7 @@ export const KeybindActionSchema = z.enum(
         keyof typeof KeybindActionMap
     >,
 );
-export type KeybindAction = keyof typeof KeybindActionMap;
+export type KeybindActionType = keyof typeof KeybindActionMap;
 
 /**
  * Keybind event payload represents the data structure that is emitted when a keybind action is triggered. 
@@ -48,9 +48,9 @@ export type KeybindAction = keyof typeof KeybindActionMap;
 export const KeybindEventPressPayloadSchema = z.object({
     code : KeybindCodeSchema.or(z.undefined()),
 });
-export type KeybindEventPressPayload = z.infer<typeof KeybindEventPressPayloadSchema>;
+export type KeybindEventPressPayloadType = z.infer<typeof KeybindEventPressPayloadSchema>;
 
 export const KeybindEventReleasePayloadSchema = z.object({
     code : KeybindCodeSchema.or(z.undefined()),
 });
-export type KeybindEventReleasePayload = z.infer<typeof KeybindEventReleasePayloadSchema>;
+export type KeybindEventReleasePayloadType = z.infer<typeof KeybindEventReleasePayloadSchema>;

@@ -1,27 +1,31 @@
 import { Engine } from './engine';
-import {
-    KeybindButton,
-    KeybindAction,
-    KeybindCombos,
-    KeybindEventPressPayload,
-    KeybindEventReleasePayload,
-    KeybindCode,
-    KeybindEventPressPayloadSchema,
+import { ConfigEngine } from './config-engine';
+import type {
+    KeybindEventPressPayloadType,
+    KeybindEventReleasePayloadType,
+    KeybindButtonType,
+    KeybindActionType,
+    KeybindCombosType,
+    KeybindCodeType,
 } from '#/schemas/keybinds';
+import type { ConfigItemKeybind } from '#/schemas/config';
 import { EventBus } from './event-engine';
-import { EventData } from '#/schemas/events.ts';
-import { KeybindButtonCodeMap, KeybindButtons, KeybindCodes } from '#/constants/keybinds.ts';
-import resolveConstMapValueFromKey from '#/lib/resolve-const-map-value-from-key.ts';
+import {
+    KeybindAction,
+    KeybindButtonCodeMap,
+} from '#/constants/keybinds.ts';
 import resolveConstMapKeyFromValue from '#/lib/resolve-const-map-key-from-value.ts';
 
 class KeybindEngineSingleton extends Engine {
     // Current Combos registered in the system, derived from config and registry.
-    currentActiveKeybindButtons: KeybindButton[] = [];
-    currentActiveKeybindMap: Map<KeybindAction, KeybindCombos[]> = new Map();
+    public currentActiveKeybindButtons: KeybindButtonType[] = [];
+    public currentActiveKeybindMap: Map<KeybindActionType, KeybindCombosType[]> = new Map();
 
     // + ----- Abstract Methods ---------------------------------------------------------------+
 
-    async boot() {}
+    async boot() {
+        this.syncCurrentActiveKeybindMap();
+    }
 
     async setupEventRoutes() {
         /**
@@ -33,19 +37,23 @@ class KeybindEngineSingleton extends Engine {
          */
 
         window.addEventListener('keydown', (event: KeyboardEvent) => {
-            EventBus.emit<KeybindEventPressPayload>('system:keybind_engine:keydown', {
+            EventBus.emit<KeybindEventPressPayloadType>('system:keybind_engine:keydown', {
                 payload: {
-                    code: event.code as KeybindCode,
+                    code: event.code as KeybindCodeType,
                 },
             });
         });
 
         window.addEventListener('keyup', (event: KeyboardEvent) => {
-            EventBus.emit<KeybindEventReleasePayload>('system:keybind_engine:keyup', {
+            EventBus.emit<KeybindEventReleasePayloadType>('system:keybind_engine:keyup', {
                 payload: {
-                    code: event.code as KeybindCode,
+                    code: event.code as KeybindCodeType,
                 },
             });
+        });
+
+        EventBus.listen('system:config:keybinds:update', () => {
+            this.syncCurrentActiveKeybindMap();
         });
 
         /**
@@ -54,22 +62,48 @@ class KeybindEngineSingleton extends Engine {
          * - When these events are emitted (e.g., from the UI when a user changes a keybind), the KeybindEngine can update its internal state or trigger corresponding behaviors.
          * - This allows for dynamic updates to keybind configurations and immediate feedback in the system without requiring a full reload.
          */
-        EventBus.listen<KeybindEventPressPayload>('system:keybind_engine:keydown', (event) => {
+        EventBus.listen<KeybindEventPressPayloadType>('system:keybind_engine:keydown', (event) => {
             if (event?.payload?.code) {
-                const convertCodeToButton: KeybindButton | undefined = resolveConstMapKeyFromValue<
+                const convertCodeToButton: KeybindButtonType | undefined = resolveConstMapKeyFromValue<
                     typeof KeybindButtonCodeMap
                 >(event?.payload?.code, KeybindButtonCodeMap);
 
                 if (!convertCodeToButton) return;
 
-                if (!this.currentActiveKeybindButtons.includes(convertCodeToButton))
+                if (!this.currentActiveKeybindButtons.includes(convertCodeToButton)) {
                     this.currentActiveKeybindButtons.push(convertCodeToButton);
+
+                    this.currentActiveKeybindMap.forEach((combos, action) => {
+                        combos.forEach((combo) => {
+                            const isSameLength =
+                                this.currentActiveKeybindButtons.length === combo.length;
+
+                            const isExactSequence = combo.every((button, index) => {
+                                return this.currentActiveKeybindButtons[index] === button;
+                            });
+
+                            if (isSameLength && isExactSequence) {
+                                EventBus.emit('system:keybind_engine:action_trigger', {
+                                    payload: { action },
+                                    meta: { combo },
+                                });
+                            }
+                        });
+                    });
+                }
             }
         });
 
-        EventBus.listen<KeybindEventPressPayload>('system:keybind_engine:keyup', (event) => {
+        /**
+         * Key Release Handling for Active Combos
+         * - Listens for 'system:keybind_engine:keyup' events to detect when a key is released.
+         * - When a key is released, it checks if that key is part of the current active keybind buttons.
+         * - If it is, the key is removed from the current active buttons list, ensuring that the system accurately reflects which keys are currently pressed.
+         * - This is crucial for handling complex combos where multiple keys must be held down simultaneously, as it allows the system to reset the state when any key in the combo is released.
+         */
+        EventBus.listen<KeybindEventReleasePayloadType>('system:keybind_engine:keyup', (event) => {
             if (event?.payload?.code) {
-                const convertCodeToButton: KeybindButton | undefined = resolveConstMapKeyFromValue<
+                const convertCodeToButton: KeybindButtonType | undefined = resolveConstMapKeyFromValue<
                     typeof KeybindButtonCodeMap
                 >(event?.payload?.code, KeybindButtonCodeMap);
 
@@ -77,19 +111,56 @@ class KeybindEngineSingleton extends Engine {
 
                 if (this.currentActiveKeybindButtons.includes(convertCodeToButton))
                     this.currentActiveKeybindButtons = this.currentActiveKeybindButtons.filter(
-                        (button) => button !== convertCodeToButton
+                        (button) => button !== convertCodeToButton,
                     );
             }
         });
 
         /**
-         * Register Action Combos
+         * Register Action Listeners for Keybind Triggers
+         * - Listens for 'system:keybind_engine:action_trigger' events, which are emitted when a registered keybind combo is detected.
+         * - The event payload contains the specific action that should be executed, allowing the system to respond accordingly (e.g., toggling overlay mode).
+         * - This centralizes the handling of keybind actions and allows for easy extension by simply emitting new actions from the UI or other parts of the system.
          */
+        EventBus.listen<{ action: KeybindActionType }, { combo: KeybindButtonType[] }>(
+            `system:keybind_engine:action_trigger`,
+            (event) => {
+                if(event?.payload?.action) {
+                
+                    const action = event.payload.action;
+
+                    switch(action) {
+
+                        case KeybindAction.toggleOverlayMode:
+                            break;
+
+                        case KeybindAction.cycleDisplayMode:
+                            break;
+
+                        default:
+                            console.warn(`[KeybindEngine] No handler registered for action: ${action}`);
+                    }
+                }
+            },
+        );
     }
 
     async setupKernelSpace() {}
 
     // + ----- API ---------------------------------------------------------------+
+
+    public syncCurrentActiveKeybindMap() {
+        const keybindItems = ConfigEngine.getConfigItems<ConfigItemKeybind>('keybinds');
+        const nextMap = new Map<KeybindActionType, KeybindCombosType[]>();
+
+        keybindItems.forEach((item) => {
+            const combos = nextMap.get(item.key) ?? [];
+            combos.push(item.value);
+            nextMap.set(item.key, combos);
+        });
+
+        this.currentActiveKeybindMap = nextMap;
+    }
 }
 
 export const KeybindEngine = new KeybindEngineSingleton();

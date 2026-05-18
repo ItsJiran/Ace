@@ -8,7 +8,7 @@ import { KeybindActionMap, KeybindButtonCodeMap, KeybindCodes, KeybindButtons } 
  */
 
 export const DefaultConfigGeneral: ConfigStorage<ConfigItem> = {
-    memory_uid: 'system:general_config',
+    memory_uid: 'system:config:general',
     file_name: 'ace.config.json',
     items: [
         {
@@ -53,7 +53,7 @@ export const DefaultConfigGeneral: ConfigStorage<ConfigItem> = {
  */
 
 export const DefaultConfigKeybinds: ConfigStorage<ConfigItemKeybind> = {
-    memory_uid: 'system:keybinds',
+    memory_uid: 'system:config:keybinds',
     file_name: 'ace.keybinds.json',
     items: [
         

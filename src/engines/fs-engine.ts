@@ -1,221 +1,196 @@
-import { FsFallbackStorage } from '#/engines/fs/fallback-storage';
-import { resolveAppConfigPath, resolveFsTarget } from '#/engines/fs/path-resolution';
-import { fsRuntimeHost } from '#/engines/fs/runtime-host';
+
+import { FilesystemStorageAdapter } from './fs/filesystem-storage';
+import { LocalStorageAdapter } from './fs/local-storage';
+import { APP_CONFIG_ROOT_DIR, resolveFsTarget } from '#/lib/fs';
+import type { FSEnginePathOptions, FsDirectoryEntry, FsResolvedTarget } from '#/schemas/fs';
+
+export type { FSEnginePathOptions } from '#/schemas/fs';
 
 class FSEngineSingleton {
-    private hasShownPermissionPopup = false;
-    private readonly fallbackStorage = new FsFallbackStorage('ace:appconfig:');
+    private readonly filesystemStorage = new FilesystemStorageAdapter();
+    private readonly fallbackStorage = new LocalStorageAdapter(`${APP_CONFIG_ROOT_DIR}:`);
 
-    /**
-     * Ensures a directory exists in the App Data directory.
-     */
-    async createDirectory(path: string): Promise<boolean> {
+    private async execute<T>(params: {
+        action: string;
+        path: string;
+        options?: FSEnginePathOptions;
+        primary: (target: FsResolvedTarget) => Promise<T>;
+        fallback?: (target: FsResolvedTarget) => Promise<T>;
+        externalFailureValue: T;
+    }): Promise<T> {
+        let target: FsResolvedTarget | null = null;
+
         try {
-                        const target = await resolveFsTarget(fsRuntimeHost, path);
-                        const dirExists = await fsRuntimeHost.exists(target.fs_path, target.baseDir);
-            if (!dirExists) {
-                                await fsRuntimeHost.mkdir(target.fs_path, target.baseDir);
-            }
-            return true;
+            target = await resolveFsTarget(params.path, params.options);
+            return await params.primary(target);
         } catch (error) {
-            console.error(`FSEngine: Failed to create directory ${path}:`, error);
-            return false;
+            console.error(`FSEngine: Failed to ${params.action} ${params.path}:`, error);
+            if (!target || target.isExternal || !params.fallback) {
+                return params.externalFailureValue;
+            }
+
+            try {
+                return await params.fallback(target);
+            } catch (fallbackError) {
+                console.error(`FSEngine: Fallback failed to ${params.action} ${params.path}:`, fallbackError);
+                return params.externalFailureValue;
+            }
         }
     }
 
-    /**
-     * Reads the contents of a directory.
-     */
-    async readDirectory(path: string) {
-        try {
-            const target = await resolveFsTarget(fsRuntimeHost, path);
-            return await fsRuntimeHost.readDir(target.fs_path, target.baseDir);
-        } catch (error) {
-            console.error(`FSEngine: Failed to read directory ${path}:`, error);
-            return [];
-        }
-    }
-
-    /**
-     * Raw write to file (text).
-     */
-    async writeFile(filename: string, content: string): Promise<boolean> {
-        try {
-            const target = await resolveFsTarget(fsRuntimeHost, filename);
-            await fsRuntimeHost.writeTextFile(target.fs_path, content, target.baseDir);
-            return true;
-        } catch (error) {
-            console.error(`FSEngine: Failed to write file ${filename}:`, error);
-            this.showPermissionDeniedPopup(filename, error);
-            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
-            if (target?.isExternal) {
-                return false;
-            }
-            const fallbackOk = this.fallbackStorage.writeRaw(filename, content);
-            if (fallbackOk) {
-                console.warn(`FSEngine: write fallback to localStorage for ${filename}`);
-            }
-            return fallbackOk;
-        }
-    }
-
-    /**
-     * Ensures a JSON file exists in the App Data directory.
-     * If not, it writes the default data.
-     */
-    async ensureFile(filename: string, defaultData: unknown): Promise<boolean> {
-        try {
-            const target = await resolveFsTarget(fsRuntimeHost, filename);
-            const fileExists = await fsRuntimeHost.exists(target.fs_path, target.baseDir);
-            if (!fileExists) {
-                return await this.saveFile(filename, defaultData);
-            }
-            return true;
-        } catch (error) {
-            console.error(`FSEngine: Failed to ensure file ${filename}:`, error);
-            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
-            if (target?.isExternal) {
-                return false;
-            }
-            if (this.fallbackStorage.hasFile(filename)) {
-                return true;
-            }
-            return await this.saveFile(filename, defaultData);
-        }
-    }
-
-    async saveFile(filename: string, data: unknown): Promise<boolean> {
-        const content = JSON.stringify(data, null, 2);
-        try {
-            const target = await resolveFsTarget(fsRuntimeHost, filename);
-            await fsRuntimeHost.writeTextFile(target.fs_path, content, target.baseDir);
-            return true;
-        } catch (error) {
-            console.error(`FSEngine: Failed to save file ${filename}:`, error);
-            this.showPermissionDeniedPopup(filename, error);
-            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
-            if (target?.isExternal) {
-                return false;
-            }
-            const fallbackOk = this.fallbackStorage.writeRaw(filename, content);
-            if (fallbackOk) {
-                console.warn(`FSEngine: save fallback to localStorage for ${filename}`);
-            }
-            return fallbackOk;
-        }
-    }
-
-    async readFile(filename: string) {
-        try {
-            const target = await resolveFsTarget(fsRuntimeHost, filename);
-            const content = await fsRuntimeHost.readTextFile(target.fs_path, target.baseDir);
-            return JSON.parse(content);
-        } catch (error) {
-            console.error(`FSEngine: Failed to read file ${filename}:`, error);
-            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
-            if (target?.isExternal) {
-                return null;
-            }
-            const fallbackRaw = this.fallbackStorage.readRaw(filename);
-            if (fallbackRaw !== null) {
-                try {
-                    return JSON.parse(fallbackRaw);
-                } catch (fallbackError) {
-                    console.error(`FSEngine: Failed to parse fallback file ${filename}:`, fallbackError);
+    async createDirectory(path: string, options: FSEnginePathOptions = {}): Promise<boolean> {
+        return await this.execute({
+            action: 'create directory',
+            path,
+            options,
+            primary: async (target) => {
+                const dirExists = await this.filesystemStorage.exists(target);
+                if (!dirExists) {
+                    await this.filesystemStorage.mkdir(target);
                 }
-            }
-            return null;
-        }
+                return true;
+            },
+            externalFailureValue: false,
+        });
     }
 
-    /**
-     * Reads raw text from a file in AppConfig directory (no JSON parsing).
-     */
-    async readRaw(filename: string): Promise<string | null> {
-        try {
-            const target = await resolveFsTarget(fsRuntimeHost, filename);
-            return await fsRuntimeHost.readTextFile(target.fs_path, target.baseDir);
-        } catch (error) {
-            console.error(`FSEngine: Failed to read raw file ${filename}:`, error);
-            const target = await resolveFsTarget(fsRuntimeHost, filename).catch(() => null);
-            if (target?.isExternal) {
-                return null;
-            }
-            return this.fallbackStorage.readRaw(filename);
-        }
+    async readDirectory(
+        path: string,
+        options: FSEnginePathOptions = {},
+    ): Promise<FsDirectoryEntry[]> {
+        return await this.execute({
+            action: 'read directory',
+            path,
+            options,
+            primary: async (target) => await this.filesystemStorage.readDir(target),
+            externalFailureValue: [],
+        });
     }
 
-    /**
-     * Deletes a file from AppConfig directory.
-     */
-    async deleteFile(filename: string): Promise<boolean> {
-        try {
-            const target = await resolveFsTarget(fsRuntimeHost, filename);
-            await fsRuntimeHost.remove(target.fs_path, target.baseDir);
-            return true;
-        } catch (error) {
-            console.error(`FSEngine: Failed to delete file ${filename}:`, error);
-            return false;
-        }
+    async writeFile(
+        filename: string,
+        content: string,
+        options: FSEnginePathOptions = {},
+    ): Promise<boolean> {
+        return await this.execute({
+            action: 'write file',
+            path: filename,
+            options,
+            primary: async (target) => {
+                await this.filesystemStorage.writeTextFile(target, String(content));
+                return true;
+            },
+            fallback: async (target) => {
+                await this.fallbackStorage.writeTextFile(target, String(content));
+                console.warn(`FSEngine: write fallback to localStorage for ${filename}`);
+                return true;
+            },
+            externalFailureValue: false,
+        });
     }
 
-    /**
-     * Resolves a relative AppConfig path to an absolute OS path.
-     * Useful for diagnostics and tool outputs so users know exact write location.
-     */
-    async resolveAppConfigPath(filename: string): Promise<string> {
+    async ensureFile(
+        filename: string,
+        defaultData: unknown,
+        options: FSEnginePathOptions = {},
+    ): Promise<boolean> {
+        return await this.execute({
+            action: 'ensure file',
+            path: filename,
+            options,
+            primary: async (target) => {
+                const fileExists = await this.filesystemStorage.exists(target);
+                if (fileExists) {
+                    return true;
+                }
+
+                await this.filesystemStorage.writeTextFile(target, JSON.stringify(defaultData, null, 2));
+                return true;
+            },
+            fallback: async (target) => {
+                const fileExists = await this.fallbackStorage.exists(target);
+                if (!fileExists) {
+                    await this.fallbackStorage.writeTextFile(target, JSON.stringify(defaultData, null, 2));
+                }
+                return true;
+            },
+            externalFailureValue: false,
+        });
+    }
+
+    async saveFile(
+        filename: string,
+        data: unknown,
+        options: FSEnginePathOptions = {},
+    ): Promise<boolean> {
+        return await this.writeFile(filename, JSON.stringify(data, null, 2), options);
+    }
+
+    async readFile<T = any>(
+        filename: string,
+        options: FSEnginePathOptions = {},
+    ): Promise<T | null> {
+        return await this.execute({
+            action: 'read file',
+            path: filename,
+            options,
+            primary: async (target) => JSON.parse(await this.filesystemStorage.readTextFile(target)) as T,
+            fallback: async (target) => JSON.parse(await this.fallbackStorage.readTextFile(target)) as T,
+            externalFailureValue: null,
+        });
+    }
+
+    async readRaw(
+        filename: string,
+        options: FSEnginePathOptions = {},
+    ): Promise<string | null> {
+        return await this.execute({
+            action: 'read raw file',
+            path: filename,
+            options,
+            primary: async (target) => await this.filesystemStorage.readTextFile(target),
+            fallback: async (target) => await this.fallbackStorage.readTextFile(target),
+            externalFailureValue: null,
+        });
+    }
+
+    async deleteFile(
+        filename: string,
+        options: FSEnginePathOptions = {},
+    ): Promise<boolean> {
+        return await this.execute({
+            action: 'delete file',
+            path: filename,
+            options,
+            primary: async (target) => {
+                await this.filesystemStorage.remove(target);
+                return true;
+            },
+            fallback: async (target) => {
+                await this.fallbackStorage.remove(target);
+                return true;
+            },
+            externalFailureValue: false,
+        });
+    }
+
+    async resolveAppConfigPath(
+        filename: string,
+        options: FSEnginePathOptions = {},
+    ): Promise<string> {
         try {
-            return await resolveAppConfigPath(fsRuntimeHost, filename);
+            return (await resolveFsTarget(filename, options)).absolutePath;
         } catch {
-            // Fallback when path API is unavailable (e.g. web runtime)
-            return `AppConfig:${filename}`;
+            return `AppConfig:${APP_CONFIG_ROOT_DIR}/${String(filename ?? '')}`;
         }
     }
 
-    async resolvePath(filename: string): Promise<string> {
+    async resolvePath(filename: string, options: FSEnginePathOptions = {}): Promise<string> {
         try {
-            const target = await resolveFsTarget(fsRuntimeHost, filename);
-            return target.absolute_path;
+            return (await resolveFsTarget(filename, options)).absolutePath;
         } catch {
-            return `Unknown:${filename}`;
+            return `Unknown:${String(filename ?? '')}`;
         }
-    }
-
-    private showPermissionDeniedPopup(filename: string, error: unknown) {
-        const message = String(error ?? 'unknown error').toLowerCase();
-        const isPermissionError =
-            message.includes('not allowed') ||
-            message.includes('permission') ||
-            message.includes('fs.write_text_file') ||
-            message.includes('fs.read_dir') ||
-            message.includes('fs.read_text_file');
-
-        if (!isPermissionError || this.hasShownPermissionPopup) {
-            return;
-        }
-
-        this.hasShownPermissionPopup = true;
-
-        if (typeof window === 'undefined' || typeof window.alert !== 'function') {
-            return;
-        }
-
-        window.alert(
-            [
-                'Config save blocked by Tauri FS permission.',
-                `Failed file: ${filename}`,
-                'Action: restart app after capability update.',
-                'If this persists, verify src-tauri/capabilities/default.json includes:',
-                '- fs:allow-read-dir',
-                '- fs:allow-read-file',
-                '- fs:allow-write-file',
-                '- fs:allow-appconfig-read',
-                '- fs:allow-appconfig-write',
-                '- fs:scope-appconfig-recursive',
-                '- fs:allow-home-read-recursive',
-                '- fs:allow-home-write-recursive',
-            ].join('\n')
-        );
     }
 }
 

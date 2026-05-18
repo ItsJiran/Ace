@@ -1,5 +1,5 @@
 import { useSyncExternalStore, useCallback, useRef } from 'react';
-import { KernelEngine } from '../services/kernel-engine';
+import { KernelEngine } from '#/engines/kernel-engine';
 
 /**
  * Global singleton registry to batch and deduplicate subscriptions.

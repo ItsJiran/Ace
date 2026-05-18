@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { KeybindAction, KeybindCombos } from './keybinds';
+import { KeybindActionType, KeybindCombosType } from './keybinds';
 
 export interface ConfigItem {
     key: string;
@@ -10,11 +10,11 @@ export interface ConfigItem {
 }
 
 export interface ConfigItemKeybind extends ConfigItem {
-    key: KeybindAction;
-    value: KeybindCombos;
+    key: KeybindActionType;
+    value: KeybindCombosType;
 }
 
-export interface ConfigStorage<T extends ConfigItem | ConfigItemKeybind> {
+export interface ConfigStorage<T = ConfigItem | ConfigItemKeybind> { 
     memory_uid: string;
     file_name: string;
     items: T[];
