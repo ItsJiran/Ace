@@ -1,5 +1,5 @@
 import { KernelEngine } from './kernel-engine';
-import type { CursorState, DesktopState, RuntimeState } from '#/schemas/global-state';
+import type { CursorState, DesktopState } from '#/schemas/state.ts';
 
 const DEFAULT_CURSOR_STATE: CursorState = {
     x: 0,
@@ -21,7 +21,7 @@ const DEFAULT_DESKTOP_STATE: DesktopState = {
     active_element_role: null,
 };
 
-class GlobalStateManagerSingleton {
+class StateEngineSingleton {
     public readonly cursorStateUid = 'system:global_state:cursor';
     public readonly desktopStateUid = 'system:global_state:desktop';
     public readonly runtimeStateUid = 'system:global_state:runtime';
@@ -192,4 +192,4 @@ class GlobalStateManagerSingleton {
     }
 }
 
-export const GlobalStateManager = new GlobalStateManagerSingleton();
+export const StateEngine = new StateEngineSingleton();

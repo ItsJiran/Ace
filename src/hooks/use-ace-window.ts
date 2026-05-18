@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import type { PanInfo } from 'framer-motion';
-import type { DesktopState } from '#/schemas/global-state';
+import type { DesktopState } from '#/schemas/state.ts';
 import type { WindowConfig } from '#/schemas/window';
 import { WindowEngine } from '#/engines/window-engine';
-import { GlobalStateManager } from '#/engines/global-state-manager';
+import { StateEngine } from '#/engines/state-engine.ts';
 import { useAceMemory, useAceMemorySelector } from '#/hooks/use-ace-memory';
 import type { WindowAnimationSnapshot } from '#/engines/window/window-animation-engine';
 
@@ -300,7 +300,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         };
 
         setIsResizing(true);
-        GlobalStateManager.setPointerDown(true);
+        StateEngine.setPointerDown(true);
         focus();
 
         if (elementRef.current) {
@@ -317,7 +317,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         };
 
         setIsDragging(true);
-        GlobalStateManager.setPointerDown(true);
+        StateEngine.setPointerDown(true);
 
         if (elementRef.current) {
             elementRef.current.dataset.isDragging = 'true';
@@ -337,7 +337,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         setLocalX(nextX);
         setLocalY(nextY);
         setIsDragging(false);
-        GlobalStateManager.setPointerDown(false);
+        StateEngine.setPointerDown(false);
         WindowEngine.updateWindowBounds(windowUid, nextX, nextY, windowConfig.width, windowConfig.height);
 
         if (elementRef.current) {
@@ -347,13 +347,13 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
 
     const handlePointerEnter = useCallback(() => {
         setIsHovered(true);
-        GlobalStateManager.setActiveWindow(windowUid);
+        StateEngine.setActiveWindow(windowUid);
     }, [windowUid]);
 
     const handlePointerLeave = useCallback(() => {
         setIsHovered(false);
-        if (GlobalStateManager.readActiveWindow() === windowUid) {
-            GlobalStateManager.setActiveWindow(null);
+        if (StateEngine.readActiveWindow() === windowUid) {
+            StateEngine.setActiveWindow(null);
         }
     }, [windowUid]);
 
@@ -430,7 +430,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
             setLocalWidth(nextWidth);
             setLocalHeight(nextHeight);
             setIsResizing(false);
-            GlobalStateManager.setPointerDown(false);
+            StateEngine.setPointerDown(false);
             WindowEngine.updateWindowBounds(
                 windowUid,
                 nextX,

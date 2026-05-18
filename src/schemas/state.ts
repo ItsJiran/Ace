@@ -1,6 +1,4 @@
 import { z } from 'zod';
-import { ConfigItemSchema } from './config';
-import { KeybindSchema } from './keybinds';
 
 export const WindowDisplayModeSchema = z.enum([
     'all_visible',
@@ -38,15 +36,6 @@ export const DesktopStateSchema = z.object({
     active_element_role: z.string().nullable(),
 });
 
-export const RuntimeStateSchema = z.object({
-    active_config_items: z.array(ConfigItemSchema),
-    active_keybinds: z.array(KeybindSchema),
-    running_keybind_uids: z.array(z.string()),
-    last_triggered_keybind_uid: z.string().nullable(),
-    updated_at: z.number(),
-});
-
 export type CursorState = z.infer<typeof CursorStateSchema>;
 export type DesktopState = z.infer<typeof DesktopStateSchema>;
-export type RuntimeState = z.infer<typeof RuntimeStateSchema>;
 export type WindowDisplayMode = z.infer<typeof WindowDisplayModeSchema>;

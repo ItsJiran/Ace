@@ -3,9 +3,10 @@ import { WindowEngine } from '#/engines/window-engine';
 import { EventBus } from '#/engines/event-engine';
 import { ConfigEngine } from '#/engines/config-engine';
 import { KeybindEngine } from '#/engines/keybind-engine';
-import { GlobalStateManager } from '#/engines/global-state-manager';
+import { StateEngine } from '#/engines/state-engine.ts';
 import { LoggerEngine } from '#/engines/logger-engine';
 import { KernelEngine } from '#/engines/kernel-engine';
+import boot from './packages/system/pipelines/boot';
 
 let bootPromise: Promise<void> | null = null;
 
@@ -26,7 +27,7 @@ export async function bootACE() {
 
         console.group('🚀 ACE: Booting System...');
 
-        GlobalStateManager.setupKernelSpace();
+        StateEngine.setupKernelSpace();
         ConfigEngine.setupKernelSpace();
         EventBus.setupKernelSpace();
         WindowEngine.setupKernelSpace();
@@ -41,7 +42,7 @@ export async function bootACE() {
                 storage: KernelEngine,
                 config: ConfigEngine,
                 keybind: KeybindEngine,
-                global: GlobalStateManager,
+                global: StateEngine,
                 logger: LoggerEngine,
             };
             console.log('🔌 ACE Registry Bridge Initialized.');
@@ -64,6 +65,8 @@ export async function bootACE() {
 
             const bootPipelineEntry = bootPipeline.entry;
             if (!bootPipelineEntry.implementation) throw new Error('CRITICAL: Bootup pipeline implementation missing.');
+
+            bootPipelineEntry.implementation();
 
             console.log('✅ ACE: System Ready.');
         } catch (error) {

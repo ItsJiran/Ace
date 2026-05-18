@@ -1,88 +1,88 @@
-import { useMemo, useState } from "react";
+// import { useMemo, useState } from "react";
 
-import type { AceWindowRenderProps } from "#/hooks/use-ace-window";
+// import type { AceWindowRenderProps } from "#/hooks/use-ace-window";
 
-import { useAIGateway } from "#/hooks/use-ai-gateway";
-import { useAIChatSession } from "#/hooks/use-ai-chat-session";
-import { AISessionStatus } from "#/schemas/ai";
+// import { useAIGateway } from "#/hooks/use-ai-gateway";
+// import { useAIChatSession } from "#/hooks/use-ai-chat-session";
+// import { AISessionStatus } from "#/schemas/ai";
 
-import SystemAIChatConversationContainer from "./system-ai-chat-conversation-container";
-import SystemAIChatPromptContainer from "./system-ai-chat-prompt-container";
+// import SystemAIChatConversationContainer from "./system-ai-chat-conversation-container";
+// import SystemAIChatPromptContainer from "./system-ai-chat-prompt-container";
 
-type SystemAIChatbarProps = {
-  title?: string;
-  dragHandleProps: AceWindowRenderProps["dragHandleProps"];
-  isFocused: boolean;
-  isDragging: boolean;
-  onClose: () => void;
-  onMinimize: () => void;
-};
+// type SystemAIChatbarProps = {
+//   title?: string;
+//   dragHandleProps: AceWindowRenderProps["dragHandleProps"];
+//   isFocused: boolean;
+//   isDragging: boolean;
+//   onClose: () => void;
+//   onMinimize: () => void;
+// };
 
-export default function SystemAIChatbar({
-  title,
-  dragHandleProps,
-  isFocused,
-  isDragging,
-  onClose,
-  onMinimize,
-}: SystemAIChatbarProps) {
-  const [prompt, setPrompt] = useState("");
-  const {
-    selectedSdk,
-    setSelectedSdk,
-    selectedModel,
-    setSelectedModel,
-    modelOptions,
-    ensureSelectedModel,
-  } = useAIGateway();
-  const { session, sessionUid, sendPrompt, interruptSession } =
-    useAIChatSession();
+// export default function SystemAIChatbar({
+//   title,
+//   dragHandleProps,
+//   isFocused,
+//   isDragging,
+//   onClose,
+//   onMinimize,
+// }: SystemAIChatbarProps) {
+//   const [prompt, setPrompt] = useState("");
+//   const {
+//     selectedSdk,
+//     setSelectedSdk,
+//     selectedModel,
+//     setSelectedModel,
+//     modelOptions,
+//     ensureSelectedModel,
+//   } = useAIGateway();
+//   const { session, sessionUid, sendPrompt, interruptSession } =
+//     useAIChatSession();
 
-  const isStreaming = session?.status === AISessionStatus.STREAMING;
-  const resolvedModel = useMemo(
-    () => selectedModel || ensureSelectedModel(),
-    [ensureSelectedModel, selectedModel],
-  );
+//   const isStreaming = session?.status === AISessionStatus.STREAMING;
+//   const resolvedModel = useMemo(
+//     () => selectedModel || ensureSelectedModel(),
+//     [ensureSelectedModel, selectedModel],
+//   );
 
-  const submitPrompt = () => {
-    const nextPrompt = prompt.trim();
-    if (!nextPrompt || isStreaming) {
-      return;
-    }
+//   const submitPrompt = () => {
+//     const nextPrompt = prompt.trim();
+//     if (!nextPrompt || isStreaming) {
+//       return;
+//     }
 
-    sendPrompt(nextPrompt, selectedSdk, ensureSelectedModel());
-    setPrompt("");
-  };
+//     sendPrompt(nextPrompt, selectedSdk, ensureSelectedModel());
+//     setPrompt("");
+//   };
 
-  return (
-    <div className="system-ai-chatbar flex h-full flex-col gap-3">
-      <SystemAIChatConversationContainer
-        title={title}
-        selectedSdk={selectedSdk}
-        resolvedModel={resolvedModel}
-        sessionUid={sessionUid ?? undefined}
-        sessionStatus={session?.status ?? "idle"}
-        dragHandleProps={dragHandleProps}
-        isFocused={isFocused}
-        isDragging={isDragging}
-        onClose={onClose}
-        onMinimize={onMinimize}
-      />
+//   return (
+//     <div className="system-ai-chatbar flex h-full flex-col gap-3">
+//       <SystemAIChatConversationContainer
+//         title={title}
+//         selectedSdk={selectedSdk}
+//         resolvedModel={resolvedModel}
+//         sessionUid={sessionUid ?? undefined}
+//         sessionStatus={session?.status ?? "idle"}
+//         dragHandleProps={dragHandleProps}
+//         isFocused={isFocused}
+//         isDragging={isDragging}
+//         onClose={onClose}
+//         onMinimize={onMinimize}
+//       />
 
-      <SystemAIChatPromptContainer
-        selectedSdk={selectedSdk}
-        resolvedModel={resolvedModel}
-        modelOptions={modelOptions}
-        isStreaming={isStreaming}
-        isFocused={isFocused}
-        isDragging={isDragging}
-        prompt={prompt}
-        onPromptChange={setPrompt}
-        onSelectedSdkChange={(sdk) => setSelectedSdk(sdk as typeof selectedSdk)}
-        onSelectedModelChange={setSelectedModel}
-        onSubmitPrompt={submitPrompt}
-        onInterruptSession={interruptSession}
-      />
-    </div>
-  );
-}
+//       <SystemAIChatPromptContainer
+//         selectedSdk={selectedSdk}
+//         resolvedModel={resolvedModel}
+//         modelOptions={modelOptions}
+//         isStreaming={isStreaming}
+//         isFocused={isFocused}
+//         isDragging={isDragging}
+//         prompt={prompt}
+//         onPromptChange={setPrompt}
+//         onSelectedSdkChange={(sdk) => setSelectedSdk(sdk as typeof selectedSdk)}
+//         onSelectedModelChange={setSelectedModel}
+//         onSubmitPrompt={submitPrompt}
+//         onInterruptSession={interruptSession}
+//       />
+//     </div>
+//   );
+// }

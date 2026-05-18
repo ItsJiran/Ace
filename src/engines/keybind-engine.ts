@@ -36,6 +36,8 @@ class KeybindEngineSingleton extends Engine {
          * - This decouples the raw key event handling from the business logic that responds to keybinds, allowing for more flexible and modular design.
          */
 
+        console.log('[KeybindEngine] Setting up event routes for keydown and keyup.');
+
         window.addEventListener('keydown', (event: KeyboardEvent) => {
             EventBus.emit<KeybindEventPressPayloadType>('system:keybind_engine:keydown', {
                 payload: {
@@ -72,6 +74,7 @@ class KeybindEngineSingleton extends Engine {
 
                 if (!this.currentActiveKeybindButtons.includes(convertCodeToButton)) {
                     this.currentActiveKeybindButtons.push(convertCodeToButton);
+                    console.log('Current Active Keybind Buttons:', this.currentActiveKeybindButtons);
 
                     this.currentActiveKeybindMap.forEach((combos, action) => {
                         combos.forEach((combo) => {

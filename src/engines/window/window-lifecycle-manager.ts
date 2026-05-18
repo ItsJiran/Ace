@@ -1,5 +1,5 @@
 import { KernelEngine } from '../kernel-engine';
-import { GlobalStateManager } from '../global-state-manager';
+import { StateEngine } from '../state-engine';
 import type { WindowConfig, SpawnWindowOptions } from '#/schemas/window';
 
 
@@ -173,12 +173,12 @@ export class WindowLifecycleManager {
 
         const focusedWindowUid = KernelEngine.readMemory('system:global_state:focused_window') as string | null | undefined;
         if (focusedWindowUid === window_uid) {
-            GlobalStateManager.setFocusedWindow(null);
+            StateEngine.setFocusedWindow(null);
         }
 
         const activeWindowUid = KernelEngine.readMemory('system:global_state:active_window') as string | null | undefined;
         if (activeWindowUid === window_uid) {
-            GlobalStateManager.setActiveWindow(null);
+            StateEngine.setActiveWindow(null);
         }
 
         KernelEngine.unregisterWindow(window_uid);

@@ -1,5 +1,5 @@
 import { RegistryEngine } from "./registry-engine";
-import { GlobalStateManager } from "./global-state-manager";
+import { StateEngine } from "./state-engine";
 import { KernelEngine } from "./kernel-engine";
 import { WindowLifecycleManager } from "./window/window-lifecycle-manager";
 import { WindowAnimationEngine } from "./window/window-animation-engine";
@@ -127,7 +127,7 @@ class WindowEngineSingleton {
             this.updateWindowConfig(renderedWindow.uid, updates);
         }
 
-        GlobalStateManager.setFocusedWindow(window_uid);
+        StateEngine.setFocusedWindow(window_uid);
         WindowAnimationEngine.playPreset(window_uid, 'focus');
     }
 
@@ -138,14 +138,14 @@ class WindowEngineSingleton {
             "system:global_state:focused_window",
         ) as string | null | undefined;
         if (focusedWindowUid === window_uid) {
-            GlobalStateManager.setFocusedWindow(null);
+            StateEngine.setFocusedWindow(null);
         }
 
         const activeWindowUid = KernelEngine.readMemory(
             "system:global_state:active_window",
         ) as string | null | undefined;
         if (activeWindowUid === window_uid) {
-            GlobalStateManager.setActiveWindow(null);
+            StateEngine.setActiveWindow(null);
         }
     }
 

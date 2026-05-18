@@ -1,4 +1,4 @@
-import { GlobalStateManager } from '#/engines/global-state-manager';
+import { StateEngine } from '#/engines/state-engine.ts';
 import type { AceRegistryType } from '#/schemas/registry-types.ts';
 
 export const registry: AceRegistryType.Pipeline = {
@@ -29,12 +29,10 @@ const InitConfigAndGlobalStateStep = async () => {
     const ConfigEngine = window.ACE.config;
     const RegistryEngine = window.ACE.registry;
     const KeybindEngine = window.ACE.keybind;
-    const GlobalStateManager = window.ACE.global;
-    const AIGatewayEngine = window.ACE.ai_gateway;
+    const StateEngine = window.ACE.state;
 
-    void GlobalStateManager;
+    void StateEngine;
     await ConfigEngine.boot();
-    await AIGatewayEngine.boot();
     await RegistryEngine.boot();
 
     const packages = RegistryEngine.getPackages();
@@ -46,7 +44,7 @@ const InitConfigAndGlobalStateStep = async () => {
 
     for (const pkg of packages) {
         console.log(`Package: ${Object.keys(pkg)}`);
-        console.group(`[Package] ${pkg.package_name}`);
+        console.group(`[Package] ${pkg.manifest.package_name}`);
 
         for (const [domainName, domainEntries] of Object.entries(pkg.domains)) {
             const entryNames = domainEntries ? Object.keys(domainEntries) : [];
@@ -71,7 +69,7 @@ const InitConfigAndGlobalStateStep = async () => {
  * Phase 3: Window Layer & Transparent Overlay
  */
 const InitGlobalState = async () => {
-    GlobalStateManager.setOverlayMode('interactive');
+    StateEngine.setOverlayMode('interactive');
     console.log('[Boot] Phase 3: Window engine and transparent layer are ready.');
 };
 
@@ -82,7 +80,7 @@ const InitGlobalInputHandlersStep = async () => {
     if (typeof window !== 'undefined') {
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                GlobalStateManager.setOverlayMode('ambient');
+                StateEngine.setOverlayMode('ambient');
             }
         });
 
@@ -143,7 +141,6 @@ const InitAutoStartWidgetsStep = async () => {
 const InitEngineRoutesStep = async () => {
     const WindowEngine = window.ACE.window as unknown as { registerEventRoutes?: () => void };
     const KeybindEngine = window.ACE.keybind as unknown as { registerEventRoutes?: () => void };
-    const AIGatewayEngine = window.ACE.ai_gateway as unknown as { registerEventRoutes?: () => void };
     const ToolEngine = window.ACE.tool as unknown as { registerEventRoutes?: () => void };
     // const AIContextEngine = window.ACE.context as unknown as { registerEventRoutes?: () => void };
     // const ParserEngine = window.ACE.parser as unknown as { registerEventRoutes?: () => void };
@@ -151,7 +148,6 @@ const InitEngineRoutesStep = async () => {
     // Centralized route gate: all engine-backed EventBus routes are mounted here.
     WindowEngine.registerEventRoutes?.();
     KeybindEngine.registerEventRoutes?.();
-    AIGatewayEngine.registerEventRoutes?.();
     ToolEngine.registerEventRoutes?.();
     // AIContextEngine.registerEventRoutes?.();
     // ParserEngine.registerEventRoutes?.();
