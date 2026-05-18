@@ -3,10 +3,10 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import type { PanInfo } from 'framer-motion';
 import type { DesktopState } from '#/schemas/global-state';
 import type { WindowConfig } from '#/schemas/window';
-import { WindowEngine } from '#/services/window-engine';
-import { GlobalStateManager } from '#/services/global-state-manager';
+import { WindowEngine } from '#/engines/window-engine';
+import { GlobalStateManager } from '#/engines/global-state-manager';
 import { useAceMemory, useAceMemorySelector } from '#/hooks/use-ace-memory';
-import type { WindowAnimationSnapshot } from '#/services/window/window-animation-engine';
+import type { WindowAnimationSnapshot } from '#/engines/window/window-animation-engine';
 
 type DragStartEvent = ReactMouseEvent<HTMLElement> | React.PointerEvent<HTMLElement>;
 type ResizeStartEvent = React.PointerEvent<HTMLElement>;

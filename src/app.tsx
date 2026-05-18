@@ -6,8 +6,8 @@ import { WindowContextProvider } from "#/hooks/use-window-context";
 import type { DesktopState } from "#/schemas/global-state";
 import { useRenderCount } from "#/hooks/use-render-count";
 import { MemoizedWindowItem } from "#/components/layout/memoized-window-item";
-import type { KernelWindowEntry } from "#/services/kernel-engine/types";
-import { GlobalStateManager } from "#/services/global-state-manager";
+import type { KernelWindowEntry } from "#/engines/kernel-engine/types";
+import { GlobalStateManager } from "#/engines/global-state-manager";
 
 function resolveOverlayModeAtPoint(x: number, y: number): {
   element: Element | null;

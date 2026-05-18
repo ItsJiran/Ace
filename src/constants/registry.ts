@@ -1,0 +1,2 @@
+export const RegistryDomain = ['widgets', 'components', 'windows', 'tools', 'features', 'processes', 'pipelines', 'registries', 'renderers'] as const;
+export type RegistryDomain = typeof RegistryDomain[number];
