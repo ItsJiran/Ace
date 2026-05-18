@@ -20,12 +20,12 @@ class ConfigEngineSingleton extends Engine {
 
     async boot() {
         try {
-            Object.keys(this.storages).forEach((storage_key) => {
-                this.syncConfigFileToRam(storage_key);
-            });
-            console.log('ConfigEngine: Booted and synced from JSON.');
+            for (const storage_key of Object.keys(this.storages)) {
+                await this.syncConfigFileToRam(storage_key);
+            }
+            this.log('Booted and synced from JSON.');
         } catch (error) {
-            console.error('ConfigEngine: Boot failed:', error);
+            this.log('Boot failed:', error);
         }
     }
 
@@ -39,6 +39,8 @@ class ConfigEngineSingleton extends Engine {
         );
     }
 
+    async setupKernelTerminationHook() {}
+
     // + ----- API ---------------------------------------------------------------+
 
     public async syncConfigFileToRam(storageKey: string) {
@@ -46,42 +48,49 @@ class ConfigEngineSingleton extends Engine {
 
         const isFileReady = await FSEngine.ensureFile(storage.file_name, storage.items);
         if (!isFileReady) {
-            console.warn(
-                `ConfigEngine: Storage file ${storage.file_name} could not be initialized. Skipping sync.`,
+            this.log(
+                `Storage file ${storage.file_name} could not be initialized. Skipping sync.`,
             );
             return;
         }
 
         const fileData = await FSEngine.readFile(storage.file_name);
-        if (fileData && fileData.items) {
-            KernelEngine.writeMemory(storage.memory_uid, fileData.items);
-            console.log(
-                `ConfigEngine: Synced ${storageKey} config from ${storage.file_name} to RAM.`,
+        
+        this.log(`Read data from ${storage.file_name}:`, fileData);
+
+
+        if (fileData && Array.isArray(fileData)) {
+            KernelEngine.writeMemory(storage.memory_uid, fileData);
+            this.log(
+                `Synced ${storageKey} config from ${storage.file_name} to RAM.`,
             );
         } else {
-            console.warn(
-                `ConfigEngine: No valid items found in ${storage.file_name}. RAM sync skipped for ${storageKey}.`,
+            this.log(
+                `No valid items found in ${storage.file_name}. RAM sync skipped for ${storageKey}.`,
             );
         }
+
+        this.log(
+            `Current items in RAM for ${storageKey}:`,
+            await KernelEngine.readMemory(storage.memory_uid),
+        );
     }
 
     public async syncConfigRamToFile(storageKey: string) {
         const storage: ConfigStorage = this.storages[storageKey];
-        const items = KernelEngine.readMemory(storage.memory_uid) as ConfigItem[] | undefined;
+        const items = (await KernelEngine.readMemory(storage.memory_uid)) as
+            | ConfigItem[]
+            | undefined;
         if (!items) {
-            console.warn(`ConfigEngine: No items in RAM for ${storageKey}. File sync skipped.`);
+            this.log(`No items in RAM for ${storageKey}. File sync skipped.`);
             return;
         }
 
         const isSaved = await FSEngine.saveFile(storage.file_name, { items });
         if (isSaved) {
-            console.log(
-                `ConfigEngine: Synced ${storageKey} config from RAM to ${storage.file_name}.`,
-            );
+            this.log(`Synced ${storageKey} config from RAM to ${storage.file_name}.`);
         } else {
-            console.warn(
-                `ConfigEngine: Failed to save ${storageKey} config to file. Sync aborted.`,
-            );
+            this.log(`Failed to save ${storageKey} config to file. Sync aborted.`);
         }
     }
 
@@ -128,7 +137,7 @@ class ConfigEngineSingleton extends Engine {
 
         KernelEngine.writeMemory(storage.memory_uid, nextItems);
         await this.syncConfigRamToFile(storageKey);
-        
+
         await EventBus.emit(`system:config:${storageKey}:update`, {
             payload: {
                 storageKey,

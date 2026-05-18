@@ -11,6 +11,8 @@ function createElectronAPIMock() {
     const files = new Map<string, string>();
     const directories = new Set<string>([APP_CONFIG_ROOT_DIR]);
     const appConfigDir = '/mock/app-config';
+    const appCacheDir = '/mock/app-cache';
+    const appLocalDir = '/mock/app-local';
 
     const normalizePath = (targetPath: string) =>
         targetPath.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '') || '/';
@@ -93,11 +95,13 @@ function createElectronAPIMock() {
             return true;
         }),
         pathAppConfigDir: vi.fn(async () => appConfigDir),
+        pathAppCacheDir: vi.fn(async () => appCacheDir),
+        pathAppLocalDir: vi.fn(async () => appLocalDir),
         pathJoin: vi.fn((...segments: string[]) => normalizePath(segments.join('/'))),
         pathNormalize: vi.fn((targetPath: string) => normalizePath(targetPath)),
     };
 
-    return { electronAPI, files, directories, appConfigDir };
+    return { electronAPI, files, directories, appConfigDir, appCacheDir, appLocalDir };
 }
 
 export default createElectronAPIMock;

@@ -9,9 +9,9 @@ type WindowItemProps = {
 function WindowItem({ uid, component: componentName }: WindowItemProps) {
     // Resolve purely from windows domain, assuming window components handle their own shell
     console.log(`Resolving window component for: ${componentName}`);
+    
     const Component = RegistryEngine.resolveWindowComponent(componentName) as React.ComponentType<{ windowUid: string }> | undefined;
     if (!Component) return null;
-    console.log('Esa 4', Component);
 
     return (
         <Component 

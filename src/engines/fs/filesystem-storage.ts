@@ -13,7 +13,7 @@ export class FilesystemStorageAdapter implements FsStorageAdapter {
     }
 
     async readTextFile(target: FsResolvedTarget): Promise<string> {
-        const api = getElectronAPIOrThrow('fsReadTextFile');
+        const api =  getElectronAPIOrThrow('fsReadTextFile');
         return await api.fsReadTextFile(target.fsPath, target.baseDir);
     }
 

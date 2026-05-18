@@ -1,9 +1,11 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron');
+const os = require('os');
 const path = require('path');
 
 let uIOhook = null;
+let UiohookKey = null;
 try {
-    ({ uIOhook } = require('uiohook-napi'));
+    ({ uIOhook, UiohookKey } = require('uiohook-napi'));
 } catch (error) {
     console.warn('[electron] uiohook-napi unavailable, falling back to screen polling:', error);
 }
@@ -12,8 +14,81 @@ const isDev = !app.isPackaged;
 let alwaysOnTopInterval = null;
 let mouseTrackingInterval = null;
 let lastMouseTrackingPayload = null;
-let uiohookMouseListener = null;
+let uiohookListeners = null;
+let isUiohookStarted = false;
 const registeredGlobalShortcuts = new Set();
+
+const UIOHOOK_KEYCODE_TO_DOM_CODE = new Map(
+    Object.entries(UiohookKey ?? {})
+        .map(([name, keycode]) => [keycode, resolveDomCodeFromUiohookKey(name)])
+        .filter((entry) => Boolean(entry[1])),
+);
+
+function resolveDomCodeFromUiohookKey(name) {
+    if (/^[A-Z]$/.test(name)) {
+        return `Key${name}`;
+    }
+
+    if (/^[0-9]$/.test(name)) {
+        return `Digit${name}`;
+    }
+
+    if (/^F\d+$/.test(name) || /^Numpad/.test(name)) {
+        return name;
+    }
+
+    switch (name) {
+        case 'Ctrl':
+            return 'ControlLeft';
+        case 'CtrlRight':
+            return 'ControlRight';
+        case 'Alt':
+            return 'AltLeft';
+        case 'AltRight':
+            return 'AltRight';
+        case 'Shift':
+            return 'ShiftLeft';
+        case 'ShiftRight':
+            return 'ShiftRight';
+        case 'Meta':
+            return 'MetaLeft';
+        case 'MetaRight':
+            return 'MetaRight';
+        case 'ArrowLeft':
+        case 'ArrowUp':
+        case 'ArrowRight':
+        case 'ArrowDown':
+        case 'Backspace':
+        case 'Tab':
+        case 'Enter':
+        case 'CapsLock':
+        case 'Escape':
+        case 'Space':
+        case 'PageUp':
+        case 'PageDown':
+        case 'End':
+        case 'Home':
+        case 'Insert':
+        case 'Delete':
+        case 'Semicolon':
+        case 'Equal':
+        case 'Comma':
+        case 'Minus':
+        case 'Period':
+        case 'Slash':
+        case 'Backquote':
+        case 'BracketLeft':
+        case 'Backslash':
+        case 'BracketRight':
+        case 'Quote':
+        case 'NumLock':
+        case 'ScrollLock':
+        case 'PrintScreen':
+            return name;
+        default:
+            return null;
+    }
+}
 
 function applyAlwaysOnTop(window) {
     if (!window || window.isDestroyed()) {
@@ -32,6 +107,30 @@ function getPrimaryWindow() {
     return BrowserWindow.getAllWindows()[0] ?? null;
 }
 
+function getAppConfigRootDir() {
+    if (process.platform === 'linux') {
+        return path.join(os.homedir(), '.config');
+    }
+
+    return app.getPath('userData');
+}
+
+function getAppCacheRootDir() {
+    if (process.platform === 'linux') {
+        return path.join(os.homedir(), '.cache');
+    }
+
+    return app.getPath('cache');
+}
+
+function getAppLocalRootDir() {
+    if (process.platform === 'linux') {
+        return path.join(os.homedir(), '.local', 'share');
+    }
+
+    return app.getPath('appData');
+}
+
 function clearRegisteredGlobalShortcuts() {
     for (const accelerator of registeredGlobalShortcuts) {
         globalShortcut.unregister(accelerator);
@@ -39,17 +138,18 @@ function clearRegisteredGlobalShortcuts() {
     registeredGlobalShortcuts.clear();
 }
 
-function stopMouseTracking() {
-    if (uIOhook && uiohookMouseListener) {
-        uIOhook.off('mousemove', uiohookMouseListener);
-        uIOhook.off('mousedown', uiohookMouseListener);
-        uIOhook.off('mouseup', uiohookMouseListener);
-        uiohookMouseListener = null;
+function stopGlobalInputTracking() {
+    if (uIOhook && uiohookListeners) {
+        uIOhook.off('mousemove', uiohookListeners.mousemove);
+        uIOhook.off('mousedown', uiohookListeners.mousedown);
+        uIOhook.off('mouseup', uiohookListeners.mouseup);
+        uIOhook.off('keydown', uiohookListeners.keydown);
+        uIOhook.off('keyup', uiohookListeners.keyup);
+        uiohookListeners = null;
 
-        try {
+        if (isUiohookStarted) {
             uIOhook.stop();
-        } catch (error) {
-            console.warn('[electron] Failed to stop uiohook mouse tracking:', error);
+            isUiohookStarted = false;
         }
     }
 
@@ -61,7 +161,7 @@ function stopMouseTracking() {
     lastMouseTrackingPayload = null;
 }
 
-function emitMouseTracking(point) {
+function emitMouseTracking(point, phase = 'move') {
     const currentWindow = getPrimaryWindow();
     if (!currentWindow || currentWindow.isDestroyed()) {
         return;
@@ -76,6 +176,7 @@ function emitMouseTracking(point) {
         y: point.y,
         localX: dipPoint.x - contentBounds.x,
         localY: dipPoint.y - contentBounds.y,
+        phase,
         isInsideApp:
             dipPoint.x >= contentBounds.x &&
             dipPoint.x < contentBounds.x + contentBounds.width &&
@@ -102,33 +203,60 @@ function startPollingMouseTracking() {
     }
 
     mouseTrackingInterval = setInterval(() => {
-        emitMouseTracking(screen.getCursorScreenPoint());
+        emitMouseTracking(screen.getCursorScreenPoint(), 'move');
     }, 50);
 }
 
-function startMouseTracking() {
+function emitGlobalKeyboardEvent(type, event) {
+    const currentWindow = getPrimaryWindow();
+    if (!currentWindow || currentWindow.isDestroyed()) {
+        return;
+    }
+
+    currentWindow.webContents.send('ace:global-keyboard', {
+        type,
+        keycode: event.keycode,
+        rawcode: event.rawcode,
+        code: UIOHOOK_KEYCODE_TO_DOM_CODE.get(event.keycode) ?? null,
+        altKey: Boolean(event.altKey),
+        ctrlKey: Boolean(event.ctrlKey),
+        shiftKey: Boolean(event.shiftKey),
+        metaKey: Boolean(event.metaKey),
+    });
+}
+
+function startGlobalInputTracking() {
     if (uIOhook) {
-        if (uiohookMouseListener) {
+        if (uiohookListeners) {
             return;
         }
 
-        uiohookMouseListener = (event) => {
-            emitMouseTracking({ x: event.x, y: event.y });
+        uiohookListeners = {
+            mousemove: (event) => emitMouseTracking({ x: event.x, y: event.y }, 'move'),
+            mousedown: (event) => emitMouseTracking({ x: event.x, y: event.y }, 'down'),
+            mouseup: (event) => emitMouseTracking({ x: event.x, y: event.y }, 'up'),
+            keydown: (event) => emitGlobalKeyboardEvent('keydown', event),
+            keyup: (event) => emitGlobalKeyboardEvent('keyup', event),
         };
 
-        uIOhook.on('mousemove', uiohookMouseListener);
-        uIOhook.on('mousedown', uiohookMouseListener);
-        uIOhook.on('mouseup', uiohookMouseListener);
+        uIOhook.on('mousemove', uiohookListeners.mousemove);
+        uIOhook.on('mousedown', uiohookListeners.mousedown);
+        uIOhook.on('mouseup', uiohookListeners.mouseup);
+        uIOhook.on('keydown', uiohookListeners.keydown);
+        uIOhook.on('keyup', uiohookListeners.keyup);
 
         try {
             uIOhook.start();
+            isUiohookStarted = true;
             return;
         } catch (error) {
             console.warn('[electron] Failed to start uiohook mouse tracking, falling back to screen polling:', error);
-            uIOhook.off('mousemove', uiohookMouseListener);
-            uIOhook.off('mousedown', uiohookMouseListener);
-            uIOhook.off('mouseup', uiohookMouseListener);
-            uiohookMouseListener = null;
+            uIOhook.off('mousemove', uiohookListeners.mousemove);
+            uIOhook.off('mousedown', uiohookListeners.mousedown);
+            uIOhook.off('mouseup', uiohookListeners.mouseup);
+            uIOhook.off('keydown', uiohookListeners.keydown);
+            uIOhook.off('keyup', uiohookListeners.keyup);
+            uiohookListeners = null;
         }
     }
 
@@ -334,10 +462,12 @@ app.whenReady().then(() => {
 
     ipcMain.handle('ace:app:platform', () => process.platform);
 
-    ipcMain.handle('ace:path:app-config-dir', () => app.getPath('userData'));
+    ipcMain.handle('ace:path:app-config-dir', () => getAppConfigRootDir());
+    ipcMain.handle('ace:path:app-cache-dir', () => getAppCacheRootDir());
+    ipcMain.handle('ace:path:app-local-dir', () => getAppLocalRootDir());
 
     createMainWindow();
-    startMouseTracking();
+    startGlobalInputTracking();
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -354,7 +484,7 @@ app.on('window-all-closed', () => {
         alwaysOnTopInterval = null;
     }
 
-    stopMouseTracking();
+    stopGlobalInputTracking();
 
     if (process.platform !== 'darwin') {
         app.quit();
@@ -363,5 +493,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
     clearRegisteredGlobalShortcuts();
-    stopMouseTracking();
+    stopGlobalInputTracking();
 });

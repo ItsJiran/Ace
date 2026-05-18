@@ -1,22 +1,70 @@
-import { RegistryEngine } from "./registry-engine";
-import { StateEngine } from "./state-engine";
-import { KernelEngine } from "./kernel-engine";
-import { WindowLifecycleManager } from "./window/window-lifecycle-manager";
-import { WindowAnimationEngine } from "./window/window-animation-engine";
-import type { AnimationSequence } from "#/schemas/animation";
-import type { WindowAnimationSequence } from "./window/window-animation-engine";
-import type { WindowConfig, SpawnWindowOptions } from "#/schemas/window";
+import { RegistryEngine } from './registry-engine';
+import { StateEngine } from './state-engine';
+import { KernelEngine } from './kernel-engine';
+import { WindowLifecycleManager } from './window/window-lifecycle-manager';
+import { WindowAnimationEngine } from './window/window-animation-engine';
+import type { AnimationSequence } from '#/schemas/animation';
+import type { WindowAnimationSequence } from './window/window-animation-engine';
+import type { WindowConfig, SpawnWindowOptions } from '#/schemas/window';
+import type { DesktopState } from '#/schemas/state';
+import { Engine } from './engine';
 
-class WindowEngineSingleton {
+class WindowEngineSingleton extends Engine {
     private highest_z_index = 100;
-    private isRouteBound = false;
-    private isTerminationHookBound = false;
-    private lifecycleManager: WindowLifecycleManager;
+    private lifecycleManager: WindowLifecycleManager = null as unknown as WindowLifecycleManager;
     private windowMemoryUid(window_uid: string) {
         return `system:window:${window_uid}`;
     }
 
-    constructor() {
+    private resolveOverlayModeAtPoint(x: number, y: number): DesktopState['mode'] {
+        const element = document.elementFromPoint(Math.round(x), Math.round(y));
+        if (!element) {
+            return 'ambient';
+        }
+
+        return element.closest('[data-window-uid]') ? 'interactive' : 'ambient';
+    }
+
+    private handleMouseTracking(payload: {
+        x: number;
+        y: number;
+        localX: number;
+        localY: number;
+        phase: 'move' | 'down' | 'up';
+        isInsideApp: boolean;
+    }) {
+        const desktopState = StateEngine.readDesktopState();
+        const cursorState = StateEngine.readCursorState();
+        const isPointerDown =
+            payload.phase === 'down'
+                ? true
+                : payload.phase === 'up'
+                  ? false
+                  : cursorState.is_pointer_down;
+
+        StateEngine.setCursorPosition(payload.x, payload.y);
+        StateEngine.setPointerInside(payload.isInsideApp);
+
+        if (payload.phase === 'down' || payload.phase === 'up') {
+            StateEngine.setPointerDown(isPointerDown);
+        }
+
+        if (!payload.isInsideApp) {
+            if (!desktopState.is_overlay_locked && !isPointerDown) {
+                StateEngine.setOverlayMode('ambient');
+            }
+            return;
+        }
+
+        if (!desktopState.is_overlay_locked) {
+            const nextMode = this.resolveOverlayModeAtPoint(payload.localX, payload.localY);
+            StateEngine.setOverlayMode(isPointerDown ? 'interactive' : nextMode);
+        }
+    }
+
+    // + ----- Abstract Methods ---------------------------------------------------------------+
+
+    boot() {
         this.lifecycleManager = new WindowLifecycleManager({
             bumpZIndex: () => {
                 this.highest_z_index += 1;
@@ -27,19 +75,25 @@ class WindowEngineSingleton {
             windowMemoryUid: (uid) => this.windowMemoryUid(uid),
             getRegistry: (pkg, slug) => this.getRegistry({ packageRef: pkg, slug }),
         });
-        this.registerTerminationHooks();
     }
 
-    setupKernelSpace() {
+    async setupKernelSpace() {
         WindowAnimationEngine.setupKernelSpace();
     }
 
-    private registerTerminationHooks() {
-        if (this.isTerminationHookBound) return;
-
+    async setupKernelTerminationHook() {
         KernelEngine.registerTerminationHandler(
-            "window-engine",
-            ({ record }: { record: { process_uid: string; type?: string; payload?: unknown; metadata?: unknown } }) => {
+            'window-engine',
+            ({
+                record,
+            }: {
+                record: {
+                    process_uid: string;
+                    type?: string;
+                    payload?: unknown;
+                    metadata?: unknown;
+                };
+            }) => {
                 // First, close any windows explicitly owned by this process in the window registry
                 const ownedWindows = KernelEngine.getRenderedWindows().filter(
                     (w) => w.process_uid === record.process_uid,
@@ -49,23 +103,23 @@ class WindowEngineSingleton {
                 }
 
                 // Next, if it's specifically a window:instance process, ensure we also catch it by its metadata payload
-                if (record.type === "window:instance") {
+                if (record.type === 'window:instance') {
                     const payload =
-                        record.payload && typeof record.payload === "object"
+                        record.payload && typeof record.payload === 'object'
                             ? (record.payload as Record<string, unknown>)
                             : undefined;
 
                     const metadata =
-                        record.metadata && typeof record.metadata === "object"
+                        record.metadata && typeof record.metadata === 'object'
                             ? (record.metadata as Record<string, unknown>)
                             : undefined;
 
                     const windowUid =
-                        typeof payload?.window_uid === "string"
+                        typeof payload?.window_uid === 'string'
                             ? payload.window_uid
-                            : typeof metadata?.window_uid === "string"
-                                ? metadata.window_uid
-                                : undefined;
+                            : typeof metadata?.window_uid === 'string'
+                              ? metadata.window_uid
+                              : undefined;
 
                     if (windowUid && !ownedWindows.some((w) => w.uid === windowUid)) {
                         this.closeWindow(windowUid, { skipProcessLifecycle: true });
@@ -73,25 +127,25 @@ class WindowEngineSingleton {
                 }
             },
         );
-
-        this.isTerminationHookBound = true;
     }
 
-    registerEventRoutes() {
-        if (this.isRouteBound) return;
+    async setupEventRoutes() {
+        if (typeof window === 'undefined') {
+            return;
+        }
 
-        // upcoming event bus mehanism
-
-        this.isRouteBound = true;
+        if (window.electronAPI?.onMouseTracking) {
+            window.electronAPI.onMouseTracking((payload) => {
+                this.handleMouseTracking(payload);
+            });
+        }
     }
 
     getRegistry({ packageRef, slug }: { packageRef: string; slug: string }) {
-        return RegistryEngine.getDomainEntry(packageRef, "windows", slug);
+        return RegistryEngine.getDomainEntry(packageRef, 'windows', slug);
     }
 
-    // + --──────────────────────────────────────────────────────────────────────────────
-    // |  Public API for managing windows
-    // + --──────────────────────────────────────────────────────────────────────────────
+    // + ----- Api Methods ---------------------------------------------------------------+
 
     spawnWindow(options: SpawnWindowOptions): string | null {
         const windowUid = this.lifecycleManager.spawnWindow(options);
@@ -105,10 +159,7 @@ class WindowEngineSingleton {
         return windowUid;
     }
 
-    closeWindow(
-        window_uid: string,
-        options?: { skipProcessLifecycle?: boolean },
-    ) {
+    closeWindow(window_uid: string, options?: { skipProcessLifecycle?: boolean }) {
         WindowAnimationEngine.clearWindow(window_uid);
         this.lifecycleManager.closeWindow(window_uid, options);
     }
@@ -134,16 +185,18 @@ class WindowEngineSingleton {
     minimizeWindow(window_uid: string) {
         this.updateWindowConfig(window_uid, { is_minimized: true });
 
-        const focusedWindowUid = KernelEngine.readMemory(
-            "system:global_state:focused_window",
-        ) as string | null | undefined;
+        const focusedWindowUid = KernelEngine.readMemory('system:global_state:focused_window') as
+            | string
+            | null
+            | undefined;
         if (focusedWindowUid === window_uid) {
             StateEngine.setFocusedWindow(null);
         }
 
-        const activeWindowUid = KernelEngine.readMemory(
-            "system:global_state:active_window",
-        ) as string | null | undefined;
+        const activeWindowUid = KernelEngine.readMemory('system:global_state:active_window') as
+            | string
+            | null
+            | undefined;
         if (activeWindowUid === window_uid) {
             StateEngine.setActiveWindow(null);
         }
@@ -172,9 +225,7 @@ class WindowEngineSingleton {
 
     updateWindowConfig(window_uid: string, updates: Partial<WindowConfig>) {
         const granularKey = this.windowMemoryUid(window_uid);
-        const currentGranular = KernelEngine.readMemory(granularKey) as
-            | WindowConfig
-            | undefined;
+        const currentGranular = KernelEngine.readMemory(granularKey) as WindowConfig | undefined;
 
         if (currentGranular) {
             const nextConfig = { ...currentGranular, ...updates };
@@ -182,17 +233,9 @@ class WindowEngineSingleton {
         }
     }
 
-    updateWindowBounds(
-        window_uid: string,
-        x: number,
-        y: number,
-        width: number,
-        height: number,
-    ) {
+    updateWindowBounds(window_uid: string, x: number, y: number, width: number, height: number) {
         const granularKey = this.windowMemoryUid(window_uid);
-        const currentGranular = KernelEngine.readMemory(granularKey) as
-            | WindowConfig
-            | undefined;
+        const currentGranular = KernelEngine.readMemory(granularKey) as WindowConfig | undefined;
 
         if (currentGranular) {
             if (

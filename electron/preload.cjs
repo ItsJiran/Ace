@@ -9,6 +9,16 @@ async function resolveFsPath(targetPath, baseDir) {
         return path.join(appConfigDir, String(targetPath || ''));
     }
 
+    if (baseDir === 'appCache') {
+        const appCacheDir = await ipcRenderer.invoke('ace:path:app-cache-dir');
+        return path.join(appCacheDir, String(targetPath || ''));
+    }
+
+    if (baseDir === 'appLocal') {
+        const appLocalDir = await ipcRenderer.invoke('ace:path:app-local-dir');
+        return path.join(appLocalDir, String(targetPath || ''));
+    }
+
     return path.normalize(String(targetPath || ''));
 }
 
@@ -60,6 +70,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return true;
     },
     pathAppConfigDir: () => ipcRenderer.invoke('ace:path:app-config-dir'),
+    pathAppCacheDir: () => ipcRenderer.invoke('ace:path:app-cache-dir'),
+    pathAppLocalDir: () => ipcRenderer.invoke('ace:path:app-local-dir'),
     pathHomeDir: () => os.homedir(),
     pathJoin: (...segments) => path.join(...segments.map((segment) => String(segment ?? ''))),
     pathNormalize: (targetPath) => path.normalize(String(targetPath || '')),
@@ -73,6 +85,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const listener = (_event, payload) => callback(payload);
         ipcRenderer.on('ace:screen:mouse-tracking', listener);
         return () => ipcRenderer.removeListener('ace:screen:mouse-tracking', listener);
+    },
+    onGlobalKeyboard: (callback) => {
+        const listener = (_event, payload) => callback(payload);
+        ipcRenderer.on('ace:global-keyboard', listener);
+        return () => ipcRenderer.removeListener('ace:global-keyboard', listener);
     },
     getPlatform: () => ipcRenderer.invoke('ace:app:platform'),
 });

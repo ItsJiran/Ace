@@ -1,3 +1,4 @@
+import { Engine } from '#/engines/engine.ts';
 import { StateEngine } from '#/engines/state-engine.ts';
 import type { AceRegistryType } from '#/schemas/registry-types.ts';
 
@@ -30,17 +31,16 @@ const InitConfigAndGlobalStateStep = async () => {
     const RegistryEngine = window.ACE.registry;
     const KeybindEngine = window.ACE.keybind;
     const StateEngine = window.ACE.state;
+    const WindowEngine = window.ACE.window;
 
     void StateEngine;
+    await WindowEngine.boot();
     await ConfigEngine.boot();
     await RegistryEngine.boot();
+    await KeybindEngine.boot();
 
     const packages = RegistryEngine.getPackages();
     console.group('[Boot] Registry Snapshot');
-    // console.log(
-    //     'Installed packages:',
-    //     packages.map((pkg: { package_name: string }) => pkg.package_name),
-    // );
 
     for (const pkg of packages) {
         console.log(`Package: ${Object.keys(pkg)}`);
@@ -60,7 +60,6 @@ const InitConfigAndGlobalStateStep = async () => {
     }
 
     console.groupEnd();
-    (KeybindEngine as any).init();
 
     console.log('[Boot] Phase 2: Config, AI gateway config, registry engine, global state, and keybind engine are ready.');
 };
@@ -138,28 +137,21 @@ const InitAutoStartWidgetsStep = async () => {
  * Phase 6: Engine Event Routes
  * Register EventBus routes for engine-backed actions (tool execution, context memory, etc.)
  */
-const InitEngineRoutesStep = async () => {
-    const WindowEngine = window.ACE.window as unknown as { registerEventRoutes?: () => void };
-    const KeybindEngine = window.ACE.keybind as unknown as { registerEventRoutes?: () => void };
-    const ToolEngine = window.ACE.tool as unknown as { registerEventRoutes?: () => void };
-    // const AIContextEngine = window.ACE.context as unknown as { registerEventRoutes?: () => void };
-    // const ParserEngine = window.ACE.parser as unknown as { registerEventRoutes?: () => void };
+const InitEngineEventRoutes = async () => {
+    const WindowEngine = window.ACE.window as Engine;
+    const KeybindEngine = window.ACE.keybind as Engine;
 
-    // Centralized route gate: all engine-backed EventBus routes are mounted here.
-    WindowEngine.registerEventRoutes?.();
-    KeybindEngine.registerEventRoutes?.();
-    ToolEngine.registerEventRoutes?.();
-    // AIContextEngine.registerEventRoutes?.();
-    // ParserEngine.registerEventRoutes?.();
+    await WindowEngine.setupEventRoutes?.();
+    await KeybindEngine.setupEventRoutes?.();
 
     console.log('[Boot] Phase 7: Engine event routes registered (window, keybind, ai_gateway, tool, ai_context, parser).');
 };
 
-export default () => {
-    InitCoreRuntimeBedStep();
-    InitConfigAndGlobalStateStep();
-    InitGlobalState();
-    InitGlobalInputHandlersStep();
-    InitAutoStartWidgetsStep();
-    InitEngineRoutesStep();
+export default async () => {
+    await InitCoreRuntimeBedStep();
+    await InitConfigAndGlobalStateStep();
+    await InitGlobalState();
+    await InitGlobalInputHandlersStep();
+    await InitAutoStartWidgetsStep();
+    await InitEngineEventRoutes();
 };

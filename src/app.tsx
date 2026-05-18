@@ -7,27 +7,6 @@ import type { DesktopState } from "#/schemas/state.ts";
 import { useRenderCount } from "#/hooks/use-render-count";
 import { MemoizedWindowItem } from "#/components/layout/memoized-window-item";
 import type { KernelWindowEntry } from "#/engines/kernel-engine/types";
-import { StateEngine } from "#/engines/state-engine.ts";
-
-function resolveOverlayModeAtPoint(x: number, y: number): {
-  element: Element | null;
-  mode: DesktopState["mode"];
-} {
-  const element = document.elementFromPoint(Math.round(x), Math.round(y));
-  if (!element) {
-    return { element: null, mode: "ambient" };
-  }
-
-  const tagName = element.tagName.toLowerCase();
-  const isDocumentRoot = tagName === "html" || tagName === "body";
-  const isWindowElement = Boolean(element.closest("[data-window-uid]"));
-
-  if (isWindowElement) {
-    return { element, mode: "interactive" };
-  }
-
-  return { element, mode: isDocumentRoot ? "ambient" : "ambient" };
-}
 
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
@@ -56,38 +35,6 @@ function App() {
       isMounted = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!isBootReady || typeof window === "undefined" || !window.electronAPI?.onMouseTracking) {
-      return;
-    }
-
-    const unsubscribe = window.electronAPI.onMouseTracking(({ x, y, localX, localY, isInsideApp }) => {
-      const desktopState = StateEngine.readDesktopState();
-      const cursorState = StateEngine.readCursorState();
-
-      StateEngine.setCursorPosition(x, y);
-      StateEngine.setPointerInside(isInsideApp);
-
-      if (!isInsideApp) {
-        if (!desktopState.is_overlay_locked && !cursorState.is_pointer_down) {
-          StateEngine.setOverlayMode("ambient");
-        }
-        return;
-      }
-
-      const { element, mode } = resolveOverlayModeAtPoint(localX, localY);
-
-      if (!desktopState.is_overlay_locked) {
-        StateEngine.setOverlayMode(cursorState.is_pointer_down ? "interactive" : mode);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      StateEngine.setPointerInside(false);
-    };
-  }, [isBootReady]);
 
   // 1. O(1) Hooks watching the global WindowEngine Maps
   const overlayState = useAceMemory<DesktopState>(

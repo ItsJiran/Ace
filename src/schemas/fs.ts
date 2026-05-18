@@ -1,4 +1,4 @@
-export type FsBaseDir = 'appConfig';
+export type FsBaseDir = 'appConfig' | 'appCache' | 'appLocal';
 
 export type FsDirectoryEntry = {
     name: string;
@@ -8,6 +8,7 @@ export type FsDirectoryEntry = {
 
 export type FSEnginePathOptions = {
     fullPath?: boolean;
+    baseDir?: FsBaseDir;
 };
 
 export type FsResolvedTarget = {

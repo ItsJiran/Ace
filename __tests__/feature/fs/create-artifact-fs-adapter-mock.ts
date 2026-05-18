@@ -9,7 +9,13 @@ function normalizeSegments(targetPath: string): string[] {
 }
 
 function resolveArtifactPath(caseName: string, target: FsResolvedTarget): string {
-    const scope = target.isExternal ? '__external__' : '__appconfig__';
+        const scope = target.isExternal
+                ? '__external__'
+                : target.baseDir === 'appCache'
+                    ? '__appcache__'
+                    : target.baseDir === 'appLocal'
+                        ? '__applocal__'
+                        : '__appconfig__';
     return path.join(artifactRootDir, caseName, scope, ...normalizeSegments(target.fsPath));
 }
 

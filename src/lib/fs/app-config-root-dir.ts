@@ -1,3 +1,3 @@
-const APP_CONFIG_ROOT_DIR = 'com.ace.assistant';
+const APP_CONFIG_ROOT_DIR = 'AceAssistant';
 
 export default APP_CONFIG_ROOT_DIR;

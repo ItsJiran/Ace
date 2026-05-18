@@ -10,11 +10,9 @@ import type {
 } from '#/schemas/keybinds';
 import type { ConfigItemKeybind } from '#/schemas/config';
 import { EventBus } from './event-engine';
-import {
-    KeybindAction,
-    KeybindButtonCodeMap,
-} from '#/constants/keybinds.ts';
+import { KeybindAction, KeybindButtonCodeMap } from '#/constants/keybinds.ts';
 import resolveConstMapKeyFromValue from '#/lib/resolve-const-map-key-from-value.ts';
+import { StateEngine } from './state-engine';
 
 class KeybindEngineSingleton extends Engine {
     // Current Combos registered in the system, derived from config and registry.
@@ -36,8 +34,6 @@ class KeybindEngineSingleton extends Engine {
          * - This decouples the raw key event handling from the business logic that responds to keybinds, allowing for more flexible and modular design.
          */
 
-        console.log('[KeybindEngine] Setting up event routes for keydown and keyup.');
-
         window.addEventListener('keydown', (event: KeyboardEvent) => {
             EventBus.emit<KeybindEventPressPayloadType>('system:keybind_engine:keydown', {
                 payload: {
@@ -54,6 +50,19 @@ class KeybindEngineSingleton extends Engine {
             });
         });
 
+        if (window.electronAPI?.onGlobalKeyboard) {
+            window.electronAPI.onGlobalKeyboard((payload) => {
+                this.handleGlobalKeyboardEvent(payload);
+            });
+        }
+
+        /**
+         * Sync Keybind Config Changes to Active Map
+         * - Listens for 'system:config:keybinds:update' events, which are emitted whenever the keybind configuration is changed (e.g., through the UI).
+         * - When this event is detected, the KeybindEngine calls syncCurrentActiveKeybindMap to refresh the internal mapping of actions to key combinations based on the latest configuration.
+         * - This ensures that any changes to keybinds are immediately reflected in the system's behavior without requiring a restart, providing a seamless user experience when customizing keybinds.
+         */
+
         EventBus.listen('system:config:keybinds:update', () => {
             this.syncCurrentActiveKeybindMap();
         });
@@ -66,18 +75,26 @@ class KeybindEngineSingleton extends Engine {
          */
         EventBus.listen<KeybindEventPressPayloadType>('system:keybind_engine:keydown', (event) => {
             if (event?.payload?.code) {
-                const convertCodeToButton: KeybindButtonType | undefined = resolveConstMapKeyFromValue<
-                    typeof KeybindButtonCodeMap
-                >(event?.payload?.code, KeybindButtonCodeMap);
+                const convertCodeToButton: KeybindButtonType | undefined =
+                    resolveConstMapKeyFromValue<typeof KeybindButtonCodeMap>(
+                        event?.payload?.code,
+                        KeybindButtonCodeMap,
+                    );
 
                 if (!convertCodeToButton) return;
 
                 if (!this.currentActiveKeybindButtons.includes(convertCodeToButton)) {
                     this.currentActiveKeybindButtons.push(convertCodeToButton);
-                    console.log('Current Active Keybind Buttons:', this.currentActiveKeybindButtons);
+                    console.log(
+                        'Current Active Keybind Buttons:',
+                        this.currentActiveKeybindButtons,
+                        this.currentActiveKeybindMap,
+                    );
 
                     this.currentActiveKeybindMap.forEach((combos, action) => {
                         combos.forEach((combo) => {
+                            console.log(`Checking combo ${combo} for action ${action}`);
+
                             const isSameLength =
                                 this.currentActiveKeybindButtons.length === combo.length;
 
@@ -86,6 +103,7 @@ class KeybindEngineSingleton extends Engine {
                             });
 
                             if (isSameLength && isExactSequence) {
+                                console.log(`Triggering action: ${action} for combo ${combo}`);
                                 EventBus.emit('system:keybind_engine:action_trigger', {
                                     payload: { action },
                                     meta: { combo },
@@ -106,9 +124,11 @@ class KeybindEngineSingleton extends Engine {
          */
         EventBus.listen<KeybindEventReleasePayloadType>('system:keybind_engine:keyup', (event) => {
             if (event?.payload?.code) {
-                const convertCodeToButton: KeybindButtonType | undefined = resolveConstMapKeyFromValue<
-                    typeof KeybindButtonCodeMap
-                >(event?.payload?.code, KeybindButtonCodeMap);
+                const convertCodeToButton: KeybindButtonType | undefined =
+                    resolveConstMapKeyFromValue<typeof KeybindButtonCodeMap>(
+                        event?.payload?.code,
+                        KeybindButtonCodeMap,
+                    );
 
                 if (!convertCodeToButton) return;
 
@@ -128,20 +148,25 @@ class KeybindEngineSingleton extends Engine {
         EventBus.listen<{ action: KeybindActionType }, { combo: KeybindButtonType[] }>(
             `system:keybind_engine:action_trigger`,
             (event) => {
-                if(event?.payload?.action) {
-                
+                console.log(
+                    `Action Triggered: ${event?.payload?.action} with combo ${event?.meta?.combo}`,
+                );
+                if (event?.payload?.action) {
                     const action = event.payload.action;
 
-                    switch(action) {
-
+                    switch (action) {
                         case KeybindAction.toggleOverlayMode:
+                            StateEngine.toggleOverlayLocked();
                             break;
 
                         case KeybindAction.cycleDisplayMode:
+                            StateEngine.cycleWindowDisplayMode();
                             break;
 
                         default:
-                            console.warn(`[KeybindEngine] No handler registered for action: ${action}`);
+                            console.warn(
+                                `[KeybindEngine] No handler registered for action: ${action}`,
+                            );
                     }
                 }
             },
@@ -149,6 +174,7 @@ class KeybindEngineSingleton extends Engine {
     }
 
     async setupKernelSpace() {}
+    async setupKernelTerminationHook() {}
 
     // + ----- API ---------------------------------------------------------------+
 
@@ -162,7 +188,26 @@ class KeybindEngineSingleton extends Engine {
             nextMap.set(item.key, combos);
         });
 
+        console.log('KeybindEngine: Synced current active keybind map from config:', nextMap);
+
         this.currentActiveKeybindMap = nextMap;
+    }
+
+    private handleGlobalKeyboardEvent(payload: { type: 'keydown' | 'keyup'; code: string | null }) {
+        if (!payload.code) {
+            return;
+        }
+
+        EventBus.emit(
+            payload.type === 'keyup'
+                ? 'system:keybind_engine:keyup'
+                : 'system:keybind_engine:keydown',
+            {
+                payload: {
+                    code: payload.code,
+                },
+            },
+        );
     }
 }
 

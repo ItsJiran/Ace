@@ -26,13 +26,14 @@ async function resolveFsTarget(
     }
 
     const relativePath = sanitizeRelativePath(inputPath);
+    const baseDir = options.baseDir ?? 'appConfig';
     const fsPath = relativePath ? `${appConfigRootDir}/${relativePath}` : appConfigRootDir;
 
     return {
-        storageKey: fsPath,
+        storageKey: `${baseDir}:${fsPath}`,
         fsPath,
-        absolutePath: await resolveInternalAbsolutePath(fsPath),
-        baseDir: 'appConfig',
+        absolutePath: await resolveInternalAbsolutePath(fsPath, baseDir),
+        baseDir,
         isExternal: false,
     };
 }

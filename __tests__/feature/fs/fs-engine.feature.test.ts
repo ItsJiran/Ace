@@ -23,7 +23,7 @@ describe('FSEngine feature', () => {
     });
 
     it('covers fs utils and target resolution cases', async () => {
-        const { electronAPI, appConfigDir } = createElectronAPIMock();
+        const { electronAPI, appConfigDir, appCacheDir, appLocalDir } = createElectronAPIMock();
         const adapterMock = await createArtifactFsAdapterMock('utils-resolution');
         await adapterMock.setup();
 
@@ -41,15 +41,37 @@ describe('FSEngine feature', () => {
         expect(await resolveInternalAbsolutePath(`${APP_CONFIG_ROOT_DIR}/demo.json`)).toBe(
             `${appConfigDir}/${APP_CONFIG_ROOT_DIR}/demo.json`,
         );
+        expect(await resolveInternalAbsolutePath(`${APP_CONFIG_ROOT_DIR}/demo.json`, 'appCache')).toBe(
+            `${appCacheDir}/${APP_CONFIG_ROOT_DIR}/demo.json`,
+        );
+        expect(await resolveInternalAbsolutePath(`${APP_CONFIG_ROOT_DIR}/demo.json`, 'appLocal')).toBe(
+            `${appLocalDir}/${APP_CONFIG_ROOT_DIR}/demo.json`,
+        );
 
         const relativeTarget = await resolveFsTarget('nested/file.json');
+        const cacheTarget = await resolveFsTarget('nested/cache.json', { baseDir: 'appCache' });
+        const localTarget = await resolveFsTarget('nested/local.json', { baseDir: 'appLocal' });
         const absoluteTarget = await resolveFsTarget('/tmp/demo.json');
 
         expect(relativeTarget).toEqual({
-            storageKey: `${APP_CONFIG_ROOT_DIR}/nested/file.json`,
+            storageKey: `appConfig:${APP_CONFIG_ROOT_DIR}/nested/file.json`,
             fsPath: `${APP_CONFIG_ROOT_DIR}/nested/file.json`,
             absolutePath: `${appConfigDir}/${APP_CONFIG_ROOT_DIR}/nested/file.json`,
             baseDir: 'appConfig',
+            isExternal: false,
+        });
+        expect(cacheTarget).toEqual({
+            storageKey: `appCache:${APP_CONFIG_ROOT_DIR}/nested/cache.json`,
+            fsPath: `${APP_CONFIG_ROOT_DIR}/nested/cache.json`,
+            absolutePath: `${appCacheDir}/${APP_CONFIG_ROOT_DIR}/nested/cache.json`,
+            baseDir: 'appCache',
+            isExternal: false,
+        });
+        expect(localTarget).toEqual({
+            storageKey: `appLocal:${APP_CONFIG_ROOT_DIR}/nested/local.json`,
+            fsPath: `${APP_CONFIG_ROOT_DIR}/nested/local.json`,
+            absolutePath: `${appLocalDir}/${APP_CONFIG_ROOT_DIR}/nested/local.json`,
+            baseDir: 'appLocal',
             isExternal: false,
         });
         expect(absoluteTarget.isExternal).toBe(true);
@@ -88,10 +110,15 @@ describe('FSEngine feature', () => {
         });
 
         await expect(FSEngine.createDirectory('cases/alpha')).resolves.toBe(true);
+        await expect(FSEngine.createDirectory('cases/cache', { baseDir: 'appCache' })).resolves.toBe(true);
         await expect(FSEngine.writeFile('cases/alpha/plain.txt', 'hello fs')).resolves.toBe(true);
         await expect(FSEngine.ensureFile('cases/alpha/default.json', { enabled: true })).resolves.toBe(true);
         await expect(FSEngine.saveFile('cases/alpha/state.json', { items: [1, 2, 3] })).resolves.toBe(true);
+        await expect(FSEngine.writeFile('cases/cache/cache.txt', 'cache fs', { baseDir: 'appCache' })).resolves.toBe(true);
+        await expect(FSEngine.writeFile('cases/local/local.txt', 'local fs', { baseDir: 'appLocal' })).resolves.toBe(true);
         await expect(FSEngine.readRaw('cases/alpha/plain.txt')).resolves.toBe('hello fs');
+        await expect(FSEngine.readRaw('cases/cache/cache.txt', { baseDir: 'appCache' })).resolves.toBe('cache fs');
+        await expect(FSEngine.readRaw('cases/local/local.txt', { baseDir: 'appLocal' })).resolves.toBe('local fs');
         await expect(FSEngine.readFile<{ enabled: boolean }>('cases/alpha/default.json')).resolves.toEqual({ enabled: true });
         await expect(FSEngine.readFile<{ items: number[] }>('cases/alpha/state.json')).resolves.toEqual({ items: [1, 2, 3] });
 
@@ -123,6 +150,34 @@ describe('FSEngine feature', () => {
                 'utf8',
             ),
         ).resolves.toContain('"items"');
+        await expect(
+            readFile(
+                path.join(
+                    artifactRootDir,
+                    'engine-methods',
+                    '__appcache__',
+                    APP_CONFIG_ROOT_DIR,
+                    'cases',
+                    'cache',
+                    'cache.txt',
+                ),
+                'utf8',
+            ),
+        ).resolves.toBe('cache fs');
+        await expect(
+            readFile(
+                path.join(
+                    artifactRootDir,
+                    'engine-methods',
+                    '__applocal__',
+                    APP_CONFIG_ROOT_DIR,
+                    'cases',
+                    'local',
+                    'local.txt',
+                ),
+                'utf8',
+            ),
+        ).resolves.toBe('local fs');
         await expect(
             access(
                 path.join(
@@ -182,10 +237,13 @@ describe('FSEngine feature', () => {
             ),
         ).rejects.toThrow();
 
-        expect(localStorage.getItem(`${APP_CONFIG_ROOT_DIR}:${APP_CONFIG_ROOT_DIR}/fallback/write.json`)).toBe('{"ok":true}');
-        expect(localStorage.getItem(`${APP_CONFIG_ROOT_DIR}:${APP_CONFIG_ROOT_DIR}/fallback/default.json`)).toBe(
+        await expect(FSEngine.writeFile('fallback/cache.json', '{"cache":true}', { baseDir: 'appCache' })).resolves.toBe(true);
+
+        expect(localStorage.getItem(`${APP_CONFIG_ROOT_DIR}:appConfig:${APP_CONFIG_ROOT_DIR}/fallback/write.json`)).toBe('{"ok":true}');
+        expect(localStorage.getItem(`${APP_CONFIG_ROOT_DIR}:appConfig:${APP_CONFIG_ROOT_DIR}/fallback/default.json`)).toBe(
             JSON.stringify({ seeded: true }, null, 2),
         );
+        expect(localStorage.getItem(`${APP_CONFIG_ROOT_DIR}:appCache:${APP_CONFIG_ROOT_DIR}/fallback/cache.json`)).toBe('{"cache":true}');
 
         writeSpy.mockRestore();
         readSpy.mockRestore();
