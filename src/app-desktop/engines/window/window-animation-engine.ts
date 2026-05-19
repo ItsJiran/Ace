@@ -1,4 +1,4 @@
-import { KernelEngine } from '#/engines/kernel-engine';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
 import type { AnimationSequence, EasingType } from '#/shared/schemas/animation';
 
 export type WindowAnimationInterruptPolicy =

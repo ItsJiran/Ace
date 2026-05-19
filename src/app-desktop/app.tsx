@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useAceMemory } from "#/hooks/use-ace-memory";
-import { ProcessContextProvider } from "#/hooks/use-process-context";
-import { WindowContextProvider } from "#/hooks/use-window-context";
+import { useAceMemory } from "#/app-desktop/hooks/use-ace-memory";
+import { ProcessContextProvider } from "#/app-desktop/hooks/use-process-context";
+import { WindowContextProvider } from "#/app-desktop/hooks/use-window-context";
 import type { DesktopState } from "#/shared/schemas/state.ts";
-import { useRenderCount } from "#/hooks/use-render-count";
-import { MemoizedWindowItem } from "#/components/layout/memoized-window-item";
-import type { KernelWindowEntry } from "#/engines/kernel-engine/types";
+import { useRenderCount } from "#/app-desktop/hooks/use-render-count";
+import { MemoizedWindowItem } from "#/app-desktop/components/layout/memoized-window-item";
+import type { KernelWindowEntry } from "#/shared/engines/kernel-engine/types";
 
 function App() {
   const [isBootReady, setIsBootReady] = useState(false);
@@ -18,7 +18,7 @@ function App() {
 
     void (async () => {
       try {
-        const { bootACE } = await import("./boot");
+        const { bootACE } = await import("../desktop");
         await bootACE();
         if (isMounted) {
           setIsBootReady(true);

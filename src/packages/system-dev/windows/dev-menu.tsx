@@ -1,5 +1,5 @@
 import type { AceRegistryType } from '#/shared/schemas/registry-types';
-import { AceWindow } from '#/components/layout/ace-window';
+import { AceWindow } from '#/app-desktop/components/layout/ace-window';
 import DevMenu from '../components/dev-menu';
 
 export const registry: AceRegistryType.Window = {

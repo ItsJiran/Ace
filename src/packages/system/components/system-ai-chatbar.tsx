@@ -1,9 +1,9 @@
 // import { useMemo, useState } from "react";
 
-// import type { AceWindowRenderProps } from "#/hooks/use-ace-window";
+// import type { AceWindowRenderProps } from "#/app-desktop/hooks/use-ace-window";
 
-// import { useAIGateway } from "#/hooks/use-ai-gateway";
-// import { useAIChatSession } from "#/hooks/use-ai-chat-session";
+// import { useAIGateway } from "#/app-desktop/hooks/use-ai-gateway";
+// import { useAIChatSession } from "#/app-desktop/hooks/use-ai-chat-session";
 // import { AISessionStatus } from "#/shared/schemas/ai";
 
 // import SystemAIChatConversationContainer from "./system-ai-chat-conversation-container";

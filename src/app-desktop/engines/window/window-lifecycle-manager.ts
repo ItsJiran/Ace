@@ -1,5 +1,5 @@
-import { KernelEngine } from '../kernel-engine';
-import { StateEngine } from '../state-engine';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
+import { StateEngine } from '#/app-desktop/engines/state-engine';
 import type { WindowConfig, SpawnWindowOptions } from '#/shared/schemas/window';
 
 

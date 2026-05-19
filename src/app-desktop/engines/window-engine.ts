@@ -1,13 +1,13 @@
-import { RegistryEngine } from './registry-engine';
+import { RegistryEngine } from '#/shared/engines/registry-engine';
 import { StateEngine } from './state-engine';
-import { KernelEngine } from './kernel-engine';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { WindowLifecycleManager } from './window/window-lifecycle-manager';
 import { WindowAnimationEngine } from './window/window-animation-engine';
 import type { AnimationSequence } from '#/shared/schemas/animation';
 import type { WindowAnimationSequence } from './window/window-animation-engine';
 import type { WindowConfig, SpawnWindowOptions } from '#/shared/schemas/window';
 import type { DesktopState } from '#/shared/schemas/state';
-import { Engine } from './engine';
+import { Engine } from '#/shared/engines/engine';
 
 class WindowEngineSingleton extends Engine {
     private highest_z_index = 100;

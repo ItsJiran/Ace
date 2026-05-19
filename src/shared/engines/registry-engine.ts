@@ -6,7 +6,12 @@ import {
     type RegistryPackage,
     type RegistryDomainEntry,
 } from '#/shared/schemas/registry';
-import { RegistryDomain } from '#/shared/constants/registry';
+import {
+    RegistryDomain,
+    RegistryRuntimeDomainMap,
+    type RegistryDomain as RegistryDomainType,
+    type RegistryRuntimeMode,
+} from '#/shared/constants/registry';
 
 class RegistryEngineSingleton {
     // Configuration
@@ -56,6 +61,53 @@ class RegistryEngineSingleton {
         if (/^[^/]+\/index\.(ts|tsx)$/.test(relativePath)) return true;
 
         return false;
+    }
+
+    private resolveRuntimeMode(): RegistryRuntimeMode {
+        const viteMode = import.meta.env.VITE_ACE_RUNTIME_MODE;
+        if (viteMode === 'desktop' || viteMode === 'background') {
+            return viteMode;
+        }
+
+        if (typeof process !== 'undefined' && process.env) {
+            const processMode = process.env.ACE_RUNTIME_MODE;
+            if (processMode === 'desktop' || processMode === 'background') {
+                return processMode;
+            }
+        }
+
+        return 'desktop';
+    }
+
+    private resolveRuntimeDomains(): readonly RegistryDomainType[] {
+        return RegistryRuntimeDomainMap[this.resolveRuntimeMode()];
+    }
+
+    private resolveCoreModuleLoaders() {
+        const moduleLoadersByDomain: Record<RegistryDomainType, Record<string, () => Promise<unknown>>> = {
+            widgets: import.meta.glob('/src/packages/*/widgets/**/*.{ts,tsx}'),
+            components: import.meta.glob('/src/packages/*/components/**/*.{ts,tsx}'),
+            windows: import.meta.glob('/src/packages/*/windows/**/*.{ts,tsx}'),
+            tools: import.meta.glob('/src/packages/*/tools/**/*.{ts,tsx}'),
+            features: import.meta.glob('/src/packages/*/features/**/*.{ts,tsx}'),
+            processes: import.meta.glob('/src/packages/*/processes/**/*.{ts,tsx}'),
+            pipelines: import.meta.glob('/src/packages/*/pipelines/**/*.{ts,tsx}'),
+            registries: import.meta.glob('/src/packages/*/registries/**/*.{ts,tsx}'),
+            renderers: import.meta.glob('/src/packages/*/renderers/**/*.{ts,tsx}'),
+        };
+
+        const allowedDomains = this.resolveRuntimeDomains();
+        const selectedLoaders: Record<string, () => Promise<unknown>> = {};
+
+        for (const domain of allowedDomains) {
+            Object.assign(selectedLoaders, moduleLoadersByDomain[domain]);
+        }
+
+        return {
+            allowedDomains,
+            selectedLoaders,
+            runtimeMode: this.resolveRuntimeMode(),
+        };
     }
 
     /** Initialize the registry system. */
@@ -414,8 +466,11 @@ class RegistryEngineSingleton {
         // 1. Glob ALL manifests to find packages
         const manifests = import.meta.glob('/src/packages/*/manifest.json');
 
-        // 2. Glob ALL source files across all core packages
-        const allModules = import.meta.glob('/src/packages/*/**/*.{ts,tsx}');
+        // 2. Load only the registry domains needed by the active runtime.
+        const { allowedDomains, selectedLoaders, runtimeMode } = this.resolveCoreModuleLoaders();
+        console.log(
+            `[RegistryEngine] Runtime domain load policy: ${runtimeMode} -> ${allowedDomains.join(', ')}`,
+        );
 
         // Temporary storage to group modules by package folder name
         const modulesByPackage: Record<string, Record<string, unknown>> = {};
@@ -428,7 +483,7 @@ class RegistryEngineSingleton {
         };
 
         // Group the massive list of modules into their respective package buckets
-        for (const [path, modLoader] of Object.entries(allModules)) {
+        for (const [path, modLoader] of Object.entries(selectedLoaders)) {
             const pkgDir = getPackageDir(path);
             if (pkgDir) {
                 if (!modulesByPackage[pkgDir]) modulesByPackage[pkgDir] = {};

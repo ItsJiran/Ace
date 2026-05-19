@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { GripHorizontal, Minus, X } from "lucide-react";
-import type { AceWindowRenderProps } from "#/hooks/use-ace-window";
+import type { AceWindowRenderProps } from "#/app-desktop/hooks/use-ace-window";
 
 type AceWindowHeadProps = {
   title?: string;

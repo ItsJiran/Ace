@@ -3,6 +3,19 @@ const { execFileSync, execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
 
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+process.stderr.write = (chunk, encoding, callback) => {
+    const message = typeof chunk === 'string' ? chunk : chunk?.toString?.() ?? '';
+    if (message.includes('hook_thread_proc') && message.includes('Could not set thread priority')) {
+        if (typeof callback === 'function') {
+            callback();
+        }
+        return true;
+    }
+
+    return originalStderrWrite(chunk, encoding, callback);
+};
+
 let uIOhook = null;
 let UiohookKey = null;
 try {

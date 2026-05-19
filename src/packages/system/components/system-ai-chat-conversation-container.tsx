@@ -1,7 +1,7 @@
 // import { MessageCircleMore, Sparkles } from 'lucide-react';
 
-// import { AceWindowHead } from '#/components/layout/ace-window-head';
-// import type { AceWindowRenderProps } from '#/hooks/use-ace-window';
+// import { AceWindowHead } from '#/app-desktop/components/layout/ace-window-head';
+// import type { AceWindowRenderProps } from '#/app-desktop/hooks/use-ace-window';
 
 // import SystemAIChatMessages from './system-ai-chat-messages';
 

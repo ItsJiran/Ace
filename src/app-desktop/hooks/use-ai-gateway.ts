@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAceMemory } from '#/hooks/use-ace-memory';
+import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import type { AIGatewayConfig, SDKProvider } from '#/shared/schemas/ai-gateway';
 
 export function useAIGateway() {

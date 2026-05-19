@@ -1,6 +1,6 @@
 // import type { AceRegistryType } from '#/shared/schemas/registry-types';
-// import { AceWindow } from '#/components/layout/ace-window';
-// import { AceWindowHead } from '#/components/layout/ace-window-head';
+// import { AceWindow } from '#/app-desktop/components/layout/ace-window';
+// import { AceWindowHead } from '#/app-desktop/components/layout/ace-window-head';
 // import { Terminal } from 'lucide-react';
 // import SystemConsole from '../components/system-console';
 

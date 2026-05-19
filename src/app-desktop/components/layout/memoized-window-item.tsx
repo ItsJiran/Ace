@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { RegistryEngine } from '#/engines/registry-engine';
+import { RegistryEngine } from '#/shared/engines/registry-engine';
 
 type WindowItemProps = {
     uid: string;

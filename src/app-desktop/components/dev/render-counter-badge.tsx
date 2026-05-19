@@ -1,4 +1,4 @@
-import { useRenderCount } from '#/hooks/use-render-count';
+import { useRenderCount } from '#/app-desktop/hooks/use-render-count';
 
 interface RenderCounterBadgeProps {
     componentName: string;

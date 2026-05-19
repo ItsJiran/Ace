@@ -1,5 +1,5 @@
 // import { useState } from 'react';
-// import { useAceMemory } from '#/hooks/use-ace-memory';
+// import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 // import { AIGatewayEngine } from '#/engines/ai-gateway-engine';
 // import type { AISession, SDKProvider } from '#/shared/schemas/ai';
 // import { KernelEngine } from '#/engines/kernel-engine';

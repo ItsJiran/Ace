@@ -1,5 +1,5 @@
-import { Engine } from './engine';
-import { ConfigEngine } from './config-engine';
+import { Engine } from '#/shared/engines/engine';
+import { ConfigEngine } from '#/shared/engines/config-engine';
 import type {
     KeybindEventPressPayloadType,
     KeybindEventReleasePayloadType,
@@ -8,8 +8,8 @@ import type {
     KeybindCombosType,
     KeybindCodeType,
 } from '#/shared/schemas/keybinds';
-import type { ConfigItemKeybind } from '#/shared/config';
-import { EventBus } from './event-engine';
+import type { ConfigItemKeybindType } from '#/shared/schemas/config';
+import { EventBus } from '#/shared/engines/event-engine';
 import { KeybindAction, KeybindButtonCodeMap } from '#/shared/constants/keybinds.ts';
 import resolveConstMapKeyFromValue from '#/shared/lib/resolve-const-map-key-from-value.ts';
 import { StateEngine } from './state-engine';
@@ -172,7 +172,7 @@ class KeybindEngineSingleton extends Engine {
     // + ----- API ---------------------------------------------------------------+
 
     public syncCurrentActiveKeybindMap() {
-        const keybindItems = ConfigEngine.getConfigItems<ConfigItemKeybind>('keybinds');
+        const keybindItems = ConfigEngine.getConfigItems<ConfigItemKeybindType>('keybinds');
         const nextMap = new Map<KeybindActionType, KeybindCombosType[]>();
 
         keybindItems.forEach((item) => {

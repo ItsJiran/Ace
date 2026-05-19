@@ -1,8 +1,8 @@
 // import type { AceRegistryType } from '#/shared/schemas/registry-types';
 // import React, { useEffect, useRef } from 'react';
-// import { useAceMemory } from '#/hooks/use-ace-memory';
+// import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 // import { Terminal } from 'lucide-react';
-// import { RenderCounterBadge } from '#/components/dev/render-counter-badge';
+// import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
 
 // export type LogLevel = 'log' | 'info' | 'warn' | 'error';
 

@@ -1,10 +1,10 @@
-import { DeferredWindowContent } from '#/components/layout/deferred-window-content';
-import { SpatialVirtualizer } from '#/components/layout/spatial-virtualizer';
+import { DeferredWindowContent } from '#/app-desktop/components/layout/deferred-window-content';
+import { SpatialVirtualizer } from '#/app-desktop/components/layout/spatial-virtualizer';
 import { Share2, Power, MessageSquare } from 'lucide-react';
 import type { DesktopState } from '#/shared/schemas/state.ts';
-import { useAceMemory } from '#/hooks/use-ace-memory';
+import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import type { AceRegistryType } from '#/shared/schemas/registry-types';
-import { RenderCounterBadge } from '#/components/dev/render-counter-badge';
+import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
 
 export const registry: AceRegistryType.Component = {
     name: 'dev_menu',

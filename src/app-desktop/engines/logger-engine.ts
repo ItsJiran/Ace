@@ -1,4 +1,4 @@
-import { KernelEngine } from './kernel-engine';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
 export interface LogEntry {

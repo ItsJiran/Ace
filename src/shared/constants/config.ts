@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type {
     ConfigSchemaMapType,
     ConfigStorageType,
-} from '#/shared/config';
+} from '#/shared/schemas/config';
 import { KeybindActionMap, KeybindButtons } from './keybinds';
 import { AIProviders } from './ai';
 

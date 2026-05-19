@@ -1,7 +1,6 @@
 import type { RAMInteractivity } from '#/shared/schemas/storage';
 import type { ProcessRuntimeMemoryMeta, RuntimeMemoryRetentionPolicy, RuntimeMemoryScope } from '#/shared/schemas/process';
 import { KernelState } from './kernel-state';
-import { KernelTelemetry } from './kernel-telemetry';
 import { KernelContextManager } from './kernel-context-manager';
 
 // Attach observer flush hook immediately upon evaluating the import
@@ -311,7 +310,6 @@ export class KernelMemoryManager {
         const immutablePayload = this.cloneForStorage(payload);
         KernelState.kernel_memory.set(memory_uid, immutablePayload);
         this.notifyMemoryChanged(memory_uid);
-        KernelTelemetry.logDebug('registerSystemMemory', { memory_uid });
     }
 
     // ─── Runtime Specific Allocation ──────────────────────────────────────
@@ -326,7 +324,6 @@ export class KernelMemoryManager {
         classifications?: string[];
     }): string | null {
         const uid = this.createMemory(input.payload, input.owner_process_uid, input.memory_uid);
-        KernelTelemetry.logDebug('createRuntimeMemory', { memory_uid: uid, owner_process_uid: input.owner_process_uid });
         return uid;
     }
 
@@ -336,9 +333,6 @@ export class KernelMemoryManager {
         payload: Record<string, any>;
     }): boolean {
         const updated = this.updateMemory(input.memory_uid, input.payload, input.owner_process_uid);
-        if (updated) {
-            KernelTelemetry.logDebug('updateRuntimeMemory', { memory_uid: input.memory_uid, owner_process_uid: input.owner_process_uid });
-        }
         return updated;
     }
 

@@ -1,6 +1,6 @@
 // import { useMemo, useState } from 'react';
 // import { Bot, Activity, Keyboard } from 'lucide-react';
-// import { useAceMemory } from '#/hooks/use-ace-memory';
+// import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 // import type { AIGatewayConfig } from '#/shared/schemas/ai-gateway';
 // import type { Keybind } from '#/shared/schemas/keybinds';
 // import { AIConnectionSettingsTab } from './settings/ai-connection-settings-tab';

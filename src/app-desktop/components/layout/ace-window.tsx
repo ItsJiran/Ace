@@ -2,9 +2,9 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { motion, useDragControls } from 'framer-motion';
 import type { Transition } from 'framer-motion';
-import type { AceWindowRenderProps } from '#/hooks/use-ace-window';
-import { useAceWindow } from '#/hooks/use-ace-window';
-import { AceWindowHead } from '#/components/layout/ace-window-head';
+import type { AceWindowRenderProps } from '#/app-desktop/hooks/use-ace-window';
+import { useAceWindow } from '#/app-desktop/hooks/use-ace-window';
+import { AceWindowHead } from '#/app-desktop/components/layout/ace-window-head';
 
 const resizeHandleDefinitions = [
     {

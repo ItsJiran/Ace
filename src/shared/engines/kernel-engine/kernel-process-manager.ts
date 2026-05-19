@@ -1,7 +1,6 @@
 import type { ProcessStatus, ProcessRecord, ProcessKind, ProcessLifecycleState } from '#/shared/schemas/process';
 import { KernelState } from './kernel-state';
 import { KernelMemoryManager } from './kernel-memory-manager';
-import { KernelTelemetry } from './kernel-telemetry';
 
 export class KernelProcessManager {
 
@@ -53,7 +52,6 @@ export class KernelProcessManager {
             process_generation: 1
         };
         const { abort_signal } = this._registerKernelProcess(record, null);
-        KernelTelemetry.logDebug('spawnProcess', { process_uid, type, owner_engine: options?.owner_engine });
         return { ...record, abort_signal };
     }
 
@@ -84,7 +82,6 @@ export class KernelProcessManager {
             process_generation: 1
         };
         const { abort_signal } = this._registerKernelProcess(record, parent_process_uid);
-        KernelTelemetry.logDebug('spawnSubprocess', { process_uid, parent_process_uid, type, owner_engine: options?.owner_engine });
         return { ...record, abort_signal };
     }
 
@@ -100,7 +97,6 @@ export class KernelProcessManager {
             };
         }
         
-        KernelTelemetry.logDebug('updateProcessStatus', { process_uid, status, hasMetadataPatch: !!metadata_patch });
         return true;
     }
 
@@ -128,19 +124,12 @@ export class KernelProcessManager {
             timeout_ms?: number;
         }
     ): boolean {
-        this._abortKernelProcess(process_uid, options?.cascade ?? true, options?.reason ?? 'kernel_terminate');
-        KernelTelemetry.logDebug('terminateProcess', {
-            process_uid,
-            mode: options?.mode ?? 'graceful',
-            cascade: options?.cascade ?? true,
-            reason: options?.reason ?? 'kernel_terminate',
-        });
+        this._abortKernelProcess(process_uid, options?.cascade ?? true, options?.reason ?? 'kernel_terminate');        
         return true;
     }
 
     static killProcess(process_uid: string): boolean {
         this._abortKernelProcess(process_uid, false, 'force_terminated');
-        KernelTelemetry.logDebug('killProcess', { process_uid });
         return true;
     }
 
