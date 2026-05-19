@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { APP_CONFIG_ROOT_DIR } from '#/lib/fs';
+import { APP_CONFIG_ROOT_DIR } from '#/shared/lib/fs';
 
 type VirtualDirEntry = {
     name: string;

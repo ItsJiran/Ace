@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { EventBus } from '#/engines/event-engine';
 import { useProcessContext } from './use-process-context';
-import type { Emitter, EventSlug, Listener } from '#/schemas/events.ts';
+import type { Emitter, EventSlug, Listener } from '#/shared/schemas/events.ts';
 
 /**
  * useAceEvent — dual-purpose EventBus hook: listen and/or emit.

@@ -7,7 +7,7 @@ import type {
     RuntimeMemoryRetentionPolicy,
     RuntimeMemoryScope,
     RuntimeMemoryState,
-} from '#/schemas/process';
+} from '#/shared/schemas/process';
 
 export interface KernelProcessEntry {
     process_uid: string;

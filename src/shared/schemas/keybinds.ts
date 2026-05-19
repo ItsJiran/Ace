@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { KeybindActionMap, KeybindButtonCodeMap, KeybindButtons, KeybindCodes } from '#/constants/keybinds';
+import { KeybindActionMap, KeybindButtonCodeMap, KeybindButtons, KeybindCodes } from '#/shared/constants/keybinds';
 
 /**
  * Keybind button represent a single button in a keybind shortcut, e.g. "Control", "Shift", "KeyA", etc.

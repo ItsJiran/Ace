@@ -1,6 +1,6 @@
 // import type { AceWindowRenderProps } from '#/hooks/use-ace-window';
-// import type { WindowConfig } from '#/schemas/window';
-// import type { AceRegistryType } from '#/schemas/registry-types';
+// import type { WindowConfig } from '#/shared/schemas/window';
+// import type { AceRegistryType } from '#/shared/schemas/registry-types';
 // import { AceWindow } from '#/components/layout/ace-window';
 
 // import SystemAIChatbar from '../components/system-ai-chatbar';

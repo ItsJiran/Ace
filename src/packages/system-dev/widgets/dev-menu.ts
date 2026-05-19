@@ -1,4 +1,4 @@
-import type { AceRegistryType } from '#/schemas/registry-types';
+import type { AceRegistryType } from '#/shared/schemas/registry-types';
 
 export const registry: AceRegistryType.Widget = {
     name: 'dev_menu',

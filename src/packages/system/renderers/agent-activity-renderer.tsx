@@ -1,6 +1,6 @@
 // /* eslint-disable react-refresh/only-export-components */
 
-// import type { AceRegistryType } from '#/schemas/registry-types';
+// import type { AceRegistryType } from '#/shared/schemas/registry-types';
 // import { Bot, BrainCircuit, CheckCircle2, AlertCircle, Activity } from 'lucide-react';
 // import RendererDisclosureCard from './renderer-disclosure-card';
 

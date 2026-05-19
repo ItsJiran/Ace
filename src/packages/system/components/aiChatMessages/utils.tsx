@@ -1,8 +1,8 @@
 import type React from 'react';
 import { BrainCircuit, Database, ListTodo, Wrench } from 'lucide-react';
 
-import type { AIRenderer } from '#/schemas/ai';
-import type { ToolChatPreview } from '#/schemas/tooling';
+import type { AIRenderer } from '#/shared/schemas/ai';
+import type { ToolChatPreview } from '#/shared/schemas/tooling';
 import { RegistryEngine } from '#/engines/registry-engine';
 
 export type AssistantSegment =

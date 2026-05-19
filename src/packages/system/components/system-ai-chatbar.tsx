@@ -4,7 +4,7 @@
 
 // import { useAIGateway } from "#/hooks/use-ai-gateway";
 // import { useAIChatSession } from "#/hooks/use-ai-chat-session";
-// import { AISessionStatus } from "#/schemas/ai";
+// import { AISessionStatus } from "#/shared/schemas/ai";
 
 // import SystemAIChatConversationContainer from "./system-ai-chat-conversation-container";
 // import SystemAIChatPromptContainer from "./system-ai-chat-prompt-container";

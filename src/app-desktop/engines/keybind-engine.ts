@@ -7,11 +7,11 @@ import type {
     KeybindActionType,
     KeybindCombosType,
     KeybindCodeType,
-} from '#/schemas/keybinds';
-import type { ConfigItemKeybind } from '#/schemas/config';
+} from '#/shared/schemas/keybinds';
+import type { ConfigItemKeybind } from '#/shared/config';
 import { EventBus } from './event-engine';
-import { KeybindAction, KeybindButtonCodeMap } from '#/constants/keybinds.ts';
-import resolveConstMapKeyFromValue from '#/lib/resolve-const-map-key-from-value.ts';
+import { KeybindAction, KeybindButtonCodeMap } from '#/shared/constants/keybinds.ts';
+import resolveConstMapKeyFromValue from '#/shared/lib/resolve-const-map-key-from-value.ts';
 import { StateEngine } from './state-engine';
 
 class KeybindEngineSingleton extends Engine {

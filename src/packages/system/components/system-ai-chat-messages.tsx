@@ -1,6 +1,6 @@
 // import { memo, useEffect, useRef } from 'react';
 
-// import type { AISession } from '#/schemas/ai';
+// import type { AISession } from '#/shared/schemas/ai';
 // import { useAceMemory } from '#/hooks/use-ace-memory';
 
 // import TurnBubble from './aiChatMessages/turn-bubble';

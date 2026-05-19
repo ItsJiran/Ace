@@ -1,5 +1,5 @@
 import { KernelEngine } from './kernel-engine';
-import type { CursorState, DesktopState } from '#/schemas/state.ts';
+import type { CursorState, DesktopState } from '#/shared/schemas/state.ts';
 
 const DEFAULT_CURSOR_STATE: CursorState = {
     x: 0,

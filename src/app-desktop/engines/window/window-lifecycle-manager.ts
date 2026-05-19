@@ -1,6 +1,6 @@
 import { KernelEngine } from '../kernel-engine';
 import { StateEngine } from '../state-engine';
-import type { WindowConfig, SpawnWindowOptions } from '#/schemas/window';
+import type { WindowConfig, SpawnWindowOptions } from '#/shared/schemas/window';
 
 
 export interface WindowLifecycleDependencies {

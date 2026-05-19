@@ -1,6 +1,6 @@
 import type React from 'react';
 
-import type { AISession } from '#/schemas/ai';
+import type { AISession } from '#/shared/schemas/ai';
 
 export interface SystemAIChatMessagesProps {
     session?: AISession | undefined;

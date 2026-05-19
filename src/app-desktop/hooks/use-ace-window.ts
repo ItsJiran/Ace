@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import type { PanInfo } from 'framer-motion';
-import type { DesktopState } from '#/schemas/state.ts';
-import type { WindowConfig } from '#/schemas/window';
+import type { DesktopState } from '#/shared/schemas/state.ts';
+import type { WindowConfig } from '#/shared/schemas/window';
 import { WindowEngine } from '#/engines/window-engine';
 import { StateEngine } from '#/engines/state-engine.ts';
 import { useAceMemory, useAceMemorySelector } from '#/hooks/use-ace-memory';

@@ -1,9 +1,9 @@
 import { DeferredWindowContent } from '#/components/layout/deferred-window-content';
 import { SpatialVirtualizer } from '#/components/layout/spatial-virtualizer';
 import { Share2, Power, MessageSquare } from 'lucide-react';
-import type { DesktopState } from '#/schemas/state.ts';
+import type { DesktopState } from '#/shared/schemas/state.ts';
 import { useAceMemory } from '#/hooks/use-ace-memory';
-import type { AceRegistryType } from '#/schemas/registry-types';
+import type { AceRegistryType } from '#/shared/schemas/registry-types';
 import { RenderCounterBadge } from '#/components/dev/render-counter-badge';
 
 export const registry: AceRegistryType.Component = {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DefaultConfigKeybinds } from '#/constants/config';
-import { KeybindActionMap, KeybindButtons } from '#/constants/keybinds';
+import { DefaultConfigKeybinds } from '#/shared/constants/config';
+import { KeybindActionMap, KeybindButtons } from '#/shared/constants/keybinds';
 import { loadFreshEngineSet } from './index';
 
 describe('ConfigEngine and KeybindEngine feature', () => {

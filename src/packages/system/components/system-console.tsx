@@ -1,4 +1,4 @@
-// import type { AceRegistryType } from '#/schemas/registry-types';
+// import type { AceRegistryType } from '#/shared/schemas/registry-types';
 // import React, { useEffect, useRef } from 'react';
 // import { useAceMemory } from '#/hooks/use-ace-memory';
 // import { Terminal } from 'lucide-react';

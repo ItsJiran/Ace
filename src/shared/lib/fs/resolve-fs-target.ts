@@ -3,7 +3,7 @@ import isAbsolutePath from './is-absolute-path';
 import normalizeAbsolutePath from './normalize-absolute-path';
 import resolveInternalAbsolutePath from './resolve-internal-absolute-path';
 import sanitizeRelativePath from './sanitize-relative-path';
-import type { FSEnginePathOptions, FsResolvedTarget } from '#/schemas/fs';
+import type { FSEnginePathOptions, FsResolvedTarget } from '#/shared/schemas/fs';
 
 async function resolveFsTarget(
     targetPath: string,

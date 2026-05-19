@@ -1,5 +1,5 @@
-import type { RAMInteractivity } from '#/schemas/storage';
-import type { ProcessRuntimeMemoryMeta, RuntimeMemoryRetentionPolicy, RuntimeMemoryScope } from '#/schemas/process';
+import type { RAMInteractivity } from '#/shared/schemas/storage';
+import type { ProcessRuntimeMemoryMeta, RuntimeMemoryRetentionPolicy, RuntimeMemoryScope } from '#/shared/schemas/process';
 import { KernelState } from './kernel-state';
 import { KernelTelemetry } from './kernel-telemetry';
 import { KernelContextManager } from './kernel-context-manager';

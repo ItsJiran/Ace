@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAceMemory } from '#/hooks/use-ace-memory';
-import type { AIGatewayConfig, SDKProvider } from '#/schemas/ai-gateway';
+import type { AIGatewayConfig, SDKProvider } from '#/shared/schemas/ai-gateway';
 
 export function useAIGateway() {
     const gatewayConfig = useAceMemory<AIGatewayConfig>(window.ACE.ai_gateway.memory_uid);

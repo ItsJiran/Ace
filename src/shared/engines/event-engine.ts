@@ -1,4 +1,4 @@
-import type { EventData, EventSlug, ListenerHandler, ListenerMap, ListenerUid } from '#/schemas/events';
+import type { EventData, EventSlug, ListenerHandler, ListenerMap, ListenerUid } from '#/shared/schemas/events';
 import { KernelEngine } from './kernel-engine';
 
 class EventEngineSingleton {

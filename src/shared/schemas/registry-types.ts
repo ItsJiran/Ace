@@ -12,7 +12,7 @@ import type { WindowConfig } from './window';
  * `@ace/registry-types` npm package for user-submitted external packages.
  *
  * Usage:
- *   import type { AceRegistryType } from '#/schemas/registry-types';
+ *   import type { AceRegistryType } from '#/shared/schemas/registry-types';
  *   export const registry: AceRegistryType.Widget = { name: 'notepad', slug: 'notepad' };
  */
 

@@ -1,4 +1,4 @@
-import type { AgentConfig } from '#/schemas/ai';
+import type { AgentConfig } from '#/shared/schemas/ai';
 import { createCodeInterpreterMiddleware } from "@langchain/quickjs";
 import { 
     initChatModel, 

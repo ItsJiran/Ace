@@ -1,6 +1,6 @@
-import { AIProviderEnvKeys } from "#/constants/ai.ts";
-import readProcessEnv from "#/lib/read-process-env.ts";
-import { AIProviderEnvKeyType, AIProviderType } from "#/schemas/ai.ts";
+import { AIProviderEnvKeys } from "#/shared/constants/ai.ts";
+import readProcessEnv from "#/shared/lib/read-process-env.ts";
+import { AIProviderEnvKeyType, AIProviderType } from "#/shared/schemas/ai.ts";
 
 export default async function resolveApiKey(providerName: AIProviderType) {
        const envKeys : AIProviderEnvKeyType[] = AIProviderEnvKeys[providerName] ?? [];

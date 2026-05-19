@@ -5,9 +5,8 @@ import {
     RegistryRuntimeSchemaMetadataSchema,
     type RegistryPackage,
     type RegistryDomainEntry,
-} from '#/schemas/registry';
-import { LoggerEngine } from './logger-engine';
-import { RegistryDomain } from '#/constants/registry';
+} from '#/shared/schemas/registry';
+import { RegistryDomain } from '#/shared/constants/registry';
 
 class RegistryEngineSingleton {
     // Configuration
@@ -116,7 +115,6 @@ class RegistryEngineSingleton {
     private logRegistryMiss(reason: string, ctx: { packageRef: string; domain: string; slug: string }) {
         const message = `[RegistryEngine] ${reason}: ${ctx.packageRef}/${ctx.domain}/${ctx.slug}`;
         console.warn(message);
-        LoggerEngine.log('warn', message);
     }
 
     /**

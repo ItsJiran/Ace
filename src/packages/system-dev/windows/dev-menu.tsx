@@ -1,4 +1,4 @@
-import type { AceRegistryType } from '#/schemas/registry-types';
+import type { AceRegistryType } from '#/shared/schemas/registry-types';
 import { AceWindow } from '#/components/layout/ace-window';
 import DevMenu from '../components/dev-menu';
 

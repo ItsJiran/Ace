@@ -1,10 +1,10 @@
 
 import { FilesystemStorageAdapter } from './fs/filesystem-storage';
 import { LocalStorageAdapter } from './fs/local-storage';
-import { APP_CONFIG_ROOT_DIR, resolveFsTarget } from '#/lib/fs';
-import type { FSEnginePathOptions, FsDirectoryEntry, FsResolvedTarget } from '#/schemas/fs';
+import { APP_CONFIG_ROOT_DIR, resolveFsTarget } from '#/shared/lib/fs';
+import type { FSEnginePathOptions, FsDirectoryEntry, FsResolvedTarget } from '#/shared/schemas/fs';
 
-export type { FSEnginePathOptions } from '#/schemas/fs';
+export type { FSEnginePathOptions } from '#/shared/schemas/fs';
 
 class FSEngineSingleton {
     private readonly filesystemStorage = new FilesystemStorageAdapter();

@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { vi } from 'vitest';
-import type { FsDirectoryEntry, FsResolvedTarget } from '#/schemas/fs';
+import type { FsDirectoryEntry, FsResolvedTarget } from '#/shared/schemas/fs';
 import artifactRootDir from './artifact-root-dir';
 
 function normalizeSegments(targetPath: string): string[] {

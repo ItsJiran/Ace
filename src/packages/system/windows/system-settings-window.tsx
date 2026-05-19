@@ -1,8 +1,8 @@
-// import type { AceRegistryType } from '#/schemas/registry-types';
+// import type { AceRegistryType } from '#/shared/schemas/registry-types';
 // import { AceWindow } from '#/components/layout/ace-window';
 // import { X, Minus, GripHorizontal } from 'lucide-react';
 // import SystemSettings from '../components/system-settings';
-// import type { WindowConfig } from '#/schemas/window';
+// import type { WindowConfig } from '#/shared/schemas/window';
 // import type { AceWindowRenderProps } from '#/hooks/use-ace-window';
 
 // // eslint-disable-next-line react-refresh/only-export-components

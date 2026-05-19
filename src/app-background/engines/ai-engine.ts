@@ -1,11 +1,11 @@
-import { AIProviders } from '#/constants/ai.ts';
+import { AIProviders } from '#/shared/constants/ai.ts';
 import type {
     AgentConfigurable,
     AgentThreadSnapshot,
     AgentThread,
     AgentThreadSyncPayload,
     AIProviderType,
-} from '#/schemas/ai.ts';
+} from '#/shared/schemas/ai.ts';
 // import SingletonAgentInstance from './ai/agent-instance';
 import resolveApiKey from './ai/resolve-api-key';
 import { ConfigEngine } from './config-engine';

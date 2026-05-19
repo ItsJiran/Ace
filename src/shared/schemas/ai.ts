@@ -1,6 +1,6 @@
 import type { RunnableConfig } from '@langchain/core/runnables';
 
-import { AIProviders, AIProviderEnvKeys } from '#/constants/ai';
+import { AIProviders, AIProviderEnvKeys } from '#/shared/constants/ai';
 export type AIProviderType = (typeof AIProviders)[keyof typeof AIProviders];
 export type AIProviderEnvKeyType = (typeof AIProviderEnvKeys)[AIProviderType][number];
 

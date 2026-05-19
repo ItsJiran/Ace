@@ -3,10 +3,10 @@ import { StateEngine } from './state-engine';
 import { KernelEngine } from './kernel-engine';
 import { WindowLifecycleManager } from './window/window-lifecycle-manager';
 import { WindowAnimationEngine } from './window/window-animation-engine';
-import type { AnimationSequence } from '#/schemas/animation';
+import type { AnimationSequence } from '#/shared/schemas/animation';
 import type { WindowAnimationSequence } from './window/window-animation-engine';
-import type { WindowConfig, SpawnWindowOptions } from '#/schemas/window';
-import type { DesktopState } from '#/schemas/state';
+import type { WindowConfig, SpawnWindowOptions } from '#/shared/schemas/window';
+import type { DesktopState } from '#/shared/schemas/state';
 import { Engine } from './engine';
 
 class WindowEngineSingleton extends Engine {

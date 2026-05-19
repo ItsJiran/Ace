@@ -12,7 +12,7 @@ import {
     resolveFsTarget,
     resolveInternalAbsolutePath,
     sanitizeRelativePath,
-} from '#/lib/fs';
+} from '#/shared/lib/fs';
 import { FSEngine } from '#/engines/fs-engine';
 import { artifactRootDir, createArtifactFsAdapterMock, createElectronAPIMock } from './index';
 

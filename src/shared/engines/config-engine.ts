@@ -1,6 +1,6 @@
 import { FSEngine } from './fs-engine';
 import { KernelEngine } from './kernel-engine';
-import { DefaultConfigGeneral, DefaultConfigKeybinds, DefaultConfigAI } from '#/constants/config';
+import { DefaultConfigGeneral, DefaultConfigKeybinds, DefaultConfigAI } from '#/shared/constants/config';
 import { EventBus } from './event-engine';
 import type {
     ConfigItemKeybindType,
@@ -8,7 +8,7 @@ import type {
     ConfigFileType,
     ConfigStorageMapType,
     ConfigStorageType,
-} from '#/schemas/config';
+} from '#/shared/schemas/config';
 import { Engine } from './engine';
 import { z } from 'zod';
 

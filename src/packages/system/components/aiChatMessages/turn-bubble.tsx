@@ -1,4 +1,4 @@
-import type { AIRenderer } from '#/schemas/ai';
+import type { AIRenderer } from '#/shared/schemas/ai';
 
 import ActivityAccordion from './activity-accordion';
 import Renderer from './renderer';

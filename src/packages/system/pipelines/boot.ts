@@ -1,6 +1,6 @@
 import { Engine } from '#/engines/engine.ts';
 import { StateEngine } from '#/engines/state-engine.ts';
-import type { AceRegistryType } from '#/schemas/registry-types.ts';
+import type { AceRegistryType } from '#/shared/schemas/registry-types.ts';
 
 export const registry: AceRegistryType.Pipeline = {
     name: 'Bootup Sequence',

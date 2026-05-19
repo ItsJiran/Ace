@@ -1,8 +1,8 @@
 // import { useMemo, useState } from 'react';
 // import { Bot, Activity, Keyboard } from 'lucide-react';
 // import { useAceMemory } from '#/hooks/use-ace-memory';
-// import type { AIGatewayConfig } from '#/schemas/ai-gateway';
-// import type { Keybind } from '#/schemas/keybinds';
+// import type { AIGatewayConfig } from '#/shared/schemas/ai-gateway';
+// import type { Keybind } from '#/shared/schemas/keybinds';
 // import { AIConnectionSettingsTab } from './settings/ai-connection-settings-tab';
 // import { AIHealthSettingsTab } from './settings/ai-health-settings-tab';
 // import { KeybindSettingsTab } from './settings/keybind-settings-tab';

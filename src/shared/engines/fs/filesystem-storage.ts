@@ -1,5 +1,5 @@
-import { getElectronAPIOrThrow } from '#/lib/fs';
-import type { FsDirectoryEntry, FsResolvedTarget, FsStorageAdapter } from '#/schemas/fs';
+import { getElectronAPIOrThrow } from '#/shared/lib/fs';
+import type { FsDirectoryEntry, FsResolvedTarget, FsStorageAdapter } from '#/shared/schemas/fs';
 
 export class FilesystemStorageAdapter implements FsStorageAdapter {
     async exists(target: FsResolvedTarget): Promise<boolean> {

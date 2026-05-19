@@ -1,5 +1,5 @@
 import { KernelEngine } from '#/engines/kernel-engine';
-import type { AnimationSequence, EasingType } from '#/schemas/animation';
+import type { AnimationSequence, EasingType } from '#/shared/schemas/animation';
 
 export type WindowAnimationInterruptPolicy =
     | 'drop'

@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import type React from 'react';
 
-import type { AIRenderer } from '#/schemas/ai';
-import type { AceRegistryType } from '#/schemas/registry-types';
+import type { AIRenderer } from '#/shared/schemas/ai';
+import type { AceRegistryType } from '#/shared/schemas/registry-types';
 import { RegistryEngine } from '#/engines/registry-engine';
 
 const Renderer = memo(function Renderer({ renderer }: { renderer: AIRenderer }) {

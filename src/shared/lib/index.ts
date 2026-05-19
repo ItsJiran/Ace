@@ -1,1 +1,1 @@
-import { default as readProcessEnv } from "#/lib/read-process-env.ts";
+import { default as readProcessEnv } from "#/shared/lib/read-process-env.ts";

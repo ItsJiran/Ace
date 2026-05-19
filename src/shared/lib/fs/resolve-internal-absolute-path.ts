@@ -1,5 +1,5 @@
 import getElectronAPI from './get-electron-api';
-import type { FsBaseDir } from '#/schemas/fs';
+import type { FsBaseDir } from '#/shared/schemas/fs';
 
 async function resolveInternalAbsolutePath(fsPath: string, baseDir: FsBaseDir = 'appConfig'): Promise<string> {
     const api = getElectronAPI();

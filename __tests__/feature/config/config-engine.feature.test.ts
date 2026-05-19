@@ -3,9 +3,9 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DefaultConfigGeneral, DefaultConfigKeybinds } from '#/constants/config';
-import { KeybindActionMap, KeybindButtons } from '#/constants/keybinds';
-import { APP_CONFIG_ROOT_DIR } from '#/lib/fs';
+import { DefaultConfigGeneral, DefaultConfigKeybinds } from '#/shared/constants/config';
+import { KeybindActionMap, KeybindButtons } from '#/shared/constants/keybinds';
+import { APP_CONFIG_ROOT_DIR } from '#/shared/lib/fs';
 import { artifactRootDir, createArtifactFsAdapterMock, createElectronAPIMock } from '../fs';
 import { loadFreshEngineSet } from './index';
 

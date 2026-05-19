@@ -1,4 +1,4 @@
-import type { FsDirectoryEntry, FsResolvedTarget, FsStorageAdapter } from '#/schemas/fs';
+import type { FsDirectoryEntry, FsResolvedTarget, FsStorageAdapter } from '#/shared/schemas/fs';
 
 export class LocalStorageAdapter implements FsStorageAdapter {
     private readonly prefix: string;

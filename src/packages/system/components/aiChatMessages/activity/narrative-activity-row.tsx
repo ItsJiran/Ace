@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import type { AIRenderer } from '#/schemas/ai';
+import type { AIRenderer } from '#/shared/schemas/ai';
 import { useAceMemory } from '#/hooks/use-ace-memory';
 
 import Renderer from '../renderer';

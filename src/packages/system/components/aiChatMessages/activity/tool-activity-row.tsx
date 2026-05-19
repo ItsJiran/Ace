@@ -1,4 +1,4 @@
-import type { AIRenderer } from '#/schemas/ai';
+import type { AIRenderer } from '#/shared/schemas/ai';
 
 import Renderer from '../renderer';
 
