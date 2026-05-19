@@ -11,6 +11,14 @@ function registerMainIPCHandlers({
     resolveElectronRuntimeMode,
     app,
 }) {
+    const unsubscribeBackgroundStream = backgroundRuntime.onStreamEvent((payload) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+            if (!window.isDestroyed()) {
+                window.webContents.send('ace:background:stream:event', payload);
+            }
+        }
+    });
+
     ipcMain.handle('ace:window:focus', (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
@@ -122,6 +130,7 @@ function registerMainIPCHandlers({
     ipcMain.handle('ace:path:app-local-dir', () => getAppLocalRootDir(app));
 
     return () => {
+        unsubscribeBackgroundStream?.();
         ipcMain.removeHandler('ace:window:focus');
         ipcMain.removeHandler('ace:window:get-bounds');
         ipcMain.removeHandler('ace:screen:ignore-mouse-events');

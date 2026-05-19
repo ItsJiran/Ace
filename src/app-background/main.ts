@@ -1,5 +1,7 @@
 import { AIEngine } from './engines/ai-engine';
 import { bootBackgroundRuntime } from '../background';
+import { setBackgroundAIStreamEmitter } from './engines/ai-stream-events';
+import type { BackgroundAIStreamEventPayload } from '#/shared/schemas/ai.ts';
 
 type BackgroundRPCRequest = {
 	id: string;
@@ -25,13 +27,27 @@ type BackgroundRPCReady = {
 	type: 'ace:background:ready';
 };
 
+type BackgroundStreamEventMessage = {
+	type: 'ace:background:stream:event';
+	payload: BackgroundAIStreamEventPayload;
+};
+
 let backgroundReadyPromise: Promise<void> | null = null;
 
-function sendToParent(message: BackgroundRPCSuccess | BackgroundRPCFailure | BackgroundRPCReady) {
+function sendToParent(
+	message: BackgroundRPCSuccess | BackgroundRPCFailure | BackgroundRPCReady | BackgroundStreamEventMessage,
+) {
 	if (typeof process.send === 'function') {
 		process.send(message);
 	}
 }
+
+setBackgroundAIStreamEmitter((payload) => {
+	sendToParent({
+		type: 'ace:background:stream:event',
+		payload,
+	});
+});
 
 async function ensureBackgroundRuntimeBooted() {
 	if (!backgroundReadyPromise) {

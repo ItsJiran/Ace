@@ -14,8 +14,59 @@ import resolveApiKey from './ai/resolve-api-key';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
+import { emitBackgroundAIStreamEvent } from './ai-stream-events';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
+
+function resolveStreamTextContent(content: unknown): string {
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    if (Array.isArray(content)) {
+        return content
+            .map((item) => {
+                if (typeof item === 'string') {
+                    return item;
+                }
+
+                if (!item || typeof item !== 'object') {
+                    return '';
+                }
+
+                const record = item as Record<string, unknown>;
+                if (typeof record.text === 'string') {
+                    return record.text;
+                }
+
+                if (typeof record.content === 'string') {
+                    return record.content;
+                }
+
+                return '';
+            })
+            .join('');
+    }
+
+    if (content && typeof content === 'object') {
+        const record = content as Record<string, unknown>;
+        if (typeof record.content === 'string') {
+            return record.content;
+        }
+        if (Array.isArray(record.content)) {
+            return resolveStreamTextContent(record.content);
+        }
+    }
+
+    return '';
+}
+
+function emitProtocolThreadEvent(thread_uid: string, message: Record<string, unknown>) {
+    emitBackgroundAIStreamEvent({
+        thread_uid,
+        message: message as never,
+    });
+}
 
 class AIEngineSingleton extends Engine {
     public ai_threads_uids_memory_uid = 'system:ai_engine:thread:uids';
@@ -206,8 +257,194 @@ class AIEngineSingleton extends Engine {
             },
         );
 
-        for await (const _event of stream) {
-            void _event;
+        const run_id = crypto.randomUUID();
+        let protocolSeq = 0;
+        let activeAssistantMessageId: string | null = null;
+        let activeAssistantText = '';
+        let hasStartedAssistantBlock = false;
+
+        const emitLifecycle = (event: 'started' | 'completed' | 'failed', error?: string) => {
+            emitProtocolThreadEvent(thread_uid, {
+                type: 'event',
+                event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
+                seq: protocolSeq,
+                method: 'lifecycle',
+                params: {
+                    namespace: [],
+                    timestamp: Date.now(),
+                    data: {
+                        event,
+                        ...(error ? { error } : {}),
+                    },
+                },
+            });
+        };
+
+        const ensureAssistantMessageStarted = (node?: string, metadata?: Record<string, unknown>) => {
+            if (!activeAssistantMessageId) {
+                activeAssistantMessageId = `assistant:${thread_uid}:${run_id}`;
+                emitProtocolThreadEvent(thread_uid, {
+                    type: 'event',
+                    event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
+                    seq: protocolSeq,
+                    method: 'messages',
+                    params: {
+                        namespace: [],
+                        timestamp: Date.now(),
+                        ...(node ? { node } : {}),
+                        data: {
+                            event: 'message-start',
+                            role: 'ai',
+                            id: activeAssistantMessageId,
+                            ...(metadata ? { metadata } : {}),
+                        },
+                    },
+                });
+            }
+
+            if (!hasStartedAssistantBlock) {
+                hasStartedAssistantBlock = true;
+                emitProtocolThreadEvent(thread_uid, {
+                    type: 'event',
+                    event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
+                    seq: protocolSeq,
+                    method: 'messages',
+                    params: {
+                        namespace: [],
+                        timestamp: Date.now(),
+                        ...(node ? { node } : {}),
+                        data: {
+                            event: 'content-block-start',
+                            index: 0,
+                            content: {
+                                type: 'text',
+                                text: '',
+                            },
+                        },
+                    },
+                });
+            }
+        };
+
+        const emitAssistantTextDelta = (text: string, node?: string, metadata?: Record<string, unknown>) => {
+            if (!text) {
+                return;
+            }
+
+            ensureAssistantMessageStarted(node, metadata);
+            activeAssistantText += text;
+            emitProtocolThreadEvent(thread_uid, {
+                type: 'event',
+                event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
+                seq: protocolSeq,
+                method: 'messages',
+                params: {
+                    namespace: [],
+                    timestamp: Date.now(),
+                    ...(node ? { node } : {}),
+                    data: {
+                        event: 'content-block-delta',
+                        index: 0,
+                        delta: {
+                            type: 'text-delta',
+                            text,
+                        },
+                    },
+                },
+            });
+        };
+
+        const finishAssistantMessage = (node?: string) => {
+            if (!activeAssistantMessageId || !hasStartedAssistantBlock) {
+                return;
+            }
+
+            emitProtocolThreadEvent(thread_uid, {
+                type: 'event',
+                event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
+                seq: protocolSeq,
+                method: 'messages',
+                params: {
+                    namespace: [],
+                    timestamp: Date.now(),
+                    ...(node ? { node } : {}),
+                    data: {
+                        event: 'content-block-finish',
+                        index: 0,
+                        content: {
+                            type: 'text',
+                            text: activeAssistantText,
+                        },
+                    },
+                },
+            });
+
+            emitProtocolThreadEvent(thread_uid, {
+                type: 'event',
+                event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
+                seq: protocolSeq,
+                method: 'messages',
+                params: {
+                    namespace: [],
+                    timestamp: Date.now(),
+                    ...(node ? { node } : {}),
+                    data: {
+                        event: 'message-finish',
+                        reason: 'stop',
+                    },
+                },
+            });
+
+            activeAssistantMessageId = null;
+            activeAssistantText = '';
+            hasStartedAssistantBlock = false;
+        };
+
+        emitLifecycle('started');
+
+        try {
+            for await (const event of stream) {
+				const eventRecord = event as unknown as Record<string, unknown>;
+                const eventName = typeof eventRecord.event === 'string' ? eventRecord.event : '';
+                const eventData =
+                    eventRecord.data && typeof eventRecord.data === 'object'
+                        ? (eventRecord.data as Record<string, unknown>)
+                        : {};
+                const node = typeof eventRecord.name === 'string' ? eventRecord.name : undefined;
+                const metadata =
+                    typeof eventRecord.metadata === 'object' && eventRecord.metadata
+                        ? (eventRecord.metadata as Record<string, unknown>)
+                        : undefined;
+
+                if (eventName === 'on_chat_model_start') {
+                    ensureAssistantMessageStarted(node, metadata);
+                    continue;
+                }
+
+                if (eventName === 'on_chat_model_stream') {
+                    const chunk = eventData.chunk as Record<string, unknown> | undefined;
+                    emitAssistantTextDelta(resolveStreamTextContent(chunk?.content), node, metadata);
+                    continue;
+                }
+
+                if (eventName === 'on_chat_model_end') {
+                    const finalOutput =
+                        resolveStreamTextContent(eventData.output) ||
+                        resolveStreamTextContent((eventData.chunk as Record<string, unknown> | undefined)?.content);
+
+                    if (finalOutput && !activeAssistantText) {
+                        emitAssistantTextDelta(finalOutput, node, metadata);
+                    }
+
+                    finishAssistantMessage(node);
+                }
+            }
+
+            emitLifecycle('completed');
+        } catch (error) {
+            finishAssistantMessage();
+            emitLifecycle('failed', error instanceof Error ? error.message : String(error));
+            throw error;
         }
 
         return this.readThread(thread_uid);

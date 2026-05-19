@@ -1,4 +1,5 @@
 import type { RunnableConfig } from '@langchain/core/runnables';
+import type { Message as ProtocolMessage } from '@langchain/protocol';
 
 import { AIProviders, AIProviderEnvKeys } from '#/shared/constants/ai';
 export type AIProviderType = (typeof AIProviders)[keyof typeof AIProviders];
@@ -57,3 +58,8 @@ export interface AgentThread extends AgentThreadSnapshot {
 export type AgentThreadSyncPayload = Partial<AgentThreadSnapshot> & {
     snapshot?: AgentThreadSnapshot;
 };
+
+export interface BackgroundAIStreamEventPayload {
+    thread_uid: string;
+    message: ProtocolMessage;
+}

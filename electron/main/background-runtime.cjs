@@ -8,6 +8,7 @@ function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode
     let backgroundReadyRejecter = null;
     let backgroundRequestCounter = 0;
     const backgroundPendingRequests = new Map();
+    const backgroundStreamListeners = new Set();
 
     function isAlive() {
         return Boolean(
@@ -48,6 +49,13 @@ function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode
 
         if (message.type === 'ace:background:ready') {
             backgroundReadyResolver?.();
+            return;
+        }
+
+        if (message.type === 'ace:background:stream:event') {
+            for (const listener of backgroundStreamListeners) {
+                listener(message.payload);
+            }
             return;
         }
 
@@ -170,11 +178,19 @@ function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode
         }
     }
 
+    function onStreamEvent(listener) {
+        backgroundStreamListeners.add(listener);
+        return () => {
+            backgroundStreamListeners.delete(listener);
+        };
+    }
+
     return {
         start,
         ensure,
         invoke,
         getStatus,
+        onStreamEvent,
         dispose,
     };
 }

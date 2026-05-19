@@ -1,76 +1,113 @@
-// import { memo, useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
+import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
+import { Sparkles } from 'lucide-react';
 
-// import type { AISession } from '#/shared/schemas/ai';
-// import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
+import { resolveMessageText } from './system-ai-chat-shared';
 
-// import TurnBubble from './aiChatMessages/turn-bubble';
-// import type { SystemAIChatMessagesProps } from './aiChatMessages/types';
-// import { resolveLatestTurnSpacing } from './aiChatMessages/utils';
+type SystemAIChatMessagesProps = {
+	messages: BaseMessage[];
+	isStreaming: boolean;
+	pendingPrompt: string | null;
+	provider: string;
+	model: string;
+	bottomRef: RefObject<HTMLDivElement | null>;
+};
 
-// function SystemAIChatMessagesInner({ session, sessionUid, className, bottomRef }: SystemAIChatMessagesProps) {
-//     const memoryKey = sessionUid ? `system:ai_session:${sessionUid}:state` : '__system_chat_messages_no_session__';
-//     const sessionFromMemory = useAceMemory<AISession | undefined>(memoryKey);
-//     const resolvedSession = sessionFromMemory ?? session;
-//     const latestTurnRef = useRef<HTMLDivElement | null>(null);
-//     const previousTurnCountRef = useRef(0);
+export function SystemAIChatMessages({
+	messages,
+	isStreaming,
+	pendingPrompt,
+	provider,
+	model,
+	bottomRef,
+}: SystemAIChatMessagesProps) {
+	return (
+		<div className="h-full overflow-auto px-5 pb-5 pt-4 [scrollbar-color:rgb(82_82_91_/_0.85)_transparent] [scrollbar-width:thin]">
+			<div className="system-chat-message-list">
+				{messages.length === 0 && !isStreaming ? (
+					<div className="system-chat-empty-state">
+						<div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-zinc-100">
+							<Sparkles size={18} />
+						</div>
+						<div className="system-chat-empty-title">No conversation yet</div>
+						<div className="system-chat-empty-copy">
+							Start a prompt to open a live conversation stream for plans, tool calls, and assistant output.
+						</div>
+						<div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+							<span className="system-chat-meta-chip">provider: {provider}</span>
+							<span className="system-chat-meta-chip max-w-[220px] truncate">model: {model}</span>
+						</div>
+					</div>
+				) : null}
 
-//     useEffect(() => {
-//         const turnCount = resolvedSession?.turns?.length ?? 0;
-//         const previousTurnCount = previousTurnCountRef.current;
+				{messages.map((message, index) => {
+					if (HumanMessage.isInstance(message)) {
+						return (
+							<div key={message.id ?? index} className="flex justify-end">
+								<div className="flex min-w-0 max-w-[88%] flex-col items-end gap-2">
+									<div className="system-chat-turn-label is-user">You</div>
+									<div className="w-full rounded-[14px_14px_4px_14px] system-container-secondary px-4 py-3 text-sm leading-6 text-zinc-100">
+										<div className="whitespace-pre-wrap">{message.text || resolveMessageText(message.content)}</div>
+									</div>
+								</div>
+							</div>
+						);
+					}
 
-//         if (turnCount > previousTurnCount) {
-//             latestTurnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-//         }
+					if (AIMessage.isInstance(message)) {
+						return (
+							<div key={message.id ?? index} className="flex justify-start">
+								<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
+									<div className="system-chat-turn-label">Assistant</div>
+									<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-100">
+										<div className="whitespace-pre-wrap">{message.text || resolveMessageText(message.content)}</div>
+									</div>
+								</div>
+							</div>
+						);
+					}
 
-//         previousTurnCountRef.current = turnCount;
-//     }, [resolvedSession?.turns?.length]);
+					if (ToolMessage.isInstance(message)) {
+						return (
+							<div key={message.id ?? index} className="flex justify-start">
+								<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
+									<div className="system-chat-turn-label">Tool</div>
+									<div className="w-full rounded-[14px_14px_14px_4px] system-container-tertiary px-4 py-3 text-sm leading-6 text-zinc-100">
+										<div className="whitespace-pre-wrap">{typeof message.content === 'string' ? message.content : JSON.stringify(message.content, null, 2)}</div>
+									</div>
+								</div>
+							</div>
+						);
+					}
 
-//     if (!resolvedSession) {
-//         return (
-//             <div className={className}>
-//                 <div className="system-chat-empty-state">
-//                     <div className="system-chat-empty-title">No session available</div>
-//                     <div className="system-chat-empty-copy">
-//                         Start a prompt to open a live conversation stream for plans, tool calls, and assistant output.
-//                     </div>
-//                 </div>
-//             </div>
-//         );
-//     }
+					return (
+						<div key={message.id ?? index} className="flex justify-start">
+							<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
+								<div className="system-chat-turn-label">{message.getType()}</div>
+								<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-100">
+									<div className="whitespace-pre-wrap">{resolveMessageText(message.content) || JSON.stringify(message.content)}</div>
+								</div>
+							</div>
+						</div>
+					);
+				})}
 
-//     const turns = resolvedSession.turns ?? [];
+				{isStreaming ? (
+					<div className="flex justify-start">
+						<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
+							<div className="system-chat-turn-label">Assistant</div>
+							<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-100/92">
+								<div className="flex items-center gap-2 text-zinc-300">
+									<span className="system-chat-status-pill is-streaming">streaming</span>
+									<span className="whitespace-pre-wrap">{pendingPrompt ? 'Generating response for the latest prompt...' : 'Agent is preparing the next turn...'}</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				) : null}
 
-//     return (
-//         <div className={className ?? ''}>
-//             {turns.map((turn, turnIndex) => {
-//                 const isLast = turnIndex === turns.length - 1;
-//                 return (
-//                     <div
-//                         key={turnIndex}
-//                         ref={isLast ? latestTurnRef : undefined}
-//                         className={`relative scroll-mt-3 ${isLast ? resolveLatestTurnSpacing(turn) : 'pb-5'}`}
-//                     >
-//                         {/* vertical chain rail */}
-//                         {!isLast && (
-//                             <div className="pointer-events-none absolute bottom-0 left-[18px] top-6 w-px bg-white/[0.12]" />
-//                         )}
-
-//                         <div className="space-y-2.5">
-//                             <TurnBubble align="right" label="You" renderers={turn.user_renderers ?? []} turnIndex={turnIndex} prefix="u" />
-//                             <TurnBubble align="left" label="Assistant" renderers={turn.assistant_renderers ?? []} turnIndex={turnIndex} prefix="a" />
-//                         </div>
-//                     </div>
-//                 );
-//             })}
-
-//             <div ref={bottomRef} aria-hidden style={{ width: 1, height: 1 }} />
-//         </div>
-//     );
-// }
-
-// export default memo(SystemAIChatMessagesInner, (prev, next) => {
-//     return prev.session === next.session
-//         && prev.sessionUid === next.sessionUid
-//         && prev.className === next.className
-//         && prev.bottomRef === next.bottomRef;
-// });
+				<div ref={bottomRef} aria-hidden style={{ width: 1, height: 1 }} />
+			</div>
+		</div>
+	);
+}
