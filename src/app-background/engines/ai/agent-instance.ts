@@ -32,6 +32,13 @@ export default class SingletonAgentInstance {
         return SingletonAgentInstance._value;
     }
 
+    public stream(
+        state: Parameters<ReturnType<typeof createDeepAgent>['invoke']>[0],
+        config: Record<string, unknown> & { version: 'v3' },
+    ) {
+        return this.value.streamEvents(state as never, config as never);
+    }
+
     public static getInstance(): SingletonAgentInstance {
         if (!SingletonAgentInstance._instance) {
             SingletonAgentInstance._instance = new SingletonAgentInstance();

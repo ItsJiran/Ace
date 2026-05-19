@@ -10,7 +10,7 @@
 
 ---------
 
-ACE is a local-first agentic desktop environment built around an overlay UI, an AI gateway sidecar, and a runtime tool/event architecture.
+ACE is a local-first agentic desktop environment built around an overlay UI, an Electron desktop shell, and a runtime tool/event architecture.
 
 The project is designed to help developers work faster by combining:
 - an always-available overlay interface
@@ -19,12 +19,12 @@ The project is designed to help developers work faster by combining:
 - session context, memory, and retrieval pipelines
 - an extensible package ecosystem for custom components, tools, and workflows
 
-In practical terms, ACE is an experimental developer assistant platform where the UI layer, runtime orchestration, and gateway backend are all being shaped into one integrated system.
+In practical terms, ACE is an experimental developer assistant platform where the UI layer, runtime orchestration, and agent runtime are still evolving toward a cleaner multi-surface architecture.
 
 ## ✨ Key Features
 
 - **🌐 Always-on Overlay:** A seamless UI layer that stays on top of your workflow without interrupting it.
-- **🧠 Local-First Intelligence:** Privacy-centric AI orchestration using a local gateway sidecar.
+- **🧠 Local-First Intelligence:** Privacy-centric AI orchestration with a local runtime, with the current DeepAgents loop still living on the client side.
 - **🛠️ Extensible Toolchain:** Schema-aware tool execution (`ToolEngine`) for local file and system tasks.
 - **📡 Event-Driven Architecture:** Robust communication via a central `EventBus` for decoupled UI and logic.
 - **📦 Package Ecosystem:** Modular architecture allowing custom widgets, tools, and workflows.
@@ -38,87 +38,107 @@ Context switching kills user productivity. Modern AI assistants often live in se
 ### Prerequisites
 
 - Node.js and npm
-- Python 3
 
-### Install Frontend Dependencies
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
-### Install Gateway Dependencies
+### Configure Provider API Keys
 
-You can either install the Python dependencies directly:
+ACE reads provider keys from your shell environment through the Electron main process and exposes only an allowlisted subset to the renderer.
 
-```bash
-cd src-gateway-server
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-```
-
-Or use the helper script from the project root:
+For example in `~/.zshrc`:
 
 ```bash
-npm run setup:gateway
+export OPENAI_API_KEY="your-key"
+export ANTHROPIC_API_KEY="your-key"
+export GOOGLE_API_KEY="your-key"
 ```
+
+Then restart your terminal and Electron dev process.
 
 ### Run The App
 
-Start the frontend app:
+Start the desktop app:
 
 ```bash
 npm run dev
 ```
 
-Start the gateway server in a separate terminal:
+This starts:
+- the Vite renderer dev server
+- the Electron main process
 
-```bash
-npm run dev:gateway
-```
+### Optional Legacy Gateway Scripts
 
-The typical local workflow is:
+The repository still contains legacy gateway-oriented scripts in `package.json` such as `setup:gateway`, `dev:gateway`, and `dev:with-gateway`.
+
+Those scripts are not the primary local workflow anymore because the current DeepAgents runtime is instantiated inside the client application under `src/engines/ai/`.
+
+### Typical Local Workflow
+
 1. install npm dependencies
-2. install Python gateway dependencies
-3. run `npm run dev:gateway`
+2. export provider API keys in your shell config
+3. restart the shell so the variables are available
 4. run `npm run dev`
 
-## What This Project Is
+## Current State
 
 ACE is currently an experimental platform for building a local-first AI-native workspace, with a strong focus on developer productivity.
 
+The current implementation is important to state clearly:
+- the overlay UI runs in a React renderer powered by Vite
+- the desktop host runs in Electron through `electron/main.cjs` and `electron/preload.cjs`
+- the app runtime lives in `src/engines`, centered around `KernelEngine` and domain engines
+- the active DeepAgents runtime currently lives on the client side in `src/engines/ai/`
+- a fuller server split is planned, but it is not the primary runtime path today
+
+## What This Project Is
+
 Today, the codebase includes work on:
 - overlay and window-based UI primitives
-- an AI gateway server for model access and orchestration
+- a kernel-like local runtime for memory, process orchestration, config, input, registry, and filesystem access
+- a client-side DeepAgents integration for local agent execution
 - session state, context, memory, and retrieval flows
 - local tool execution through an internal event/runtime system
 - package-driven extensibility for future third-party or internal feature development
 
-## What Is Currently Done
+## Current Implementation
 
 Even though the project is still early, a meaningful amount of the runtime foundation is already implemented.
 
-What is currently done in the repository:
-- a working frontend runtime built with React, Vite, and an Electron/Tauri-oriented desktop shell approach
-- a central KernelEngine-based control plane for memory, process lifecycle, runtime state, and orchestration helpers
-- an EventBus-driven interaction system for routing actions like tool execution and session events across the app
-- a package-oriented architecture with core package domains for components, widgets, tools, windows, and development utilities
-- an AI gateway sidecar built with FastAPI and DeepAgents, including `/health`, `/models/{sdk}`, `/test/{sdk}`, and `/chat/{sdk}` endpoints
-- provider/model integration plumbing for OpenAI, Google Gemini, and Anthropic through the gateway runtime
-- AI session creation, storage, listing, closing, interrupt handling, and per-session state persisted through the frontend runtime
-- a streaming chat/request loop that opens a gateway request, mirrors runtime state, persists turn data, and finalizes session status
-- runtime snapshot mirroring for planning, context, working memory, and active agent state from the backend into the frontend session state
-- a gateway context flow where session context records can be sent to the backend and mirrored back into the live session runtime
-- local ACE tool execution through ToolEngine, including schema-aware execution paths and result write-back into session artifacts
-- an external ACE tool round-trip flow where the backend can queue tool intents, the frontend fetches them over HTTP, dispatches them into EventBus, and returns results back to the gateway with session and request correlation
-- development and debugging surfaces such as session inspection, event monitoring, parser tracing, and tool runner development components
-- a non-trivial automated test surface across backend runtime support, gateway tools, parser behavior, event engine behavior, kernel behavior, and related orchestration slices
+What is currently implemented in the repository:
+- a working desktop runtime built with React, Vite, and Electron
+- a central `KernelEngine` control plane for memory, process lifecycle, runtime state, and orchestration helpers
+- an `EventBus`-driven interaction system for routing actions like tool execution and system events across the app
+- configuration, keybind, filesystem, window, logging, registry, and AI engines under `src/engines`
+- a client-side DeepAgents runtime created in `src/engines/ai/agent-instance.ts`
+- provider/model integration plumbing for OpenAI, Google, and Anthropic through the in-app AI runtime
+- AI thread state synchronization into kernel memory through `AIEngine`
+- Electron bridges for filesystem access, global mouse/keyboard input, and shell-derived environment variables
+- a package-oriented architecture with components, widgets, layout primitives, and development surfaces
+- a non-trivial automated test surface across config, filesystem, eventing, kernel behavior, and related orchestration slices
 
-In short, the project already has a real runtime skeleton in place: app shell, kernel-like control plane, gateway sidecar, session loop, tool execution path, and debugging infrastructure. What is still evolving is the hardening, cleanup, scalability, and consistency of those pieces.
+In short, the current architecture is real and usable, but still transitional: the app shell, kernel-like control plane, local agent runtime, and tool execution path are already present, while the clean separation into dedicated app/server/shared surfaces is still ahead.
+
+## Current Engine Surfaces
+
+The current engine layer is centered on these runtime domains:
+- `KernelEngine`: control plane for system memory, process lifecycle, and orchestration helpers
+- `ConfigEngine`: schema-driven config persistence with versioned files and kernel RAM sync
+- `FSEngine`: local file persistence with Electron-backed adapters and fallback behavior
+- `WindowEngine`: desktop/window coordination, overlay interaction, and global input routing
+- `KeybindEngine`: active keybind resolution and input-driven command dispatch
+- `RegistryEngine`: package and runtime registration surface
+- `AIEngine`: AI thread state, provider/model helpers, and kernel synchronization
+- `EventEngine` / `EventBus`: decoupled routing layer for runtime events
 
 ## 🛠 Technical Decisions & AI Implementation
 
 ### Why DeepAgents + LangChain?
-The AI agent intelligence in ACE is implemented using **DeepAgents** built on top of **LangChain**. While many frameworks exist, this choice was driven by a need for high-speed delivery without sacrificing orchestration power:
+The AI agent intelligence in ACE currently uses **DeepAgents** built on top of **LangChain**, and right now that runtime still lives inside the client application. While many frameworks exist, this choice was driven by a need for high-speed delivery without sacrificing orchestration power:
 
 *   **Speed over Boilerplate:** Leveraging a pre-built agentic framework allowed me to focus on ACE's unique overlay logic rather than building a custom **LangGraph** from scratch. Managing complex nodes, edges, and state transitions manually would have significantly delayed the experimental cycle.
 *   **ReAct vs. Custom Loops:** Implementing a reliable **ReAct** (Reasoning and Acting) pattern is non-trivial. DeepAgents provides a battle-tested execution loop that handles tool calling and observation cycles out of the box.
@@ -130,7 +150,7 @@ For a more detailed technical breakdown, architectural logs, and the journey of 
 
 ## Architecture Overview
 
-At a high level, ACE is structured as a layered desktop runtime. The top layer is the overlay UI and package-driven React surface. Under that sits the app runtime, which routes events, manages memory and processes, and coordinates windows, tools, layouts, and sessions. The AI path then bridges into a local Python gateway sidecar, which owns model access and the DeepAgents runtime.
+At a high level, ACE is currently structured as a layered desktop runtime inside one application package. The top layer is the overlay UI and package-driven React surface. Under that sits the app runtime, which routes events, manages memory and processes, and coordinates windows, tools, layouts, sessions, and the current in-client DeepAgents runtime. The long-term target is to split these concerns more cleanly into app, server, and shared surfaces.
 
 ```mermaid
 flowchart TD
@@ -154,26 +174,32 @@ flowchart TD
 		TM[ToolEngine]
 		GM[Global State Manager]
 		FS[FSEngine / Local File Persistence]
+		CF[ConfigEngine / KeybindEngine]
 	end
 
-	subgraph AI[AI Session Runtime Layer]
-		AG[AIGatewayEngine]
-		SM[AISessionManager]
-		IL[Interaction Loop]
-		SP[Streaming Parser and Runtime Mirroring]
-		TI[HTTP Tool Intent Pump]
+	subgraph AI[Current In-Client AI Layer]
+		AE[AIEngine]
+		DA[DeepAgent Instance]
+		AM[Agent Middlewares]
+		AT[Agent Tools]
+		AB[Agent Backend Storage]
 	end
 
-	subgraph GW[Local Gateway Sidecar]
-		API[FastAPI Gateway API]
-		RT[DeepAgent Runtime]
-		GT[Gateway Tools / Session Context]
+	subgraph DESKTOP[Desktop Host Layer]
+		EM[Electron Main]
+		EP[Electron Preload]
 	end
 
 	subgraph MODEL[Provider Layer]
 		OA[OpenAI]
-		GG[Google Gemini]
+		GG[Google]
 		AN[Anthropic]
+	end
+
+	subgraph FUTURE[Planned Split]
+		APPKG[src/app]
+		SERVERKG[src/server]
+		SHAREDKG[src/shared]
 	end
 
 	U --> O
@@ -187,61 +213,74 @@ flowchart TD
 	D --> E
 	R --> WM
 	R --> TM
-	R --> LM
 	R --> K
 
 	E --> K
 	K --> WM
 	K --> TM
-	K --> LM
 	K --> GM
 	K --> FS
-	K --> AG
+	K --> CF
+	K --> AE
 
-	AG --> SM
-	AG --> IL
-	IL --> SP
-	IL --> TI
-	IL --> API
-	TM --> API
+	O --> EP
+	EP --> EM
+	EM --> FS
+	AE --> DA
+	DA --> AM
+	DA --> AT
+	DA --> AB
 
-	API --> RT
-	RT --> GT
-	RT --> OA
-	RT --> GG
-	RT --> AN
+	DA --> OA
+	DA --> GG
+	DA --> AN
 
-	GT -. mirrored runtime state .-> SP
-	GT -. queued external tool intents .-> TI
-	TI --> E
-	TM -. tool result callback .-> API
+	APPKG -. future workspace split .-> SERVERKG
+	APPKG -. shared contracts .-> SHAREDKG
+	SERVERKG -. shared contracts .-> SHAREDKG
 ```
 
 ### How The Layers Work Together
 
 - The user interacts with the overlay UI, which renders windows, widgets, chat surfaces, and developer monitors.
 - Those surfaces are mounted from package definitions and resolved through the registry layer.
-- Runtime actions are routed through the app control plane, centered around `KernelEngine`, `EventBus`, and the domain engines such as `WindowEngine`, `ToolEngine`.
-- AI sessions are managed in the frontend runtime through `AIGatewayEngine`, `AISessionManager`, the interaction loop, and the streaming parser/mirroring layer.
-- The frontend talks to the local gateway sidecar over HTTP for health checks, model discovery, test requests, streaming chat, queued tool intents, and tool result callbacks.
-- The gateway sidecar runs the DeepAgents-based runtime, binds provider models, manages gateway tools, and returns structured runtime state back to the app.
-- External ACE tools are executed inside the app runtime, while the gateway remains the orchestration owner for the AI request lifecycle.
+- Runtime actions are routed through the app control plane, centered around `KernelEngine`, `EventBus`, and domain engines such as `WindowEngine`, `ConfigEngine`, `FSEngine`, `KeybindEngine`, and `AIEngine`.
+- The Electron host layer exposes desktop capabilities such as filesystem access, global input, and shell-derived environment variables through the preload bridge.
+- The current DeepAgents runtime is instantiated locally inside `src/engines/ai/agent-instance.ts`, with tools, middlewares, and backend storage wired in-process.
+- Provider selection, API key injection, thread synchronization, and available-model caching are currently handled inside the app runtime rather than through a dedicated external server.
+- The architecture is intentionally moving toward a cleaner split where app UI, server-side agent orchestration, and shared contracts can evolve as separate surfaces without breaking the current runtime.
 
 
 ## 🗺️ Current Roadmap
 
 - [x] Core KernelEngine and EventBus Implementation
-- [x] AI Gateway with Multi-Provider Support
+- [x] In-client DeepAgents runtime with multi-provider support
 - [ ] **Phase 1:** Hardening the tool execution pipeline
-- [ ] **Phase 2:** Advanced Memory & RAG retrieval systems
-- [ ] **Phase 3:** Public Package Registry for community modules
+- [ ] **Phase 2:** Stabilize AI runtime state, provider model sync, and session boundaries
+- [ ] **Phase 3:** Split architecture into clearer app, server, and shared surfaces
+- [ ] **Phase 4:** Advanced Memory & RAG retrieval systems
+- [ ] **Phase 5:** Public Package Registry for community modules
+
+## Roadmap For Architecture Split
+
+The current runtime is intentionally transitional. The likely next structural move is a workspace-style split, still inside one repository, along these lines:
+- `src/app`: renderer UI, overlay runtime, hooks, visual components, and app-facing engines
+- `src/server`: future backend agent runtime, orchestration endpoints, provider adapters, and long-lived session execution
+- `src/shared`: schemas, transport contracts, DTOs, constants, and other runtime-safe shared modules
+- `electron/`: desktop host runtime for main/preload and OS integration
+
+The purpose of that split is not cosmetic. It is mainly to separate:
+- UI concerns from server-side orchestration concerns
+- desktop host concerns from agent runtime concerns
+- shared protocol contracts from implementation details
 
 ## Long-Term Roadmap
 
 The broader direction of the project is no longer just feature expansion. A major part of the roadmap is hardening and cleaning up the architecture that is currently still heavily vibe-coded and experimental.
 
 Key long-term priorities:
-- harden and simplify the gateway runtime so tool execution, session flow, and orchestration are more deterministic and observable
+- harden and simplify the current AI runtime so tool execution, session flow, and orchestration are more deterministic and observable
+- migrate the current in-client agent runtime toward a cleaner dedicated server surface when the contract layer is stable enough
 - clean up and stabilize the current architecture so core concepts have clearer boundaries and fewer ad hoc flows
 - add stronger windowing and batching systems for context, memory, and retrieval so session state can scale more safely
 - improve memory, retrieval, and context assembly into a more reliable pipeline with better lifecycle control

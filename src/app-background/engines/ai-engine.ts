@@ -6,10 +6,13 @@ import type {
     AgentThreadSyncPayload,
     AIProviderType,
 } from '#/schemas/ai.ts';
+// import SingletonAgentInstance from './ai/agent-instance';
 import resolveApiKey from './ai/resolve-api-key';
 import { ConfigEngine } from './config-engine';
 import { Engine } from './engine';
 import { KernelEngine } from './kernel-engine';
+
+const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
 class AIEngineSingleton extends Engine {
     public ai_threads_uids_memory_uid = 'system:ai_engine:thread:uids';
@@ -54,45 +57,35 @@ class AIEngineSingleton extends Engine {
     // + ----- API Provider ----------------------------------------------------------------------------+
 
     private async fetchProviderModelsResponse(provider: AIProviderType): Promise<unknown> {
-        const apiKey = await resolveApiKey(provider);
+        try {
+            const response = await fetch(OPENROUTER_MODELS_ENDPOINT, {
+                headers: {
+                    Accept: 'application/json',
+                },
+            });
 
-        if (!apiKey) {
-            this.log(`[AIEngine] No API key found for provider "${provider}". Skipping model fetch.`);
-            return null;
-        }
-
-        switch (provider) {
-            case AIProviders.OPENAI:
-                return await fetch('https://api.openai.com/v1/models', {
-                    headers: {
-                        Authorization: `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                    },
-                }).then((res) => res.json());
-            case AIProviders.GOOGLE:
-                return await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
-                    headers: {
-                        'x-goog-api-key': apiKey,
-                        'Content-Type': 'application/json',
-                    },
-                }).then((res) => res.json());
-            case AIProviders.ANTHROPIC:
-                return await fetch('https://api.anthropic.com/v1/models', {
-                    headers: {
-                        'x-api-key': apiKey,
-                        'anthropic-version': '2023-06-01',
-                        'Content-Type': 'application/json',
-                    },
-                }).then((res) => res.json());
-            default:
+            if (!response.ok) {
+                this.log(
+                    `[AIEngine] Failed to fetch OpenRouter models for provider "${provider}".`,
+                    response.status,
+                    response.statusText,
+                );
                 return null;
+            }
+
+            return await response.json();
+        } catch (error) {
+            this.log(
+                `[AIEngine] Failed to reach OpenRouter model registry for provider "${provider}".`,
+                error,
+            );
+            return null;
         }
     }
 
     public async fetchAvailableModels(provider: AIProviderType): Promise<string[]> {
         const payload = await this.fetchProviderModelsResponse(provider);
-        this.log(`[AIEngine] Fetched models response for provider "${provider}":`, payload);
-        return this.resolveModelNamesFromResponse(payload);
+        return this.resolveModelNamesFromResponse(payload, provider);
     }
 
     private resolveModelName(candidate: unknown): string | null {
@@ -115,19 +108,23 @@ class AIEngineSingleton extends Engine {
         return resolvedName?.replace(/^models\//, '') ?? null;
     }
 
-    private resolveModelNamesFromResponse(payload: unknown): string[] {
+    private resolveModelNamesFromResponse(payload: unknown, provider: AIProviderType): string[] {
         if (!payload || typeof payload !== 'object') {
             return [];
         }
 
         const record = payload as Record<string, unknown>;
         const sources = [record.data, record.models];
+        const providerPrefix = `${provider}/`;
 
         return Array.from(
             new Set(
                 sources
                     .flatMap((source) => (Array.isArray(source) ? source : []))
                     .map((candidate) => this.resolveModelName(candidate))
+                    .filter((modelName): modelName is string => Boolean(modelName))
+                    .filter((modelName) => modelName.startsWith(providerPrefix))
+                    .map((modelName) => modelName.slice(providerPrefix.length))
                     .filter((modelName): modelName is string => Boolean(modelName)),
             ),
         ).sort();
@@ -148,6 +145,58 @@ class AIEngineSingleton extends Engine {
 
         return models;
     }
+
+    // + ----- API Threads DeepAgents ----------------------------------------------------------------------------+
+
+    // public async streamThreadPrompt(
+    //     thread_uid: string,
+    //     prompt: string,
+    //     overrides: Partial<AgentConfigurable> = {},
+    // ) {
+    //     const existingThread = this.readThread(thread_uid);
+    //     const provider =
+    //         overrides.provider ??
+    //         existingThread?.provider ??
+    //         (ConfigEngine.getConfigItem('ai', 'ai.default_provider')?.value as AIProviderType | undefined) ??
+    //         AIProviders.OPENAI;
+    //     const model =
+    //         overrides.model ??
+    //         existingThread?.model ??
+    //         (ConfigEngine.getConfigItem('ai', 'ai.default_model')?.value as string | undefined);
+    //     const apiKey = overrides.apiKey ?? (await resolveApiKey(provider)) ?? undefined;
+    //     const checkpoint_id = overrides.checkpoint_id ?? existingThread?.checkpoint_id;
+
+    //     this.syncThread(thread_uid, {
+    //         thread_uid,
+    //         checkpoint_id,
+    //         model,
+    //         provider,
+    //         updated_at: Date.now(),
+    //     });
+
+    //     return SingletonAgentInstance.getInstance().stream(
+    //         {
+    //             messages: [
+    //                 {
+    //                     role: 'user',
+    //                     content: prompt,
+    //                 },
+    //             ],
+    //         },
+    //         {
+    //             version: 'v3',
+    //             configurable: {
+    //                 thread_id: thread_uid,
+    //                 checkpoint_id,
+    //                 model,
+    //                 provider,
+    //                 apiKey,
+    //                 ...overrides,
+    //             },
+    //         },
+    //     );
+    // }
+
 
     // + ----- API Threads ----------------------------------------------------------------------------+
 
@@ -206,6 +255,11 @@ class AIEngineSingleton extends Engine {
                 | AgentThread
                 | undefined) ?? null
         );
+    }
+
+    public async deleteThread(thread_uid: string): Promise<boolean> {
+        void thread_uid;
+        return false;
     }
 }
 
