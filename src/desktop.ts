@@ -6,6 +6,7 @@ import { KeybindEngine } from './app-desktop/engines/keybind-engine';
 import { StateEngine } from './app-desktop/engines/state-engine';
 import { LoggerEngine } from './app-desktop/engines/logger-engine';
 import { KernelEngine } from './shared/engines/kernel-engine';
+import { AIEngine } from './app-desktop/engines/ai-engine';
 
 let bootPromise: Promise<void> | null = null;
 
@@ -35,6 +36,7 @@ async function initCoreRuntimeBedStep() {
 
 async function initConfigAndGlobalStateStep() {
 	const configEngine = window.ACE.config;
+	const aiEngine = window.ACE.ai;
 	const registryEngine = window.ACE.registry;
 	const keybindEngine = window.ACE.keybind;
 	const windowEngine = window.ACE.window;
@@ -42,6 +44,7 @@ async function initConfigAndGlobalStateStep() {
 	// await stateEngine.boot();
 	await windowEngine.boot();
 	await configEngine.boot();
+	await aiEngine.boot();
 	await registryEngine.boot();
 	await keybindEngine.boot();
 
@@ -174,6 +177,7 @@ export async function bootACE() {
 		EventBus.setupKernelSpace();
 		StateEngine.setupKernelSpace();
 		ConfigEngine.setupKernelSpace();
+		AIEngine.setupKernelSpace();
 		WindowEngine.setupKernelSpace();
 		KeybindEngine.setupKernelSpace();
 
@@ -188,6 +192,8 @@ export async function bootACE() {
 				event: EventBus,
 				storage: KernelEngine,
 				config: ConfigEngine,
+				ai: AIEngine,
+				ai_gateway: AIEngine,
 				keybind: KeybindEngine,
 				state: StateEngine,
 				global: StateEngine,

@@ -1,41 +1,57 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
-import type { AIGatewayConfig, SDKProvider } from '#/shared/schemas/ai-gateway';
+import type { AIProviderType } from '#/shared/schemas/ai';
+import { AIProviders } from '#/shared/constants/ai';
+import { DefaultConfigAI } from '#/shared/constants/config';
+import type { ConfigAI_V0_0_0_Type } from '#/shared/constants/config';
+
+type ModelOptionType = {
+    id: string;
+    name: string;
+};
 
 export function useAIGateway() {
-    const gatewayConfig = useAceMemory<AIGatewayConfig>(window.ACE.ai_gateway.memory_uid);
+    const gatewayConfig = useAceMemory<ConfigAI_V0_0_0_Type>(DefaultConfigAI.memory_uid);
 
-    const [selectedProvider, setSelectedProvider] = useState<SDKProvider>('openai');
+    const [selectedProvider, setSelectedProvider] = useState<AIProviderType>(AIProviders.OPENAI);
     const [selectedModel, setSelectedModel] = useState<string>('');
 
     const configInitialised = useRef(false);
+
+    const providerModels =
+        gatewayConfig?.['ai.providers_models'] as Partial<Record<AIProviderType, string[]>> | undefined;
     
     useEffect(() => {
         if (configInitialised.current || !gatewayConfig) return;
         configInitialised.current = true;
-        if (gatewayConfig.active_provider ?? gatewayConfig.active_sdk) {
-            setSelectedProvider((gatewayConfig.active_provider ?? gatewayConfig.active_sdk) as SDKProvider);
+        if (gatewayConfig['ai.default_provider']) {
+            setSelectedProvider(gatewayConfig['ai.default_provider'] as AIProviderType);
         }
-        if (gatewayConfig.active_model) setSelectedModel(gatewayConfig.active_model);
+        if (typeof gatewayConfig['ai.default_model'] === 'string') {
+            setSelectedModel(gatewayConfig['ai.default_model']);
+        }
     }, [gatewayConfig]);
 
-    const modelOptions = useMemo(() => {
-        const models = gatewayConfig?.providers?.[selectedProvider]?.models
-            ?? gatewayConfig?.sdks?.[selectedProvider]?.models
-            ?? [];
-        return models;
-    }, [gatewayConfig, selectedProvider]);
+    const modelOptions = useMemo<ModelOptionType[]>(() => {
+        const models = providerModels?.[selectedProvider] ?? [];
+        return models.map((model: string) => ({
+            id: model,
+            name: model,
+        }));
+    }, [providerModels, selectedProvider]);
 
-    const ensureSelectedModel = () => {
+    const ensureSelectedModel = (): string => {
         if (selectedModel) return selectedModel;
         if (modelOptions.length > 0) {
             return modelOptions[0].id;
         }
-        return gatewayConfig?.active_model || 'gpt-4o-mini';
+        return typeof gatewayConfig?.['ai.default_model'] === 'string'
+            ? gatewayConfig['ai.default_model']
+            : 'gpt-4o-mini';
     };
 
     const fetchModels = async () => {
-        await window.ACE.ai_gateway.fetchModels(selectedProvider);
+        await window.ACE.ai.fetchModels(selectedProvider);
     };
 
     return {

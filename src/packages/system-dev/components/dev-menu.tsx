@@ -1,18 +1,12 @@
 import { DeferredWindowContent } from '#/app-desktop/components/layout/deferred-window-content';
 import { SpatialVirtualizer } from '#/app-desktop/components/layout/spatial-virtualizer';
-import { Share2, Power, MessageSquare } from 'lucide-react';
+import { Share2, Power, MessageSquare, Bot, Settings2 } from 'lucide-react';
 import type { DesktopState } from '#/shared/schemas/state.ts';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
-import type { AceRegistryType } from '#/shared/schemas/registry-types';
 import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
+import { defineComponent } from '#/lib/define-registry';
 
-export const registry: AceRegistryType.Component = {
-    name: 'dev_menu',
-    slug: 'dev-menu',
-    react_behavior: 'dev_menu',
-};
-
-export default function DevMenu({ close }: { close: () => void }) {
+function DevMenu({ close }: { close: () => void }) {
     const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
     const isAmbient = overlayState?.mode === 'ambient';
 
@@ -28,6 +22,78 @@ export default function DevMenu({ close }: { close: () => void }) {
         });
     };
 
+    const spawnDevAIThreadChat = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'dev-ai-chat-thread',
+            title: 'Dev AI Chat Thread',
+            width: 980,
+            height: 720,
+            x: 460,
+            y: 120,
+        });
+    };
+
+    const spawnSystemSettings = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system',
+            window: 'system-settings-window',
+            title: 'System Settings',
+            width: 1024,
+            height: 760,
+            x: 360,
+            y: 90,
+        });
+    };
+
+    const spawnSystemRuntimeMonitor = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system',
+            window: 'system-runtime-monitor-window',
+            title: 'System Runtime Monitor',
+            width: 1180,
+            height: 760,
+            x: 320,
+            y: 80,
+        });
+    };
+
+    const spawnSystemRAMMonitor = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system',
+            window: 'system-ram-monitor-window',
+            title: 'Kernel RAM Monitor',
+            width: 1120,
+            height: 740,
+            x: 360,
+            y: 100,
+        });
+    };
+
+    const spawnSystemProcessMonitor = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system',
+            window: 'system-process-monitor-window',
+            title: 'Process Monitor',
+            width: 1120,
+            height: 740,
+            x: 380,
+            y: 110,
+        });
+    };
+
+    const spawnSystemEventBusMonitor = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system',
+            window: 'system-event-bus-monitor-window',
+            title: 'Event Bus Monitor',
+            width: 1120,
+            height: 740,
+            x: 400,
+            y: 120,
+        });
+    };
+
     const buttonClass =
         'flex items-center justify-start gap-2 system-btn-primary w-full px-3 py-2 mb-2 rounded-sm';
 
@@ -36,6 +102,36 @@ export default function DevMenu({ close }: { close: () => void }) {
             label: 'ACE Chat',
             icon: <MessageSquare size={14} className="text-sky-300" />,
             onClick: spawnSystemAIChat,
+        },
+        {
+            label: 'Dev AI Chat Thread',
+            icon: <Bot size={14} className="text-emerald-300" />,
+            onClick: spawnDevAIThreadChat,
+        },
+        {
+            label: 'System Settings',
+            icon: <Settings2 size={14} className="text-amber-300" />,
+            onClick: spawnSystemSettings,
+        },
+        {
+            label: 'Runtime Monitor',
+            icon: <Settings2 size={14} className="text-cyan-300" />,
+            onClick: spawnSystemRuntimeMonitor,
+        },
+        {
+            label: 'RAM Monitor',
+            icon: <Settings2 size={14} className="text-blue-300" />,
+            onClick: spawnSystemRAMMonitor,
+        },
+        {
+            label: 'Process Monitor',
+            icon: <Settings2 size={14} className="text-orange-300" />,
+            onClick: spawnSystemProcessMonitor,
+        },
+        {
+            label: 'Event Bus Monitor',
+            icon: <Settings2 size={14} className="text-teal-300" />,
+            onClick: spawnSystemEventBusMonitor,
         },
         {
             label: isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode',
@@ -77,3 +173,9 @@ export default function DevMenu({ close }: { close: () => void }) {
         </DeferredWindowContent>
     );
 }
+
+export default defineComponent(DevMenu, {
+    name: 'dev_menu',
+    slug: 'dev-menu',
+    react_behavior: 'dev_menu',
+});

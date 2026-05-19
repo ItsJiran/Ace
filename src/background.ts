@@ -1,4 +1,3 @@
-import { RegistryEngine } from './shared/engines/registry-engine';
 import { EventBus } from './shared/engines/event-engine';
 import { ConfigEngine } from './shared/engines/config-engine';
 import { KernelEngine } from './shared/engines/kernel-engine';
@@ -7,7 +6,9 @@ import { AIEngine } from './app-background/engines/ai-engine';
 let backgroundBootPromise: Promise<void> | null = null;
 
 function resolveRuntimeMode() {
-	const viteMode = import.meta.env.VITE_ACE_RUNTIME_MODE;
+	const viteMode = (
+		import.meta as ImportMeta & { env?: Record<string, string | undefined> }
+	).env?.VITE_ACE_RUNTIME_MODE;
 	if (viteMode === 'desktop' || viteMode === 'background') {
 		return viteMode;
 	}
@@ -45,7 +46,6 @@ export async function bootBackgroundRuntime() {
 
 		try {
 			await ConfigEngine.boot();
-			await RegistryEngine.boot();
 			await AIEngine.boot();
 			await AIEngine.setupEventRoutes?.();
 

@@ -24,6 +24,14 @@ interface ElectronAPI {
     onMouseTracking: (callback: (payload: { x: number; y: number; localX: number; localY: number; phase: 'move' | 'down' | 'up'; isInsideApp: boolean }) => void) => () => void;
     onGlobalKeyboard: (callback: (payload: { type: 'keydown' | 'keyup'; keycode: number; rawcode: number; code: string | null; altKey: boolean; ctrlKey: boolean; shiftKey: boolean; metaKey: boolean }) => void) => () => void;
     getPlatform: () => Promise<string>;
+    backgroundStatus: () => Promise<{ active: boolean; runtime_mode: string; pid: number | null }>;
+    backgroundInvoke: (method: string, payload?: Record<string, unknown>) => Promise<unknown>;
+    backgroundFetchModels: (provider: string) => Promise<string[]>;
+    backgroundSyncModels: (provider: string) => Promise<string[]>;
+    backgroundCreateThread: (initialState?: Record<string, unknown>) => Promise<{ thread_id: string; checkpoint_id?: string; model?: string; provider?: string; apiKey?: string }>;
+    backgroundReadThread: (threadUid: string) => Promise<unknown>;
+    backgroundSyncThread: (threadUid: string, thread?: Record<string, unknown>) => Promise<string>;
+    backgroundDeleteThread: (threadUid: string) => Promise<boolean>;
 }
 
 interface EnvVariablesAPI {

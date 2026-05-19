@@ -1,0 +1,1 @@
+void import('./app-desktop/main');

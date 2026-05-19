@@ -3,8 +3,6 @@ import { KernelEngine } from './kernel-engine';
 import { DefaultConfigGeneral, DefaultConfigKeybinds, DefaultConfigAI } from '#/shared/constants/config';
 import { EventBus } from './event-engine';
 import type {
-    ConfigItemKeybindType,
-    ConfigItemType,
     ConfigFileType,
     ConfigStorageMapType,
     ConfigStorageType,
@@ -55,12 +53,18 @@ class ConfigEngineSingleton extends Engine {
     async setupEventRoutes() {}
 
     async setupKernelSpace() {
-        KernelEngine.registerSystemMemory(DefaultConfigGeneral.memory_uid, [] as ConfigItemType[]);
+        KernelEngine.registerSystemMemory(
+            DefaultConfigGeneral.memory_uid,
+            this.resolveDefaultConfig(DefaultConfigGeneral),
+        );
         KernelEngine.registerSystemMemory(
             DefaultConfigKeybinds.memory_uid,
-            [] as ConfigItemKeybindType[],
+            this.resolveDefaultConfig(DefaultConfigKeybinds),
         );
-        KernelEngine.registerSystemMemory(DefaultConfigAI.memory_uid, [] as ConfigItemType[]);
+        KernelEngine.registerSystemMemory(
+            DefaultConfigAI.memory_uid,
+            this.resolveDefaultConfig(DefaultConfigAI),
+        );
     }
 
     async setupKernelTerminationHook() {}
@@ -98,9 +102,8 @@ class ConfigEngineSingleton extends Engine {
         }
 
         const resolvedConfig = await this.resolveConfigFromFile(storage);
-        const items = this.resolveItemsFromConfig(storage, resolvedConfig);
 
-        KernelEngine.writeMemory(storage.memory_uid, items);
+        KernelEngine.writeMemory(storage.memory_uid, resolvedConfig);
         this.log(`Synced ${storageKey} config from ${storage.file_name} to RAM.`);
 
         this.log(
@@ -111,17 +114,17 @@ class ConfigEngineSingleton extends Engine {
 
     public async syncConfigRamToFile(storageKey: string) {
         const storage = this.storages[storageKey] as ConfigStorageType;
-        const items = (await KernelEngine.readMemory(storage.memory_uid)) as
-            | ConfigItemType[]
+        const config = (await KernelEngine.readMemory(storage.memory_uid)) as
+            | Record<string, unknown>
             | undefined;
-        if (!items) {
-            this.log(`No items in RAM for ${storageKey}. File sync skipped.`);
+        if (!config) {
+            this.log(`No config object in RAM for ${storageKey}. File sync skipped.`);
             return;
         }
 
         const isSaved = await FSEngine.saveFile(storage.file_name, {
             version: storage.version,
-            config: this.resolveConfigFromItems(storage, items),
+            config: this.resolveConfigFromState(storage, config),
         });
         if (isSaved) {
             this.log(`Synced ${storageKey} config from RAM to ${storage.file_name}.`);
@@ -132,32 +135,28 @@ class ConfigEngineSingleton extends Engine {
 
     // + ----- API GET UPDATE ---------------------------------------------------------------+
 
-    public getConfigItems<T extends ConfigItemType = ConfigItemType | ConfigItemKeybindType>(
+    public getConfigItems<T extends Record<string, unknown> = Record<string, unknown>>(
         storageKey: string,
-    ): T[] {
+    ): T {
         const storage = this.storages[storageKey];
-        if (!storage) return [];
+        if (!storage) return {} as T;
 
-        const items = KernelEngine.readMemory(storage.memory_uid) as T[] | undefined;
-        return items ?? [];
+        const config = KernelEngine.readMemory(storage.memory_uid) as T | undefined;
+        return (config ?? ({} as T)) as T;
     }
 
-    public getConfigItem<T extends ConfigItemType = ConfigItemType | ConfigItemKeybindType>(
+    public getConfigItem<T = unknown>(
         storageKey: string,
-        key: T['key'],
+        key: string,
     ): T | undefined {
-        const items = this.getConfigItems<T>(storageKey);
-        return items.find((item) => item.key === key);
+        const config = this.getConfigItems<Record<string, unknown>>(storageKey);
+        return config[key] as T | undefined;
     }
 
-    public async updateConfigItem<
-        T extends ConfigItemType = ConfigItemType | ConfigItemKeybindType,
-    >(
+    public async updateConfigItem(
         storageKey: string,
-        key: T['key'],
-        value: T['value'],
-        category?: string,
-        description?: string,
+        key: string,
+        value: unknown,
     ) {
         const storage = this.storages[storageKey] as ConfigStorageType;
         const targetSchema = storage.config[String(key)];
@@ -177,27 +176,13 @@ class ConfigEngineSingleton extends Engine {
             return;
         }
 
-        const currentItems = this.getConfigItems<T>(storageKey);
-        const nextItems = [...currentItems];
-        const existingIndex = nextItems.findIndex((item) => item.key === key);
+        const currentConfig = this.getConfigItems<Record<string, unknown>>(storageKey);
+        const nextConfig = {
+            ...currentConfig,
+            [key]: validatedValue.data,
+        };
 
-        if (existingIndex >= 0) {
-            nextItems[existingIndex] = {
-                ...nextItems[existingIndex],
-                value: validatedValue.data as T['value'],
-                category: category ?? nextItems[existingIndex].category,
-                description: description ?? nextItems[existingIndex].description,
-            };
-        } else {
-            nextItems.push({
-                key,
-                value: validatedValue.data as T['value'],
-                category,
-                description,
-            } as T);
-        }
-
-        KernelEngine.writeMemory(storage.memory_uid, nextItems);
+        KernelEngine.writeMemory(storage.memory_uid, nextConfig);
         await this.syncConfigRamToFile(storageKey);
 
         await EventBus.emit(`system:config:${storageKey}:update`, {
@@ -205,7 +190,7 @@ class ConfigEngineSingleton extends Engine {
                 storageKey,
                 key,
                 value,
-                items: nextItems,
+                config: nextConfig,
             },
         });
     }
@@ -249,27 +234,12 @@ class ConfigEngineSingleton extends Engine {
         }
     }
 
-    private resolveItemsFromConfig(
+    private resolveConfigFromState(
         storage: ConfigStorageType,
         config: Record<string, unknown>,
-    ): ConfigItemType[] | ConfigItemKeybindType[] {
-        return Object.entries(config).map(([key, value]) => ({
-            key,
-            value,
-            description: storage.config[key]?.description,
-        }));
-    }
-
-    private resolveConfigFromItems(
-        storage: ConfigStorageType,
-        items: ConfigItemType[],
     ): Record<string, unknown> {
         const defaults = this.resolveDefaultConfig(storage);
-        const nextConfig: Record<string, unknown> = { ...defaults };
-
-        for (const item of items) {
-            nextConfig[item.key] = item.value;
-        }
+        const nextConfig: Record<string, unknown> = { ...defaults, ...config };
 
         const parsed = this.resolveConfigSchema(storage).safeParse(nextConfig);
         return parsed.success ? (parsed.data as Record<string, unknown>) : defaults;

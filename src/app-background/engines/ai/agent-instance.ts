@@ -1,4 +1,7 @@
 import { createDeepAgent } from 'deepagents';
+import { MemorySaver } from "@langchain/langgraph";
+
+const checkpointer = new MemorySaver();
 
 import AgentTools from './agent-tools';
 import AgentMiddlewares from './agent-middlewares';
@@ -9,7 +12,7 @@ export default class SingletonAgentInstance {
 
     private static _value = createDeepAgent({
         /** Default Model */
-        model: 'default-model',
+        model: 'openai:gpt-4o-mini',
 
         /** Prompts */
         systemPrompt: `You are an assistant integrated in Ace, a collaborative coding environment. Your task is to assist users with their coding needs, 
@@ -21,6 +24,9 @@ export default class SingletonAgentInstance {
 
         /** Middlewares*/
         middleware: AgentMiddlewares,
+
+        /** Checkpointer */
+        checkpointer,
 
         /** Backend for agent runtime storing in file mechanism.. */
         backend: SingletonAgentBackend.getInstance().value,

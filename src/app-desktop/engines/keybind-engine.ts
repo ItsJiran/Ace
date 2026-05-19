@@ -8,7 +8,6 @@ import type {
     KeybindCombosType,
     KeybindCodeType,
 } from '#/shared/schemas/keybinds';
-import type { ConfigItemKeybindType } from '#/shared/schemas/config';
 import { EventBus } from '#/shared/engines/event-engine';
 import { KeybindAction, KeybindButtonCodeMap } from '#/shared/constants/keybinds.ts';
 import resolveConstMapKeyFromValue from '#/shared/lib/resolve-const-map-key-from-value.ts';
@@ -172,13 +171,11 @@ class KeybindEngineSingleton extends Engine {
     // + ----- API ---------------------------------------------------------------+
 
     public syncCurrentActiveKeybindMap() {
-        const keybindItems = ConfigEngine.getConfigItems<ConfigItemKeybindType>('keybinds');
+        const keybindConfig = ConfigEngine.getConfigItems<Record<KeybindActionType, KeybindCombosType>>('keybinds');
         const nextMap = new Map<KeybindActionType, KeybindCombosType[]>();
 
-        keybindItems.forEach((item) => {
-            const combos = nextMap.get(item.key) ?? [];
-            combos.push(item.value);
-            nextMap.set(item.key, combos);
+        Object.entries(keybindConfig).forEach(([action, combo]) => {
+            nextMap.set(action as KeybindActionType, [combo]);
         });
 
         console.log('KeybindEngine: Synced current active keybind map from config:', nextMap);

@@ -1,120 +1,256 @@
-// import { useMemo, useState } from 'react';
-// import { Bot, Activity, Keyboard } from 'lucide-react';
-// import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
-// import type { AIGatewayConfig } from '#/shared/schemas/ai-gateway';
-// import type { Keybind } from '#/shared/schemas/keybinds';
-// import { AIConnectionSettingsTab } from './settings/ai-connection-settings-tab';
-// import { AIHealthSettingsTab } from './settings/ai-health-settings-tab';
-// import { KeybindSettingsTab } from './settings/keybind-settings-tab';
+import { useMemo } from 'react';
+import { z } from 'zod';
+import { Settings2, SlidersHorizontal, Keyboard, Bot } from 'lucide-react';
 
-// type SystemSettingsTab = 'ai_connection' | 'ai_health' | 'keybinds';
+import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
+import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
+import {
+	ConfigAI_V0_0_0_Type,
+	ConfigGeneral_V0_0_0_Type,
+	ConfigKeybind_V0_0_0_Type,
+	DefaultConfigAI,
+	DefaultConfigGeneral,
+	DefaultConfigKeybinds,
+} from '#/shared/constants/config';
+import { defineComponent } from '#/lib/define-registry';
 
-// const TAB_CONFIG: Array<{
-//     key: SystemSettingsTab;
-//     label: string;
-//     description: string;
-//     icon: typeof Bot;
-// }> = [
-//     {
-//         key: 'ai_connection',
-//         label: 'AI Connection',
-//         description: 'Provider selection, API keys, and model inventory.',
-//         icon: Bot,
-//     },
-//     {
-//         key: 'ai_health',
-//         label: 'AI Health',
-//         description: 'Gateway reachability, radar scan, and response testing.',
-//         icon: Activity,
-//     },
-//     {
-//         key: 'keybinds',
-//         label: 'Keybinds',
-//         description: 'Persisted keyboard shortcuts managed by ConfigEngine.',
-//         icon: Keyboard,
-//     },
-// ];
+type SectionDefinitionType = {
+	storageKey: 'general' | 'keybinds' | 'ai';
+	title: string;
+	description: string;
+	icon: typeof Settings2;
+	memoryUid: string;
+	schema: Record<string, z.ZodTypeAny>;
+	config: Record<string, unknown> | undefined;
+};
 
-// export default function SystemSettings() {
-//     const [activeTab, setActiveTab] = useState<SystemSettingsTab>('ai_connection');
-//     const gatewayConfig = useAceMemory<AIGatewayConfig>(window.ACE.ai_gateway.memory_uid);
-//     const keybinds = useAceMemory<Keybind[]>('system:keybinds') ?? [];
+function parseInputValue(rawValue: string, currentValue: unknown): unknown {
+	if (typeof currentValue === 'number') {
+		return Number(rawValue);
+	}
 
-//     const activeProvider = gatewayConfig?.active_provider ?? gatewayConfig?.active_sdk ?? 'none';
-//     const activeModel = gatewayConfig?.active_model ?? 'not selected';
-//     const modelCount = useMemo(() => {
-//         const providers = gatewayConfig?.providers ?? gatewayConfig?.sdks;
-//         if (!providers) return 0;
-//         return Object.values(providers).reduce((total, provider) => total + (provider?.models?.length ?? 0), 0);
-//     }, [gatewayConfig]);
+	if (Array.isArray(currentValue)) {
+		return rawValue
+			.split(',')
+			.map((value) => value.trim())
+			.filter(Boolean);
+	}
 
-//     return (
-//         <div className="flex h-full w-full overflow-hidden bg-[linear-gradient(180deg,#f7f9fc_0%,#eef2f8_100%)] text-slate-900 dark:bg-[linear-gradient(180deg,#121722_0%,#0d1118_100%)] dark:text-slate-100">
-//             <aside className="flex h-full w-[250px] shrink-0 flex-col overflow-hidden border-r border-slate-200/80 bg-white/70 p-4 backdrop-blur dark:border-white/10 dark:bg-[#131926]/80">
-//                 <div>
-//                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600 dark:text-blue-300">System Settings</p>
-//                     <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Runtime Configuration</h2>
-//                     <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">Manage AI connectivity, health checks, and persisted keyboard shortcuts without bloating the window shell.</p>
-//                 </div>
+	if (currentValue && typeof currentValue === 'object') {
+		try {
+			return JSON.parse(rawValue);
+		} catch {
+			return currentValue;
+		}
+	}
 
-//                 <div className="mt-5 grid gap-2">
-//                     <SummaryStat label="Active SDK" value={String(activeProvider)} />
-//                     <SummaryStat label="Active Model" value={activeModel} />
-//                     <SummaryStat label="Known Models" value={String(modelCount)} />
-//                     <SummaryStat label="Keybinds" value={String(keybinds.length)} />
-//                 </div>
+	return rawValue;
+}
 
-//                 <nav className="mt-6 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
-//                     {TAB_CONFIG.map((tab) => {
-//                         const Icon = tab.icon;
-//                         const isActive = tab.key === activeTab;
-//                         return (
-//                             <button
-//                                 key={tab.key}
-//                                 type="button"
-//                                 data-window-action="true"
-//                                 onClick={() => setActiveTab(tab.key)}
-//                                 className={[
-//                                     'rounded-2xl border px-3 py-3 text-left transition-colors',
-//                                     isActive
-//                                         ? 'border-blue-300 bg-blue-50 text-blue-950 shadow-sm dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-100'
-//                                         : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10',
-//                                 ].join(' ')}
-//                             >
-//                                 <div className="flex items-start gap-3">
-//                                     <div className={[
-//                                         'mt-0.5 rounded-xl p-2',
-//                                         isActive ? 'bg-blue-600 text-white dark:bg-blue-400 dark:text-slate-950' : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300',
-//                                     ].join(' ')}>
-//                                         <Icon size={16} />
-//                                     </div>
-//                                     <div>
-//                                         <p className="text-sm font-semibold">{tab.label}</p>
-//                                         <p className="mt-1 text-[11px] leading-5 text-inherit/80">{tab.description}</p>
-//                                     </div>
-//                                 </div>
-//                             </button>
-//                         );
-//                     })}
-//                 </nav>
-//             </aside>
+function resolveTextValue(value: unknown) {
+	if (Array.isArray(value)) {
+		return value.join(', ');
+	}
 
-//             <main className="min-w-0 flex-1 overflow-hidden p-5">
-//                 <div className="h-full overflow-y-auto pr-1">
-//                     {activeTab === 'ai_connection' ? <AIConnectionSettingsTab /> : null}
-//                     {activeTab === 'ai_health' ? <AIHealthSettingsTab /> : null}
-//                     {activeTab === 'keybinds' ? <KeybindSettingsTab /> : null}
-//                 </div>
-//             </main>
-//         </div>
-//     );
-// }
+	if (value && typeof value === 'object') {
+		return JSON.stringify(value, null, 2);
+	}
 
-// function SummaryStat({ label, value }: { label: string; value: string }) {
-//     return (
-//         <div className="rounded-2xl border border-slate-200 bg-white/85 px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-white/5">
-//             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">{label}</p>
-//             <p className="mt-1 truncate text-sm font-medium text-slate-800 dark:text-slate-100">{value}</p>
-//         </div>
-//     );
-// }
+	return value == null ? '' : String(value);
+}
+
+function ConfigField({
+	storageKey,
+	configKey,
+	schema,
+	value,
+}: {
+	storageKey: SectionDefinitionType['storageKey'];
+	configKey: string;
+	schema: z.ZodTypeAny;
+	value: unknown;
+}) {
+	const schemaDescription = schema.description;
+	const enumOptions = schema instanceof z.ZodEnum ? schema.options : null;
+
+	if (typeof value === 'boolean') {
+		return (
+			<label className="flex items-start justify-between gap-4 rounded-2xl system-container-tertiary px-4 py-3">
+				<div>
+					<div className="text-sm font-medium text-zinc-100">{configKey}</div>
+					{schemaDescription ? (
+						<div className="mt-1 text-xs leading-5">{schemaDescription}</div>
+					) : null}
+				</div>
+				<input
+					type="checkbox"
+					checked={value}
+					onChange={(event) => {
+						void window.ACE.config.updateConfigItem(storageKey, configKey, event.target.checked);
+					}}
+					className="mt-1 h-4 w-4 rounded border-white/20 bg-black/30"
+				/>
+			</label>
+		);
+	}
+
+	if (enumOptions) {
+		return (
+			<label className="flex flex-col gap-2 rounded-2xl system-container-tertiary px-4 py-3">
+				<div className="text-sm font-medium text-zinc-100">{configKey}</div>
+				{schemaDescription ? (
+					<div className="text-xs leading-5">{schemaDescription}</div>
+				) : null}
+				<select
+					value={String(value ?? '')}
+					onChange={(event) => {
+						void window.ACE.config.updateConfigItem(storageKey, configKey, event.target.value);
+					}}
+					className="system-input-primary rounded-xl px-3 py-2 text-sm text-zinc-100"
+				>
+					{enumOptions.map((option) => (
+						<option key={option} value={option}>
+							{option}
+						</option>
+					))}
+				</select>
+			</label>
+		);
+	}
+
+	const isLongText = Array.isArray(value) || (value && typeof value === 'object');
+
+	return (
+		<label className="flex flex-col gap-2 rounded-2xl system-container-tertiary px-4 py-3">
+			<div className="text-sm font-medium text-zinc-100">{configKey}</div>
+			{schemaDescription ? (
+				<div className="text-xs leading-5">{schemaDescription}</div>
+			) : null}
+			{isLongText ? (
+				<textarea
+					defaultValue={resolveTextValue(value)}
+					rows={Array.isArray(value) ? 2 : 6}
+					onBlur={(event) => {
+						void window.ACE.config.updateConfigItem(
+							storageKey,
+							configKey,
+							parseInputValue(event.target.value, value),
+						);
+					}}
+					className="system-input-primary min-h-[72px] resize-y rounded-2xl px-3 py-2 text-sm text-zinc-100"
+				/>
+			) : (
+				<input
+					type={typeof value === 'number' ? 'number' : 'text'}
+					defaultValue={resolveTextValue(value)}
+					onBlur={(event) => {
+						void window.ACE.config.updateConfigItem(
+							storageKey,
+							configKey,
+							parseInputValue(event.target.value, value),
+						);
+					}}
+					className="system-input-primary rounded-xl px-3 py-2 text-sm text-zinc-100"
+				/>
+			)}
+		</label>
+	);
+}
+
+function ConfigSection({ section }: { section: SectionDefinitionType }) {
+	const Icon = section.icon;
+	const entries = useMemo(() => Object.entries(section.schema), [section.schema]);
+
+	return (
+		<section className="system-shell-primary rounded-2xl p-4 flex flex-col gap-4">
+			<div className="flex items-start gap-3">
+				<div className="rounded-2xl system-btn-secondary p-3">
+					<Icon size={18} />
+				</div>
+				<div>
+					<div className="text-lg font-semibold">{section.title}</div>
+					<div className="mt-1 text-sm leading-6">{section.description}</div>
+				</div>
+			</div>
+
+			<div className="grid gap-3">
+				{entries.map(([configKey, schema]) => (
+					<ConfigField
+						key={configKey}
+						storageKey={section.storageKey}
+						configKey={configKey}
+						schema={schema}
+						value={section.config?.[configKey]}
+					/>
+				))}
+			</div>
+		</section>
+	);
+}
+
+function SystemSettings() {
+	const generalConfig = useAceMemory<ConfigGeneral_V0_0_0_Type>(DefaultConfigGeneral.memory_uid);
+	const keybindConfig = useAceMemory<ConfigKeybind_V0_0_0_Type>(DefaultConfigKeybinds.memory_uid);
+	const aiConfig = useAceMemory<ConfigAI_V0_0_0_Type>(DefaultConfigAI.memory_uid);
+
+	const sections: SectionDefinitionType[] = [
+		{
+			storageKey: 'general',
+			title: 'General',
+			description: 'Overlay, theme, opacity, and runtime shell behavior.',
+			icon: SlidersHorizontal,
+			memoryUid: DefaultConfigGeneral.memory_uid,
+			schema: DefaultConfigGeneral.config,
+			config: generalConfig,
+		},
+		{
+			storageKey: 'keybinds',
+			title: 'Keybinds',
+			description: 'Persisted keyboard shortcuts used by the desktop runtime.',
+			icon: Keyboard,
+			memoryUid: DefaultConfigKeybinds.memory_uid,
+			schema: DefaultConfigKeybinds.config,
+			config: keybindConfig,
+		},
+		{
+			storageKey: 'ai',
+			title: 'AI',
+			description: 'Default provider, default model, and cached provider model inventories.',
+			icon: Bot,
+			memoryUid: DefaultConfigAI.memory_uid,
+			schema: DefaultConfigAI.config,
+			config: aiConfig,
+		},
+	];
+
+	return (
+		<div className="flex h-full min-h-0 flex-col gap-4 p-4 text-zinc-100">
+			<RenderCounterBadge componentName="system-settings" />
+
+			<section className="system-shell-primary rounded-2xl p-5 flex items-start justify-between gap-4">
+				<div>
+					<div className="text-xs uppercase tracking-[0.24em] text-zinc-500">System Settings</div>
+					<div className="mt-2 text-2xl font-semibold">Configuration Workspace</div>
+					<div className="mt-2 max-w-2xl text-sm leading-6">
+						Edit the live schema-backed configuration stored by ConfigEngine. The RAM state now mirrors the schema shape directly, so this panel edits the real config object instead of a derived item list.
+					</div>
+				</div>
+				<div className="rounded-2xl system-btn-secondary bg-white/10 p-3 text-zinc-100">
+					<Settings2 size={22} />
+				</div>
+			</section>
+
+			<div className="grid min-h-0 flex-1 gap-4 overflow-auto pr-1">
+				{sections.map((section) => (
+					<ConfigSection key={section.memoryUid} section={section} />
+				))}
+			</div>
+		</div>
+	);
+}
+
+export default defineComponent(SystemSettings, {
+	name: 'system_settings',
+	slug: 'system-settings',
+	react_behavior: 'system_settings',
+});

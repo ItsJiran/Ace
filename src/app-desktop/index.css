@@ -3,587 +3,596 @@
 @tailwind utilities;
 /* For Firefox and W3C Standards */
 html {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(86, 86, 133, 0.85) transparent;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(86, 86, 133, 0.85) transparent;
 }
 
 /* For Chrome, Edge, Safari, and Opera */
 html::-webkit-scrollbar {
-  width: 3px; /* Matches the "thin" look (usually 3px-3px) */
-  height: 3px; /* For horizontal scrollbars */
+    width: 3px; /* Matches the "thin" look (usually 3px-3px) */
+    height: 3px; /* For horizontal scrollbars */
 }
 
 @layer base {
-  /**
+    /**
    * GLOBAL HOVER POLICY
    * 
    * Disable all default Tailwind hover effects globally.
    * Hover behavior must be explicitly defined per-component.
    * This prevents performance degradation from automatic CSS generation.
    */
-  * {
-    /* Remove any inherited transition on hover unless explicitly set */
-    @apply transition-none;
-  }
-
-  button:not([class*="transition-"]),
-  a:not([class*="transition-"]),
-  [role="button"]:not([class*="transition-"]) {
-    /* No default hover transitions - must be explicitly defined */
-    &:hover {
-      transition: none !important;
+    * {
+        /* Remove any inherited transition on hover unless explicitly set */
+        @apply transition-none;
     }
-  }
 
-  .overflow-y-auto,
-  .overflow-x-auto,
-  .overflow-auto,
-  .overflow-scroll,
-  .overflow-y-scroll,
-  .overflow-x-scroll {
-    transform: translateZ(0);
-    will-change: transform, scroll-position;
-    /* Optional safety net against GPU flickering during opacity changes */
-    backface-visibility: hidden;
-    /* Stop the scroll chain from bouncing the parent webview bounding box, which triggers a full transparent window repaint on Linux */
-    overscroll-behavior: contain;
-    contain: paint;
-  }
+    button:not([class*='transition-']),
+    a:not([class*='transition-']),
+    [role='button']:not([class*='transition-']) {
+        /* No default hover transitions - must be explicitly defined */
+        &:hover {
+            transition: none !important;
+        }
+    }
+
+    .overflow-y-auto,
+    .overflow-x-auto,
+    .overflow-auto,
+    .overflow-scroll,
+    .overflow-y-scroll,
+    .overflow-x-scroll {
+        transform: translateZ(0);
+        will-change: transform, scroll-position;
+        /* Optional safety net against GPU flickering during opacity changes */
+        backface-visibility: hidden;
+        /* Stop the scroll chain from bouncing the parent webview bounding box, which triggers a full transparent window repaint on Linux */
+        overscroll-behavior: contain;
+        contain: paint;
+    }
 }
 
 html,
 body,
 #root {
-  margin: 0;
-  padding: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: transparent;
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(45, 52, 78, 0.88);
-  letter-spacing: 0.01em;
-  /* Di Tauri, transparent biasanya sudah cukup tanpa hack 0.005 */
-  overflow: hidden;
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(45, 52, 78, 0.88);
+    letter-spacing: 0.01em;
+    /* Di Tauri, transparent biasanya sudah cukup tanpa hack 0.005 */
+    overflow: hidden;
 }
 @layer utilities {
-  /* HARDWARE ACCELERATE ALPHA-BLENDING & COMPOSITING GLOBALLY
+    /* HARDWARE ACCELERATE ALPHA-BLENDING & COMPOSITING GLOBALLY
      Transparent webviews lag massively when painting DOM nodes with alpha background changes.
      By enforcing zero transition time & paint isolation, we remove 90% of the compositor tax */
-  .transition,
-  .transition,
-  .transition-colors,
-  .transition-all,
-  [class*="transition-"] {
-    transition-duration: 0ms !important;
-  }
+    .transition,
+    .transition,
+    .transition-colors,
+    .transition-all,
+    [class*='transition-'] {
+        transition-duration: 0ms !important;
+    }
 
-  /* Retain smoothness for structural transforms exclusively */
-  .transition-transform {
-    transition-duration: 150ms !important;
-  }
+    /* Retain smoothness for structural transforms exclusively */
+    .transition-transform {
+        transition-duration: 150ms !important;
+    }
 }
 
 @layer components {
-  /* + ------------------------------------------------------------------------------------------------------+ */
-  /* + -------------------------------------- System Main Styling -------------------------------------------+ */
-  /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + -------------------------------------- System Main Styling -------------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
 
-  .system-shell {
-    position: relative;
-    overflow: hidden;
-    opacity: 20%;
-  }
+    .system-shell {
+        position: relative;
+        overflow: hidden;
+        opacity: 20%;
+    }
 
-  .system-shell::before,
-  .system-shell-primary::before {
-    @apply opacity-0;
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    transition: opacity 0.3s ease-in-out;
-    z-index: -1;
-  }
+    .system-shell::before,
+    .system-shell-primary::before {
+        @apply opacity-0;
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        transition: opacity 0.3s ease-in-out;
+        z-index: -1;
+    }
 
-  .system-shell:hover,
-  .system-shell.active,
-  .system-shell:hover::before,
-  .system-shell.active::before {
-    @apply opacity-100;
-  }
+    .system-shell:hover,
+    .system-shell.active,
+    .system-shell:hover::before,
+    .system-shell.active::before {
+        @apply opacity-100;
+    }
 
-  /* + ------------------------------------------------------------------------------------------------------+ */
-  /* + -------------------------------------- System Shell Shell --------------------------------------------+ */
-  /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + -------------------------------------- System Shell Shell --------------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
 
-  .system-shell-primary {
-    @apply backdrop-blur-glass transition shadow-panel-fade duration-300;
-    background: linear-gradient(160deg, #dbe2ec67 0%, #d6ddeb31 100%);
-    color: rgba(252, 253, 255, 0.92);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-  }
+    .system-shell-primary {
+        @apply backdrop-blur-glass transition duration-300;
+        background: linear-gradient(160deg, #dbe2ec67 0%, #d6ddeb31 100%);
+        color: rgba(252, 253, 255, 0.92);
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+    }
 
-  .system-shell-primary::before {
-    background: linear-gradient(160deg, #dbe2ec 0%, #d6ddeb 100%);
-  }
+    .system-shell-primary::before {
+        background: linear-gradient(160deg, #dbe2ec 0%, #d6ddeb 100%);
+    }
 
-  .system-shell:hover.system-shell-primary,
-  .system-shell:hover .system-shell-primary,
+    .system-shell:hover.system-shell-primary,
+    .system-shell:hover .system-shell-primary,
+    .system-shell.active.system-shell-primary,
+    .system-shell.active .system-shell-primary,
+    .system-shell.active.system-shell-primary,
+    .system-shell.active .system-shell-primary {
+        @apply border border-glass-border;
+        color: rgba(66, 75, 102, 0.92);
+    }
 
-  .system-shell.active.system-shell-primary,
-  .system-shell.active .system-shell-primary,
+    .system-shell:hover .system-shell-primary::before,
+    .system-shell.active .system-shell-primary::before,
+    .system-shell.active .system-shell-primary::before {
+        @apply opacity-100;
+    }
 
-  .system-shell.active.system-shell-primary,
-  .system-shell.active .system-shell-primary {
-    @apply border border-glass-border shadow-panel;
-    color: rgba(66, 75, 102, 0.92);
-  }
+    /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + -------------------------------------- System Container Shell ----------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
 
-  .system-shell:hover .system-shell-primary::before,
-  .system-shell.active .system-shell-primary::before,
-  .system-shell.active .system-shell-primary::before {
-    @apply opacity-100;
-  }
+    .system-container-primary {
+        background: linear-gradient(145deg, rgba(238, 240, 245, 0.55), rgba(216, 221, 240, 0.45));
+        border: 1px solid rgba(255, 255, 255, 0.62);
+        border-bottom-color: rgba(255, 255, 255, 0.62);
+        border-bottom-color: rgba(165, 178, 210, 0.28);
+        /* box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1); */
+        color: rgba(40, 48, 72, 0.85);
+    }
 
-  /* + ------------------------------------------------------------------------------------------------------+ */
-  /* + -------------------------------------- System Container Shell ----------------------------------------+ */
-  /* + ------------------------------------------------------------------------------------------------------+ */
-
-  .system-container-primary {
-    background: linear-gradient(
-      150deg,
-      rgba(255, 255, 255, 0.26),
-      rgba(228, 234, 250, 0.1)
-    );
-    border: 1px solid rgba(255, 255, 255, 0.62);
-    border-bottom-color: rgba(255, 255, 255, 0.62);
-    border-bottom-color: rgba(165, 178, 210, 0.28);
-    box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1);
-    color: rgba(40, 48, 72, 0.85);
-  }
-
-  .system-container-secondary {
-    background: linear-gradient(
-      145deg,
-      rgba(130, 148, 210, 0.55),
-      rgba(100, 120, 185, 0.45)
-    );
-    border: 1px solid rgba(160, 175, 225, 0.5);
-    box-shadow:
+    .system-container-secondary {
+        background: linear-gradient(330deg, rgb(102, 123, 153), rgb(115, 133, 160));
+        border: 1px solid rgba(160, 175, 225, 0.5);
+        /* box-shadow:
       0 2px 6px rgba(90, 110, 170, 0.2),
-      0 1px 0 rgba(255, 255, 255, 0.5) inset;
-    color: rgba(40, 48, 72, 0.85);
-  }
+      0 1px 0 rgba(255, 255, 255, 0.5) inset; */
+        color: rgba(40, 48, 72, 0.85);
+    }
 
-  /* + ------------------------------------------------------------------------------------------------------+ */
-  /* + -------------------------------------- System Head Shell -------------------------------------------+ */
-  /* + ------------------------------------------------------------------------------------------------------+ */
+    .system-container-tertiary {
+        background: linear-gradient(145deg, rgba(104, 119, 170, 0.55), rgba(83, 100, 155, 0.45));
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-bottom-color: rgba(180, 185, 195, 0.3);
+        /* box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1); */
+        color: rgba(236, 239, 245, 0.85);
+    }
 
-  /* Keeping your header styling intact */
-  .system-shell-head-primary {
-    @apply flex cursor-grab items-center 
+    .system-container-quaternary {
+        background: linear-gradient(145deg, rgba(118, 128, 155, 0.55), rgba(115, 126, 158, 0.616));
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-bottom-color: rgba(180, 185, 195, 0.3);
+        /* box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1); */
+        color: rgba(236, 239, 245, 0.85);
+    }
+
+    /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + -------------------------------------- System Head Shell -------------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
+
+    /* Keeping your header styling intact */
+    .system-shell-head-primary {
+        @apply flex cursor-grab items-center 
   justify-between border-b 
   bg-white/5 px-4 py-3 active:cursor-grabbing;
-    border-color: rgba(155, 168, 200, 0.32);
-  }
-
-  /* + ------------------------------------------------------------------------------------------------------+ */
-  /* + -------------------------------------- System Border Styling -----------------------------------------+ */
-  /* + ------------------------------------------------------------------------------------------------------+ */
-
-  .system-btn,
-  .system-btn-primary,
-  .system-btn-secondary {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  /* PRIMARY */
-  .system-btn-primary {
-    border-radius: 8px;
-    border: 1px solid rgba(160, 170, 195, 0.3);
-    background: rgba(255, 255, 255, 0.3);
-    color: rgba(252, 253, 255, 0.92);
-    padding: 4px;
-    transition: background 0.15s;
-  }
-
-  .system-btn-primary:hover {
-    background: rgba(255, 255, 255, 0.5);
-  }
-
-  .system-shell:hover.system-btn-primary,
-  .system-shell:hover .system-btn-primary,
-
-  .system-shell.active.system-btn-primary,
-  .system-shell.active .system-btn-primary,
-
-  .system-shell.active.system-btn-primary,
-  .system-shell.active .system-btn-primary {
-    color: rgba(66, 75, 102, 0.92);
-  }
-
-  /* SECONDARY */
-  .system-btn-secondary {
-    border-radius: 8px;
-    border: 1px solid rgba(160,175,225,0.5);
-    background: linear-gradient(145deg, rgba(130,148,210,0.55), rgba(100,120,185,0.45));
-    box-shadow:0 2px 6px rgba(90,110,170,0.2), 0 1px 0 rgba(255,255,255,0.5) inset;
-    padding: 4px;
-    color: rgba(252, 253, 255, 0.92);
-    transition: background 0.15s;
-  }
-
-  .system-btn-secondary:hover {
-    background: linear-gradient(145deg, rgba(140,158,220,0.68), rgba(110,130,195,0.58));
-  }
-
-  .system-shell:hover.system-btn-secondary,
-  .system-shell:hover .system-btn-secondary,
-
-  .system-shell.active.system-btn-secondary,
-  .system-shell.active .system-btn-secondary,
-
-  .system-shell.active.system-btn-secondary,
-  .system-shell.active .system-btn-secondary {
-    color: rgba(35,45,85,0.85);
-  }
-
-  /* + ------------------------------------------------------------------------------------------------------+ */
-  /* + --------------------------------------- System Input Styling -----------------------------------------+ */
-  /* + ------------------------------------------------------------------------------------------------------+ */
-
-  .system-input-primary{
-    background: rgba(255,255,255,0.28);
-    border: 1px solid rgba(160,172,200,0.38);
-    border-radius: 12px;
-    color: rgba(40,48,72,0.85);
-    transition: background 0.15s, border-color 0.15s;
-  }
-
-  .system-shell:hover.system-input-primary,
-  .system-shell:hover .system-input-primary,
-
-  .system-shell.active.system-input-primary,
-  .system-shell.active .system-input-primary,
-
-  .system-shell.active.system-input-primary,
-  .system-shell.active .system-input-primary {
-    color: rgba(35,45,85,0.85);
-  }
-
-  /* + ------------------------------------------------------------------------------------------------------+ */
-  /* + ------------------------------------------- AI Chat --------------------------------------------------+ */
-  /* + ------------------------------------------------------------------------------------------------------+ */
-
-  .system-ai-chatbar {
-    color: inherit;
-  }
-
-  .system-chat-section-label,
-  .system-chat-label-muted,
-  .system-chat-renderer-heading {
-    @apply flex items-center gap-2 font-semibold uppercase;
-    color: inherit;
-    opacity: 0.56;
-  }
-
-  .system-chat-section-label {
-    font-size: 10px;
-    letter-spacing: 0.22em;
-  }
-
-  .system-chat-label-muted,
-  .system-chat-renderer-heading {
-    letter-spacing: 0.2em;
-  }
-
-  .system-chat-section-copy,
-  .system-chat-copy-body,
-  .system-chat-copy-muted,
-  .system-chat-preview-copy,
-  .system-chat-preview-subtitle,
-  .system-chat-meta-note,
-  .system-chat-icon-muted,
-  .system-chat-renderer-summary,
-  .system-chat-renderer-body,
-  .system-chat-mono {
-    color: inherit;
-  }
-
-  .system-chat-section-copy,
-  .system-chat-copy-body,
-  .system-chat-preview-copy,
-  .system-chat-renderer-body,
-  .system-chat-mono {
-    opacity: 0.82;
-  }
-
-  .system-chat-copy-muted,
-  .system-chat-preview-subtitle,
-  .system-chat-renderer-summary {
-    opacity: 0.64;
-  }
-
-  .system-chat-copy-strong,
-  .system-chat-preview-title,
-  .system-chat-empty-title,
-  .system-chat-paragraph-heading,
-  .system-chat-paragraph-subheading {
-    color: inherit;
-    opacity: 0.94;
-  }
-
-  .system-chat-meta-note,
-  .system-chat-icon-muted {
-    opacity: 0.56;
-  }
-
-  .system-chat-section-copy {
-    @apply text-sm leading-6;
-  }
-
-  .system-chat-meta-note {
-    @apply text-[10px];
-  }
-
-  .system-chat-meta-chip {
-    @apply inline-flex items-center rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs;
-    color: inherit;
-    opacity: 0.82;
-  }
-
-  .system-chat-message-list {
-    @apply space-y-5;
-    color: inherit;
-  }
-
-  .system-chat-empty-state {
-    @apply flex min-h-[220px] flex-col items-center justify-center rounded-[20px] border border-dashed border-white/10 bg-white/[0.035] px-6 py-10 text-center;
-  }
-
-  .system-chat-empty-title {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-  }
-
-  .system-chat-empty-copy {
-    @apply mt-2 max-w-sm text-sm leading-6;
-    color: inherit;
-    opacity: 0.64;
-  }
-
-  .system-chat-status-pill,
-  .system-chat-renderer-status,
-  .system-chat-tone-pill {
-    @apply inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.18em];
-    color: inherit;
-    opacity: 0.68;
-  }
-
-  .system-chat-renderer-status,
-  .system-chat-tone-pill {
-    @apply px-2 py-0.5 text-[10px] tracking-wide;
-  }
-
-  .system-chat-status-pill.is-streaming {
-    background: rgba(130, 148, 210, 0.18);
-    border-color: rgba(130, 148, 210, 0.34);
-    opacity: 0.92;
-  }
-
-  .system-chat-turn-label {
-    @apply px-1 text-[10px] font-semibold uppercase tracking-[0.24em];
-    color: inherit;
-    opacity: 0.56;
-  }
-
-  .system-chat-turn-label.is-user {
-    opacity: 0.72;
-  }
-
-  .system-chat-count-pill,
-  .system-chat-preview-badge,
-  .system-chat-subtle-action {
-    @apply rounded bg-white/5;
-    color: inherit;
-  }
-
-  .system-chat-count-pill {
-    opacity: 0.68;
-  }
-
-  .system-chat-preview-title {
-    @apply text-[11px] font-medium;
-  }
-
-  .system-chat-preview-subtitle,
-  .system-chat-preview-copy {
-    @apply text-[11px];
-  }
-
-  .system-chat-preview-card {
-    @apply rounded;
-    border-width: 0;
-  }
-
-  .system-chat-preview-badge {
-    @apply px-1.5 py-0.5 text-[9px] uppercase tracking-wide;
-    opacity: 0.64;
-  }
-
-  .system-chat-subtle-action {
-    @apply px-1.5 py-0.5 text-[10px] uppercase tracking-wide;
-    opacity: 0.68;
-    transition: opacity 0.15s ease;
-  }
-
-  .system-chat-subtle-action:hover {
-    opacity: 1;
-  }
-
-  .system-chat-renderer-surface {
-    @apply overflow-hidden rounded-xl border backdrop-blur-sm;
-    color: inherit;
-  }
-
-  .system-chat-renderer-header {
-    @apply flex w-full items-center justify-between gap-3 border-b border-white/10 bg-white/[0.04] px-3 py-2 text-left;
-  }
-
-  .system-chat-renderer-summary {
-    @apply mt-0.5 truncate text-[11px];
-  }
-
-  .system-chat-paragraph-subheading {
-    @apply mt-2 text-sm font-semibold first:mt-0;
-  }
-
-
-  .system-chat-inline-empty {
-    @apply text-xs italic;
-    color: inherit;
-    opacity: 0.58;
-  }
-
-  .system-chat-code-block {
-    @apply max-h-40 overflow-auto whitespace-pre-wrap break-all rounded p-2 text-[10px];
-    background: rgba(13, 18, 28, 0.82);
-    color: rgba(226, 231, 242, 0.9);
-  }
-
-  .system-chat-summary-card {
-    @apply p-2 text-sm leading-6;
-  }
-
-  .system-chat-stat-row {
-    @apply flex items-center gap-3 text-xs;
-    color: inherit;
-    opacity: 0.68;
-  }
-
-  .system-chat-stat-dot {
-    @apply h-1 w-1 rounded-full bg-white/30;
-  }
-
-  .system-chat-meter-track {
-    @apply h-1.5 max-w-24 flex-1 rounded-full bg-white/10;
-  }
-
-  .system-chat-meter-fill {
-    @apply h-full rounded-full;
-    background: rgba(130, 148, 210, 0.72);
-  }
-
-  .system-chat-error-box {
-    @apply rounded border px-2 py-2;
-    border-color: rgba(251, 113, 133, 0.28);
-    background: rgba(251, 113, 133, 0.08);
-    color: rgba(251, 113, 133, 0.92);
-  }
-
-  .system-chat-todo-item {
-    @apply relative overflow-hidden rounded-xl border px-3 py-3;
-    border-color: rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.045);
-    color: inherit;
-  }
-
-  .system-chat-todo-item.is-current {
-    border-color: rgba(130, 148, 210, 0.34);
-    background: rgba(130, 148, 210, 0.14);
-  }
-
-  .system-chat-todo-item.is-complete {
-    border-color: rgba(52, 211, 153, 0.24);
-    background: rgba(52, 211, 153, 0.1);
-  }
-
-  .system-chat-todo-rail {
-    @apply absolute left-[19px] top-10 h-full w-px;
-    background: rgba(255, 255, 255, 0.12);
-  }
-
-  .system-chat-todo-node {
-    @apply mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border;
-    border-color: rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.045);
-    color: inherit;
-  }
-
-  .system-chat-todo-node.is-current {
-    border-color: rgba(130, 148, 210, 0.4);
-    background: rgba(130, 148, 210, 0.16);
-  }
-
-  .system-chat-todo-node.is-complete {
-    border-color: rgba(52, 211, 153, 0.32);
-    background: rgba(52, 211, 153, 0.15);
-  }
-
-  .system-chat-todo-title {
-    @apply mt-1 text-sm font-semibold;
-    color: inherit;
-    opacity: 0.94;
-  }
-
-  .system-chat-todo-detail {
-    @apply mt-1 text-[11px] leading-5;
-    color: inherit;
-    opacity: 0.78;
-  }
-
-  .system-chat-tone-error {
-    color: rgba(251, 113, 133, 0.92);
-  }
-
-  .system-chat-tone-success {
-    color: rgba(52, 211, 153, 0.92);
-  }
-
-  .system-chat-tone-active {
-    color: rgba(251, 191, 36, 0.92);
-  }
-
-  .system-chat-tone-info {
-    color: rgba(130, 148, 210, 0.92);
-  }
-
-  .semi-transparent {
-    opacity: 0.5;
-  }
-
-  .transparent {
-    opacity: 0;
-    pointer-events: none;
-  }
-
+        border-color: rgba(155, 168, 200, 0.32);
+    }
+
+    /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + -------------------------------------- System Border Styling -----------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
+
+    .system-btn,
+    .system-btn-primary,
+    .system-btn-secondary {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    /* PRIMARY */
+    .system-btn-primary {
+        border-radius: 8px;
+        border: 1px solid rgba(160, 175, 225, 0.5);
+        background: linear-gradient(145deg, rgba(238, 240, 245, 0.55), rgba(216, 221, 240, 0.45));
+        box-shadow:
+            0 2px 6px rgba(90, 110, 170, 0.2),
+            0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        color: rgba(252, 253, 255, 0.92);
+        padding: 4px;
+        transition: background 0.15s;
+    }
+
+    .system-btn-primary:hover {
+        background: rgba(255, 255, 255, 0.5);
+    }
+
+    .system-shell:hover.system-btn-primary,
+    .system-shell:hover .system-btn-primary,
+    .system-shell.active.system-btn-primary,
+    .system-shell.active .system-btn-primary,
+    .system-shell.active.system-btn-primary,
+    .system-shell.active .system-btn-primary {
+        color: rgba(66, 75, 102, 0.92);
+    }
+
+    /* SECONDARY */
+    .system-btn-secondary {
+        border-radius: 8px;
+        border: 1px solid rgba(160, 175, 225, 0.5);
+        background: linear-gradient(145deg, rgba(130, 148, 210, 0.55), rgba(100, 120, 185, 0.45));
+        box-shadow:
+            0 2px 6px rgba(90, 110, 170, 0.2),
+            0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        padding: 4px;
+        color: rgba(252, 253, 255, 0.92);
+        transition: background 0.15s;
+    }
+
+    .system-btn-secondary:hover {
+        background: linear-gradient(145deg, rgba(140, 158, 220, 0.68), rgba(110, 130, 195, 0.58));
+    }
+
+    .system-shell:hover.system-btn-secondary,
+    .system-shell:hover .system-btn-secondary,
+    .system-shell.active.system-btn-secondary,
+    .system-shell.active .system-btn-secondary,
+    .system-shell.active.system-btn-secondary,
+    .system-shell.active .system-btn-secondary {
+        color: rgba(35, 45, 85, 0.85);
+    }
+
+    /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + --------------------------------------- System Input Styling -----------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
+
+    .system-input-primary {
+        background: rgba(255, 255, 255, 0.28);
+        border: 1px solid rgba(160, 172, 200, 0.38);
+        border-radius: 12px;
+        color: rgba(40, 48, 72, 0.85);
+        transition:
+            background 0.15s,
+            border-color 0.15s;
+    }
+
+    .system-shell:hover.system-input-primary,
+    .system-shell:hover .system-input-primary,
+    .system-shell.active.system-input-primary,
+    .system-shell.active .system-input-primary,
+    .system-shell.active.system-input-primary,
+    .system-shell.active .system-input-primary {
+        color: rgba(35, 45, 85, 0.85);
+    }
+
+    /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + ------------------------------------------- AI Chat --------------------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
+
+    /* .system-ai-chatbar {
+        color: inherit;
+    }
+
+    .system-chat-section-label,
+    .system-chat-label-muted,
+    .system-chat-renderer-heading {
+        @apply flex items-center gap-2 font-semibold uppercase;
+        color: inherit;
+        opacity: 0.56;
+    }
+
+    .system-chat-section-label {
+        font-size: 10px;
+        letter-spacing: 0.22em;
+    }
+
+    .system-chat-label-muted,
+    .system-chat-renderer-heading {
+        letter-spacing: 0.2em;
+    }
+
+    .system-chat-section-copy,
+    .system-chat-copy-body,
+    .system-chat-copy-muted,
+    .system-chat-preview-copy,
+    .system-chat-preview-subtitle,
+    .system-chat-meta-note,
+    .system-chat-icon-muted,
+    .system-chat-renderer-summary,
+    .system-chat-renderer-body,
+    .system-chat-mono {
+        color: inherit;
+    }
+
+    .system-chat-section-copy,
+    .system-chat-copy-body,
+    .system-chat-preview-copy,
+    .system-chat-renderer-body,
+    .system-chat-mono {
+        opacity: 0.82;
+    }
+
+    .system-chat-copy-muted,
+    .system-chat-preview-subtitle,
+    .system-chat-renderer-summary {
+        opacity: 0.64;
+    }
+
+    .system-chat-copy-strong,
+    .system-chat-preview-title,
+    .system-chat-empty-title,
+    .system-chat-paragraph-heading,
+    .system-chat-paragraph-subheading {
+        color: inherit;
+        opacity: 0.94;
+    }
+
+    .system-chat-meta-note,
+    .system-chat-icon-muted {
+        opacity: 0.56;
+    }
+
+    .system-chat-section-copy {
+        @apply text-sm leading-6;
+    }
+
+    .system-chat-meta-note {
+        @apply text-[10px];
+    }
+
+    .system-chat-meta-chip {
+        @apply inline-flex items-center rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs;
+        color: inherit;
+        opacity: 0.82;
+    }
+
+    .system-chat-message-list {
+        @apply space-y-5;
+        color: inherit;
+    }
+
+    .system-chat-empty-state {
+        @apply flex min-h-[220px] flex-col items-center justify-center rounded-[20px] border border-dashed border-white/10 bg-white/[0.035] px-6 py-10 text-center;
+    }
+
+    .system-chat-empty-title {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+    }
+
+    .system-chat-empty-copy {
+        @apply mt-2 max-w-sm text-sm leading-6;
+        color: inherit;
+        opacity: 0.64;
+    }
+
+    .system-chat-status-pill,
+    .system-chat-renderer-status,
+    .system-chat-tone-pill {
+        @apply inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.18em];
+        color: inherit;
+        opacity: 0.68;
+    }
+
+    .system-chat-renderer-status,
+    .system-chat-tone-pill {
+        @apply px-2 py-0.5 text-[10px] tracking-wide;
+    }
+
+    .system-chat-status-pill.is-streaming {
+        background: rgba(130, 148, 210, 0.18);
+        border-color: rgba(130, 148, 210, 0.34);
+        opacity: 0.92;
+    }
+
+    .system-chat-turn-label {
+        @apply px-1 text-[10px] font-semibold uppercase tracking-[0.24em];
+        color: inherit;
+        opacity: 0.56;
+    }
+
+    .system-chat-turn-label.is-user {
+        opacity: 0.72;
+    }
+
+    .system-chat-count-pill,
+    .system-chat-preview-badge,
+    .system-chat-subtle-action {
+        @apply rounded bg-white/5;
+        color: inherit;
+    }
+
+    .system-chat-count-pill {
+        opacity: 0.68;
+    }
+
+    .system-chat-preview-title {
+        @apply text-[11px] font-medium;
+    }
+
+    .system-chat-preview-subtitle,
+    .system-chat-preview-copy {
+        @apply text-[11px];
+    }
+
+    .system-chat-preview-card {
+        @apply rounded;
+        border-width: 0;
+    }
+
+    .system-chat-preview-badge {
+        @apply px-1.5 py-0.5 text-[9px] uppercase tracking-wide;
+        opacity: 0.64;
+    }
+
+    .system-chat-subtle-action {
+        @apply px-1.5 py-0.5 text-[10px] uppercase tracking-wide;
+        opacity: 0.68;
+        transition: opacity 0.15s ease;
+    }
+
+    .system-chat-subtle-action:hover {
+        opacity: 1;
+    }
+
+    .system-chat-renderer-surface {
+        @apply overflow-hidden rounded-xl border backdrop-blur-sm;
+        color: inherit;
+    }
+
+    .system-chat-renderer-header {
+        @apply flex w-full items-center justify-between gap-3 border-b border-white/10 bg-white/[0.04] px-3 py-2 text-left;
+    }
+
+    .system-chat-renderer-summary {
+        @apply mt-0.5 truncate text-[11px];
+    }
+
+    .system-chat-paragraph-subheading {
+        @apply mt-2 text-sm font-semibold first:mt-0;
+    }
+
+    .system-chat-inline-empty {
+        @apply text-xs italic;
+        color: inherit;
+        opacity: 0.58;
+    }
+
+    .system-chat-code-block {
+        @apply max-h-40 overflow-auto whitespace-pre-wrap break-all rounded p-2 text-[10px];
+        background: rgba(13, 18, 28, 0.82);
+        color: rgba(226, 231, 242, 0.9);
+    }
+
+    .system-chat-summary-card {
+        @apply p-2 text-sm leading-6;
+    }
+
+    .system-chat-stat-row {
+        @apply flex items-center gap-3 text-xs;
+        color: inherit;
+        opacity: 0.68;
+    }
+
+    .system-chat-stat-dot {
+        @apply h-1 w-1 rounded-full bg-white/30;
+    }
+
+    .system-chat-meter-track {
+        @apply h-1.5 max-w-24 flex-1 rounded-full bg-white/10;
+    }
+
+    .system-chat-meter-fill {
+        @apply h-full rounded-full;
+        background: rgba(130, 148, 210, 0.72);
+    }
+
+    .system-chat-error-box {
+        @apply rounded border px-2 py-2;
+        border-color: rgba(251, 113, 133, 0.28);
+        background: rgba(251, 113, 133, 0.08);
+        color: rgba(251, 113, 133, 0.92);
+    }
+
+    .system-chat-todo-item {
+        @apply relative overflow-hidden rounded-xl border px-3 py-3;
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.045);
+        color: inherit;
+    }
+
+    .system-chat-todo-item.is-current {
+        border-color: rgba(130, 148, 210, 0.34);
+        background: rgba(130, 148, 210, 0.14);
+    }
+
+    .system-chat-todo-item.is-complete {
+        border-color: rgba(52, 211, 153, 0.24);
+        background: rgba(52, 211, 153, 0.1);
+    }
+
+    .system-chat-todo-rail {
+        @apply absolute left-[19px] top-10 h-full w-px;
+        background: rgba(255, 255, 255, 0.12);
+    }
+
+    .system-chat-todo-node {
+        @apply mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border;
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.045);
+        color: inherit;
+    }
+
+    .system-chat-todo-node.is-current {
+        border-color: rgba(130, 148, 210, 0.4);
+        background: rgba(130, 148, 210, 0.16);
+    }
+
+    .system-chat-todo-node.is-complete {
+        border-color: rgba(52, 211, 153, 0.32);
+        background: rgba(52, 211, 153, 0.15);
+    }
+
+    .system-chat-todo-title {
+        @apply mt-1 text-sm font-semibold;
+        color: inherit;
+        opacity: 0.94;
+    }
+
+    .system-chat-todo-detail {
+        @apply mt-1 text-[11px] leading-5;
+        color: inherit;
+        opacity: 0.78;
+    }
+
+    .system-chat-tone-error {
+        color: rgba(251, 113, 133, 0.92);
+    }
+
+    .system-chat-tone-success {
+        color: rgba(52, 211, 153, 0.92);
+    }
+
+    .system-chat-tone-active {
+        color: rgba(251, 191, 36, 0.92);
+    }
+
+    .system-chat-tone-info {
+        color: rgba(130, 148, 210, 0.92);
+    } */
+
+    /* + ------------------------------------------------------------------------------------------------------+ */
+    /* + -------------------------------------- Utility Classes ----------------------------------------------+ */
+    /* + ------------------------------------------------------------------------------------------------------+ */
+
+    .semi-transparent {
+        opacity: 0.5;
+    }
+
+    .transparent {
+        opacity: 0;
+        pointer-events: none;
+    }
 }

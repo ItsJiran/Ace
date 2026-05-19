@@ -1,18 +1,49 @@
-import type { AgentConfig } from '#/shared/schemas/ai';
+import type { AgentConfig, AIProviderType } from '#/shared/schemas/ai';
 import { createCodeInterpreterMiddleware } from "@langchain/quickjs";
+import { AIProviders } from '#/shared/constants/ai';
+import { ConfigEngine } from '#/shared/engines/config-engine';
 import { 
     initChatModel, 
     createMiddleware, 
     summarizationMiddleware, 
     llmToolSelectorMiddleware, 
-    todoListMiddleware, 
     ClearToolUsesEdit, 
     contextEditingMiddleware,
 } from 'langchain';
-import { createFilesystemMiddleware } from "deepagents";
-import SingletonAgentBackend from './agent-backend';
 import { AIEngine } from '../ai-engine';
 import resolveApiKey from './resolve-api-key';
+
+function resolveConfiguredProviderName(runtime: AgentConfig): AIProviderType {
+    return (
+        runtime.configurable?.provider ??
+        (ConfigEngine.getConfigItem<AIProviderType>('ai', 'ai.default_provider') as AIProviderType | undefined) ??
+        AIProviders.OPENAI
+    );
+}
+
+function resolveConfiguredModelName(runtime: AgentConfig, providerName: string) {
+    const configuredDefaultModel = ConfigEngine.getConfigItem<string>('ai', 'ai.default_model') as
+        | string
+        | undefined;
+
+    if (runtime.configurable?.model) {
+        return runtime.configurable.model;
+    }
+
+    if (configuredDefaultModel) {
+        return configuredDefaultModel;
+    }
+
+    if (providerName === AIProviders.ANTHROPIC) {
+        return 'claude-3-5-sonnet-latest';
+    }
+
+    if (providerName === AIProviders.GOOGLE) {
+        return 'gemini-2.0-flash';
+    }
+
+    return 'gpt-4o-mini';
+}
 
 /**
  * Runtime configurable model middleware. This middleware allows the agent to dynamically select
@@ -27,8 +58,8 @@ const configurableModel = createMiddleware({
     name: 'ConfigurableModel',
     wrapModelCall: async (request, handler) => {
         const runtime = request.runtime as AgentConfig; 
-        const modelName = runtime.configurable?.model || 'gpt-3.5-turbo'; 
-        const providerName = runtime.configurable?.provider || 'openai'; 
+        const providerName = resolveConfiguredProviderName(runtime); 
+        const modelName = resolveConfiguredModelName(runtime, providerName); 
         const apiKey = runtime.configurable?.apiKey;
         const model = await initChatModel(
             `${providerName}:${modelName}`,
@@ -48,41 +79,11 @@ const contextEditingMiddlewareInstance = contextEditingMiddleware({
     ],
 });
 
-/**
- * filesystemMiddleware. This middleware provides a simple filesystem interface for the agent to read and write files during its execution.
- * It can be used to store intermediate results, logs, or any other data that the agent needs to persist across different steps of its reasoning process.
- */
-const filesystemMiddleware = createFilesystemMiddleware({
-    backend: SingletonAgentBackend.getInstance().value,
-    
-    systemPrompt : `You have access to a filesystem where you can read and write files. 
-    Use this capability to store intermediate results, logs, or any other data that you need to persist across different steps of your reasoning process. 
-    Always consider the structure of the filesystem and organize your files in a way that makes it easy for you to retrieve them later.`,
-
-    customToolDescriptions : {
-        'read_file' : `This tool allows you to read the contents of a file from the filesystem. 
-        You can specify the path of the file you want to read. Use this tool when you need to access information that you have previously 
-        stored or when you need to read data that is relevant to your current task.`,
-
-        'ls' : `This tool allows you to list the contents of a directory in the filesystem. 
-        You can specify the path of the directory you want to list. Use this tool when you need to see 
-        the files and subdirectories within a specific directory.`,
-
-        'edit_file' : `This tool allows you to edit the contents of a file in the filesystem. 
-        You can specify the path of the file you want to edit. Use this tool when you need to modify information that you have previously 
-        stored or when you need to update data that is relevant to your current task.`,
-
-        'write_file' : `This tool allows you to write the contents of a file to the filesystem. 
-        You can specify the path of the file you want to write. Use this tool when you need to store information that you have previously 
-        stored or when you need to write data that is relevant to your current task.`
-    }
-});
-
 const injectApiKeyMiddleware = createMiddleware({
     name: 'InjectApiKey',
     wrapModelCall: async (request, handler) => {
         const runtime = request.runtime as AgentConfig; 
-        const providerName = runtime.configurable?.provider || 'openai'; 
+        const providerName = resolveConfiguredProviderName(runtime); 
         const apiKey = runtime.configurable?.apiKey ?? await resolveApiKey(providerName);
 
         if (!apiKey) {
@@ -131,8 +132,6 @@ export default [
     syncKernelSpaceMiddleware,
 
     // prebuild middleware
-    todoListMiddleware, 
-    filesystemMiddleware,
     summarizationMiddleware, 
     llmToolSelectorMiddleware,
     contextEditingMiddlewareInstance,

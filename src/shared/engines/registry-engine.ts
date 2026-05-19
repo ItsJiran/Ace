@@ -571,10 +571,7 @@ class RegistryEngineSingleton {
                     validator?: any;
                 };
 
-                // 1. Detect 'registry' export (Identity/Metadata)
-                const registryData = exports.registry || {};
-
-                // 2. Resolve implementation export.
+                // 1. Resolve implementation export.
                 // Parsers are standardized to named export `handler`.
                 // Other domains keep using default export for now.
                 const implementation = domain === 'parsers'
@@ -585,6 +582,11 @@ class RegistryEngineSingleton {
                         abort: exports.handlerAbort,
                     }
                     : exports.default;
+
+                // 2. Detect registry metadata from either a named export or a static
+                // property on the default export. The latter keeps React modules
+                // Fast Refresh-safe by avoiding non-component named exports.
+                const registryData = exports.registry || implementation?.registry || {};
 
                 if (!implementation) {
                     if (domain === 'parsers') {

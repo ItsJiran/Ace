@@ -3,7 +3,7 @@ export default async function (key: string): Promise<string | null> {
         return null;
     }
 
-    if (window.envVariables?.get) {
+    if (typeof window !== 'undefined' && window.envVariables?.get) {
         return await window.envVariables.get(key);
     }
 

@@ -1,4 +1,5 @@
 import { AIProviders } from '#/shared/constants/ai.ts';
+
 import type {
     AgentConfigurable,
     AgentThreadSnapshot,
@@ -6,11 +7,13 @@ import type {
     AgentThreadSyncPayload,
     AIProviderType,
 } from '#/shared/schemas/ai.ts';
-// import SingletonAgentInstance from './ai/agent-instance';
+
+
+import SingletonAgentInstance from './ai/agent-instance';
 import resolveApiKey from './ai/resolve-api-key';
-import { ConfigEngine } from './config-engine';
-import { Engine } from './engine';
-import { KernelEngine } from './kernel-engine';
+import { ConfigEngine } from '#/shared/engines/config-engine';
+import { Engine } from '#/shared/engines/engine';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
@@ -132,8 +135,10 @@ class AIEngineSingleton extends Engine {
 
     public async syncAvailableModels(provider: AIProviderType): Promise<string[]> {
         const models = await this.fetchAvailableModels(provider);
-        const currentProviderModels = ConfigEngine.getConfigItem('ai', 'ai.providers_models')
-            ?.value as Record<string, string[]> | undefined;
+        const currentProviderModels = ConfigEngine.getConfigItem<Record<string, string[]>>(
+            'ai',
+            'ai.providers_models',
+        );
 
         const nextProviderModels: Record<string, string[]> = {
             ...(currentProviderModels ?? {}),
@@ -148,62 +153,73 @@ class AIEngineSingleton extends Engine {
 
     // + ----- API Threads DeepAgents ----------------------------------------------------------------------------+
 
-    // public async streamThreadPrompt(
-    //     thread_uid: string,
-    //     prompt: string,
-    //     overrides: Partial<AgentConfigurable> = {},
-    // ) {
-    //     const existingThread = this.readThread(thread_uid);
-    //     const provider =
-    //         overrides.provider ??
-    //         existingThread?.provider ??
-    //         (ConfigEngine.getConfigItem('ai', 'ai.default_provider')?.value as AIProviderType | undefined) ??
-    //         AIProviders.OPENAI;
-    //     const model =
-    //         overrides.model ??
-    //         existingThread?.model ??
-    //         (ConfigEngine.getConfigItem('ai', 'ai.default_model')?.value as string | undefined);
-    //     const apiKey = overrides.apiKey ?? (await resolveApiKey(provider)) ?? undefined;
-    //     const checkpoint_id = overrides.checkpoint_id ?? existingThread?.checkpoint_id;
+    public async streamThreadPrompt(
+        thread_uid: string,
+        prompt: string,
+        overrides: Partial<AgentConfigurable> = {},
+    ) {
+        const normalizedPrompt = prompt.trim();
+        if (!normalizedPrompt) {
+            return this.readThread(thread_uid);
+        }
 
-    //     this.syncThread(thread_uid, {
-    //         thread_uid,
-    //         checkpoint_id,
-    //         model,
-    //         provider,
-    //         updated_at: Date.now(),
-    //     });
+        const existingThread = this.readThread(thread_uid);
+        const provider =
+            overrides.provider ??
+            existingThread?.provider ??
+            (ConfigEngine.getConfigItem<AIProviderType>('ai', 'ai.default_provider') as AIProviderType | undefined) ??
+            AIProviders.OPENAI;
+        const model =
+            overrides.model ??
+            existingThread?.model ??
+            (ConfigEngine.getConfigItem<string>('ai', 'ai.default_model') as string | undefined);
+        const apiKey = overrides.apiKey ?? (await resolveApiKey(provider)) ?? undefined;
+        const checkpoint_id = overrides.checkpoint_id ?? existingThread?.checkpoint_id;
 
-    //     return SingletonAgentInstance.getInstance().stream(
-    //         {
-    //             messages: [
-    //                 {
-    //                     role: 'user',
-    //                     content: prompt,
-    //                 },
-    //             ],
-    //         },
-    //         {
-    //             version: 'v3',
-    //             configurable: {
-    //                 thread_id: thread_uid,
-    //                 checkpoint_id,
-    //                 model,
-    //                 provider,
-    //                 apiKey,
-    //                 ...overrides,
-    //             },
-    //         },
-    //     );
-    // }
+        this.syncThread(thread_uid, {
+            thread_uid,
+            checkpoint_id,
+            model,
+            provider,
+            updated_at: Date.now(),
+        });
+
+        const stream = await SingletonAgentInstance.getInstance().stream(
+            {
+                messages: [
+                    {
+                        role: 'user',
+                        content: normalizedPrompt,
+                    },
+                ],
+            },
+            {
+                version: 'v3',
+                configurable: {
+                    thread_id: thread_uid,
+                    // checkpoint_id,
+                    model,
+                    provider,
+                    apiKey,
+                    ...overrides,
+                },
+            },
+        );
+
+        for await (const _event of stream) {
+            void _event;
+        }
+
+        return this.readThread(thread_uid);
+    }
 
 
     // + ----- API Threads ----------------------------------------------------------------------------+
 
     public createThread(
         initialState: Partial<AgentThreadSnapshot> = {
-            model: ConfigEngine.getConfigItem('ai', 'ai.default_model')?.value,
-            provider: ConfigEngine.getConfigItem('ai', 'ai.default_provider')?.value,
+            model: ConfigEngine.getConfigItem<string>('ai', 'ai.default_model'),
+            provider: ConfigEngine.getConfigItem<AIProviderType>('ai', 'ai.default_provider'),
         },
     ): AgentConfigurable {
         const thread_id = initialState.thread_uid ?? crypto.randomUUID();
@@ -229,7 +245,12 @@ class AIEngineSingleton extends Engine {
             checkpoint_id: payload.checkpoint_id ?? existingThread?.checkpoint_id,
             model: payload.model ?? existingThread?.model,
             provider: payload.provider ?? existingThread?.provider,
-            messages: payload.messages ?? existingThread?.messages ?? [],
+            messages:
+                Array.isArray(payload.messages) && Array.isArray(existingThread?.messages)
+                    ? payload.messages.length >= existingThread.messages.length
+                        ? payload.messages
+                        : existingThread.messages
+                    : payload.messages ?? existingThread?.messages ?? [],
             state: payload.state ?? existingThread?.state ?? {},
             created_at: existingThread?.created_at ?? payload.created_at ?? now,
             updated_at: payload.updated_at ?? now,
@@ -249,17 +270,64 @@ class AIEngineSingleton extends Engine {
         return memory_uid;
     }
 
+    public listThreads() {
+        const index = this.readThreadIndex();
+        const threads = Object.entries(index)
+            .map(([thread_uid, memory_uid]) => {
+                const thread = KernelEngine.readMemory(memory_uid) as AgentThread | undefined;
+
+                if (!thread) {
+                    return null;
+                }
+
+                return {
+                    thread_uid,
+                    memory_uid,
+                    thread,
+                };
+            })
+            .filter(
+                (
+                    entry,
+                ): entry is {
+                    thread_uid: string;
+                    memory_uid: string;
+                    thread: AgentThread;
+                } => Boolean(entry),
+            );
+
+        return {
+            index,
+            threads,
+        };
+    }
+
     public readThread(thread_uid: string): AgentThread | null {
-        return (
-            (KernelEngine.readMemory(this.ai_threads_memory_uid(thread_uid)) as
-                | AgentThread
-                | undefined) ?? null
-        );
+        const memory_uid = this.readThreadIndex()[thread_uid] ?? this.ai_threads_memory_uid(thread_uid);
+
+        return ((KernelEngine.readMemory(memory_uid) as AgentThread | undefined) ?? null);
     }
 
     public async deleteThread(thread_uid: string): Promise<boolean> {
-        void thread_uid;
-        return false;
+        const currentIndex = this.readThreadIndex();
+        const memory_uid = currentIndex[thread_uid] ?? this.ai_threads_memory_uid(thread_uid);
+        const existingThread = KernelEngine.readMemory(memory_uid);
+
+        if (!existingThread && !currentIndex[thread_uid]) {
+            return false;
+        }
+
+        if (existingThread) {
+            KernelEngine.deleteMemory(memory_uid);
+        }
+
+        if (currentIndex[thread_uid]) {
+            const nextIndex = { ...currentIndex };
+            delete nextIndex[thread_uid];
+            KernelEngine.writeMemory(this.ai_threads_uids_memory_uid, nextIndex);
+        }
+
+        return true;
     }
 }
 
