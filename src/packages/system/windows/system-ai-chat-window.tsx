@@ -139,8 +139,6 @@ function SystemAIChatWindowBody({
 					messages={renderedMessages}
 					isStreaming={is_streaming}
 					pendingPrompt={pending_prompt}
-					provider={selectedProvider}
-					model={resolvedModel}
 					bottomRef={bottomRef}
 				/>
 			</section>

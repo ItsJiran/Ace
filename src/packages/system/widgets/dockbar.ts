@@ -17,6 +17,11 @@ export default async function activate() {
 	});
 
 	if (existingDockbarWindow) {
+		window.ACE.window.updateWindowConfig(existingDockbarWindow.uid, {
+			is_locked: false,
+			is_resizeable: false,
+			always_on_top: true,
+		});
 		window.ACE.window.focusWindow(existingDockbarWindow.uid);
 		return existingDockbarWindow.uid;
 	}
@@ -38,7 +43,7 @@ export default async function activate() {
 		x: default_config?.x || 240,
 		y: default_config?.y || 920,
 		window_style: default_config?.window_style || 'borderless',
-		is_locked: default_config?.is_locked ?? true,
+		is_locked: default_config?.is_locked ?? false,
 		is_resizeable: default_config?.is_resizeable ?? false,
 		always_on_top: default_config?.always_on_top ?? true,
 	});

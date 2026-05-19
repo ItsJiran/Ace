@@ -64,7 +64,9 @@ class RegistryEngineSingleton {
     }
 
     private resolveRuntimeMode(): RegistryRuntimeMode {
-        const viteMode = import.meta.env.VITE_ACE_RUNTIME_MODE;
+        const viteMode = (
+            import.meta as ImportMeta & { env?: Record<string, string | undefined> }
+        ).env?.VITE_ACE_RUNTIME_MODE;
         if (viteMode === 'desktop' || viteMode === 'background') {
             return viteMode;
         }
@@ -108,6 +110,94 @@ class RegistryEngineSingleton {
             selectedLoaders,
             runtimeMode: this.resolveRuntimeMode(),
         };
+    }
+
+    private async collectFilesystemModules(baseDir: string): Promise<string[]> {
+        const { readdir } = await import('node:fs/promises');
+        const entries = await readdir(baseDir, { withFileTypes: true });
+        const files: string[] = [];
+
+        for (const entry of entries) {
+            const nextPath = `${baseDir}/${entry.name}`;
+            if (entry.isDirectory()) {
+                files.push(...(await this.collectFilesystemModules(nextPath)));
+                continue;
+            }
+
+            if (/\.(ts|tsx)$/.test(entry.name)) {
+                files.push(nextPath);
+            }
+        }
+
+        return files;
+    }
+
+    private async loadCorePackagesFromFilesystem() {
+        const { access, readFile, readdir } = await import('node:fs/promises');
+        const path = await import('node:path');
+        const { fileURLToPath, pathToFileURL } = await import('node:url');
+
+        const { allowedDomains, runtimeMode } = {
+            allowedDomains: this.resolveRuntimeDomains(),
+            runtimeMode: this.resolveRuntimeMode(),
+        };
+
+        console.log(
+            `[RegistryEngine] Runtime domain load policy: ${runtimeMode} -> ${allowedDomains.join(', ')}`,
+        );
+
+        const engineDir = path.dirname(fileURLToPath(import.meta.url));
+        const packagesRoot = path.resolve(engineDir, '../../packages');
+        const packageEntries = await readdir(packagesRoot, { withFileTypes: true });
+
+        for (const packageEntry of packageEntries) {
+            if (!packageEntry.isDirectory()) {
+                continue;
+            }
+
+            const pkgDir = packageEntry.name;
+            const manifestPath = path.join(packagesRoot, pkgDir, 'manifest.json');
+
+            try {
+                await access(manifestPath);
+            } catch {
+                continue;
+            }
+
+            const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+            if (!manifest || !manifest.package_name) {
+                console.warn(`[RegistryEngine] Invalid manifest found at ${manifestPath}`);
+                continue;
+            }
+
+            this.registerPackage(manifest);
+
+            const loadedPackageModules: Record<string, unknown> = {};
+            for (const domain of allowedDomains) {
+                const domainDir = path.join(packagesRoot, pkgDir, domain);
+
+                try {
+                    await access(domainDir);
+                } catch {
+                    continue;
+                }
+
+                const moduleFiles = await this.collectFilesystemModules(domainDir);
+                for (const moduleFile of moduleFiles) {
+                    const modulePath = `/src/packages/${pkgDir}/${path
+                        .relative(path.join(packagesRoot, pkgDir), moduleFile)
+                        .replace(/\\/g, '/')}`;
+                    loadedPackageModules[modulePath] = await import(
+                        /* @vite-ignore */ pathToFileURL(moduleFile).href
+                    );
+                }
+            }
+
+            this.registerPackageModules(manifest.package_name as string, loadedPackageModules, {
+                coreComponentEntryMode: true,
+            });
+            console.log(`   - Loaded: ${manifest.package_name}`);
+        }
     }
 
     /** Initialize the registry system. */
@@ -463,11 +553,20 @@ class RegistryEngineSingleton {
     private async loadCorePackages() {
         console.group('📦 RegistryEngine: Auto-discovering core packages...');
 
+        const runtimeMode = this.resolveRuntimeMode();
+
+        if (runtimeMode === 'background') {
+            await this.loadCorePackagesFromFilesystem();
+            console.log('📦 Core package discovery complete.');
+            console.groupEnd();
+            return;
+        }
+
         // 1. Glob ALL manifests to find packages
         const manifests = import.meta.glob('/src/packages/*/manifest.json');
 
         // 2. Load only the registry domains needed by the active runtime.
-        const { allowedDomains, selectedLoaders, runtimeMode } = this.resolveCoreModuleLoaders();
+        const { allowedDomains, selectedLoaders } = this.resolveCoreModuleLoaders();
         console.log(
             `[RegistryEngine] Runtime domain load policy: ${runtimeMode} -> ${allowedDomains.join(', ')}`,
         );

@@ -8,8 +8,6 @@ type SystemAIChatMessagesProps = {
 	messages: BaseMessage[];
 	isStreaming: boolean;
 	pendingPrompt: string | null;
-	provider: string;
-	model: string;
 	bottomRef: RefObject<HTMLDivElement | null>;
 };
 
@@ -17,8 +15,6 @@ export function SystemAIChatMessages({
 	messages,
 	isStreaming,
 	pendingPrompt,
-	provider,
-	model,
 	bottomRef,
 }: SystemAIChatMessagesProps) {
 	return (
@@ -93,7 +89,7 @@ export function SystemAIChatMessages({
 						<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
 							<div className="system-chat-turn-label">Assistant</div>
 							<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
-								<div className="flex items-center gap-2 text-zinc-300">
+								<div className="flex items-center gap-2 text-zinc-500">
 									<span className="system-chat-status-pill is-streaming">streaming</span>
 									<span className="whitespace-pre-wrap">{pendingPrompt ? 'Generating response for the latest prompt...' : 'Agent is preparing the next turn...'}</span>
 								</div>
@@ -102,6 +98,7 @@ export function SystemAIChatMessages({
 					</div>
 				) : null}
 
+				<div aria-hidden className="pointer-events-none h-[34vh] min-h-24 max-h-72" />
 				<div ref={bottomRef} aria-hidden style={{ width: 1, height: 1 }} />
 			</div>
 		</div>
