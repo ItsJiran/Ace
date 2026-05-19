@@ -11,7 +11,9 @@ import {
 } from 'langchain';
 import { createFilesystemMiddleware } from "deepagents";
 import SingletonAgentBackend from './agent-backend';
-import { ConfigEngine } from '../config-engine';
+import { AIEngine } from '../ai-engine';
+import resolveApiKey from './resolve-api-key';
+
 /**
  * Runtime configurable model middleware. This middleware allows the agent to dynamically select
  * and initialize a chat model based on the configuration provided in the agent's runtime.
@@ -27,7 +29,11 @@ const configurableModel = createMiddleware({
         const runtime = request.runtime as AgentConfig; 
         const modelName = runtime.configurable?.model || 'gpt-3.5-turbo'; 
         const providerName = runtime.configurable?.provider || 'openai'; 
-        const model = await initChatModel(`${providerName}:${modelName}`);
+        const apiKey = runtime.configurable?.apiKey;
+        const model = await initChatModel(
+            `${providerName}:${modelName}`,
+            apiKey ? { apiKey } : undefined,
+        );
         return handler({ ...request, model });
     },
 });
@@ -77,14 +83,52 @@ const injectApiKeyMiddleware = createMiddleware({
     wrapModelCall: async (request, handler) => {
         const runtime = request.runtime as AgentConfig; 
         const providerName = runtime.configurable?.provider || 'openai'; 
-        const apiKey = ConfigEngine.boot; 
-        
-        return handler(request);
+        const apiKey = runtime.configurable?.apiKey ?? await resolveApiKey(providerName);
+
+        if (!apiKey) {
+            return handler(request);
+        }
+
+        return handler({
+            ...request,
+            runtime: {
+                ...runtime,
+                configurable: {
+                    ...runtime.configurable,
+                    apiKey,
+                },
+            },
+        });
+    },
+});
+
+const syncKernelSpaceMiddleware = createMiddleware({
+    name: 'SyncKernelSpace',
+    afterAgent: async (state, runtime) => {
+        const agentRuntime = runtime as AgentConfig;
+        const thread_uid = agentRuntime.configurable?.thread_id;
+
+        if (!thread_uid) {
+            return;
+        }
+
+        AIEngine.syncAIThread(thread_uid, {
+            thread_uid,
+            checkpoint_id: agentRuntime.configurable?.checkpoint_id,
+            model: agentRuntime.configurable?.model,
+            provider: agentRuntime.configurable?.provider,
+            messages: Array.isArray((state as { messages?: unknown[] }).messages)
+                ? ((state as { messages?: unknown[] }).messages ?? [])
+                : [],
+            state: state as Record<string, unknown>,
+        });
     },
 });
 
 export default [
+    injectApiKeyMiddleware,
     configurableModel, 
+    syncKernelSpaceMiddleware,
 
     // prebuild middleware
     todoListMiddleware, 

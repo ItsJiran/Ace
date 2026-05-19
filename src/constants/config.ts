@@ -1,5 +1,10 @@
-import type { ConfigItem, ConfigItemKeybind, ConfigStorage } from '#/schemas/config';
-import { KeybindActionMap, KeybindButtonCodeMap, KeybindCodes, KeybindButtons } from './keybinds';
+import { z } from 'zod';
+import type {
+    ConfigSchemaMapType,
+    ConfigStorageType,
+} from '#/schemas/config';
+import { KeybindActionMap, KeybindButtons } from './keybinds';
+import { AIProviders } from './ai';
 
 /**
  * Default general configuration
@@ -7,41 +12,45 @@ import { KeybindActionMap, KeybindButtonCodeMap, KeybindCodes, KeybindButtons } 
  * and changes will be persisted to ace.config.json. The configuration includes theme settings, window behavior, and debug options.
  */
 
-export const DefaultConfigGeneral: ConfigStorage<ConfigItem> = {
+export const ConfigGeneral_V0_0_0_SchemaMap: ConfigSchemaMapType = {
+    'core.theme': z
+        .enum(['light', 'dark', 'system'])
+        .default('system')
+        .describe('The visual theme of the overlay (light, dark, or system).'),
+
+    'core.overlay_opacity': z
+        .number()
+        .min(0)
+        .max(1)
+        .default(0.8)
+        .describe('The base opacity of the transparent layer containers.'),
+
+    'core.always_on_top': z
+        .boolean()
+        .default(true)
+        .describe('Whether the assistant stays above all other windows.'),
+
+    'core.debug_mode': z
+        .boolean()
+        .default(false)
+        .describe('Enable verbose logging and visual debug helpers.'),
+        
+    'window.mouse_focus_enabled': z
+        .boolean()
+        .default(true)
+        .describe(
+            'Whether mouse presence/click on a window is allowed to focus and activate that window. If disabled, windows remain transparent to mouse focus behavior.',
+        ),
+};
+
+export const ConfigGeneral_V0_0_0_Schema = z.object(ConfigGeneral_V0_0_0_SchemaMap);
+export type ConfigGeneral_V0_0_0_Type = z.infer<typeof ConfigGeneral_V0_0_0_Schema>;
+
+export const DefaultConfigGeneral: ConfigStorageType = {
     memory_uid: 'system:config:general',
     file_name: 'ace.config.json',
-    items: [
-        {
-            key: 'core.theme',
-            value: 'system',
-            category: 'Appearance',
-            description: 'The visual theme of the overlay (light, dark, or system).',
-        },
-        {
-            key: 'core.overlay_opacity',
-            value: 0.8,
-            category: 'Appearance',
-            description: 'The base opacity of the transparent layer containers.',
-        },
-        {
-            key: 'core.always_on_top',
-            value: true,
-            category: 'Window',
-            description: 'Whether the assistant stays above all other windows.',
-        },
-        {
-            key: 'core.debug_mode',
-            value: false,
-            category: 'Developer',
-            description: 'Enable verbose logging and visual debug helpers.',
-        },
-        {
-            key: 'window.mouse_focus_enabled',
-            value: true,
-            category: 'Window',
-            description: 'Whether mouse presence/click on a window is allowed to focus and activate that window. If disabled, windows remain transparent to mouse focus behavior.',
-        },
-    ],
+    version: '0.0.0',
+    config: ConfigGeneral_V0_0_0_SchemaMap,
 };
 
 /**
@@ -52,27 +61,71 @@ export const DefaultConfigGeneral: ConfigStorage<ConfigItem> = {
  * listens for to trigger the corresponding action.
  */
 
-export const DefaultConfigKeybinds: ConfigStorage<ConfigItemKeybind> = {
+export const ConfigKeybind_V0_0_0_SchemaMap: ConfigSchemaMapType = {
+    [KeybindActionMap.toggleOverlayMode]: z
+        .array(z.enum(KeybindButtons))
+        .default([KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.Backslash])
+        .describe('Toggle between Ambient (Pass-through) and Interactive mode.'),
+    [KeybindActionMap.cycleDisplayMode]: z
+        .array(z.enum(KeybindButtons))
+        .default([KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.KeyD])
+        .describe(
+            'Cycle desktop window display mode between visible, focused-only, semi-transparent, and transparent.',
+        ),
+};
+
+export const ConfigKeybind_V0_0_0_Schema = z.object(ConfigKeybind_V0_0_0_SchemaMap);
+export type ConfigKeybind_V0_0_0_Type = z.infer<typeof ConfigKeybind_V0_0_0_Schema>;
+
+export const DefaultConfigKeybinds: ConfigStorageType = {
     memory_uid: 'system:config:keybinds',
     file_name: 'ace.keybinds.json',
-    items: [
-        
-        /**
-         * Toggle overlay mode
-         */
-        {
-            key: KeybindActionMap.toggleOverlayMode,
-            value: [KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.Backslash],
-            description: 'Toggle between Ambient (Pass-through) and Interactive mode.',
-        },
+    version: '0.0.0',
+    config: ConfigKeybind_V0_0_0_SchemaMap,
+};
 
-        /**
-         * Cycle display mode
-         */
-        {
-            key: KeybindActionMap.cycleDisplayMode,
-            value: [KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.KeyD],
-            description: 'Cycle desktop window display mode between visible, focused-only, semi-transparent, and transparent.',
-        },
-    ],
+
+/**
+ * Default Configuration for AI Configuration
+ * This configuration includes settings related to AI providers, such as the default provider to use for agent interactions. 
+ * Users can customize this through the UI, and changes will be persisted to ace.ai_config.json. The configuration allows 
+ * for flexibility in choosing different AI providers and managing API keys.
+ * 
+ * Containing default_provider and default_model, and also containing list of providers with all of the cached models that we have seen so far in the system.
+ * This is useful for allowing users to set their preferred AI provider and model, and for the system to manage interactions with multiple AI providers seamlessly.
+ */
+export const ConfigAI_V0_0_0_SchemaMap: ConfigSchemaMapType = {
+    'ai.default_provider': z
+        .string()
+        .default(AIProviders.OPENAI)
+        .describe('The default AI provider to use for agent interactions.'),
+    'ai.default_model': z
+        .string()
+        .default('gpt-3.5-turbo')
+        .describe('The default AI model to use for agent interactions.'),
+
+    // 'ai.providers_models' : {
+    //     'openai' : ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-32k'],
+    //     'azure' : ['gpt-3.5-turbo', 'gpt-4'],
+    //     'anthropic' : ['claude-2', 'claude-instant-100k']
+    // }
+
+    'ai.providers_models' : z
+        .record(z.enum(AIProviders), z.array(z.string()))
+        .default({
+            [AIProviders.OPENAI]: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-32k'],
+            [AIProviders.GOOGLE]: ['gpt-3.5-turbo', 'gpt-4'],
+            [AIProviders.ANTHROPIC]: ['claude-2', 'claude-instant-100k'],
+        })
+        .describe('A mapping of AI providers to their available models.'),
+};
+
+export const ConfigAI_V0_0_0_Schema = z.object(ConfigAI_V0_0_0_SchemaMap);
+export type ConfigAI_V0_0_0_Type = z.infer<typeof ConfigAI_V0_0_0_Schema>;
+
+export const DefaultConfigAI: ConfigStorageType = {
+    memory_uid: 'system:config:ai',
+    file_name: 'ace.ai_config.json',
+    version: '0.0.0',
+    config: ConfigAI_V0_0_0_SchemaMap,
 };

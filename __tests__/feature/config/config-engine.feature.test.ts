@@ -59,20 +59,14 @@ describe('ConfigEngine write feature', () => {
         );
 
         expect(writtenConfig).toEqual({
-            items: [
-                {
-                    key: 'core.theme',
-                    value: 'dark',
-                    category: 'Appearance',
-                    description: 'Theme updated by feature test.',
-                },
-                {
-                    key: 'core.overlay_opacity',
-                    value: 0.65,
-                    category: 'Appearance',
-                    description: 'Opacity updated by feature test.',
-                },
-            ],
+            version: DefaultConfigGeneral.version,
+            config: {
+                'core.theme': 'dark',
+                'core.overlay_opacity': 0.65,
+                'core.always_on_top': true,
+                'core.debug_mode': false,
+                'window.mouse_focus_enabled': true,
+            },
         });
 
         adapterMock.teardown();
@@ -92,7 +86,19 @@ describe('ConfigEngine write feature', () => {
         EventBus.setupKernelSpace();
         ConfigEngine._setupKernelSpace();
 
-        KernelEngine.writeMemory(DefaultConfigKeybinds.memory_uid, DefaultConfigKeybinds.items);
+        KernelEngine.writeMemory(DefaultConfigKeybinds.memory_uid, [
+            {
+                key: KeybindActionMap.toggleOverlayMode,
+                value: [KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.Backslash],
+                description: 'Toggle between Ambient (Pass-through) and Interactive mode.',
+            },
+            {
+                key: KeybindActionMap.cycleDisplayMode,
+                value: [KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.KeyD],
+                description:
+                    'Cycle desktop window display mode between visible, focused-only, semi-transparent, and transparent.',
+            },
+        ]);
 
         await ConfigEngine.updateConfigItem(
             'keybinds',
@@ -116,19 +122,11 @@ describe('ConfigEngine write feature', () => {
         );
 
         expect(writtenKeybindConfig).toEqual({
-            items: [
-                {
-                    key: KeybindActionMap.toggleOverlayMode,
-                    value: [KeybindButtons.ControlLeft, KeybindButtons.KeyA],
-                    description: 'Updated by feature test.',
-                    category: 'Shortcuts',
-                },
-                {
-                    key: KeybindActionMap.cycleDisplayMode,
-                    value: [KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.KeyD],
-                    description: 'Cycle desktop window display mode between visible, focused-only, semi-transparent, and transparent.',
-                },
-            ],
+            version: DefaultConfigKeybinds.version,
+            config: {
+                [KeybindActionMap.toggleOverlayMode]: [KeybindButtons.ControlLeft, KeybindButtons.KeyA],
+                [KeybindActionMap.cycleDisplayMode]: [KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.KeyD],
+            },
         });
 
         adapterMock.teardown();
@@ -148,23 +146,25 @@ describe('ConfigEngine write feature', () => {
         ConfigEngine._setupKernelSpace();
 
         await FSEngine.saveFile(DefaultConfigGeneral.file_name, {
-            items: [
-                {
-                    key: 'core.debug_mode',
-                    value: true,
-                    category: 'Developer',
-                    description: 'Boot sync test.',
-                },
-            ],
+            version: DefaultConfigGeneral.version,
+            config: {
+                'core.theme': 'system',
+                'core.overlay_opacity': 0.8,
+                'core.always_on_top': true,
+                'core.debug_mode': true,
+                'window.mouse_focus_enabled': true,
+            },
         });
         await FSEngine.saveFile(DefaultConfigKeybinds.file_name, {
-            items: [
-                {
-                    key: KeybindActionMap.cycleDisplayMode,
-                    value: [KeybindButtons.ControlLeft, KeybindButtons.KeyD],
-                    description: 'Boot sync keybind test.',
-                },
-            ],
+            version: DefaultConfigKeybinds.version,
+            config: {
+                [KeybindActionMap.toggleOverlayMode]: [
+                    KeybindButtons.ControlLeft,
+                    KeybindButtons.AltLeft,
+                    KeybindButtons.Backslash,
+                ],
+                [KeybindActionMap.cycleDisplayMode]: [KeybindButtons.ControlLeft, KeybindButtons.KeyD],
+            },
         });
 
         await ConfigEngine.syncConfigFileToRam('general');
@@ -172,19 +172,115 @@ describe('ConfigEngine write feature', () => {
 
         expect(KernelEngine.readMemory(DefaultConfigGeneral.memory_uid)).toEqual([
             {
+                key: 'core.theme',
+                value: 'system',
+                description: 'The visual theme of the overlay (light, dark, or system).',
+            },
+            {
+                key: 'core.overlay_opacity',
+                value: 0.8,
+                description: 'The base opacity of the transparent layer containers.',
+            },
+            {
+                key: 'core.always_on_top',
+                value: true,
+                description: 'Whether the assistant stays above all other windows.',
+            },
+            {
                 key: 'core.debug_mode',
                 value: true,
-                category: 'Developer',
-                description: 'Boot sync test.',
+                description: 'Enable verbose logging and visual debug helpers.',
+            },
+            {
+                key: 'window.mouse_focus_enabled',
+                value: true,
+                description:
+                    'Whether mouse presence/click on a window is allowed to focus and activate that window. If disabled, windows remain transparent to mouse focus behavior.',
             },
         ]);
         expect(KernelEngine.readMemory(DefaultConfigKeybinds.memory_uid)).toEqual([
             {
+                key: KeybindActionMap.toggleOverlayMode,
+                value: [KeybindButtons.ControlLeft, KeybindButtons.AltLeft, KeybindButtons.Backslash],
+                description: 'Toggle between Ambient (Pass-through) and Interactive mode.',
+            },
+            {
                 key: KeybindActionMap.cycleDisplayMode,
                 value: [KeybindButtons.ControlLeft, KeybindButtons.KeyD],
-                description: 'Boot sync keybind test.',
+                description:
+                    'Cycle desktop window display mode between visible, focused-only, semi-transparent, and transparent.',
             },
         ]);
+
+        adapterMock.teardown();
+    });
+
+    it('backs up invalid or outdated config file and rebuilds with current defaults', async () => {
+        const { electronAPI } = createElectronAPIMock();
+        const { ConfigEngine, KernelEngine, FSEngine } = await loadFreshEngineSet();
+        const adapterMock = await createArtifactFsAdapterMock('config-rebuild-backup');
+        await adapterMock.setup();
+
+        Object.defineProperty(window, 'electronAPI', {
+            configurable: true,
+            value: electronAPI,
+        });
+        KernelEngine.resetKernelSpace();
+        ConfigEngine._setupKernelSpace();
+
+        vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
+
+        await FSEngine.saveFile(DefaultConfigGeneral.file_name, {
+            version: '0.0.0-old',
+            config: {
+                'core.theme': 'dark',
+            },
+        });
+
+        await ConfigEngine.syncConfigFileToRam('general');
+
+        const rebuiltConfig = JSON.parse(
+            await readFile(
+                path.join(
+                    artifactRootDir,
+                    'config-rebuild-backup',
+                    '__appconfig__',
+                    APP_CONFIG_ROOT_DIR,
+                    DefaultConfigGeneral.file_name,
+                ),
+                'utf8',
+            ),
+        );
+
+        const backupConfig = JSON.parse(
+            await readFile(
+                path.join(
+                    artifactRootDir,
+                    'config-rebuild-backup',
+                    '__appconfig__',
+                    APP_CONFIG_ROOT_DIR,
+                    `${DefaultConfigGeneral.file_name}.backup.1700000000000.json`,
+                ),
+                'utf8',
+            ),
+        );
+
+        expect(backupConfig).toEqual({
+            version: '0.0.0-old',
+            config: {
+                'core.theme': 'dark',
+            },
+        });
+        expect(rebuiltConfig).toEqual({
+            version: DefaultConfigGeneral.version,
+            config: {
+                'core.theme': 'system',
+                'core.overlay_opacity': 0.8,
+                'core.always_on_top': true,
+                'core.debug_mode': false,
+                'window.mouse_focus_enabled': true,
+            },
+        });
 
         adapterMock.teardown();
     });

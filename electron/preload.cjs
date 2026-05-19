@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     pathAppCacheDir: () => ipcRenderer.invoke('ace:path:app-cache-dir'),
     pathAppLocalDir: () => ipcRenderer.invoke('ace:path:app-local-dir'),
     pathHomeDir: () => os.homedir(),
+    getEnv: (key) => ipcRenderer.invoke('ace:env:get', key),
     pathJoin: (...segments) => path.join(...segments.map((segment) => String(segment ?? ''))),
     pathNormalize: (targetPath) => path.normalize(String(targetPath || '')),
     syncGlobalShortcuts: (accelerators) => ipcRenderer.invoke('ace:global-shortcuts:sync', accelerators),

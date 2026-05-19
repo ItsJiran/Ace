@@ -17,6 +17,7 @@ interface ElectronAPI {
     pathAppCacheDir: () => Promise<string>;
     pathAppLocalDir: () => Promise<string>;
     pathHomeDir: () => Promise<string>;
+    getEnv: (key: string) => Promise<string | null>;
     pathJoin: (...segments: string[]) => Promise<string> | string;
     pathNormalize: (targetPath: string) => Promise<string> | string;
     syncGlobalShortcuts: (accelerators: string[]) => Promise<string[]>;

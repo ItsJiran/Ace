@@ -429,6 +429,15 @@ app.whenReady().then(() => {
         window?.minimize();
     });
 
+    ipcMain.handle('ace:env:get', (_event, key) => {
+        const envKey = String(key || '').trim();
+        if (!envKey) {
+            return null;
+        }
+
+        return process.env[envKey] ?? null;
+    });
+
     ipcMain.handle('ace:window:toggle-devtools', (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {

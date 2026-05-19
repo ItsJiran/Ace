@@ -6,6 +6,7 @@ import { KeybindEngine } from '#/engines/keybind-engine';
 import { StateEngine } from '#/engines/state-engine.ts';
 import { LoggerEngine } from '#/engines/logger-engine';
 import { KernelEngine } from '#/engines/kernel-engine';
+import { AIEngine } from '#/engines/ai-engine';
 import boot from './packages/system/pipelines/boot';
 
 let bootPromise: Promise<void> | null = null;
@@ -27,10 +28,12 @@ export async function bootACE() {
 
         console.group('🚀 ACE: Booting System...');
 
+        EventBus.setupKernelSpace();
         StateEngine.setupKernelSpace();
         ConfigEngine.setupKernelSpace();
-        EventBus.setupKernelSpace();
         WindowEngine.setupKernelSpace();
+        KeybindEngine.setupKernelSpace();
+        AIEngine.setupKernelSpace();
 
         // Initialize window.ACE registry bridge immediately so packages can register
         if (typeof window !== 'undefined') {
@@ -44,6 +47,7 @@ export async function bootACE() {
                 keybind: KeybindEngine,
                 global: StateEngine,
                 logger: LoggerEngine,
+                ai: AIEngine,
             };
             console.log('🔌 ACE Registry Bridge Initialized.');
         }
