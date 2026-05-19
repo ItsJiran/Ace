@@ -3,6 +3,15 @@ const fs = require('fs/promises');
 const path = require('path');
 const os = require('os');
 
+const EXPOSED_ENV_KEYS = new Set([
+    'OPENAI_API_KEY',
+    'OPENAI_KEY',
+    'ANTHROPIC_API_KEY',
+    'ANTHROPIC_KEY',
+    'GOOGLE_API_KEY',
+    'GOOGLE_KEY',
+]);
+
 async function resolveFsPath(targetPath, baseDir) {
     if (baseDir === 'appConfig') {
         const appConfigDir = await ipcRenderer.invoke('ace:path:app-config-dir');
@@ -73,7 +82,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     pathAppCacheDir: () => ipcRenderer.invoke('ace:path:app-cache-dir'),
     pathAppLocalDir: () => ipcRenderer.invoke('ace:path:app-local-dir'),
     pathHomeDir: () => os.homedir(),
-    getEnv: (key) => ipcRenderer.invoke('ace:env:get', key),
     pathJoin: (...segments) => path.join(...segments.map((segment) => String(segment ?? ''))),
     pathNormalize: (targetPath) => path.normalize(String(targetPath || '')),
     syncGlobalShortcuts: (accelerators) => ipcRenderer.invoke('ace:global-shortcuts:sync', accelerators),
@@ -93,4 +101,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('ace:global-keyboard', listener);
     },
     getPlatform: () => ipcRenderer.invoke('ace:app:platform'),
+});
+
+contextBridge.exposeInMainWorld('envVariables', {
+    get: (key) => {
+        const envKey = String(key || '').trim();
+        if (!EXPOSED_ENV_KEYS.has(envKey)) {
+            return null;
+        }
+
+        return process.env[envKey] ?? null;
+    },
+    keys: () => Array.from(EXPOSED_ENV_KEYS),
 });

@@ -85,16 +85,9 @@ class KeybindEngineSingleton extends Engine {
 
                 if (!this.currentActiveKeybindButtons.includes(convertCodeToButton)) {
                     this.currentActiveKeybindButtons.push(convertCodeToButton);
-                    console.log(
-                        'Current Active Keybind Buttons:',
-                        this.currentActiveKeybindButtons,
-                        this.currentActiveKeybindMap,
-                    );
 
                     this.currentActiveKeybindMap.forEach((combos, action) => {
                         combos.forEach((combo) => {
-                            console.log(`Checking combo ${combo} for action ${action}`);
-
                             const isSameLength =
                                 this.currentActiveKeybindButtons.length === combo.length;
 
@@ -103,7 +96,7 @@ class KeybindEngineSingleton extends Engine {
                             });
 
                             if (isSameLength && isExactSequence) {
-                                console.log(`Triggering action: ${action} for combo ${combo}`);
+                                this.log(`Detected keybind combo for action: ${action} with combo ${combo}`);
                                 EventBus.emit('system:keybind_engine:action_trigger', {
                                     payload: { action },
                                     meta: { combo },

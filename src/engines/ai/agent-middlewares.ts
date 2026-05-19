@@ -106,14 +106,14 @@ const syncKernelSpaceMiddleware = createMiddleware({
     name: 'SyncKernelSpace',
     afterAgent: async (state, runtime) => {
         const agentRuntime = runtime as AgentConfig;
-        const thread_uid = agentRuntime.configurable?.thread_id;
+        const thread_id = agentRuntime.configurable?.thread_id;
 
-        if (!thread_uid) {
+        if (!thread_id) {
             return;
         }
 
-        AIEngine.syncAIThread(thread_uid, {
-            thread_uid,
+        AIEngine.syncThread(thread_id, {
+            thread_uid: thread_id,
             checkpoint_id: agentRuntime.configurable?.checkpoint_id,
             model: agentRuntime.configurable?.model,
             provider: agentRuntime.configurable?.provider,

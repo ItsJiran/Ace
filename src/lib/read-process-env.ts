@@ -3,8 +3,8 @@ export default async function (key: string): Promise<string | null> {
         return null;
     }
 
-    if (window.electronAPI?.getEnv) {
-        return await window.electronAPI.getEnv(key);
+    if (window.envVariables?.get) {
+        return await window.envVariables.get(key);
     }
 
     if (typeof process !== 'undefined' && process.env) {

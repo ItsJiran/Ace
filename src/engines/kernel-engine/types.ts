@@ -21,12 +21,6 @@ export interface KernelProcessEntry {
     original_record: ProcessRecord; // Store the original record
 }
 
-export interface KernelAISessionEntry {
-    session_uid: string;
-    process_uid: string;
-    memory_uid?: string;
-}
-
 export interface KernelWindowEntry {
     window_uid: string;
     process_uid: string;

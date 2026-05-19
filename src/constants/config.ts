@@ -103,13 +103,6 @@ export const ConfigAI_V0_0_0_SchemaMap: ConfigSchemaMapType = {
         .string()
         .default('gpt-3.5-turbo')
         .describe('The default AI model to use for agent interactions.'),
-
-    // 'ai.providers_models' : {
-    //     'openai' : ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-32k'],
-    //     'azure' : ['gpt-3.5-turbo', 'gpt-4'],
-    //     'anthropic' : ['claude-2', 'claude-instant-100k']
-    // }
-
     'ai.providers_models' : z
         .record(z.enum(AIProviders), z.array(z.string()))
         .default({

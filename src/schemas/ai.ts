@@ -31,12 +31,6 @@ export interface AgentConfig extends RunnableConfig {
  * such as the thread_uid, checkpoint_id, model, provider,
  */
 
-export interface AgentTread extends AgentConfigurable {
-  /** Snapshot of the agent thread's state, undefined if not available 
-   *  usually when initializing */
-  snapshot : AgentThreadSnapshot | undefined;
-}
-
 /**
  * This is purely just a snapshot readonly type that we can use to sync the state of the agent thread in the kernel space. 
  * It contains all the necessary information about the agent thread, such as the thread_uid, checkpoint_id, model, provider, 
@@ -48,9 +42,18 @@ export interface AgentThreadSnapshot {
     checkpoint_id?: string;
     model?: string;
     provider?: AIProviderType;
-    allowedTool: string[];
     messages: unknown[];
     state: Record<string, unknown>;
     created_at: number;
     updated_at: number;
 }
+
+export interface AgentThread extends AgentThreadSnapshot {
+    /** Snapshot of the latest persisted thread state for consumers that only need a readonly copy. */
+    snapshot?: AgentThreadSnapshot;
+}
+
+
+export type AgentThreadSyncPayload = Partial<AgentThreadSnapshot> & {
+    snapshot?: AgentThreadSnapshot;
+};
