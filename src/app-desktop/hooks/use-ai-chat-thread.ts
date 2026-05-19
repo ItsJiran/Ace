@@ -8,6 +8,7 @@ import type { AgentConfigurable, AgentThread, AIProviderType } from '#/shared/sc
 import {
 	createStreamOptions,
 	resolveActiveThreadUid,
+	submitPromptToThread,
 	waitForThreadRun,
 } from '#/app-desktop/hooks/use-ai-chat-thread.stream';
 import {
@@ -116,6 +117,7 @@ export function useAIChatThread() {
 
 		try {
 			let threadUid = current_thread_uid;
+			const shouldSubmitViaDirectTransport = !threadUid;
 			if (!threadUid) {
 				const created = await createThread({
 					provider: selectedProvider,
@@ -134,14 +136,18 @@ export function useAIChatThread() {
 				updated_at: Date.now(),
 			});
 
-			await stream.submit({
-				messages: [
-					{
-						type: 'human' as const,
-						content: normalizedPrompt,
-					},
-				],
-			});
+			if (shouldSubmitViaDirectTransport) {
+				submitPromptToThread(threadUid, normalizedPrompt);
+			} else {
+				await stream.submit({
+					messages: [
+						{
+							type: 'human' as const,
+							content: normalizedPrompt,
+						},
+					],
+				});
+			}
 			await waitForThreadRun(resolveActiveThreadUid(threadUid) ?? threadUid);
 
 			const thread = await AIEngine.syncCurrentThreadFromBackground(threadUid);

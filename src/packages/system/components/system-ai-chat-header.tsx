@@ -17,7 +17,7 @@ export function SystemAIChatHeader({
 }: SystemAIChatHeaderProps) {
 	return (
 		<div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
-			<div className="min-w-0 flex-1">
+			<div className="flex-1 system-btn-secondary">
 				<div className="flex flex-wrap items-center gap-2">
 					<span className="system-chat-meta-chip">{selectedProvider}</span>
 					<span className="system-chat-meta-chip max-w-[220px] truncate">{resolvedModel || 'no model selected'}</span>
@@ -27,12 +27,12 @@ export function SystemAIChatHeader({
 				</div>
 			</div>
 
-			<div className="flex shrink-0 flex-col items-end gap-1 text-right">
-				<span className="system-chat-meta-note" title={currentThreadUid || ''}>
+			<div className="w-fit flex gap-2 items-end">
+				<span className="system-btn-primary text-sm px-3 w-fit" title={currentThreadUid || ''}>
 					thread: {currentThreadUid || '-'}
 				</span>
-				<span className="system-chat-meta-note">messages: {messageCount}</span>
-				<span className="system-chat-meta-note">threads: {threadCount}</span>
+				<span className="system-btn-primary text-sm px-3 w-fit">messages: {messageCount}</span>
+				<span className="system-btn-primary text-sm px-3 w-fit">threads: {threadCount}</span>
 			</div>
 		</div>
 	);

@@ -30,6 +30,27 @@ const projectRoot = path.join(__dirname, '..');
 const backgroundRuntime = createBackgroundRuntimeBridge({
     projectRoot,
     resolveElectronRuntimeMode,
+    invokeDesktop: async (method, payload = {}) => {
+        const targetWindow = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed());
+        if (!targetWindow) {
+            throw new Error('ACE desktop window is not available.');
+        }
+
+        const serializedMethod = JSON.stringify(String(method || ''));
+        const serializedPayload = JSON.stringify(payload && typeof payload === 'object' ? payload : {});
+
+        return await targetWindow.webContents.executeJavaScript(
+            `(() => {
+                const bridge = window.__ACE_DESKTOP_HOST_BRIDGE__;
+                if (!bridge || typeof bridge.invoke !== 'function') {
+                    throw new Error('ACE desktop host bridge is unavailable.');
+                }
+
+                return bridge.invoke(${serializedMethod}, ${serializedPayload});
+            })()`,
+            true,
+        );
+    },
 });
 const globalInput = createGlobalInputController({
     BrowserWindow,

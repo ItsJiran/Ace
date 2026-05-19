@@ -98,6 +98,10 @@ function registerMainIPCHandlers({
     });
 
     ipcMain.handle('ace:app:platform', () => process.platform);
+    ipcMain.handle('ace:app:quit', () => {
+        app.quit();
+        return true;
+    });
 
     ipcMain.handle('ace:background:status', () => backgroundRuntime.getStatus());
     ipcMain.handle('ace:background:invoke', async (_event, method, payload) => {
@@ -141,6 +145,7 @@ function registerMainIPCHandlers({
         ipcMain.removeHandler('ace:window:toggle-devtools');
         ipcMain.removeHandler('ace:window:focus-devtools');
         ipcMain.removeHandler('ace:app:platform');
+        ipcMain.removeHandler('ace:app:quit');
         ipcMain.removeHandler('ace:background:status');
         ipcMain.removeHandler('ace:background:invoke');
         ipcMain.removeHandler('ace:background:fetch-models');

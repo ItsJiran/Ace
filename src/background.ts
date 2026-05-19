@@ -1,6 +1,7 @@
 import { EventBus } from './shared/engines/event-engine';
 import { ConfigEngine } from './shared/engines/config-engine';
 import { KernelEngine } from './shared/engines/kernel-engine';
+import { RegistryEngine } from './shared/engines/registry-engine';
 import { AIEngine } from './app-background/engines/ai-engine';
 
 let backgroundBootPromise: Promise<void> | null = null;
@@ -45,6 +46,7 @@ export async function bootBackgroundRuntime() {
 		AIEngine.setupKernelSpace();
 
 		try {
+			await RegistryEngine.boot();
 			await ConfigEngine.boot();
 			await AIEngine.boot();
 			await AIEngine.setupEventRoutes?.();

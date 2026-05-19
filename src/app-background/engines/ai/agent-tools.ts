@@ -1,4 +1,6 @@
 
-export default [
-    // upcoming tools defined here using registry
-]
+import { resolveAgentToolsFromRegistry } from './agent-tool-registry';
+
+export default function resolveAgentTools() {
+	return resolveAgentToolsFromRegistry();
+}

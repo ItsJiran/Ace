@@ -71,7 +71,6 @@ function SystemAIChatWindowBody({
 	} = useAIGateway();
 	const {
 		current_thread_uid,
-		current_thread,
 		is_streaming,
 		pending_prompt,
 		stream,
@@ -89,12 +88,15 @@ function SystemAIChatWindowBody({
 		bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
 	}, [is_streaming, messages.length]);
 
-	const handleSubmit = async () => {
-		const nextPrompt = prompt.trim();
+	const handleSubmit = async (promptOverride?: string) => {
+		const nextPrompt = (promptOverride ?? prompt).trim();
 		if (!nextPrompt) {
 			return;
 		}
 
+		if (promptOverride !== undefined && promptOverride !== prompt) {
+			setPrompt(promptOverride);
+		}
 		setPrompt('');
 		await sendPrompt(nextPrompt, selectedProvider, resolvedModel);
 	};
@@ -151,9 +153,6 @@ function SystemAIChatWindowBody({
 				modelOptions={modelOptions}
 				fetchModels={fetchModels}
 				handleCreateThread={handleCreateThread}
-				currentProvider={current_thread?.provider ?? selectedProvider}
-				currentModel={current_thread?.model ?? resolvedModel}
-				checkpointId={current_thread?.checkpoint_id}
 				prompt={prompt}
 				setPrompt={setPrompt}
 				isStreaming={is_streaming}

@@ -1,7 +1,7 @@
 const path = require('path');
 const { spawn } = require('child_process');
 
-function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode }) {
+function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode, invokeDesktop }) {
     let backgroundRuntimeProcess = null;
     let backgroundReadyPromise = null;
     let backgroundReadyResolver = null;
@@ -42,8 +42,44 @@ function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode
         backgroundPendingRequests.clear();
     }
 
+    async function handleDesktopRequest(message) {
+        if (!backgroundRuntimeProcess || typeof backgroundRuntimeProcess.send !== 'function') {
+            return;
+        }
+
+        try {
+            const result = await invokeDesktop(
+                String(message.method || ''),
+                message.payload && typeof message.payload === 'object' ? message.payload : {},
+            );
+
+            backgroundRuntimeProcess.send({
+                type: 'ace:background:desktop:response',
+                id: message.id,
+                success: true,
+                result,
+            });
+        } catch (error) {
+            const err = error instanceof Error ? error : new Error(String(error));
+            backgroundRuntimeProcess.send({
+                type: 'ace:background:desktop:response',
+                id: message.id,
+                success: false,
+                error: {
+                    message: err.message,
+                    stack: err.stack,
+                },
+            });
+        }
+    }
+
     function handleMessage(message) {
         if (!message || typeof message !== 'object') {
+            return;
+        }
+
+        if (message.type === 'ace:background:desktop:request' && message.id) {
+            void handleDesktopRequest(message);
             return;
         }
 

@@ -24,6 +24,7 @@ interface ElectronAPI {
     onMouseTracking: (callback: (payload: { x: number; y: number; localX: number; localY: number; phase: 'move' | 'down' | 'up'; isInsideApp: boolean }) => void) => () => void;
     onGlobalKeyboard: (callback: (payload: { type: 'keydown' | 'keyup'; keycode: number; rawcode: number; code: string | null; altKey: boolean; ctrlKey: boolean; shiftKey: boolean; metaKey: boolean }) => void) => () => void;
     getPlatform: () => Promise<string>;
+    quitApp: () => Promise<boolean>;
     onBackgroundAIStreamEvent: (callback: (payload: import('#/shared/schemas/ai').BackgroundAIStreamEventPayload) => void) => () => void;
 }
 

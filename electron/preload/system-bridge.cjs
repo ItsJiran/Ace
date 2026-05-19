@@ -31,6 +31,7 @@ function createSystemBridge({ ipcRenderer, os, path }) {
             return () => ipcRenderer.removeListener('ace:global-keyboard', listener);
         },
         getPlatform: () => ipcRenderer.invoke('ace:app:platform'),
+        quitApp: () => ipcRenderer.invoke('ace:app:quit'),
     };
 }
 

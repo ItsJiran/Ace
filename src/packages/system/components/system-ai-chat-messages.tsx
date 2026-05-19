@@ -25,17 +25,13 @@ export function SystemAIChatMessages({
 		<div className="h-full overflow-auto px-5 pb-5 pt-4 [scrollbar-color:rgb(82_82_91_/_0.85)_transparent] [scrollbar-width:thin]">
 			<div className="system-chat-message-list">
 				{messages.length === 0 && !isStreaming ? (
-					<div className="system-chat-empty-state">
-						<div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-zinc-100">
+					<div className="system-container-primary px-3 py-8 items-center rounded-sm justify-center flex flex-col gap-3 text-center text-sm shadow-sm">
+						<div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full system-btn-secondary text-zinc-100">
 							<Sparkles size={18} />
 						</div>
-						<div className="system-chat-empty-title">No conversation yet</div>
-						<div className="system-chat-empty-copy">
+						<div className="text-zinc-500">No conversation yet</div>
+						<div className="system-chat-empty-copy text-zinc-400">
 							Start a prompt to open a live conversation stream for plans, tool calls, and assistant output.
-						</div>
-						<div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-							<span className="system-chat-meta-chip">provider: {provider}</span>
-							<span className="system-chat-meta-chip max-w-[220px] truncate">model: {model}</span>
 						</div>
 					</div>
 				) : null}
@@ -46,7 +42,7 @@ export function SystemAIChatMessages({
 							<div key={message.id ?? index} className="flex justify-end">
 								<div className="flex min-w-0 max-w-[88%] flex-col items-end gap-2">
 									<div className="system-chat-turn-label is-user">You</div>
-									<div className="w-full rounded-[14px_14px_4px_14px] system-container-secondary px-4 py-3 text-sm leading-6 text-zinc-100">
+									<div className="w-full rounded-[14px_14px_4px_14px] system-container-secondary px-4 py-3 text-sm leading-6">
 										<div className="whitespace-pre-wrap">{message.text || resolveMessageText(message.content)}</div>
 									</div>
 								</div>
@@ -59,7 +55,7 @@ export function SystemAIChatMessages({
 							<div key={message.id ?? index} className="flex justify-start">
 								<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
 									<div className="system-chat-turn-label">Assistant</div>
-									<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-100">
+									<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
 										<div className="whitespace-pre-wrap">{message.text || resolveMessageText(message.content)}</div>
 									</div>
 								</div>
@@ -72,7 +68,7 @@ export function SystemAIChatMessages({
 							<div key={message.id ?? index} className="flex justify-start">
 								<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
 									<div className="system-chat-turn-label">Tool</div>
-									<div className="w-full rounded-[14px_14px_14px_4px] system-container-tertiary px-4 py-3 text-sm leading-6 text-zinc-100">
+									<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
 										<div className="whitespace-pre-wrap">{typeof message.content === 'string' ? message.content : JSON.stringify(message.content, null, 2)}</div>
 									</div>
 								</div>
@@ -84,7 +80,7 @@ export function SystemAIChatMessages({
 						<div key={message.id ?? index} className="flex justify-start">
 							<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
 								<div className="system-chat-turn-label">{message.getType()}</div>
-								<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-100">
+									<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
 									<div className="whitespace-pre-wrap">{resolveMessageText(message.content) || JSON.stringify(message.content)}</div>
 								</div>
 							</div>
@@ -96,7 +92,7 @@ export function SystemAIChatMessages({
 					<div className="flex justify-start">
 						<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
 							<div className="system-chat-turn-label">Assistant</div>
-							<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-100/92">
+							<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
 								<div className="flex items-center gap-2 text-zinc-300">
 									<span className="system-chat-status-pill is-streaming">streaming</span>
 									<span className="whitespace-pre-wrap">{pendingPrompt ? 'Generating response for the latest prompt...' : 'Agent is preparing the next turn...'}</span>

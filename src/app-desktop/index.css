@@ -162,8 +162,14 @@ body,
     }
 
     .system-container-secondary {
-        background: linear-gradient(330deg, rgb(102, 123, 153), rgb(115, 133, 160));
+        border-radius: 8px;
         border: 1px solid rgba(160, 175, 225, 0.5);
+        background: linear-gradient(145deg, rgba(130, 148, 210, 0.55), rgba(100, 120, 185, 0.45));
+        box-shadow:
+            0 2px 6px rgba(90, 110, 170, 0.2),
+            0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        padding: 4px;
+        color: rgba(252, 253, 255, 0.92);
         /* box-shadow:
       0 2px 6px rgba(90, 110, 170, 0.2),
       0 1px 0 rgba(255, 255, 255, 0.5) inset; */

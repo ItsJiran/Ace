@@ -12,13 +12,10 @@ type SystemAIChatComposerProps = {
 	modelOptions: ModelOption[];
 	fetchModels: () => Promise<unknown>;
 	handleCreateThread: () => Promise<void>;
-	currentProvider: string;
-	currentModel: string;
-	checkpointId?: string;
 	prompt: string;
 	setPrompt: (value: string) => void;
 	isStreaming: boolean;
-	handleSubmit: () => Promise<void>;
+	handleSubmit: (promptOverride?: string) => Promise<void>;
 	handleInterrupt: () => Promise<void>;
 };
 
@@ -30,9 +27,6 @@ export function SystemAIChatComposer({
 	modelOptions,
 	fetchModels,
 	handleCreateThread,
-	currentProvider,
-	currentModel,
-	checkpointId,
 	prompt,
 	setPrompt,
 	isStreaming,
@@ -63,21 +57,15 @@ export function SystemAIChatComposer({
 					))}
 				</select>
 
-				<button type="button" onClick={() => void fetchModels()} className="system-btn-secondary inline-flex h-[45px] items-center justify-center gap-2 rounded-2xl px-4 text-sm">
+				<button type="button" onClick={() => void fetchModels()} className="system-btn-secondary inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-sm">
 					<RefreshCcw size={15} />
 					<span>Sync</span>
 				</button>
 
-				<button type="button" onClick={() => void handleCreateThread()} className="system-btn-secondary inline-flex h-[45px] items-center justify-center gap-2 rounded-2xl px-4 text-sm">
+				<button type="button" onClick={() => void handleCreateThread()} className="system-btn-secondary inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-sm">
 					<Plus size={15} />
 					<span>New</span>
 				</button>
-			</div>
-
-			<div className="rounded-2xl system-container-quaternary px-3 py-2 text-xs text-zinc-400">
-				<div>provider: {currentProvider}</div>
-				<div>model: {currentModel}</div>
-				<div>checkpoint: {checkpointId ?? '-'}</div>
 			</div>
 
 			<div className="flex items-end gap-3">
@@ -87,12 +75,12 @@ export function SystemAIChatComposer({
 					onKeyDown={(event) => {
 						if (event.key === 'Enter' && !event.shiftKey && !isStreaming) {
 							event.preventDefault();
-							void handleSubmit();
+							void handleSubmit(event.currentTarget.value);
 						}
 					}}
 					placeholder={isStreaming ? 'Streaming... press Stop to interrupt.' : 'Type a prompt... Enter to send, Shift+Enter for newline.'}
 					rows={3}
-					className="h-[90px] flex-1 resize-none system-input-primary px-4 py-3 text-sm leading-6 outline-none"
+					className="h-[50px] flex-1 resize-none system-input-primary px-4 py-3 text-sm leading-6 outline-none"
 					disabled={isStreaming}
 				/>
 

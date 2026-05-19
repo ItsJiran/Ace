@@ -113,6 +113,11 @@ function startBackgroundThreadRun(threadUid: string, prompt: string) {
 	};
 }
 
+export function submitPromptToThread(threadUid: string, prompt: string) {
+	ensureBackgroundAIStreamListener();
+	return startBackgroundThreadRun(threadUid, prompt);
+}
+
 export function resolveActiveThreadUid(threadUid: string | null) {
 	return AIEngine.readCurrentThreadUidFromMemory() ?? threadUid ?? null;
 }
