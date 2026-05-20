@@ -32,7 +32,29 @@ In practical terms, ACE is an experimental developer assistant platform where th
 - **📡 Event-Driven Architecture:** Robust communication via a central `EventBus` for decoupled UI and logic.
 - **📦 Package Ecosystem:** Modular architecture allowing custom widgets, tools, and workflows.
 
-[![Watch the video](https://img.youtube.com/vi/f9zeMf6KNdQ/maxresdefault.jpg)](https://youtu.be/f9zeMf6KNdQ)
+
+## 🖥️ Demos
+
+<table width="100%">
+  <tr>
+    <td width="50%" align="center">
+      <!-- GIF 1: Sistem Windowing / Devkit -->
+      <img src="assets/1.gif" width="100%" alt="ACE Windowing System" />
+    </td>
+    <td width="50%" align="center">
+      <!-- GIF 2: Proses Deepagents / Langchain -->
+      <img src="assets/2.gif" width="100%" alt="ACE Agentic Workflow" />
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <br />
+  <!-- TOMBOL FULL DEMO -->
+  <a href="https://youtu.be/f9zeMf6KNdQ" target="_blank">
+    <img src="https://img.shields.io/badge/▶_Watch_Full_Video_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Full Demo" height="45">
+  </a>
+</p>
 
 ## 💡 Why ACE?
 
