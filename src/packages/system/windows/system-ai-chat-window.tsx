@@ -72,6 +72,7 @@ function SystemAIChatWindowBody({
 	const {
 		current_thread_uid,
 		is_streaming,
+		running_tool_streams,
 		pending_prompt,
 		stream,
 		createThread,
@@ -156,6 +157,7 @@ function SystemAIChatWindowBody({
 					messages={renderedMessages}
 					isStreaming={is_streaming}
 					pendingPrompt={pending_prompt}
+					runningToolStreams={running_tool_streams}
 					bottomRef={bottomRef}
 				/>
 			</section>

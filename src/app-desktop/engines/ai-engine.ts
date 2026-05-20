@@ -3,6 +3,7 @@ import { ConfigEngine } from '#/shared/engines/config-engine';
 import { DefaultConfigAI } from '#/shared/constants/config';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { StateEngine } from '#/app-desktop/engines/state-engine';
+import readProcessEnv from '#/shared/lib/read-process-env';
 import type {
 	AgentConfigurable,
 	AgentInvokeContext,
@@ -23,9 +24,15 @@ type BackgroundThreadListPayloadType = {
 	threads: BackgroundThreadListEntryType[];
 };
 
-function resolveAgentInvokeContext(): AgentInvokeContext {
+async function resolveAgentInvokeContext(): Promise<AgentInvokeContext> {
 	const desktopState = StateEngine.readDesktopState();
+	const username = await readProcessEnv('USER');
+	const homeDir = username ? `/home/${username}/` : null;
 	return {
+		user: {
+			username,
+			home_dir: homeDir,
+		},
 		desktop: {
 			mode: desktopState.mode,
 			window_display_mode: desktopState.window_display_mode,
@@ -213,7 +220,7 @@ class DesktopAIEngineSingleton extends Engine {
 			thread_uid: threadUid,
 			prompt,
 			overrides,
-			context: resolveAgentInvokeContext(),
+			context: await resolveAgentInvokeContext(),
 		})) ?? null) as AgentThread | null;
 
 		if (thread) {

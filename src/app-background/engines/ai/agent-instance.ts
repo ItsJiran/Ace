@@ -5,6 +5,10 @@ import { z } from 'zod';
 const checkpointer = new MemorySaver();
 
 const AgentInvokeContextSchema = z.object({
+	user: z.object({
+		username: z.string().nullable(),
+		home_dir: z.string().nullable(),
+	}),
     desktop: z.object({
         mode: z.enum(['ambient', 'interactive']),
         window_display_mode: z.enum([

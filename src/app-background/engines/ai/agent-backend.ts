@@ -7,6 +7,7 @@ import {
 } from 'deepagents';
 import { homedir } from 'node:os';
 
+const resolvedShellRootDir = `/home/${process.env.USER ?? 'user'}/`;
 const normalizedHomeDir = homedir().replace(/\\/g, '/');
 
 export const AGENT_STORE_MEMORY_ROUTE_PREFIX = '/memories/';
@@ -26,7 +27,7 @@ const routedBackends: Record<string, StoreBackend | FilesystemBackend> = {
 
 if (AGENT_FILESYSTEM_HOME_ROUTE_PREFIX) {
 	routedBackends[AGENT_FILESYSTEM_HOME_ROUTE_PREFIX] = new LocalShellBackend({
-		rootDir: normalizedHomeDir,
+        rootDir: resolvedShellRootDir,
 		virtualMode: true,
 	});
 }

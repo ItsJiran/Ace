@@ -69,6 +69,22 @@ function emitProtocolThreadEvent(thread_uid: string, message: Record<string, unk
     });
 }
 
+function resolveToolDisplayName(eventData: Record<string, unknown>, node?: string) {
+    if (typeof eventData.name === 'string' && eventData.name.trim()) {
+        return eventData.name;
+    }
+
+    if (typeof eventData.tool_name === 'string' && eventData.tool_name.trim()) {
+        return eventData.tool_name;
+    }
+
+    if (typeof node === 'string' && node.trim()) {
+        return node;
+    }
+
+    return 'tool';
+}
+
 class AIEngineSingleton extends Engine {
     public ai_threads_uids_memory_uid = 'system:ai_engine:thread:uids';
     public ai_threads_memory_uid = (thread_uid: string) => `system:ai_engine:thread:${thread_uid}`;
@@ -283,6 +299,46 @@ class AIEngineSingleton extends Engine {
             });
         };
 
+        const emitToolStatus = (
+            event: 'tool-start' | 'tool-finish' | 'tool-error',
+            eventData: Record<string, unknown>,
+            node?: string,
+            metadata?: Record<string, unknown>,
+        ) => {
+            const event_id = `${thread_uid}:${run_id}:${++protocolSeq}`;
+            console.log('[AIEngine tool-stream]', {
+                thread_uid,
+                run_id,
+                event,
+                event_id,
+                node: node ?? null,
+                tool_name: resolveToolDisplayName(eventData, node),
+                input: eventData.input ?? null,
+                output: eventData.output ?? null,
+                error: eventData.error ?? null,
+            });
+            emitProtocolThreadEvent(thread_uid, {
+                type: 'event',
+                event_id,
+                seq: protocolSeq,
+                method: 'tool',
+                params: {
+                    namespace: [],
+                    timestamp: Date.now(),
+                    ...(node ? { node } : {}),
+                    data: {
+                        event,
+                        tool_event_stream_uid: event_id,
+                        tool_name: resolveToolDisplayName(eventData, node),
+                        input: eventData.input ?? null,
+                        output: eventData.output ?? null,
+                        error: eventData.error ?? null,
+                        ...(metadata ? { metadata } : {}),
+                    },
+                },
+            });
+        };
+
         const ensureAssistantMessageStarted = (node?: string, metadata?: Record<string, unknown>) => {
             if (!activeAssistantMessageId) {
                 activeAssistantMessageId = `assistant:${thread_uid}:${run_id}`;
@@ -409,15 +465,57 @@ class AIEngineSingleton extends Engine {
             for await (const event of stream) {
 				const eventRecord = event as unknown as Record<string, unknown>;
                 const eventName = typeof eventRecord.event === 'string' ? eventRecord.event : '';
+                const eventMethod = typeof eventRecord.method === 'string' ? eventRecord.method : '';
                 const eventData =
                     eventRecord.data && typeof eventRecord.data === 'object'
                         ? (eventRecord.data as Record<string, unknown>)
                         : {};
+                const eventParams =
+                    eventRecord.params && typeof eventRecord.params === 'object'
+                        ? (eventRecord.params as Record<string, unknown>)
+                        : undefined;
+                const protocolData =
+                    eventParams?.data && typeof eventParams.data === 'object'
+                        ? (eventParams.data as Record<string, unknown>)
+                        : undefined;
                 const node = typeof eventRecord.name === 'string' ? eventRecord.name : undefined;
                 const metadata =
                     typeof eventRecord.metadata === 'object' && eventRecord.metadata
                         ? (eventRecord.metadata as Record<string, unknown>)
                         : undefined;
+
+                if (eventMethod === 'tools' && protocolData) {
+                    console.log('[AIEngine raw-tools-event]', {
+                        thread_uid,
+                        run_id,
+                        event_method: eventMethod,
+                        node: node ?? null,
+                        data: protocolData,
+                    });
+
+                    const normalizedToolData: Record<string, unknown> = {
+                        name: protocolData.tool_name,
+                        tool_name: protocolData.tool_name,
+                        input: protocolData.input ?? null,
+                        output: protocolData.output ?? null,
+                        error: protocolData.error ?? protocolData.message ?? null,
+                    };
+
+                    if (protocolData.event === 'tool-started') {
+                        emitToolStatus('tool-start', normalizedToolData, node, metadata);
+                        continue;
+                    }
+
+                    if (protocolData.event === 'tool-finished') {
+                        emitToolStatus('tool-finish', normalizedToolData, node, metadata);
+                        continue;
+                    }
+
+                    if (protocolData.event === 'tool-error') {
+                        emitToolStatus('tool-error', normalizedToolData, node, metadata);
+                        continue;
+                    }
+                }
 
                 if (eventName === 'on_chat_model_start') {
                     ensureAssistantMessageStarted(node, metadata);
@@ -440,6 +538,21 @@ class AIEngineSingleton extends Engine {
                     }
 
                     finishAssistantMessage(node);
+                    continue;
+                }
+
+                if (eventName === 'on_tool_start') {
+                    emitToolStatus('tool-start', eventData, node, metadata);
+                    continue;
+                }
+
+                if (eventName === 'on_tool_end') {
+                    emitToolStatus('tool-finish', eventData, node, metadata);
+                    continue;
+                }
+
+                if (eventName === 'on_tool_error') {
+                    emitToolStatus('tool-error', eventData, node, metadata);
                 }
             }
 

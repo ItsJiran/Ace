@@ -30,6 +30,10 @@ export interface AgentConfig extends RunnableConfig {
 }
 
 export interface AgentInvokeContext {
+	user: {
+		username: string | null;
+		home_dir: string | null;
+	};
     desktop: {
         mode: DesktopState['mode'];
         window_display_mode: DesktopState['window_display_mode'];

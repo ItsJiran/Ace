@@ -4,7 +4,12 @@ import { HumanMessage } from '@langchain/core/messages';
 
 import { AIEngine } from '#/app-desktop/engines/ai-engine';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
-import type { AgentConfigurable, AgentThread, AIProviderType } from '#/shared/schemas/ai';
+import type {
+	AgentConfigurable,
+	AgentThread,
+	AIProviderType,
+	BackgroundAIStreamEventPayload,
+} from '#/shared/schemas/ai';
 import {
 	createStreamOptions,
 	resolveActiveThreadUid,
@@ -15,6 +20,13 @@ import {
 	resolvePromptFromInput,
 	resolveThreadValues,
 } from '#/app-desktop/hooks/use-ai-chat-thread.utils';
+
+export type RunningToolStreamItem = {
+	uid: string;
+	toolName: string;
+	input: unknown;
+	startedAt: number;
+};
 
 export function useAIChatThread() {
 	const list_threads = useAceMemory<Record<string, string>>(AIEngine.thread_uids_memory_uid) ?? {};
@@ -30,6 +42,7 @@ export function useAIChatThread() {
 	);
 	const [pending_prompt, setPendingPrompt] = useState<string | null>(null);
 	const [is_submitting_prompt, setIsSubmittingPrompt] = useState(false);
+	const [running_tool_streams, setRunningToolStreams] = useState<RunningToolStreamItem[]>([]);
 
 	useEffect(() => {
 		void AIEngine.syncAIMemory();
@@ -46,6 +59,7 @@ export function useAIChatThread() {
 	useEffect(() => {
 		if (!current_thread_uid) {
 			setCurrentThreadState(null);
+			setRunningToolStreams([]);
 			return;
 		}
 
@@ -53,6 +67,107 @@ export function useAIChatThread() {
 			setCurrentThreadState(thread ?? null);
 		});
 	}, [current_thread_uid]);
+
+	useEffect(() => {
+		if (!window.electronAPI?.onBackgroundAIStreamEvent) {
+			return;
+		}
+
+		return window.electronAPI.onBackgroundAIStreamEvent((payload: BackgroundAIStreamEventPayload) => {
+			const observedThreadUid = resolveActiveThreadUid(current_thread_uid);
+			console.log('[useAIChatThread stream-event]', {
+				payload_thread_uid: payload.thread_uid,
+				observed_thread_uid: observedThreadUid,
+				message: payload.message,
+			});
+			if (!observedThreadUid || payload.thread_uid !== observedThreadUid) {
+				console.log('[useAIChatThread stream-event ignored]', {
+					reason: 'thread-mismatch',
+					payload_thread_uid: payload.thread_uid,
+					observed_thread_uid: observedThreadUid,
+					message: payload.message,
+				});
+				return;
+			}
+
+			const message = payload.message as unknown as Record<string, unknown>;
+			if (message.method === 'lifecycle') {
+				const lifecycleData =
+					message.params && typeof message.params === 'object'
+						? ((message.params as Record<string, unknown>).data as Record<string, unknown> | undefined)
+						: undefined;
+
+				if (lifecycleData?.event === 'completed' || lifecycleData?.event === 'failed') {
+					setRunningToolStreams([]);
+				}
+				return;
+			}
+
+			if (message.method !== 'tool') {
+				return;
+			}
+
+			const params =
+				message.params && typeof message.params === 'object'
+					? (message.params as Record<string, unknown>)
+					: null;
+			const data =
+				params?.data && typeof params.data === 'object'
+					? (params.data as Record<string, unknown>)
+					: null;
+
+			if (!data || typeof data.event !== 'string' || typeof data.tool_name !== 'string') {
+				console.log('[useAIChatThread tool-event ignored]', {
+					reason: 'missing-tool-data',
+					message,
+					params,
+					data,
+				});
+				return;
+			}
+
+			if (data.event === 'tool-start') {
+				const nextItem: RunningToolStreamItem = {
+					uid:
+						typeof data.tool_event_stream_uid === 'string' && data.tool_event_stream_uid
+							? data.tool_event_stream_uid
+							: String(message.event_id ?? `${data.tool_name}:${Date.now()}`),
+					toolName: data.tool_name,
+					input: data.input ?? null,
+					startedAt: typeof params?.timestamp === 'number' ? params.timestamp : Date.now(),
+				};
+
+				console.log('[useAIChatThread tool-start accepted]', nextItem);
+				setRunningToolStreams((currentItems) => {
+					const nextItems = [...currentItems, nextItem];
+					console.log('[useAIChatThread running tools next]', nextItems);
+					return nextItems;
+				});
+				return;
+			}
+
+			if (data.event === 'tool-finish' || data.event === 'tool-error') {
+				setRunningToolStreams((currentItems) => {
+					const matchedIndex = currentItems.findIndex((item) => item.toolName === data.tool_name);
+					if (matchedIndex === -1) {
+						return currentItems;
+					}
+
+					const nextItems = currentItems.filter((_, index) => index !== matchedIndex);
+					console.log('[useAIChatThread tool-finish removed]', {
+						event: data.event,
+						tool_name: data.tool_name,
+						nextItems,
+					});
+					return nextItems;
+				});
+			}
+		});
+	}, [current_thread_uid]);
+
+	useEffect(() => {
+		console.log('[useAIChatThread running_tool_streams]', running_tool_streams);
+	}, [running_tool_streams]);
 
 	// Flow:
 	// 1. Hydrate from kernel memory so the latest saved transcript shows up immediately.
@@ -190,6 +305,7 @@ export function useAIChatThread() {
 		current_thread_uid,
 		current_thread,
 		messages,
+		running_tool_streams,
 		pending_prompt,
 		is_streaming,
 		stream,

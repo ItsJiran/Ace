@@ -110,30 +110,36 @@ const injectDesktopContextMiddleware = createMiddleware({
         const runtime = request.runtime as AgentConfig;
         const runtimeContext =
             runtime.context && typeof runtime.context === 'object'
-                ? (runtime.context as { desktop?: Record<string, unknown> })
+                ? (runtime.context as { user?: Record<string, unknown>; desktop?: Record<string, unknown> })
                 : undefined;
+        const userContext = runtimeContext?.user;
         const desktopContext = runtimeContext?.desktop;
 
-        if (!desktopContext) {
+        if (!desktopContext && !userContext) {
             return handler(request);
         }
 
-        const viewportWidth = Number(desktopContext.viewport_width ?? 0);
-        const viewportHeight = Number(desktopContext.viewport_height ?? 0);
-        const viewportCenterX = Number(desktopContext.viewport_center_x ?? 0);
-        const viewportCenterY = Number(desktopContext.viewport_center_y ?? 0);
-        const screenWidth = Number(desktopContext.screen_width ?? 0);
-        const screenHeight = Number(desktopContext.screen_height ?? 0);
+        const safeDesktopContext = desktopContext ?? {};
+
+        const viewportWidth = Number(safeDesktopContext.viewport_width ?? 0);
+        const viewportHeight = Number(safeDesktopContext.viewport_height ?? 0);
+        const viewportCenterX = Number(safeDesktopContext.viewport_center_x ?? 0);
+        const viewportCenterY = Number(safeDesktopContext.viewport_center_y ?? 0);
+        const screenWidth = Number(safeDesktopContext.screen_width ?? 0);
+        const screenHeight = Number(safeDesktopContext.screen_height ?? 0);
 
         const contextMessage = new SystemMessage([
+            'Runtime context:',
+            `- local username: ${userContext?.username ? String(userContext.username) : 'unknown'}`,
+            `- user home directory: ${userContext?.home_dir ? String(userContext.home_dir) : 'unknown'}`,
             'Runtime desktop context:',
             `- screen resolution: ${screenWidth} x ${screenHeight}`,
             `- viewport size: ${viewportWidth} x ${viewportHeight}`,
             `- viewport center: (${viewportCenterX}, ${viewportCenterY})`,
-            `- cursor position: (${Number(desktopContext.cursor_x ?? 0)}, ${Number(desktopContext.cursor_y ?? 0)})`,
-            `- overlay mode: ${String(desktopContext.mode ?? 'ambient')}`,
-            `- focused window uid: ${desktopContext.focused_window_uid ? String(desktopContext.focused_window_uid) : 'none'}`,
-            `- active window uid: ${desktopContext.active_window_uid ? String(desktopContext.active_window_uid) : 'none'}`,
+            `- cursor position: (${Number(safeDesktopContext.cursor_x ?? 0)}, ${Number(safeDesktopContext.cursor_y ?? 0)})`,
+            `- overlay mode: ${String(safeDesktopContext.mode ?? 'ambient')}`,
+            `- focused window uid: ${safeDesktopContext.focused_window_uid ? String(safeDesktopContext.focused_window_uid) : 'none'}`,
+            `- active window uid: ${safeDesktopContext.active_window_uid ? String(safeDesktopContext.active_window_uid) : 'none'}`,
             'Use these values when the user gives spatial instructions like "move to the center" or asks about screen-relative positioning.',
         ].join('\n'));
 
