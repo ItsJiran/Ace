@@ -2,6 +2,7 @@ import { AIProviders } from '#/shared/constants/ai.ts';
 
 import type {
     AgentConfigurable,
+    AgentInvokeContext,
     AgentThreadSnapshot,
     AgentThread,
     AgentThreadSyncPayload,
@@ -208,6 +209,7 @@ class AIEngineSingleton extends Engine {
         thread_uid: string,
         prompt: string,
         overrides: Partial<AgentConfigurable> = {},
+        context?: Record<string, unknown>,
     ) {
         const normalizedPrompt = prompt.trim();
         if (!normalizedPrompt) {
@@ -246,6 +248,7 @@ class AIEngineSingleton extends Engine {
             },
             {
                 version: 'v3',
+                ...(context ? { context: context as unknown as AgentInvokeContext } : {}),
                 configurable: {
                     thread_id: thread_uid,
                     // checkpoint_id,

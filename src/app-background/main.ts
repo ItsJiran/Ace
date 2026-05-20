@@ -84,6 +84,7 @@ async function handleRPC(method: string, payload: Record<string, unknown> = {}) 
 				String(payload.thread_uid || ''),
 				String(payload.prompt || ''),
 				(payload.overrides as Record<string, unknown>) ?? {},
+				(payload.context as Record<string, unknown> | undefined) ?? undefined,
 			);
 		case 'ai.deleteThread':
 			return await AIEngine.deleteThread(String(payload.thread_uid || ''));

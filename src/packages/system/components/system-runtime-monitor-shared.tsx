@@ -47,7 +47,7 @@ export function SectionShell({
 				</div>
 				<div>
 					<div className="text-lg font-semibold">{title}</div>
-					<div className="mt-1 text-sm leading-6 text-zinc-400">{description}</div>
+					<div className="mt-1 text-sm leading-6 text-zinc-500">{description}</div>
 				</div>
 			</div>
 			{children}

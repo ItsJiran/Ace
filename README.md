@@ -63,9 +63,26 @@ export GOOGLE_API_KEY="your-key"
 
 Then restart your terminal and Electron dev process.
 
+### Temporary Filesystem Security Note
+
+ACE currently runs DeepAgents with filesystem permissions explicitly set to allow both `read` and `write` operations across the configured backend routes.
+
+This is a deliberate temporary tradeoff for MVP velocity so the local agent can inspect, edit, and persist project artifacts without friction while the tool/runtime contract is still settling.
+
+Important caveats for the current MVP state:
+- this is not a hardened least-privilege policy yet
+- filesystem access is intentionally permissive for agent workflows during rapid iteration
+- stronger route-scoped and tool-scoped permission rules should be added before treating the runtime as production-hardened
+
+In short: the current filesystem permission model is intentionally permissive for experimentation, and that should be treated as a temporary security issue accepted for MVP delivery rather than a final posture.
+
 ### Run The App
 
 Start the desktop app:
+
+```bash
+npm run start
+```
 
 ```bash
 npm run dev
@@ -156,77 +173,137 @@ For a more detailed technical breakdown, architectural logs, and the journey of 
 
 ## Architecture Overview
 
-At a high level, ACE is now structured as a layered Electron application with a desktop renderer, a background agent runtime, and shared contracts. The renderer owns overlay UI and live window interaction. The background runtime owns agent execution and tool orchestration. Shared schemas and engines keep the two sides aligned.
+At a high level, ACE is structured around the real runtime entrypoints and package surfaces that exist in this repository today. `src/desktop.ts` boots the renderer-side desktop runtime. `src/background.ts` boots the dedicated background runtime. `src/shared/` provides the common contracts and core engines. `src/packages/` contributes registry-loaded windows, widgets, tools, renderers, and related package surfaces that are mounted into the running system.
 
 ```mermaid
-flowchart TD
-	U[Developer / User]
+flowchart LR
+	U[Developer or User]
 
-	subgraph RENDERER[src/app-desktop]
-		O[Overlay Surface]
-		W[Windows Widgets Components]
-		DE[Desktop Engines]
+	subgraph ENTRY[Runtime Entrypoints]
+		DT[src/desktop.ts]
+		BT[src/background.ts]
+	end
+
+	subgraph DESKTOP[src/app-desktop]
+		APP[app.tsx and main.tsx]
+		HOOKS[hooks/]
+		COMP[components/layout and system UI glue]
+		DENG[engines/window, state, keybind, logger, ai]
+	end
+
+	subgraph PACKAGES[src/packages]
+		subgraph SYS[src/packages/system]
+			SYSW[windows/]
+			SYSWD[widgets/dockbar.ts]
+			SYST[tools/]
+			SYSR[renderers/]
+			SYSC[components/]
+		end
+		subgraph SYSDEV[src/packages/system-dev]
+			DEVW[windows/]
+			DEVWD[widgets/]
+			DEVT[tools and features]
+		end
 	end
 
 	subgraph SHARED[src/shared]
-		K[KernelEngine]
-		R[RegistryEngine]
-		E[EventBus]
-		S[Schemas and Contracts]
-	end
-
-	subgraph BACKGROUND[src/app-background]
-		BA[Background AIEngine]
-		DA[DeepAgent Instance]
-		AT[Registry Tools]
-		AM[Agent Middlewares]
+		SE[engines/config, registry, event, fs, kernel]
+		SS[schemas/]
+		SL[lib/]
 	end
 
 	subgraph ELECTRON[electron]
-		EM[Electron Main]
-		EP[Electron Preload]
-		BR[Background Runtime Bridge]
+		EM[main.cjs]
+		EP[preload.cjs]
+		EB[background bridge and IPC routes]
+		HOST[OS integration, env, input, filesystem]
 	end
 
-	subgraph MODELS[Providers]
+	subgraph BACKGROUND[src/app-background]
+		BM[main.ts]
+		BAI[engines/ai-engine.ts]
+		BA[engines/ai/agent-instance.ts]
+		BMW[engines/ai/agent-middlewares.ts]
+		BAB[engines/ai/agent-backend.ts]
+	end
+
+	subgraph PROVIDERS[Provider Layer]
 		OA[OpenAI]
 		GG[Google]
 		AN[Anthropic]
 	end
 
-	U --> O
-	O --> W
-	W --> DE
-	DE --> K
-	DE --> R
-	DE --> E
-	R --> W
+	subgraph FUTURE[Future Prospect Direction]
+		PKG[Extension Packages]
+		VISION[Screen Analyze Agents]
+		SCHED[Scheduling and Automation]
+		FLOW[Workflow Pipelines]
+	end
 
-	O --> EP
+	U --> DT
+	U --> EM
+	DT --> APP
+	APP --> HOOKS
+	APP --> COMP
+	HOOKS --> DENG
+	COMP --> SYS
+	COMP --> SYSDEV
+	DENG --> SE
+	DENG --> SS
+	SE --> SYS
+	SE --> SYSDEV
+	SE --> SS
+	SL --> DENG
+
+	SYSWD --> SYSW
+	SYST --> SYSR
+	SYSC --> SYSW
+
+	DT --> EP
 	EP --> EM
-	EM --> BR
-	BR --> BA
-	BA --> DA
-	DA --> AT
-	DA --> AM
+	EM --> EB
+	EM --> HOST
+	EB --> BT
+	BT --> BM
+	BM --> BAI
+	BAI --> BA
+	BA --> BMW
+	BA --> BAB
+	BAB --> HOST
+	BA --> OA
+	BA --> GG
+	BA --> AN
 
-	K --> BA
-	S --> DE
-	S --> BA
-	DA --> OA
-	DA --> GG
-	DA --> AN
+	SE --> BAI
+	SS --> BAI
+	SE --> BM
+
+	SYS -.-> PKG
+	BA -.-> VISION
+	BAI -.-> SCHED
+	SE -.-> FLOW
 ```
 
 ### How The Layers Work Together
 
-- The user interacts with the overlay UI, which renders windows, widgets, chat surfaces, monitors, and launch surfaces like the dockbar.
-- Those surfaces are mounted from package definitions and resolved through `RegistryEngine`.
-- Renderer-side domain engines such as `WindowEngine`, `ConfigEngine`, `KeybindEngine`, and desktop `AIEngine` coordinate live UI behavior through `KernelEngine` and `EventBus`.
-- Electron main and preload provide filesystem access, shell environment plumbing, global input, and IPC between the renderer and the background runtime.
-- The DeepAgents runtime is instantiated in `src/app-background/engines/ai/agent-instance.ts`, with registry-loaded tools and background-side middlewares.
-- AI streaming is bridged back into the renderer so persisted thread state and live token-by-token output stay in sync.
-- The architecture is already partially split into desktop, background, shared, and electron surfaces; the remaining work is hardening those boundaries rather than inventing them from scratch.
+- `src/desktop.ts` boots the renderer-side runtime by composing desktop-facing engines such as `WindowEngine`, `StateEngine`, `KeybindEngine`, `LoggerEngine`, and desktop `AIEngine` on top of shared contracts.
+- `src/app-desktop/` owns renderer UI, hooks, window shells, and interaction logic, while package windows and widgets from `src/packages/system/` and `src/packages/system-dev/` provide much of the actual mounted UI surface.
+- `src/shared/engines/` contains the common control-plane layer, especially `KernelEngine`, `RegistryEngine`, `ConfigEngine`, `EventBus`, and filesystem-facing shared runtime contracts.
+- Electron `main.cjs`, `preload.cjs`, and the background bridge connect the desktop runtime to host capabilities such as environment access, filesystem access, global input, and background IPC.
+- `src/background.ts` and `src/app-background/main.ts` boot the dedicated background runtime, where background `AIEngine` invokes the DeepAgents instance and emits stream updates back toward the renderer.
+- DeepAgents-specific composition currently lives under `src/app-background/engines/ai/`, including the agent instance, middleware stack, backend wiring, and tool-facing integration points.
+- AI streaming and persisted thread synchronization flow through shared kernel state so windows like chat and monitors can reflect both live and durable runtime state.
+- The architecture already reflects a practical split between desktop, background, shared, electron, and package layers; the main ongoing task is reducing leakage between those real surfaces rather than inventing a new separation model.
+
+### Runtime Flow In Practice
+
+1. A user action starts from an overlay surface such as chat, dockbar, or a system window.
+2. Renderer-side components call into desktop engines and shared contracts rather than directly mutating host state.
+3. Desktop engines persist durable state into `KernelEngine` and route interactions through `RegistryEngine` or `EventBus` when appropriate.
+4. When AI execution is needed, desktop `AIEngine` forwards the request through Electron IPC into the dedicated background runtime.
+5. Background `AIEngine` invokes the DeepAgents instance, which resolves middlewares, tools, backends, and provider calls.
+6. Tool output, stream events, and thread snapshots are synchronized back into kernel memory and then reflected into renderer windows.
+7. The renderer consumes that shared state to keep chat, monitors, and other package-driven surfaces live and in sync.
 
 
 ## 🗺️ Current Roadmap
@@ -239,6 +316,20 @@ flowchart TD
 - [ ] **Phase 4:** Advanced Memory & RAG retrieval systems
 - [ ] **Phase 5:** Public Package Registry for community modules
 
+## Future Prospects
+
+The future direction of ACE is not only “more chat features”. The longer-term goal is to turn the current overlay plus runtime foundation into a programmable agentic workstation where AI can operate with stronger situational awareness, controlled automation, and package-level extensibility.
+
+Some of the clearest next prospect areas are:
+- **Extension Packages:** a stronger package contract so third-party or internal modules can contribute windows, widgets, tools, parsers, workflows, and background capabilities without patching the core runtime directly.
+- **Screen Analyze Agentics:** a future agent layer that can reason about the visible desktop state more directly, including screen context, active windows, layout state, and eventually richer screen analysis for UI-aware assistance.
+- **Scheduling and Background Automation:** scheduled tasks, recurring jobs, reminder-like automations, queued workflows, and agent-triggered routines that continue running in the background runtime.
+- **Workflow Pipelines:** more explicit multi-step agent workflows for coding, research, project setup, local automation, and cross-tool orchestration instead of only single-turn chat interactions.
+- **Assistive System Surfaces:** richer monitors, planners, execution dashboards, runtime inspectors, and package-provided operational windows so agent behavior is easier to inspect and control.
+- **Safer Execution Contracts:** tighter policy layers for filesystem access, tool permissions, scheduling ownership, and package isolation so future automation remains observable and bounded.
+
+Put differently: the present repository is the start of a local-first agent runtime plus overlay shell, while the future prospect is a broader extensible workstation where packages, automation, memory, vision-like screen analysis, and agent scheduling all compose cleanly around the same kernel and registry model.
+
 ## Architecture Split Status
 
 The split has already started and the current repository is organized around these practical surfaces:
@@ -248,18 +339,6 @@ The split has already started and the current repository is organized around the
 - `electron/`: main/preload runtime and OS integration
 
 The next step is not a cosmetic rename. It is to keep reducing leakage between these surfaces so renderer concerns, agent execution concerns, and host concerns stay independently testable.
-
-## Long-Term Roadmap
-
-The broader direction of the project is no longer just feature expansion. A major part of the roadmap is hardening and cleaning up the architecture that is currently still heavily vibe-coded and experimental.
-
-Key long-term priorities:
-- harden and simplify the current AI runtime so tool execution, session flow, and orchestration are more deterministic and observable
-- continue hardening the current background agent runtime and only split it further when the contract layer is stable enough
-- clean up and stabilize the current architecture so core concepts have clearer boundaries and fewer ad hoc flows
-- add stronger windowing and batching systems for context, memory, and retrieval so session state can scale more safely
-- improve memory, retrieval, and context assembly into a more reliable pipeline with better lifecycle control
-- expand the package registry system so developers can extend the app with their own tools, UI modules, workflows, and runtime integrations
 
 The end goal is an extensible developer environment where AI, runtime tools, overlay UI, package modules, and session intelligence work together in a clean and durable architecture.
 

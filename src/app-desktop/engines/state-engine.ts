@@ -19,6 +19,13 @@ const DEFAULT_DESKTOP_STATE: DesktopState = {
     focused_widget_uid: null,
     active_element_tag: null,
     active_element_role: null,
+    screen_width: 0,
+    screen_height: 0,
+    available_screen_width: 0,
+    available_screen_height: 0,
+    viewport_width: 0,
+    viewport_height: 0,
+    device_pixel_ratio: 1,
 };
 
 class StateEngineSingleton {
@@ -28,6 +35,7 @@ class StateEngineSingleton {
     public readonly mouseFocusMemoryUid = 'system:global_state:mouse_focus_enabled';
     public readonly focusedWindowMemoryUid = 'system:global_state:focused_window';
     public readonly activeWindowMemoryUid = 'system:global_state:active_window';
+        private hasBoundDisplayTracking = false;
 
     setupKernelSpace() {
         KernelEngine.registerSystemMemory(this.cursorStateUid, DEFAULT_CURSOR_STATE);
@@ -35,6 +43,8 @@ class StateEngineSingleton {
         KernelEngine.registerSystemMemory(this.mouseFocusMemoryUid, true);
         KernelEngine.registerSystemMemory(this.focusedWindowMemoryUid, null);
         KernelEngine.registerSystemMemory(this.activeWindowMemoryUid, null);
+
+		this.syncDisplayMetrics();
     }
 
     readCursorState(): CursorState {
@@ -49,6 +59,49 @@ class StateEngineSingleton {
     }
     readActiveWindow(): string | null {
         return (KernelEngine.readMemory(this.activeWindowMemoryUid) as string | null | undefined) ?? null;
+    }
+
+    bindDisplayTracking() {
+        if (this.hasBoundDisplayTracking || typeof window === 'undefined') return;
+
+        const syncMetrics = () => this.syncDisplayMetrics();
+        window.addEventListener('resize', syncMetrics);
+        window.visualViewport?.addEventListener('resize', syncMetrics);
+        window.visualViewport?.addEventListener('scroll', syncMetrics);
+        this.hasBoundDisplayTracking = true;
+        this.syncDisplayMetrics();
+    }
+
+    syncDisplayMetrics() {
+        if (typeof window === 'undefined') return;
+
+        const state = this.readDesktopState();
+        const nextMetrics = {
+            screen_width: window.screen?.width ?? 0,
+            screen_height: window.screen?.height ?? 0,
+            available_screen_width: window.screen?.availWidth ?? window.screen?.width ?? 0,
+            available_screen_height: window.screen?.availHeight ?? window.screen?.height ?? 0,
+            viewport_width: Math.round(window.visualViewport?.width ?? window.innerWidth ?? 0),
+            viewport_height: Math.round(window.visualViewport?.height ?? window.innerHeight ?? 0),
+            device_pixel_ratio: window.devicePixelRatio || 1,
+        };
+
+        if (
+            state.screen_width === nextMetrics.screen_width &&
+            state.screen_height === nextMetrics.screen_height &&
+            state.available_screen_width === nextMetrics.available_screen_width &&
+            state.available_screen_height === nextMetrics.available_screen_height &&
+            state.viewport_width === nextMetrics.viewport_width &&
+            state.viewport_height === nextMetrics.viewport_height &&
+            state.device_pixel_ratio === nextMetrics.device_pixel_ratio
+        ) {
+            return;
+        }
+
+        KernelEngine.updateMemory(this.desktopStateUid, {
+            ...state,
+            ...nextMetrics,
+        });
     }
 
     setCursorPosition(x: number, y: number) {

@@ -1,6 +1,34 @@
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { StateEngine } from '#/app-desktop/engines/state-engine';
-import type { WindowConfig, SpawnWindowOptions } from '#/shared/schemas/window';
+import type { WindowConfig, SpawnWindowOptions, WindowPositionInput } from '#/shared/schemas/window';
+
+function resolveDisplaySpan(axis: 'x' | 'y') {
+    const desktopState = StateEngine.readDesktopState();
+    if (axis === 'x') {
+        return desktopState.viewport_width || desktopState.available_screen_width || window.innerWidth || 0;
+    }
+
+    return desktopState.viewport_height || desktopState.available_screen_height || window.innerHeight || 0;
+}
+
+function resolveSpawnPosition(
+    value: WindowPositionInput | undefined,
+    axis: 'x' | 'y',
+    fallback: number,
+) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+
+    if (typeof value === 'string' && value.trim().endsWith('%')) {
+        const parsedPercentage = Number.parseFloat(value);
+        if (Number.isFinite(parsedPercentage)) {
+            return Math.round(resolveDisplaySpan(axis) * (parsedPercentage / 100));
+        }
+    }
+
+    return fallback;
+}
 
 
 export interface WindowLifecycleDependencies {
@@ -107,14 +135,16 @@ export class WindowLifecycleManager {
 
         const window_uid = options._reserved_uid ?? ('win-' + Math.random().toString(36).substring(2, 9));
         const z_index = this.deps.bumpZIndex();
+        const width = options.width ?? defaultConfig.width ?? 400;
+        const height = options.height ?? defaultConfig.height ?? 300;
 
         const freshWindow: WindowConfig = {
             window_uid,
             component: entryRef,
-            x: options.x ?? defaultConfig.x ?? 100,
-            y: options.y ?? defaultConfig.y ?? 100,
-            width: options.width ?? defaultConfig.width ?? 400,
-            height: options.height ?? defaultConfig.height ?? 300,
+            x: resolveSpawnPosition(options.x, 'x', defaultConfig.x ?? 100),
+            y: resolveSpawnPosition(options.y, 'y', defaultConfig.y ?? 100),
+            width,
+            height,
             z_index,
             opacity: options.opacity ?? defaultConfig.opacity ?? 1,
             is_locked: options.is_locked ?? defaultConfig.is_locked ?? false,

@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import type { ElementType, ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * A lightweight Spatial Auto-Virtualizer Component.
@@ -10,19 +11,19 @@ export function SpatialVirtualizer({ as: Component = "div",
     className,
     targetSelector = ':scope > *' // Automatically observes direct children by default
 }: { 
-    children: React.ReactNode;
+    children: ReactNode;
     className?: string;
-    as?: any;
+    as?: ElementType;
     targetSelector?: string;
 }) {
-    const rootRef = useRef<any>(null);
+    const rootRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         const rootNode = rootRef.current;
         if (!rootNode) return;
 
         const observedChildren = new WeakSet<Element>();
-        let scanTimeout: any;
+        let scanTimeout: ReturnType<typeof setTimeout> | undefined;
 
         const handleIntersection = (entries: IntersectionObserverEntry[]) => {
             for (const entry of entries) {
@@ -57,7 +58,7 @@ export function SpatialVirtualizer({ as: Component = "div",
         };
 
 
-        let scrollRoot = rootNode;
+        let scrollRoot: HTMLElement | null = rootNode;
         while (scrollRoot && scrollRoot !== document.body) {
             const style = window.getComputedStyle(scrollRoot);
             if (style.overflowY === 'auto' || style.overflowY === 'scroll' || style.overflow === 'auto' || style.overflow === 'scroll') {
@@ -79,16 +80,16 @@ export function SpatialVirtualizer({ as: Component = "div",
             
             try {
                 // Find all target elements that match the selector within the rootNode
-                const targets = Array.from(rootRef.current.querySelectorAll(targetSelector));
+                const targets = Array.from(rootRef.current.querySelectorAll<HTMLElement>(targetSelector));
                 
-                targets.forEach(target => {
+                targets.forEach((target) => {
                     if (!observedChildren.has(target)) {
                         observedChildren.add(target);
                         
                         // Fix for inline elements not taking dimensions well
                         const style = window.getComputedStyle(target);
                         if (style.display === 'inline') {
-                            (target as HTMLElement).style.display = 'inline-block';
+                            target.style.display = 'inline-block';
                         }
                         
                         target.setAttribute('data-spatial', 'true');
@@ -115,7 +116,9 @@ export function SpatialVirtualizer({ as: Component = "div",
         });
 
         return () => {
-            clearTimeout(scanTimeout);
+            if (scanTimeout !== undefined) {
+                clearTimeout(scanTimeout);
+            }
             mutationObserver.disconnect();
             observer.disconnect();
         };

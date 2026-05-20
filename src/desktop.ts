@@ -186,6 +186,7 @@ async function initConfigAndGlobalStateStep() {
 }
 
 async function initGlobalStateStep() {
+	window.ACE.state.bindDisplayTracking();
 	window.ACE.state.setOverlayMode('interactive');
 	console.log('[Boot] Phase 3: Window engine and transparent layer are ready.');
 }

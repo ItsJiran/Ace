@@ -10,7 +10,6 @@ function SystemDockbarWindow({ windowUid }: { windowUid: string }) {
                 windowConfig,
                 resolveWindowStateClass,
                 isDragging,
-                isFocused,
                 dragHandleProps,
             }) => {
                 if (!windowConfig) {
@@ -18,7 +17,6 @@ function SystemDockbarWindow({ windowUid }: { windowUid: string }) {
                 }
 
                 const windowStateClass = resolveWindowStateClass();
-                const isWindowStateActive = windowStateClass === 'active';
 
                 return (
                     <div

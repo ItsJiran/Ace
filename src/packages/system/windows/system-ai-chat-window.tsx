@@ -75,6 +75,7 @@ function SystemAIChatWindowBody({
 		pending_prompt,
 		stream,
 		createThread,
+		setCurrentThread,
 		sendPrompt,
 		messages,
 		list_threads,
@@ -82,6 +83,7 @@ function SystemAIChatWindowBody({
 	const renderedMessages = messages as BaseMessage[];
 
 	const resolvedModel = selectedModel || ensureSelectedModel();
+	const threadOptions = useMemo(() => Object.keys(list_threads), [list_threads]);
 	const threadCount = useMemo(() => Object.keys(list_threads).length, [list_threads]);
 
 	useEffect(() => {
@@ -131,6 +133,21 @@ function SystemAIChatWindowBody({
 					resolvedModel={resolvedModel}
 					isStreaming={is_streaming}
 					currentThreadUid={current_thread_uid}
+					threadOptions={threadOptions}
+					onSelectThread={(threadUid) => {
+						void setCurrentThread(threadUid);
+					}}
+					onOpenThreadMonitor={() => {
+						window.ACE.window.spawnWindow({
+							package: 'itsjiran/ace-system',
+							window: 'system-ai-thread-monitor-window',
+							title: 'AI Thread Monitor',
+							width: 1180,
+							height: 760,
+							x: 420,
+							y: 120,
+						});
+					}}
 					messageCount={renderedMessages.length}
 					threadCount={threadCount}
 				/>

@@ -1,7 +1,7 @@
 // src/hooks/use-render-count.ts
-import { useRef, useEffect } from 'react';
+import { useRef } from 'react';
 
-export function useRenderCount(componentName: string) {
+export function useRenderCount(_componentName: string) {
     const renders = useRef(0);
     renders.current += 1;
     return renders.current;

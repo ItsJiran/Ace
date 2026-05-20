@@ -2,6 +2,7 @@ import type { AgentConfig, AIProviderType } from '#/shared/schemas/ai';
 import { createCodeInterpreterMiddleware } from "@langchain/quickjs";
 import { AIProviders } from '#/shared/constants/ai';
 import { ConfigEngine } from '#/shared/engines/config-engine';
+import { SystemMessage } from '@langchain/core/messages';
 import { 
     initChatModel, 
     createMiddleware, 
@@ -103,6 +104,46 @@ const injectApiKeyMiddleware = createMiddleware({
     },
 });
 
+const injectDesktopContextMiddleware = createMiddleware({
+    name: 'InjectDesktopContext',
+    wrapModelCall: async (request, handler) => {
+        const runtime = request.runtime as AgentConfig;
+        const runtimeContext =
+            runtime.context && typeof runtime.context === 'object'
+                ? (runtime.context as { desktop?: Record<string, unknown> })
+                : undefined;
+        const desktopContext = runtimeContext?.desktop;
+
+        if (!desktopContext) {
+            return handler(request);
+        }
+
+        const viewportWidth = Number(desktopContext.viewport_width ?? 0);
+        const viewportHeight = Number(desktopContext.viewport_height ?? 0);
+        const viewportCenterX = Number(desktopContext.viewport_center_x ?? 0);
+        const viewportCenterY = Number(desktopContext.viewport_center_y ?? 0);
+        const screenWidth = Number(desktopContext.screen_width ?? 0);
+        const screenHeight = Number(desktopContext.screen_height ?? 0);
+
+        const contextMessage = new SystemMessage([
+            'Runtime desktop context:',
+            `- screen resolution: ${screenWidth} x ${screenHeight}`,
+            `- viewport size: ${viewportWidth} x ${viewportHeight}`,
+            `- viewport center: (${viewportCenterX}, ${viewportCenterY})`,
+            `- cursor position: (${Number(desktopContext.cursor_x ?? 0)}, ${Number(desktopContext.cursor_y ?? 0)})`,
+            `- overlay mode: ${String(desktopContext.mode ?? 'ambient')}`,
+            `- focused window uid: ${desktopContext.focused_window_uid ? String(desktopContext.focused_window_uid) : 'none'}`,
+            `- active window uid: ${desktopContext.active_window_uid ? String(desktopContext.active_window_uid) : 'none'}`,
+            'Use these values when the user gives spatial instructions like "move to the center" or asks about screen-relative positioning.',
+        ].join('\n'));
+
+        return handler({
+            ...request,
+            messages: [contextMessage, ...(request.messages ?? [])],
+        });
+    },
+});
+
 const syncKernelSpaceMiddleware = createMiddleware({
     name: 'SyncKernelSpace',
     afterAgent: async (state, runtime) => {
@@ -128,10 +169,10 @@ const syncKernelSpaceMiddleware = createMiddleware({
 
 export default [
     injectApiKeyMiddleware,
+    injectDesktopContextMiddleware,
     configurableModel, 
     syncKernelSpaceMiddleware,
 
-    // prebuild middleware
     summarizationMiddleware, 
     llmToolSelectorMiddleware,
     contextEditingMiddlewareInstance,

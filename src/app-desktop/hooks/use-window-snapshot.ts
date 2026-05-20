@@ -1,4 +1,4 @@
-import { KernelEngine } from '#/engines/kernel-engine';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { useAceMemorySelector } from './use-ace-memory';
 
 export function useWindowSnapshot(windowUid: string) {

@@ -28,18 +28,12 @@ src/app-desktop/components/widgets/system-console.tsx(2,42): error TS2307: Canno
 src/app-desktop/components/widgets/system-widget.tsx(1,25): error TS2307: Cannot find module '../../core/packages/system/components/system-widget' or its corresponding type declarations.
 src/app-desktop/components/widgets/system-widget.tsx(2,41): error TS2307: Cannot find module '../../core/packages/system/components/system-widget' or its corresponding type declarations.
 src/app-desktop/engines/logger-engine.ts(131,15): error TS6133: 'logLine' is declared but its value is never read.
-src/app-desktop/hooks/use-ace-event.ts(2,26): error TS2307: Cannot find module '#/engines/event-engine' or its corresponding type declarations.
-src/app-desktop/hooks/use-ace-event.ts(4,15): error TS2305: Module '"#/shared/schemas/events.ts"' has no exported member 'Emitter'.
-src/app-desktop/hooks/use-ace-event.ts(4,15): error TS6196: 'Emitter' is declared but never used.
-src/app-desktop/hooks/use-ace-event.ts(4,35): error TS2305: Module '"#/shared/schemas/events.ts"' has no exported member 'Listener'.
 src/app-desktop/hooks/use-ace-event.ts(9,28): error TS6133: 'T' is declared but its value is never read.
 src/app-desktop/hooks/use-render-count.ts(2,18): error TS6133: 'useEffect' is declared but its value is never read.
 src/app-desktop/hooks/use-render-count.ts(4,32): error TS6133: 'componentName' is declared but its value is never read.
 src/app-desktop/hooks/use-window-context.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
 src/app-desktop/hooks/use-window-snapshot.ts(1,30): error TS2307: Cannot find module '#/engines/kernel-engine' or its corresponding type declarations.
-src/packages/system/components/system-ai-chat-messages.tsx(20,2): error TS6133: 'provider' is declared but its value is never read.
-src/packages/system/components/system-ai-chat-messages.tsx(21,2): error TS6133: 'model' is declared but its value is never read.
-src/packages/system/components/system-ram-monitor.tsx(3,1): error TS6133: 'RenderCounterBadge' is declared but its value is never read.
+src/packages/system/components/system-memory-table.tsx(88,13): error TS6133: 'expandedTitle' is declared but its value is never read.
 src/shared/engines/kernel-engine/types.ts(2,5): error TS6196: 'ProcessKind' is declared but never used.
 src/shared/engines/kernel-engine/types.ts(3,5): error TS6196: 'ProcessLifecycleState' is declared but never used.
 src/shared/engines/kernel-engine/types.ts(5,5): error TS6196: 'ProcessRuntimeMemoryMeta' is declared but never used.

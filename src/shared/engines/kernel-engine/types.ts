@@ -1,12 +1,14 @@
-import type {
-    ProcessKind,
-    ProcessLifecycleState,
-    ProcessRecord,
-    ProcessRuntimeMemoryMeta,
-    ProcessStatus,
-    RuntimeMemoryRetentionPolicy,
-    RuntimeMemoryScope,
-    RuntimeMemoryState,
+import type { ProcessRecord } from '#/shared/schemas/process';
+
+export type {
+	ProcessKind,
+	ProcessLifecycleState,
+	ProcessRecord,
+	ProcessRuntimeMemoryMeta,
+	ProcessStatus,
+	RuntimeMemoryRetentionPolicy,
+	RuntimeMemoryScope,
+	RuntimeMemoryState,
 } from '#/shared/schemas/process';
 
 export interface KernelProcessEntry {

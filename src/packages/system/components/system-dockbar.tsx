@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
     Activity,
+    Bot,
     ChevronUp,
     Cpu,
     MemoryStick,
@@ -75,6 +76,20 @@ const menuItems = [
                 height: 740,
                 x: 380,
                 y: 110,
+            }),
+    },
+    {
+        label: 'AI Thread Monitor',
+        icon: Bot,
+        spawn: () =>
+            window.ACE.window.spawnWindow({
+                package: 'itsjiran/ace-system',
+                window: 'system-ai-thread-monitor-window',
+                title: 'AI Thread Monitor',
+                width: 1180,
+                height: 760,
+                x: 420,
+                y: 120,
             }),
     },
     {

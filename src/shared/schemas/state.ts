@@ -34,6 +34,13 @@ export const DesktopStateSchema = z.object({
     focused_widget_uid: z.string().nullable(),
     active_element_tag: z.string().nullable(),
     active_element_role: z.string().nullable(),
+    screen_width: z.number().default(0),
+    screen_height: z.number().default(0),
+    available_screen_width: z.number().default(0),
+    available_screen_height: z.number().default(0),
+    viewport_width: z.number().default(0),
+    viewport_height: z.number().default(0),
+    device_pixel_ratio: z.number().default(1),
 });
 
 export type CursorState = z.infer<typeof CursorStateSchema>;

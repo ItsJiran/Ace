@@ -1,8 +1,13 @@
+import { Bot } from 'lucide-react';
+
 type SystemAIChatHeaderProps = {
 	selectedProvider: string;
 	resolvedModel: string;
 	isStreaming: boolean;
 	currentThreadUid: string | null;
+	threadOptions: string[];
+	onSelectThread: (threadUid: string | null) => void;
+	onOpenThreadMonitor: () => void;
 	messageCount: number;
 	threadCount: number;
 };
@@ -12,6 +17,9 @@ export function SystemAIChatHeader({
 	resolvedModel,
 	isStreaming,
 	currentThreadUid,
+	threadOptions,
+	onSelectThread,
+	onOpenThreadMonitor,
 	messageCount,
 	threadCount,
 }: SystemAIChatHeaderProps) {
@@ -28,9 +36,27 @@ export function SystemAIChatHeader({
 			</div>
 
 			<div className="w-fit flex gap-2 items-end">
-				<span className="system-btn-primary text-sm px-3 w-fit" title={currentThreadUid || ''}>
-					thread: {currentThreadUid || '-'}
-				</span>
+				<button
+					type="button"
+					onClick={onOpenThreadMonitor}
+					className="inline-flex items-center gap-2 system-btn-primary rounded-2xl px-3 py-2 text-sm"
+					title="Open AI thread state monitor"
+				>
+					<Bot size={14} />
+					<span>thread state</span>
+				</button>
+				<select
+					value={currentThreadUid || ''}
+					onChange={(event) => onSelectThread(event.target.value || null)}
+					className="system-input-primary min-w-[200px] rounded-2xl px-3 py-2 text-sm"
+				>
+					<option value="">active: none</option>
+					{threadOptions.map((threadUid) => (
+						<option key={threadUid} value={threadUid}>
+							{threadUid}
+						</option>
+					))}
+				</select>
 				<span className="system-btn-primary text-sm px-3 w-fit">messages: {messageCount}</span>
 				<span className="system-btn-primary text-sm px-3 w-fit">threads: {threadCount}</span>
 			</div>

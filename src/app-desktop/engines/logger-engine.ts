@@ -128,7 +128,7 @@ class LoggerEngineSingleton {
 
     private writeToDebugLog(level: LogLevel, message: string) {
         const timestamp = new Date().toISOString();
-        const logLine = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+        void `[${timestamp}] [${level.toUpperCase()}] ${message}`;
     }
 
     private addLog(level: LogLevel, message: string) {

@@ -25,7 +25,8 @@ process.stderr.write = (chunk, encoding, callback) => {
     return originalStderrWrite(chunk, encoding, callback);
 };
 
-const isDev = !app.isPackaged;
+const isForcedProd = process.env.ACE_ELECTRON_FORCE_PROD === 'true';
+const isDev = !app.isPackaged && !isForcedProd;
 const projectRoot = path.join(__dirname, '..');
 const backgroundRuntime = createBackgroundRuntimeBridge({
     projectRoot,

@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 export type EventSlug = string;
 
 export interface EventData<TPayload = Record<string, unknown>, TMeta = Record<string, unknown>> {

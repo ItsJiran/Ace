@@ -30,6 +30,8 @@ export const WindowConfigSchema = z.object({
     is_minimized: z.boolean(),
 });
 
+export type WindowPositionInput = number | `${number}%`;
+
 
 export interface SpawnWindowOptions {
     package?: string;
@@ -37,8 +39,8 @@ export interface SpawnWindowOptions {
     window_style?: 'standard' | 'borderless';
 
     title?: string;
-    x?: number;
-    y?: number;
+    x?: WindowPositionInput;
+    y?: WindowPositionInput;
     width?: number;
     height?: number;
     opacity?: number;
