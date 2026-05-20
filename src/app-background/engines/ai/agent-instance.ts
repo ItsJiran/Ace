@@ -33,6 +33,8 @@ import resolveAgentTools from './agent-tools';
 import AgentMiddlewares from './agent-middlewares';
 import SingletonAgentBackend from './agent-backend';
 import {
+	AGENT_STORE_MEMORY_ROUTE_PREFIX,
+	AGENT_STORE_TOOL_RESULTS_ROUTE_PREFIX,
     AGENT_FILESYSTEM_ARTIFACT_ROUTE_PREFIX,
     AGENT_FILESYSTEM_HOME_ROUTE_PREFIX,
 } from './agent-backend';
@@ -53,6 +55,16 @@ export default class SingletonAgentInstance {
     private static ensureValue() {
 		if (!SingletonAgentInstance._value) {
             const permissions = [
+                {
+                    operations: ['read', 'write'] as const,
+                    paths: resolveAllowedFilesystemPaths(AGENT_STORE_MEMORY_ROUTE_PREFIX),
+                    mode: 'allow' as const,
+                },
+                {
+                    operations: ['read', 'write'] as const,
+                    paths: resolveAllowedFilesystemPaths(AGENT_STORE_TOOL_RESULTS_ROUTE_PREFIX),
+                    mode: 'allow' as const,
+                },
                 {
                     operations: ['read', 'write'] as const,
                     paths: resolveAllowedFilesystemPaths(AGENT_FILESYSTEM_ARTIFACT_ROUTE_PREFIX),
@@ -82,6 +94,11 @@ export default class SingletonAgentInstance {
     - if detailed output is already available from the tool result, prefer a short summary like "I found 12 matches" or "I listed the directory contents" instead of reproducing the full result
     - only restate full raw output when the user explicitly asks for the exact output
 
+                    When a task requires coordinated edits across many files or many repeated transformations:
+                    - prefer generating a temporary shell script or command sequence to perform the bulk change consistently
+                    - run the script or command, inspect the result, and clean up the temporary script afterward
+                    - prefer this scripted workflow over manually editing a large number of files one by one
+
     Treat tool outputs as the primary detailed source of truth, and treat your assistant message after a tool call as a concise interpretation or summary.
 
     You may also receive runtime desktop context describing the current screen resolution, viewport size, viewport center point, cursor position, and focused window state. Use that context when the user asks for spatial actions such as centering, aligning, moving, resizing, or positioning windows/elements on screen.`,
@@ -103,7 +120,9 @@ export default class SingletonAgentInstance {
 
                 /**
                  * Temporary MVP stance:
-                 * allow read/write access on explicitly mounted filesystem routes only.
+                 * allow read/write access on every mounted route, including the routed home filesystem path.
+                 * DeepAgents does not enforce permissions on `execute`, so command execution remains available
+                 * as long as the backend exposes execution support.
                  */
                 permissions,
             }) as unknown as ReturnType<typeof createDeepAgent>;

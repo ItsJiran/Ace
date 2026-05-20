@@ -1,6 +1,7 @@
 import {
     StateBackend,
     FilesystemBackend,
+    LocalShellBackend,
     StoreBackend,
     CompositeBackend,
 } from 'deepagents';
@@ -8,6 +9,8 @@ import { homedir } from 'node:os';
 
 const normalizedHomeDir = homedir().replace(/\\/g, '/');
 
+export const AGENT_STORE_MEMORY_ROUTE_PREFIX = '/memories/';
+export const AGENT_STORE_TOOL_RESULTS_ROUTE_PREFIX = '/tool_results/';
 export const AGENT_FILESYSTEM_ARTIFACT_ROUTE_PREFIX = '/artifacts/';
 export const AGENT_FILESYSTEM_HOME_ROUTE_PREFIX = normalizedHomeDir.startsWith('/')
 	? normalizedHomeDir.endsWith('/')
@@ -16,13 +19,13 @@ export const AGENT_FILESYSTEM_HOME_ROUTE_PREFIX = normalizedHomeDir.startsWith('
 	: null;
 
 const routedBackends: Record<string, StoreBackend | FilesystemBackend> = {
-	'/memories/': new StoreBackend(),
-	'/tool_results/': new StoreBackend(),
+    [AGENT_STORE_MEMORY_ROUTE_PREFIX]: new StoreBackend(),
+    [AGENT_STORE_TOOL_RESULTS_ROUTE_PREFIX]: new StoreBackend(),
 	[AGENT_FILESYSTEM_ARTIFACT_ROUTE_PREFIX]: new FilesystemBackend(),
 };
 
 if (AGENT_FILESYSTEM_HOME_ROUTE_PREFIX) {
-	routedBackends[AGENT_FILESYSTEM_HOME_ROUTE_PREFIX] = new FilesystemBackend({
+	routedBackends[AGENT_FILESYSTEM_HOME_ROUTE_PREFIX] = new LocalShellBackend({
 		rootDir: normalizedHomeDir,
 		virtualMode: true,
 	});

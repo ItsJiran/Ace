@@ -65,16 +65,21 @@ Then restart your terminal and Electron dev process.
 
 ### Temporary Filesystem Security Note
 
-ACE currently runs DeepAgents with filesystem permissions explicitly set to allow both `read` and `write` operations across the configured backend routes.
+ACE currently runs DeepAgents with filesystem permissions explicitly set to allow both `read` and `write` operations across all mounted backend routes used by the MVP runtime.
 
-This is a deliberate temporary tradeoff for MVP velocity so the local agent can inspect, edit, and persist project artifacts without friction while the tool/runtime contract is still settling.
+This is a deliberate temporary tradeoff for MVP velocity so the local agent can inspect, edit, delete, rewrite, and persist project artifacts without friction while the tool/runtime contract is still settling.
+
+In practical terms for the current MVP state, ACE is intentionally permissive across the routed home-directory filesystem mount, so the agent can operate on files under the mounted home path without fine-grained resolution yet.
+
+The current workflow also allows command execution for MVP iteration, which means batch-edit scripts, temporary shell helpers, and command-driven file transformations are intentionally available while stricter policy layers are still pending.
 
 Important caveats for the current MVP state:
 - this is not a hardened least-privilege policy yet
-- filesystem access is intentionally permissive for agent workflows during rapid iteration
+- filesystem access is intentionally permissive for agent workflows during rapid iteration, including the routed home filesystem mount
+- bulk file changes may currently be performed through temporary shell scripts or command-driven workflows for speed and consistency
 - stronger route-scoped and tool-scoped permission rules should be added before treating the runtime as production-hardened
 
-In short: the current filesystem permission model is intentionally permissive for experimentation, and that should be treated as a temporary security issue accepted for MVP delivery rather than a final posture.
+In short: the current filesystem permission model is intentionally permissive for experimentation, including broad home-route access for MVP workflows, and that should be treated as a temporary security issue accepted for MVP delivery rather than a final posture.
 
 ### Run The App
 
