@@ -147,7 +147,7 @@ export function resolveToolRendererKind({ toolName, content, artifact, record }:
 		return 'window';
 	}
 
-	if (/(filesystem|file_system|\bfs\b|file|directory|path|\bls\b|\bglob\b|\bgrep\b|read_file|write_file|edit_file|mkdir|delete_file|move_file|copy_file)/.test(normalizedToolName)) {
+	if (/(filesystem|file_system|\bfs\b|file|directory|path|\bls\b|\bglob\b|\bgrep\b|read_file|write_file|edit_file|mkdir|delete_file|move_file|copy_file|execute|local_shell_tool|shell|command)/.test(normalizedToolName)) {
 		return 'filesystem';
 	}
 

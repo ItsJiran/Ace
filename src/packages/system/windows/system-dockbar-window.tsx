@@ -21,7 +21,7 @@ function SystemDockbarWindow({ windowUid }: { windowUid: string }) {
                 return (
                     <div
                         className={[
-                            'system-shell flex h-full w-full flex-col rounded-[24px] pointer-events-auto',
+                            'system-shell flex h-full w-fit flex-col rounded-[24px] pointer-events-auto',
                             windowStateClass,
                             isDragging ? 'dragging active overflow-visible' : 'overflow-visible',
                         ]

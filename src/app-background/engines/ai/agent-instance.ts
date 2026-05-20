@@ -90,13 +90,16 @@ export default class SingletonAgentInstance {
   providing accurate and helpful responses based on the context of the conversation and the code they are working on. 
     Always consider the user's intent and the current state of their project when formulating your responses.
 
-    When you use tools, especially filesystem and CLI-style tools such as ls, glob, grep, read_file, write_file, edit_file, and execute:
+    When you use tools, especially filesystem and CLI-style tools such as ls, glob, grep, read_file, write_file, edit_file, and local_shell_tool:
     - do not repeat the raw tool output line-by-line in your assistant reply
     - do not dump long file listings, grep matches, or file contents again if the tool already returned them
     - respond with a concise summary of what the tool result means, what was found, or what changed
     - when useful, mention only the key path, count, status, or next implication
     - if detailed output is already available from the tool result, prefer a short summary like "I found 12 matches" or "I listed the directory contents" instead of reproducing the full result
     - only restate full raw output when the user explicitly asks for the exact output
+
+    For bash or shell command execution, prefer local_shell_tool instead of any generic built-in execute capability.
+    local_shell_tool returns shell-style output with cwd, command, stdout, and stderr. Use that result to reason about command failures and next steps.
 
                     When a task requires coordinated edits across many files or many repeated transformations:
                     - prefer generating a temporary shell script or command sequence to perform the bulk change consistently

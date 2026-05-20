@@ -1,4 +1,4 @@
-import { CheckCircle2, FileCode2, FolderTree, Search, TextSearch } from 'lucide-react';
+import { CheckCircle2, FileCode2, FolderTree, Search, TerminalSquare, TextSearch } from 'lucide-react';
 
 import { MetaGrid, StructuredValueBlock, ToolSection } from './tool-renderer-shared';
 import { asRecord, normalizeToolName, parseStructuredValue } from './tool-renderer.utils';
@@ -328,6 +328,50 @@ function ToolEditFileRenderer(props: ToolRendererProps) {
     ]);
 }
 
+function ToolExecuteRenderer(props: ToolRendererProps) {
+    const textContent = resolveToolTextContent(props.content) ?? '';
+    const sections = textContent.split(/\n\n+/).map((section) => section.trim()).filter(Boolean);
+    const cwdLine = sections.find((section) => section.startsWith('cwd: ')) ?? null;
+    const commandLine = sections.find((section) => section.startsWith('$ ')) ?? null;
+    const stdoutSection = sections.find((section) => section.startsWith('stdout:')) ?? null;
+    const stderrSection = sections.find((section) => section.startsWith('stderr:')) ?? null;
+    const fallbackBody = sections
+        .filter((section) => section !== cwdLine && section !== commandLine && section !== stdoutSection && section !== stderrSection)
+        .join('\n\n');
+    const status = stderrSection ? 'error' : 'success';
+    const stdoutBody = stdoutSection?.replace(/^stdout:\n?/, '') ?? '';
+    const stderrBody = stderrSection?.replace(/^stderr:\n?/, '') ?? '';
+
+    return (
+        <div className="flex flex-col gap-3">
+
+            {commandLine ? (
+                <div className="rounded-[18px] p-3">
+                    <div className="mb-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-zinc-500">
+                        <TerminalSquare size={13} />
+                        <span>Command</span>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-zinc-950/75 px-3 py-2 font-mono text-[11px] text-zinc-300">
+                        {commandLine.replace(/^\$\s*/, '')}
+                    </div>
+                </div>
+            ) : null}
+
+            {stdoutBody ? (
+                <ToolSection title="Stdout" icon={TerminalSquare} value={stdoutBody} />
+            ) : null}
+
+            {stderrBody ? (
+                <ToolSection title="Stderr" icon={TerminalSquare} value={stderrBody} />
+            ) : null}
+
+            {!stdoutBody && !stderrBody && fallbackBody ? (
+                <ToolSection title="Execute Result" icon={TerminalSquare} value={fallbackBody} />
+            ) : null}
+        </div>
+    );
+}
+
 export function ToolFilesystemCliRenderer(props: ToolRendererProps) {
     const normalizedToolName = normalizeToolName(props.toolName);
 
@@ -353,6 +397,10 @@ export function ToolFilesystemCliRenderer(props: ToolRendererProps) {
 
     if (normalizedToolName === 'edit_file') {
         return <ToolEditFileRenderer {...props} />;
+    }
+
+    if (normalizedToolName === 'execute' || normalizedToolName === 'local_shell_tool') {
+        return <ToolExecuteRenderer {...props} />;
     }
 
     return null;

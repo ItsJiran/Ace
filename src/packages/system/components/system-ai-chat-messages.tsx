@@ -187,9 +187,9 @@ export function SystemAIChatMessages({
 									</div>
 									<div className="flex flex-col gap-2">
 										{runningToolStreams.map((toolItem) => (
-											<div key={toolItem.uid} className="rounded-2xl border border-white/10 bg-black/15 px-3 py-3">
-												<div className="flex items-center gap-2 text-xs text-emerald-200">
-													<span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300 animate-pulse" />
+											<div key={toolItem.uid} className="rounded-2xl system-container-primary animate-pulse px-3 py-3">
+												<div className="flex items-center gap-2 text-xs">
+													<span className="inline-flex h-2.5 w-2.5 rounded-full system-container-secondary" />
 													<span>Sedang menjalankan {toolItem.toolName}</span>
 												</div>
 												{resolveToolInputLabel(toolItem.input) ? (
@@ -216,8 +216,8 @@ export function SystemAIChatMessages({
 										<span className="system-chat-status-pill is-streaming">sending prompt</span>
 										<span className="whitespace-pre-wrap">Mengirim prompt ke agent dan menunggu tool atau response pertama...</span>
 									</div>
-									<div className="flex items-center gap-2 rounded-2xl border border-sky-400/15 bg-sky-400/5 px-3 py-2 text-xs text-sky-200">
-										<span className="inline-flex h-2.5 w-2.5 rounded-full bg-sky-300 animate-pulse" />
+									<div className="flex items-center gap-2 rounded-2xl system-container-primary animate-pulse px-3 py-2 text-xs">
+										<span className="inline-flex h-2.5 w-2.5 system-container-secondary" />
 										<span>{pendingPrompt ? `Sending: ${pendingPrompt}` : 'Sending prompt...'}</span>
 									</div>
 								</div>
