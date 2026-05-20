@@ -20,9 +20,9 @@ export const AGENT_FILESYSTEM_HOME_ROUTE_PREFIX = normalizedHomeDir.startsWith('
 	: null;
 
 const routedBackends: Record<string, StoreBackend | FilesystemBackend> = {
-    // [AGENT_STORE_MEMORY_ROUTE_PREFIX]: new StoreBackend(),
-    // [AGENT_STORE_TOOL_RESULTS_ROUTE_PREFIX]: new StoreBackend(),
-	// [AGENT_FILESYSTEM_ARTIFACT_ROUTE_PREFIX]: new FilesystemBackend(),
+    [AGENT_STORE_MEMORY_ROUTE_PREFIX]: new StoreBackend(),
+    [AGENT_STORE_TOOL_RESULTS_ROUTE_PREFIX]: new StoreBackend(),
+	[AGENT_FILESYSTEM_ARTIFACT_ROUTE_PREFIX]: new FilesystemBackend(),
 };
 
 if (AGENT_FILESYSTEM_HOME_ROUTE_PREFIX) {
