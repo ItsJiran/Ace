@@ -1,4 +1,4 @@
-import { Check, CheckCircle2, CheckSquare, Wrench, X } from 'lucide-react';
+import { Check, Wrench, X } from 'lucide-react';
 import { ToolMessage } from '@langchain/core/messages';
 import { ToolPayloadRenderer } from './tools/tool-payload-renderer';
 

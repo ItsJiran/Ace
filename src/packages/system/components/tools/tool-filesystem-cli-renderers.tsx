@@ -338,7 +338,9 @@ function ToolExecuteRenderer(props: ToolRendererProps) {
     const fallbackBody = sections
         .filter((section) => section !== cwdLine && section !== commandLine && section !== stdoutSection && section !== stderrSection)
         .join('\n\n');
-    const status = stderrSection ? 'error' : 'success';
+
+
+    // const status = stderrSection ? 'error' : 'success';
     const stdoutBody = stdoutSection?.replace(/^stdout:\n?/, '') ?? '';
     const stderrBody = stderrSection?.replace(/^stderr:\n?/, '') ?? '';
 
