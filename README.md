@@ -6,7 +6,6 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-blue)
-![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Stage](https://img.shields.io/badge/stage-experimental-orange)
 
@@ -32,6 +31,8 @@ In practical terms, ACE is an experimental developer assistant platform where th
 - **🛠️ Extensible Toolchain:** Registry-loaded tools, package-defined windows/widgets, and runtime-safe bridges for desktop and background capabilities.
 - **📡 Event-Driven Architecture:** Robust communication via a central `EventBus` for decoupled UI and logic.
 - **📦 Package Ecosystem:** Modular architecture allowing custom widgets, tools, and workflows.
+
+[![Watch the video](https://img.youtube.com/vi/f9zeMf6KNdQ/maxresdefault.jpg)](https://youtu.be/f9zeMf6KNdQ)
 
 ## 💡 Why ACE?
 
