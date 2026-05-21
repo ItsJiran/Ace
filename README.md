@@ -84,6 +84,22 @@ export GOOGLE_API_KEY="your-key"
 
 Then restart your terminal and Electron dev process.
 
+
+### Run The App
+
+Start the desktop app:
+
+```bash
+npm run start
+```
+
+```bash
+npm run dev
+```
+
+This starts:
+- the Vite renderer dev server
+- the Electron main process
 ### Temporary Filesystem Security Note
 
 ACE currently runs DeepAgents with filesystem permissions explicitly set to allow both `read` and `write` operations across all mounted backend routes used by the MVP runtime.
@@ -101,22 +117,6 @@ Important caveats for the current MVP state:
 - stronger route-scoped and tool-scoped permission rules should be added before treating the runtime as production-hardened
 
 In short: the current filesystem permission model is intentionally permissive for experimentation, including broad home-route access for MVP workflows, and that should be treated as a temporary security issue accepted for MVP delivery rather than a final posture.
-
-### Run The App
-
-Start the desktop app:
-
-```bash
-npm run start
-```
-
-```bash
-npm run dev
-```
-
-This starts:
-- the Vite renderer dev server
-- the Electron main process
 
 ## Current Engine Surfaces
 
