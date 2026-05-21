@@ -9,8 +9,6 @@
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Stage](https://img.shields.io/badge/stage-experimental-orange)
 
-> Project Status: ACE is an active experimental developed as a side project alongside my full-time work, marking my first implementation of AI agents using the DeepAgents framework. To maintain high velocity within a limited timeline, I have heavily leveraged AI-assisted development to scaffold and iterate on core ideas. Although the project is heavily curated and performance is already solid, the high complexity and rapid development pace mean you should expect some architectural awkwardness, volatile schemas, and structural inconsistencies. I’m sharing this early to gather feedback on the vision of a local-first, overlay-driven workspace, and I appreciate your patience as I work to refine these early experimental patterns into a more hardened and elegant architecture.
-
 ---------
 
 ACE is a local-first agentic desktop environment built around an overlay UI, an Electron desktop shell, a desktop runtime, and a background agent runtime.
@@ -119,60 +117,6 @@ npm run dev
 This starts:
 - the Vite renderer dev server
 - the Electron main process
-
-### Optional Legacy Gateway Scripts
-
-The repository still contains legacy gateway-oriented scripts in `package.json` such as `setup:gateway`, `dev:gateway`, and `dev:with-gateway`.
-
-Those scripts are not the primary local workflow anymore. The active AI flow now runs through the Electron desktop renderer plus the dedicated background runtime under `src/app-background/`.
-
-### Typical Local Workflow
-
-1. install npm dependencies
-2. export provider API keys in your shell config
-3. restart the shell so the variables are available
-4. run `npm run dev`
-
-## Current State
-
-ACE is currently an experimental platform for building a local-first AI-native workspace, with a strong focus on developer productivity.
-
-The current implementation is important to state clearly:
-- the overlay UI runs in a React renderer powered by Vite under `src/app-desktop/`
-- the desktop host runs in Electron through `electron/main.cjs` and `electron/preload.cjs`
-- the shared control plane and runtime-safe contracts live under `src/shared/`
-- the active DeepAgents runtime runs in a dedicated background process under `src/app-background/`
-- the renderer and background runtime communicate through Electron IPC and a local stream bridge
-
-## What This Project Is
-
-Today, the codebase includes work on:
-- overlay and window-based UI primitives
-- a kernel-like local runtime for memory, process orchestration, config, input, registry, and filesystem access
-- a background DeepAgents integration for local agent execution
-- session state, context, memory, and retrieval flows
-- local tool execution through package registry domains and runtime bridges
-- package-driven extensibility for future third-party or internal feature development
-
-## Current Implementation
-
-Even though the project is still early, a meaningful amount of the runtime foundation is already implemented.
-
-What is currently implemented in the repository:
-- a working desktop runtime built with React, Vite, and Electron
-- a central `KernelEngine` control plane for memory, process lifecycle, runtime state, and orchestration helpers
-- an `EventBus`-driven interaction system for routing actions like tool execution and system events across the app
-- configuration, keybind, filesystem, window, logging, registry, and AI engines split across `src/app-desktop/`, `src/app-background/`, and `src/shared/`
-- a background DeepAgents runtime created from `src/app-background/engines/ai/agent-instance.ts`
-- provider/model integration plumbing for OpenAI, Google, and Anthropic through the in-app AI runtime
-- AI thread state synchronization into kernel memory through `AIEngine`
-- Electron bridges for filesystem access, global mouse/keyboard input, shell-derived environment variables, and background event streaming
-- registry-driven package loading for windows, widgets, tools, features, and renderers
-- system surfaces such as chat, settings, runtime monitors, and a dockbar-style launcher window
-- a package-oriented architecture with components, widgets, layout primitives, and development surfaces
-- a non-trivial automated test surface across config, filesystem, eventing, kernel behavior, and related orchestration slices
-
-In short, the current architecture is real and usable, but still transitional: the desktop shell, kernel-like control plane, package registry, and background agent runtime are already present, while stronger contracts and cleaner long-term boundaries are still being hardened.
 
 ## Current Engine Surfaces
 
@@ -333,17 +277,6 @@ flowchart LR
 6. Tool output, stream events, and thread snapshots are synchronized back into kernel memory and then reflected into renderer windows.
 7. The renderer consumes that shared state to keep chat, monitors, and other package-driven surfaces live and in sync.
 
-
-## 🗺️ Current Roadmap
-
-- [x] Core KernelEngine and EventBus Implementation
-- [x] Electron background DeepAgents runtime with multi-provider support
-- [ ] **Phase 1:** Hardening the tool execution pipeline
-- [ ] **Phase 2:** Stabilize AI runtime state, provider model sync, and session boundaries
-- [ ] **Phase 3:** Split architecture into clearer app, server, and shared surfaces
-- [ ] **Phase 4:** Advanced Memory & RAG retrieval systems
-- [ ] **Phase 5:** Public Package Registry for community modules
-
 ## Future Prospects
 
 The future direction of ACE is not only “more chat features”. The longer-term goal is to turn the current overlay plus runtime foundation into a programmable agentic workstation where AI can operate with stronger situational awareness, controlled automation, and package-level extensibility.
@@ -357,18 +290,6 @@ Some of the clearest next prospect areas are:
 - **Safer Execution Contracts:** tighter policy layers for filesystem access, tool permissions, scheduling ownership, and package isolation so future automation remains observable and bounded.
 
 Put differently: the present repository is the start of a local-first agent runtime plus overlay shell, while the future prospect is a broader extensible workstation where packages, automation, memory, vision-like screen analysis, and agent scheduling all compose cleanly around the same kernel and registry model.
-
-## Architecture Split Status
-
-The split has already started and the current repository is organized around these practical surfaces:
-- `src/app-desktop`: renderer UI, hooks, overlay behavior, and desktop-facing engines
-- `src/app-background`: background AI runtime, DeepAgents integration, and registry-backed tools
-- `src/shared`: schemas, engine facades, contracts, and runtime-safe shared state models
-- `electron/`: main/preload runtime and OS integration
-
-The next step is not a cosmetic rename. It is to keep reducing leakage between these surfaces so renderer concerns, agent execution concerns, and host concerns stay independently testable.
-
-The end goal is an extensible developer environment where AI, runtime tools, overlay UI, package modules, and session intelligence work together in a clean and durable architecture.
 
 ## 📄 License
 
