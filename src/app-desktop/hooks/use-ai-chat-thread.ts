@@ -5,10 +5,10 @@ import { HumanMessage } from '@langchain/core/messages';
 import { AIEngine } from '#/app-desktop/engines/ai-engine';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import type {
-	AgentConfigurable,
+	AgentConfigurableType,
 	AgentThread,
 	AIProviderType,
-	BackgroundAIStreamEventPayload,
+	BackgroundAIStreamEventPayloadType,
 } from '#/shared/schemas/ai';
 import {
 	createStreamOptions,
@@ -73,7 +73,7 @@ export function useAIChatThread() {
 			return;
 		}
 
-		return window.electronAPI.onBackgroundAIStreamEvent((payload: BackgroundAIStreamEventPayload) => {
+		return window.electronAPI.onBackgroundAIStreamEvent((payload: BackgroundAIStreamEventPayloadType) => {
 			const observedThreadUid = resolveActiveThreadUid(current_thread_uid);
 			console.log('[useAIChatThread stream-event]', {
 				payload_thread_uid: payload.thread_uid,
@@ -205,7 +205,7 @@ export function useAIChatThread() {
 		return thread;
 	};
 
-	const createThread = async (overrides: Partial<AgentConfigurable> = {}) => {
+	const createThread = async (overrides: Partial<AgentConfigurableType> = {}) => {
 		const created = await AIEngine.createThread({
 			thread_uid: overrides.thread_id,
 			checkpoint_id: overrides.checkpoint_id,

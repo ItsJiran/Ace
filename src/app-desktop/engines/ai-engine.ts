@@ -5,11 +5,11 @@ import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { StateEngine } from '#/app-desktop/engines/state-engine';
 import readProcessEnv from '#/shared/lib/read-process-env';
 import type {
-	AgentConfigurable,
-	AgentInvokeContext,
+	AgentConfigurableType,
+	AgentInvokeContextType,
 	AgentThread,
-	AgentThreadSnapshot,
-	AgentThreadSyncPayload,
+	AgentThreadSnapshotType,
+	AgentThreadSyncPayloadType,
 	AIProviderType,
 } from '#/shared/schemas/ai';
 
@@ -24,7 +24,7 @@ type BackgroundThreadListPayloadType = {
 	threads: BackgroundThreadListEntryType[];
 };
 
-async function resolveAgentInvokeContext(): Promise<AgentInvokeContext> {
+async function resolveAgentInvokeContext(): Promise<AgentInvokeContextType> {
 	const desktopState = StateEngine.readDesktopState();
 	const username = await readProcessEnv('USER');
 	const homeDir = username ? `/home/${username}/` : null;
@@ -181,14 +181,14 @@ class DesktopAIEngineSingleton extends Engine {
 		return payload.threads ?? [];
 	}
 
-	async createThread(initialState: Partial<AgentThreadSnapshot> = {}) {
+	async createThread(initialState: Partial<AgentThreadSnapshotType> = {}) {
 		const thread = (
 			(await window.electronAPI?.backgroundCreateThread(
 				initialState as Record<string, unknown>,
 			)) ?? {
 				thread_id: initialState.thread_uid ?? crypto.randomUUID(),
 			}
-		) as AgentConfigurable;
+		) as AgentConfigurableType;
 
 		this.setCurrentThread(thread.thread_id);
 		await this.syncCurrentThreadFromBackground(thread.thread_id);
@@ -199,7 +199,7 @@ class DesktopAIEngineSingleton extends Engine {
 		return await this.syncCurrentThreadFromBackground(threadUid);
 	}
 
-	async syncThread(threadUid: string, payload: AgentThreadSyncPayload = {}) {
+	async syncThread(threadUid: string, payload: AgentThreadSyncPayloadType = {}) {
 		const memoryUid = (
 			(await window.electronAPI?.backgroundSyncThread(
 				threadUid,
@@ -214,7 +214,7 @@ class DesktopAIEngineSingleton extends Engine {
 	async streamThreadPrompt(
 		threadUid: string,
 		prompt: string,
-		overrides: Partial<AgentConfigurable> = {},
+		overrides: Partial<AgentConfigurableType> = {},
 	) {
 		const thread = ((await this.invoke('ai.streamThreadPrompt', {
 			thread_uid: threadUid,

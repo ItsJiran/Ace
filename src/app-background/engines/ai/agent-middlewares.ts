@@ -1,186 +1,20 @@
-import type { AgentConfig, AIProviderType } from '#/shared/schemas/ai';
-import { createCodeInterpreterMiddleware } from "@langchain/quickjs";
-import { AIProviders } from '#/shared/constants/ai';
-import { ConfigEngine } from '#/shared/engines/config-engine';
-import { SystemMessage } from '@langchain/core/messages';
-import { 
-    initChatModel, 
-    createMiddleware, 
-    summarizationMiddleware, 
-    llmToolSelectorMiddleware, 
-    ClearToolUsesEdit, 
-    contextEditingMiddleware,
-} from 'langchain';
-import { AIEngine } from '../ai-engine';
-import resolveApiKey from './resolve-api-key';
+import { createCodeInterpreterMiddleware } from '@langchain/quickjs';
+import { summarizationMiddleware, llmToolSelectorMiddleware } from 'langchain';
 
-function resolveConfiguredProviderName(runtime: AgentConfig): AIProviderType {
-    return (
-        runtime.configurable?.provider ??
-        (ConfigEngine.getConfigItem<AIProviderType>('ai', 'ai.default_provider') as AIProviderType | undefined) ??
-        AIProviders.OPENAI
-    );
-}
-
-function resolveConfiguredModelName(runtime: AgentConfig, providerName: string) {
-    const configuredDefaultModel = ConfigEngine.getConfigItem<string>('ai', 'ai.default_model') as
-        | string
-        | undefined;
-
-    if (runtime.configurable?.model) {
-        return runtime.configurable.model;
-    }
-
-    if (configuredDefaultModel) {
-        return configuredDefaultModel;
-    }
-
-    if (providerName === AIProviders.ANTHROPIC) {
-        return 'claude-3-5-sonnet-latest';
-    }
-
-    if (providerName === AIProviders.GOOGLE) {
-        return 'gemini-2.0-flash';
-    }
-
-    return 'gpt-4o-mini';
-}
-
-/**
- * Runtime configurable model middleware. This middleware allows the agent to dynamically select
- * and initialize a chat model based on the configuration provided in the agent's runtime.
- *
- * The model name is retrieved from the runtime's configurable properties, 
- * and the corresponding
- * chat model is initialized and passed to the handler for processing the request.
- */
-
-const configurableModel = createMiddleware({
-    name: 'ConfigurableModel',
-    wrapModelCall: async (request, handler) => {
-        const runtime = request.runtime as AgentConfig; 
-        const providerName = resolveConfiguredProviderName(runtime); 
-        const modelName = resolveConfiguredModelName(runtime, providerName); 
-        const apiKey = runtime.configurable?.apiKey;
-        const model = await initChatModel(
-            `${providerName}:${modelName}`,
-            apiKey ? { apiKey } : undefined,
-        );
-        return handler({ ...request, model });
-    },
-});
-
-/**
- * contextEditingMiddleware. This middleware allows the agent to 
- * store and retrieve intermediate tool results
- */
-const contextEditingMiddlewareInstance = contextEditingMiddleware({
-    edits: [
-        new ClearToolUsesEdit(),
-    ],
-});
-
-const injectApiKeyMiddleware = createMiddleware({
-    name: 'InjectApiKey',
-    wrapModelCall: async (request, handler) => {
-        const runtime = request.runtime as AgentConfig; 
-        const providerName = resolveConfiguredProviderName(runtime); 
-        const apiKey = runtime.configurable?.apiKey ?? await resolveApiKey(providerName);
-
-        if (!apiKey) {
-            return handler(request);
-        }
-
-        return handler({
-            ...request,
-            runtime: {
-                ...runtime,
-                configurable: {
-                    ...runtime.configurable,
-                    apiKey,
-                },
-            },
-        });
-    },
-});
-
-const injectDesktopContextMiddleware = createMiddleware({
-    name: 'InjectDesktopContext',
-    wrapModelCall: async (request, handler) => {
-        const runtime = request.runtime as AgentConfig;
-        const runtimeContext =
-            runtime.context && typeof runtime.context === 'object'
-                ? (runtime.context as { user?: Record<string, unknown>; desktop?: Record<string, unknown> })
-                : undefined;
-        const userContext = runtimeContext?.user;
-        const desktopContext = runtimeContext?.desktop;
-
-        if (!desktopContext && !userContext) {
-            return handler(request);
-        }
-
-        const safeDesktopContext = desktopContext ?? {};
-
-        const viewportWidth = Number(safeDesktopContext.viewport_width ?? 0);
-        const viewportHeight = Number(safeDesktopContext.viewport_height ?? 0);
-        const viewportCenterX = Number(safeDesktopContext.viewport_center_x ?? 0);
-        const viewportCenterY = Number(safeDesktopContext.viewport_center_y ?? 0);
-        const screenWidth = Number(safeDesktopContext.screen_width ?? 0);
-        const screenHeight = Number(safeDesktopContext.screen_height ?? 0);
-
-        const contextMessage = new SystemMessage([
-            'Runtime context:',
-            `- local username: ${userContext?.username ? String(userContext.username) : 'unknown'}`,
-            `- user home directory: ${userContext?.home_dir ? String(userContext.home_dir) : 'unknown'}`,
-            'Runtime desktop context:',
-            `- screen resolution: ${screenWidth} x ${screenHeight}`,
-            `- viewport size: ${viewportWidth} x ${viewportHeight}`,
-            `- viewport center: (${viewportCenterX}, ${viewportCenterY})`,
-            `- cursor position: (${Number(safeDesktopContext.cursor_x ?? 0)}, ${Number(safeDesktopContext.cursor_y ?? 0)})`,
-            `- overlay mode: ${String(safeDesktopContext.mode ?? 'ambient')}`,
-            `- focused window uid: ${safeDesktopContext.focused_window_uid ? String(safeDesktopContext.focused_window_uid) : 'none'}`,
-            `- active window uid: ${safeDesktopContext.active_window_uid ? String(safeDesktopContext.active_window_uid) : 'none'}`,
-            'Use these values when the user gives spatial instructions like "move to the center" or asks about screen-relative positioning.',
-        ].join('\n'));
-
-        return handler({
-            ...request,
-            messages: [contextMessage, ...(request.messages ?? [])],
-        });
-    },
-});
-
-const syncKernelSpaceMiddleware = createMiddleware({
-    name: 'SyncKernelSpace',
-    afterAgent: async (state, runtime) => {
-        const agentRuntime = runtime as AgentConfig;
-        const thread_id = agentRuntime.configurable?.thread_id;
-
-        if (!thread_id) {
-            return;
-        }
-
-        AIEngine.syncThread(thread_id, {
-            thread_uid: thread_id,
-            checkpoint_id: agentRuntime.configurable?.checkpoint_id,
-            model: agentRuntime.configurable?.model,
-            provider: agentRuntime.configurable?.provider,
-            messages: Array.isArray((state as { messages?: unknown[] }).messages)
-                ? ((state as { messages?: unknown[] }).messages ?? [])
-                : [],
-            state: state as Record<string, unknown>,
-        });
-    },
-});
+import configurableModelMiddleware from './middlewares/configurable-model';
+import contextEditingMiddleware from './middlewares/context-editing';
+import syncDesktopKernelSpaceMiddleware from './middlewares/sync-frontend-kernel';
+import injectApiKeyMiddleware from './middlewares/inject-api-key';
+import injectDesktopContextMiddleware from './middlewares/inject-desktop-context';
 
 export default [
     injectApiKeyMiddleware,
     injectDesktopContextMiddleware,
-    configurableModel, 
-    syncKernelSpaceMiddleware,
+    configurableModelMiddleware,
+    syncDesktopKernelSpaceMiddleware,
 
-    summarizationMiddleware, 
+    summarizationMiddleware,
     llmToolSelectorMiddleware,
-    contextEditingMiddlewareInstance,
-    createCodeInterpreterMiddleware(), 
+    contextEditingMiddleware,
+    createCodeInterpreterMiddleware(),
 ];

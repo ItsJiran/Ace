@@ -1,17 +1,17 @@
 import { AIProviders } from '#/shared/constants/ai.ts';
 
 import type {
-    AgentConfigurable,
-    AgentInvokeContext,
-    AgentThreadSnapshot,
+    AgentConfigurableType,
+    AgentInvokeContextType,
+    AgentThreadSnapshotType,
     AgentThread,
-    AgentThreadSyncPayload,
+    AgentThreadSyncPayloadType,
     AIProviderType,
 } from '#/shared/schemas/ai.ts';
 
 
 import SingletonAgentInstance from './ai/agent-instance';
-import resolveApiKey from './ai/resolve-api-key';
+import resolveApiKey from '../lib/utils/ai/resolve-api-key';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
@@ -224,7 +224,7 @@ class AIEngineSingleton extends Engine {
     public async streamThreadPrompt(
         thread_uid: string,
         prompt: string,
-        overrides: Partial<AgentConfigurable> = {},
+        overrides: Partial<AgentConfigurableType> = {},
         context?: Record<string, unknown>,
     ) {
         const normalizedPrompt = prompt.trim();
@@ -264,7 +264,7 @@ class AIEngineSingleton extends Engine {
             },
             {
                 version: 'v3',
-                ...(context ? { context: context as unknown as AgentInvokeContext } : {}),
+                ...(context ? { context: context as unknown as AgentInvokeContextType } : {}),
                 configurable: {
                     thread_id: thread_uid,
                     // checkpoint_id,
@@ -570,11 +570,11 @@ class AIEngineSingleton extends Engine {
     // + ----- API Threads ----------------------------------------------------------------------------+
 
     public createThread(
-        initialState: Partial<AgentThreadSnapshot> = {
+        initialState: Partial<AgentThreadSnapshotType> = {
             model: ConfigEngine.getConfigItem<string>('ai', 'ai.default_model'),
             provider: ConfigEngine.getConfigItem<AIProviderType>('ai', 'ai.default_provider'),
         },
-    ): AgentConfigurable {
+    ): AgentConfigurableType {
         const thread_id = initialState.thread_uid ?? crypto.randomUUID();
 
         this.syncThread(thread_id, initialState);
@@ -588,12 +588,12 @@ class AIEngineSingleton extends Engine {
         };
     }
 
-    public syncThread(thread_uid: string, payload: AgentThreadSyncPayload = {}): string {
+    public syncThread(thread_uid: string, payload: AgentThreadSyncPayloadType = {}): string {
         const memory_uid = this.ensureThreadIndex(thread_uid);
         const existingThread = KernelEngine.readMemory(memory_uid) as AgentThread | undefined;
         const now = Date.now();
 
-        const nextSnapshot: AgentThreadSnapshot = {
+        const nextSnapshot: AgentThreadSnapshotType = {
             thread_uid,
             checkpoint_id: payload.checkpoint_id ?? existingThread?.checkpoint_id,
             model: payload.model ?? existingThread?.model,

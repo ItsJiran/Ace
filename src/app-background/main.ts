@@ -1,7 +1,7 @@
 import { AIEngine } from './engines/ai-engine';
 import { bootBackgroundRuntime } from '../background';
 import { setBackgroundAIStreamEmitter } from './engines/ai-stream-events';
-import type { BackgroundAIStreamEventPayload } from '#/shared/schemas/ai.ts';
+import type { BackgroundAIStreamEventPayloadType } from '#/shared/schemas/ai.ts';
 
 type BackgroundRPCRequest = {
 	id: string;
@@ -29,7 +29,7 @@ type BackgroundRPCReady = {
 
 type BackgroundStreamEventMessage = {
 	type: 'ace:background:stream:event';
-	payload: BackgroundAIStreamEventPayload;
+	payload: BackgroundAIStreamEventPayloadType;
 };
 
 let backgroundReadyPromise: Promise<void> | null = null;

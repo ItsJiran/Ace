@@ -4,7 +4,7 @@ import { Client as LangGraphClient } from '@langchain/langgraph-sdk/client';
 import type { Command, Message } from '@langchain/protocol';
 
 import { AIEngine } from '#/app-desktop/engines/ai-engine';
-import type { AgentThread, BackgroundAIStreamEventPayload } from '#/shared/schemas/ai';
+import type { AgentThread, BackgroundAIStreamEventPayloadType } from '#/shared/schemas/ai';
 
 import {
 	resolvePromptFromInput,
@@ -90,7 +90,7 @@ function ensureBackgroundAIStreamListener() {
 	}
 
 	removeBackgroundAIStreamListener = window.electronAPI.onBackgroundAIStreamEvent(
-		(payload: BackgroundAIStreamEventPayload) => {
+		(payload: BackgroundAIStreamEventPayloadType) => {
 			for (const sessionKey of resolveSessionKeysForPayload(payload.thread_uid)) {
 				threadTransportSessions.get(sessionKey)?.queue.push(payload.message);
 			}

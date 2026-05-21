@@ -33,7 +33,7 @@ interface ElectronAPI {
     backgroundReadThread: (threadUid: string) => Promise<unknown>;
     backgroundSyncThread: (threadUid: string, thread?: Record<string, unknown>) => Promise<string>;
     backgroundDeleteThread: (threadUid: string) => Promise<boolean>;
-    onBackgroundAIStreamEvent: (callback: (payload: import('#/shared/schemas/ai').BackgroundAIStreamEventPayload) => void) => () => void;
+    onBackgroundAIStreamEvent: (callback: (payload: import('#/shared/schemas/ai').BackgroundAIStreamEventPayloadType) => void) => () => void;
 }
 
 interface EnvVariablesAPI {
