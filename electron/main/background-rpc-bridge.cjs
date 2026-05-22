@@ -1,4 +1,6 @@
 const path = require('path');
+const fs = require('fs');
+const { pathToFileURL } = require('url');
 const { spawn } = require('child_process');
 
 /**
@@ -144,14 +146,25 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
 
         const loaderPath = path.join(projectRoot, 'scripts', 'background-alias-loader.mjs');
         const entryPath = path.join(projectRoot, 'src', 'app-background', 'main.ts');
+        const packagedRuntimeRoot = projectRoot.includes('.asar')
+            ? path.join(path.dirname(projectRoot), 'app.asar.unpacked')
+            : projectRoot;
+        const tsxImportPath = pathToFileURL(
+            path.join(packagedRuntimeRoot, 'node_modules', 'tsx', 'dist', 'loader.mjs'),
+        ).href;
+                const runtimeCwd = projectRoot.includes('.asar')
+                        ? path.dirname(projectRoot)
+                        : fs.existsSync(projectRoot) && fs.statSync(projectRoot).isDirectory()
+                            ? projectRoot
+                            : path.dirname(projectRoot);
 
         createReadyPromise();
 
         backgroundRuntimeProcess = spawn(
             process.execPath,
-            ['--import', 'tsx', '--loader', loaderPath, entryPath],
+            ['--import', tsxImportPath, '--loader', loaderPath, entryPath],
             {
-                cwd: projectRoot,
+                cwd: runtimeCwd,
                 env: {
                     ...process.env,
                     ELECTRON_RUN_AS_NODE: '1',
