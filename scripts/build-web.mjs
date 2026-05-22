@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile);
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, '..');
 const srcWebDir = path.join(projectRoot, 'src-web');
-const distWebDir = path.join(projectRoot, 'dist-web');
+const distWebDir = path.join(projectRoot, 'docs');
 const distAssetsDir = path.join(distWebDir, 'assets');
 const publicDir = path.join(projectRoot, 'public');
 const projectAssetsDir = path.join(projectRoot, 'assets');
@@ -65,7 +65,7 @@ async function main() {
   await copyStaticFiles();
 
   const builtFiles = await readdir(distWebDir);
-  console.log('[build-web] Built /dist-web with files:', builtFiles.join(', '));
+  console.log('[build-web] Built /docs with files:', builtFiles.join(', '));
 }
 
 main().catch((error) => {
