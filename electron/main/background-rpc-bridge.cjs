@@ -1,7 +1,7 @@
 const path = require('path');
 const { spawn } = require('child_process');
 
-function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode, invokeDesktop }) {
+function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, invokeDesktop }) {
     let backgroundRuntimeProcess = null;
     let backgroundReadyPromise = null;
     let backgroundReadyResolver = null;
@@ -42,7 +42,7 @@ function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode
         backgroundPendingRequests.clear();
     }
 
-    async function handleDesktopRequest(message) {
+    async function handleDesktopRpcRequest(message) {
         if (!backgroundRuntimeProcess || typeof backgroundRuntimeProcess.send !== 'function') {
             return;
         }
@@ -79,7 +79,7 @@ function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode
         }
 
         if (message.type === 'ace:background:desktop:request' && message.id) {
-            void handleDesktopRequest(message);
+            void handleDesktopRpcRequest(message);
             return;
         }
 
@@ -222,15 +222,14 @@ function createBackgroundRuntimeBridge({ projectRoot, resolveElectronRuntimeMode
     }
 
     return {
-        start,
         ensure,
         invoke,
         getStatus,
-        onStreamEvent,
         dispose,
+        onStreamEvent,
     };
 }
 
 module.exports = {
-    createBackgroundRuntimeBridge,
+    createBackgroundRpcBridge,
 };

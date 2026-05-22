@@ -1,41 +1,16 @@
 import { AIEngine } from './engines/ai-engine';
 import { bootBackgroundRuntime } from '../background';
 import { setBackgroundAIStreamEmitter } from './engines/ai-stream-events';
-import type { BackgroundAIStreamEventPayloadType } from '#/shared/schemas/ai.ts';
-
-type BackgroundRPCRequest = {
-	id: string;
-	method: string;
-	payload?: Record<string, unknown>;
-};
-
-type BackgroundRPCSuccess = {
-	type: 'ace:background:rpc:result';
-	id: string;
-	success: true;
-	result: unknown;
-};
-
-type BackgroundRPCFailure = {
-	type: 'ace:background:rpc:result';
-	id: string;
-	success: false;
-	error: { message: string; stack?: string };
-};
-
-type BackgroundRPCReady = {
-	type: 'ace:background:ready';
-};
-
-type BackgroundStreamEventMessage = {
-	type: 'ace:background:stream:event';
-	payload: BackgroundAIStreamEventPayloadType;
-};
+import type {
+	BackgroundRPCInboundMessage,
+	BackgroundRPCOutboundMessage,
+	BackgroundRPCRequestMessage,
+} from '#/shared/schemas/background-rpc';
 
 let backgroundReadyPromise: Promise<void> | null = null;
 
 function sendToParent(
-	message: BackgroundRPCSuccess | BackgroundRPCFailure | BackgroundRPCReady | BackgroundStreamEventMessage,
+	message: BackgroundRPCOutboundMessage,
 ) {
 	if (typeof process.send === 'function') {
 		process.send(message);
@@ -93,7 +68,7 @@ async function handleRPC(method: string, payload: Record<string, unknown> = {}) 
 	}
 }
 
-async function handleRPCRequest(message: BackgroundRPCRequest) {
+async function handleRPCRequest(message: BackgroundRPCRequestMessage) {
 	try {
 		await ensureBackgroundRuntimeBooted();
 		const result = await handleRPC(message.method, message.payload);
@@ -122,12 +97,13 @@ process.on('message', (message) => {
 		return;
 	}
 
-	const payload = message as Partial<BackgroundRPCRequest> & { type?: string };
+	const payload = message as Partial<BackgroundRPCInboundMessage>;
 	if (payload.type !== 'ace:background:rpc:request' || !payload.id || !payload.method) {
 		return;
 	}
 
 	void handleRPCRequest({
+		type: 'ace:background:rpc:request',
 		id: payload.id,
 		method: payload.method,
 		payload: payload.payload,

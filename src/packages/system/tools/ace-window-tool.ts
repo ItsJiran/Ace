@@ -1,5 +1,5 @@
 import { defineTool } from '#/lib/define-registry';
-import { invokeDesktopRuntime } from '#/app-background/engines/desktop-runtime';
+import { DesktopRPCEngine } from '#/app-background/engines/desktop-rpc-engine';
 
 type AceWindowToolInput = {
 	action:
@@ -31,39 +31,39 @@ type AceWindowToolInput = {
 async function AceWindowTool(input: AceWindowToolInput) {
 	switch (input.action) {
 		case 'list_windows':
-			return await invokeDesktopRuntime('window.list');
+			return await DesktopRPCEngine.invoke('window.list');
 		case 'get_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for get_window.');
 			}
-			return await invokeDesktopRuntime('window.get', { window_uid: input.window_uid });
+			return await DesktopRPCEngine.invoke('window.get', { window_uid: input.window_uid });
 		case 'focus_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for focus_window.');
 			}
-			return await invokeDesktopRuntime('window.focus', { window_uid: input.window_uid });
+			return await DesktopRPCEngine.invoke('window.focus', { window_uid: input.window_uid });
 		case 'minimize_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for minimize_window.');
 			}
-			return await invokeDesktopRuntime('window.minimize', { window_uid: input.window_uid });
+			return await DesktopRPCEngine.invoke('window.minimize', { window_uid: input.window_uid });
 		case 'restore_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for restore_window.');
 			}
-			return await invokeDesktopRuntime('window.restore', { window_uid: input.window_uid });
+			return await DesktopRPCEngine.invoke('window.restore', { window_uid: input.window_uid });
 		case 'close_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for close_window.');
 			}
-			return await invokeDesktopRuntime('window.close', { window_uid: input.window_uid });
+			return await DesktopRPCEngine.invoke('window.close', { window_uid: input.window_uid });
 		case 'move_window':
 		case 'resize_window':
 		case 'update_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for window updates.');
 			}
-			return await invokeDesktopRuntime('window.update', {
+			return await DesktopRPCEngine.invoke('window.update', {
 				window_uid: input.window_uid,
 				x: input.x,
 				y: input.y,
@@ -80,7 +80,7 @@ async function AceWindowTool(input: AceWindowToolInput) {
 			if (!input.package || !input.window) {
 				throw new Error('package and window are required for spawn_window.');
 			}
-			return await invokeDesktopRuntime('window.spawn', {
+			return await DesktopRPCEngine.invoke('window.spawn', {
 				package: input.package,
 				window: input.window,
 				title: input.title,

@@ -7,7 +7,7 @@ const {
     getAppLocalRootDir,
     resolveElectronRuntimeMode,
 } = require('./main/runtime-paths.cjs');
-const { createBackgroundRuntimeBridge } = require('./main/background-runtime.cjs');
+const { createBackgroundRpcBridge } = require('./main/background-rpc-bridge.cjs');
 const { createGlobalInputController } = require('./main/global-input.cjs');
 const { applyAlwaysOnTop, createMainWindow } = require('./main/window.cjs');
 const { registerMainIPCHandlers } = require('./main/ipc-routes.cjs');
@@ -28,7 +28,7 @@ process.stderr.write = (chunk, encoding, callback) => {
 const isForcedProd = process.env.ACE_ELECTRON_FORCE_PROD === 'true';
 const isDev = !app.isPackaged && !isForcedProd;
 const projectRoot = path.join(__dirname, '..');
-const backgroundRuntime = createBackgroundRuntimeBridge({
+const backgroundRuntime = createBackgroundRpcBridge({
     projectRoot,
     resolveElectronRuntimeMode,
     invokeDesktop: async (method, payload = {}) => {

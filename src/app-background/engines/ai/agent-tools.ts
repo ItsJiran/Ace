@@ -1,6 +1,4 @@
-import { tool as defineTool } from 'langchain';
 import type { StructuredToolInterface } from '@langchain/core/tools';
-
 import { resolveAgentToolsFromRegistry } from './agent-tool-registry';
 import resolveShellTools from './tools/resolve-shell';
 
