@@ -18,6 +18,7 @@
     "dev:perf": "env VITE_PERF_LOG=true npm run dev:desktop",
     "start": "npm run start:electron",
     "build": "npm run build:electron",
+    "build:web": "node scripts/build-web.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",

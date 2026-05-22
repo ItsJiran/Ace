@@ -100,52 +100,15 @@ npm run dev
 This starts:
 - the Vite renderer dev server
 - the Electron main process
+
 ### Temporary Filesystem Security Note
-
-ACE currently runs DeepAgents with filesystem permissions explicitly set to allow both `read` and `write` operations across all mounted backend routes used by the MVP runtime.
-
-This is a deliberate temporary tradeoff for MVP velocity so the local agent can inspect, edit, delete, rewrite, and persist project artifacts without friction while the tool/runtime contract is still settling.
-
-In practical terms for the current MVP state, ACE is intentionally permissive across the routed home-directory filesystem mount, so the agent can operate on files under the mounted home path without fine-grained resolution yet.
-
-The current workflow also allows command execution for MVP iteration, which means batch-edit scripts, temporary shell helpers, and command-driven file transformations are intentionally available while stricter policy layers are still pending.
-
-Important caveats for the current MVP state:
-- this is not a hardened least-privilege policy yet
-- filesystem access is intentionally permissive for agent workflows during rapid iteration, including the routed home filesystem mount
-- bulk file changes may currently be performed through temporary shell scripts or command-driven workflows for speed and consistency
-- stronger route-scoped and tool-scoped permission rules should be added before treating the runtime as production-hardened
-
-In short: the current filesystem permission model is intentionally permissive for experimentation, including broad home-route access for MVP workflows, and that should be treated as a temporary security issue accepted for MVP delivery rather than a final posture.
-
-## Current Engine Surfaces
-
-The current engine layer is centered on these runtime domains:
-- `KernelEngine`: control plane for system memory, process lifecycle, and orchestration helpers
-- `ConfigEngine`: schema-driven config persistence with versioned files and kernel RAM sync
-- `FSEngine`: local file persistence with Electron-backed adapters and fallback behavior
-- `WindowEngine`: desktop/window coordination, overlay interaction, and global input routing
-- `KeybindEngine`: active keybind resolution and input-driven command dispatch
-- `RegistryEngine`: package and runtime registration surface
-- `AIEngine`: AI thread state, provider/model helpers, background thread orchestration, and live stream synchronization
-- `EventEngine` / `EventBus`: decoupled routing layer for runtime events
-
-## 🛠 Technical Decisions & AI Implementation
-
-### Why DeepAgents + LangChain?
-The AI agent intelligence in ACE currently uses **DeepAgents** built on top of **LangChain**, executed in an Electron-managed background runtime. While many frameworks exist, this choice was driven by a need for high-speed delivery without sacrificing orchestration power:
-
-*   **Speed over Boilerplate:** Leveraging a pre-built agentic framework allowed me to focus on ACE's unique overlay logic rather than building a custom **LangGraph** from scratch. Managing complex nodes, edges, and state transitions manually would have significantly delayed the experimental cycle.
-*   **ReAct vs. Custom Loops:** Implementing a reliable **ReAct** (Reasoning and Acting) pattern is non-trivial. DeepAgents provides a battle-tested execution loop that handles tool calling and observation cycles out of the box.
-*   **LangChain Ecosystem:** By using LangChain as the backbone, ACE stays compatible with a vast ecosystem of document loaders, retrievers, and model providers, ensuring the "local-first" vision remains flexible.
+MVP Security Notice: ACE intentionally runs DeepAgents with permissive read/write filesystem access and broad command execution capabilities across the mounted home directory. This is a deliberate, temporary tradeoff to maximize MVP velocity—allowing the agent to inspect, edit, and rewrite project artifacts via batch scripts and shell helpers without friction while the core runtime contracts are still settling. This current posture is not a hardened least-privilege policy; it should be treated as an accepted security issue for rapid iteration that requires strict route-scoped and tool-scoped permission layers before any production release.
 
 ### Deep Dive & Developer Logs
 For a more detailed technical breakdown, architectural logs, and the journey of building ACE, check out my blog:
 👉 **[jiran.dev/projects/ace](https://jiran.dev/projects/ace)**
 
 ## Architecture Overview
-
-At a high level, ACE is structured around the real runtime entrypoints and package surfaces that exist in this repository today. `src/desktop.ts` boots the renderer-side desktop runtime. `src/background.ts` boots the dedicated background runtime. `src/shared/` provides the common contracts and core engines. `src/packages/` contributes registry-loaded windows, widgets, tools, renderers, and related package surfaces that are mounted into the running system.
 
 ```mermaid
 flowchart LR
@@ -266,16 +229,6 @@ flowchart LR
 - DeepAgents-specific composition currently lives under `src/app-background/engines/ai/`, including the agent instance, middleware stack, backend wiring, and tool-facing integration points.
 - AI streaming and persisted thread synchronization flow through shared kernel state so windows like chat and monitors can reflect both live and durable runtime state.
 - The architecture already reflects a practical split between desktop, background, shared, electron, and package layers; the main ongoing task is reducing leakage between those real surfaces rather than inventing a new separation model.
-
-### Runtime Flow In Practice
-
-1. A user action starts from an overlay surface such as chat, dockbar, or a system window.
-2. Renderer-side components call into desktop engines and shared contracts rather than directly mutating host state.
-3. Desktop engines persist durable state into `KernelEngine` and route interactions through `RegistryEngine` or `EventBus` when appropriate.
-4. When AI execution is needed, desktop `AIEngine` forwards the request through Electron IPC into the dedicated background runtime.
-5. Background `AIEngine` invokes the DeepAgents instance, which resolves middlewares, tools, backends, and provider calls.
-6. Tool output, stream events, and thread snapshots are synchronized back into kernel memory and then reflected into renderer windows.
-7. The renderer consumes that shared state to keep chat, monitors, and other package-driven surfaces live and in sync.
 
 ## Future Prospects
 

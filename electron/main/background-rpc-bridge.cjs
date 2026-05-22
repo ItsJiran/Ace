@@ -1,6 +1,19 @@
 const path = require('path');
 const { spawn } = require('child_process');
 
+/**
+ * Background RPC bridge owned by Electron main.
+ *
+ * Responsibilities:
+ * - spawn and supervise the background runtime child process
+ * - broker request/response RPC between Electron main and the background runtime
+ * - relay desktop-only RPC requests coming from background to the desktop renderer
+ * - fan out one-way background stream events to Electron-side listeners
+ *
+ * This module is intentionally a bridge, not the background runtime itself.
+ * Electron main remains the broker/process host, the background runtime remains
+ * the execution runtime, and the desktop renderer remains the UI runtime.
+ */
 function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, invokeDesktop }) {
     let backgroundRuntimeProcess = null;
     let backgroundReadyPromise = null;
@@ -10,6 +23,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
     const backgroundPendingRequests = new Map();
     const backgroundStreamListeners = new Set();
 
+    // Determine whether the background child process is currently alive and usable.
     function isAlive() {
         return Boolean(
             backgroundRuntimeProcess &&
@@ -18,6 +32,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         );
     }
 
+    // Rebuild the deferred boot promise whenever we start a fresh child runtime.
     function createReadyPromise() {
         backgroundReadyPromise = new Promise((resolve, reject) => {
             backgroundReadyResolver = resolve;
@@ -26,6 +41,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         return backgroundReadyPromise;
     }
 
+    // Reset bridge state and reject any pending RPC calls when the child stops.
     function reset(error) {
         if (backgroundReadyRejecter && error) {
             backgroundReadyRejecter(error);
@@ -42,6 +58,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         backgroundPendingRequests.clear();
     }
 
+    // Forward background-originated desktop RPC calls into the desktop renderer host bridge.
     async function handleDesktopRpcRequest(message) {
         if (!backgroundRuntimeProcess || typeof backgroundRuntimeProcess.send !== 'function') {
             return;
@@ -73,6 +90,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         }
     }
 
+    // Handle all child-process IPC messages: desktop RPC, ready state, streams, and RPC results.
     function handleMessage(message) {
         if (!message || typeof message !== 'object') {
             return;
@@ -118,6 +136,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         pending.reject(error);
     }
 
+    // Spawn and wire the background child process when the bridge is first needed.
     function start() {
         if (isAlive()) {
             return backgroundReadyPromise ?? Promise.resolve();
@@ -165,6 +184,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         return backgroundReadyPromise;
     }
 
+    // Ensure the background runtime exists before any RPC call is attempted.
     async function ensure() {
         if (resolveElectronRuntimeMode() === 'background') {
             return;
@@ -173,6 +193,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         return await start();
     }
 
+    // Invoke a request/response RPC against the background child runtime.
     async function invoke(method, payload = {}) {
         await ensure();
 
@@ -200,6 +221,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         });
     }
 
+    // Expose bridge-level runtime status for diagnostics and UI inspection.
     function getStatus() {
         return {
             active: isAlive(),
@@ -208,12 +230,14 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         };
     }
 
+    // Stop the child process during shutdown or runtime teardown.
     function dispose() {
         if (backgroundRuntimeProcess && !backgroundRuntimeProcess.killed) {
             backgroundRuntimeProcess.kill();
         }
     }
 
+    // Subscribe Electron-side listeners to one-way background stream events.
     function onStreamEvent(listener) {
         backgroundStreamListeners.add(listener);
         return () => {

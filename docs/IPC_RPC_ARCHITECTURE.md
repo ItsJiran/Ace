@@ -34,6 +34,18 @@ ACE utilizes two communication patterns:
 
 ## Current Flow
 
+## RPC Bridge Diagram
+
+```mermaid
+flowchart LR
+   R[Desktop Renderer\nBrowserWindow / Chromium] -->|Electron IPC| M[Electron Main\nBroker / Process Host]
+   M -->|background RPC request| B[Background Runtime\nNode child process]
+   B -->|desktop RPC request| M
+   M -->|desktop host bridge| R
+   B -. stream events .-> M
+   M -. mirrored stream / IPC .-> R
+```
+
 ### Renderer to Background
 The renderer utilizes Electron IPC exposed via a preload script. From the renderer's perspective, this looks like a standard method call, such as `backgroundInvoke(...)`.
 

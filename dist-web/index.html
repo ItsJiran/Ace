@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>ACE — Agentic Client Environment</title>
+        <meta
+            name="description"
+            content="ACE is a local-first agentic desktop environment with an overlay UI, Electron runtime, DeepAgents orchestration, package registry domains, and live tool execution."
+        />
+        <link rel="icon" href="./favicon.ico" sizes="any" />
+        <link rel="icon" href="./favicon-32x32.png" type="image/png" />
+        <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+        <link rel="stylesheet" href="./assets/web.css" />
+    </head>
+    <body class="min-h-screen bg-scene-gradient text-slate-800 antialiased">
+        <div class="page-noise"></div>
+        <div
+            class="relative mx-auto flex min-h-screen max-w-7xl flex-col px-5 pb-12 pt-6 sm:px-8 lg:px-10"
+        >
+            <header
+                class="system-shell system-shell-primary rounded-[28px] px-5 py-4 shadow-panel-fade"
+            >
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div class="flex items-center gap-4">
+                        <div class="h-11 w-11 rounded-[14px]">
+                            <img
+                                src="./android-chrome-192x192.png"
+                                alt="ACE logo"
+                                class="h-full w-full rounded-[10px] object-cover"
+                            />
+                        </div>
+                        <div>
+                            <div class="text-lg font-semibold text-slate-800">ACE</div>
+                            <div class="text-[11px] uppercase tracking-[0.1em] text-slate-500">
+                                Agentic Client Environment
+                            </div>
+                        </div>
+                    </div>
+                    <div
+                        class="flex flex-wrap items-center gap-2 text-[11px] capitalize tracking-[0.18em] text-slate-500"
+                    >
+                        <span class="status-pill">local-first</span>
+                        <span class="status-pill">electron</span>
+                        <span class="status-pill">deepagents</span>
+                        <span class="status-pill">experimental</span>
+                    </div>
+                </div>
+            </header>
+
+            <main class="mt-6 flex-1 gap-6 flex flex-col">
+                <section
+                    class="system-shell system-shell-primary overflow-hidden rounded-[34px] px-6 py-7 shadow-panel"
+                >
+                    <div class="max-w-full">
+                        <div
+                            class="inline-flex items-center rounded-full border border-white/50 bg-white/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500"
+                        >
+                            Overlay-native developer workspace
+                        </div>
+                        <h1
+                            class="mt-5 max-w-4xl text-lg font-semibold tracking-[-0.04em] text-slate-900 sm:text-xl lg:text-3xl"
+                        >
+                            A local-first agent runtime that lives on top of your desktop, not
+                            behind another tab.
+                        </h1>
+                        <p class="mt-5 max-w-2xl text-sm leading-7 text-slate-600 sm:text-[15px]">
+                            ACE combines an Electron shell, React overlay surfaces, a background
+                            DeepAgents runtime, live tool execution, and a package-driven registry
+                            model into one ambient environment for building and operating AI-native
+                            workflows.
+                        </p>
+                        <div class="mt-6 flex flex-wrap gap-3">
+                            <a href="https://github.com/itsjiran" target="_blank" class="cta-primary">
+                                <span class="cta-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77 5.44 5.44 0 0 0 3.5 8.52c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+                                    </svg>
+                                </span>
+                                <span>View Project</span>
+                            </a>
+                            <a href="https://jiran.dev/projects/ace" target="_blank" class="cta-primary">
+                                <span class="cta-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M14 3h7v7" />
+                                        <path d="M10 14 21 3" />
+                                        <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+                                    </svg>
+                                </span>
+                                <span>Blog Post</span>
+                            </a>
+                            <a href="#architecture" class="cta-secondary">
+                                <span class="cta-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                        <path d="M3.3 7 12 12l8.7-5" />
+                                        <path d="M12 22V12" />
+                                    </svg>
+                                </span>
+                                <span>Explore Architecture</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 grid gap-4 md:grid-cols-3">
+                        <article class="system-container-primary rounded-[22px] p-4">
+                            <div class="eyebrow">Runtime</div>
+                            <h2 class="mt-2 text-lg font-semibold text-slate-800">
+                                Background orchestration
+                            </h2>
+                            <p class="text-sm leading-5 mt-1 text-slate-600">
+                                Dedicated Node background runtime for agent execution, structured
+                                tools, and streamed lifecycle events.
+                            </p>
+                        </article>
+                        <article class="system-container-primary rounded-[22px] p-4">
+                            <div class="eyebrow">Desktop</div>
+                            <h2 class="mt-2 text-lg font-semibold text-slate-800">
+                                Overlay window system
+                            </h2>
+                            <p class="text-sm leading-5 mt-1 text-slate-600">
+                                Window shells, widgets, dockbar surfaces, and system monitors
+                                designed as a desktop-native interface layer.
+                            </p>
+                        </article>
+                        <article class="system-container-primary rounded-[22px] p-4">
+                            <div class="eyebrow">Extension</div>
+                            <h2 class="mt-2 text-lg font-semibold text-slate-800">
+                                Package registry
+                            </h2>
+                            <p class="text-sm leading-5 mt-1 text-slate-600">
+                                Registry domains for tools, windows, widgets, renderers, features,
+                                and future workspace capabilities.
+                            </p>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="mt-6 grid gap-6">
+                    <article
+                        class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                    >
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <div class="eyebrow">Visual demo</div>
+                                <h2
+                                    class="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-900"
+                                >
+                                    Windowing, agent flow, and desktop-native interaction in motion.
+                                </h2>
+                            </div>
+                            <a
+                                href="https://www.youtube.com/watch?v=f9zeMf6KNdQ"
+                                target="_blank"
+                                rel="noreferrer"
+                                class="cta-secondary whitespace-nowrap"
+                                >
+                                <span class="cta-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.6 3.5 12 3.5 12 3.5s-7.6 0-9.4.6A3 3 0 0 0 .5 6.2 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.8.6 9.4.6 9.4.6s7.6 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8ZM9.6 15.8V8.2l6.7 3.8-6.7 3.8Z" />
+                                    </svg>
+                                </span>
+                                <span>Watch video demo</span></a
+                            >
+                        </div>
+
+                        <div class="mt-5 grid gap-4 md:grid-cols-2">
+                            <figure class="demo-frame">
+                                <img
+                                    src="./assets/1.gif"
+                                    alt="ACE windowing system demo"
+                                    class="demo-media"
+                                />
+                                <figcaption class="demo-caption">
+                                    Window composition and desktop-native surface orchestration.
+                                </figcaption>
+                            </figure>
+                            <figure class="demo-frame">
+                                <img
+                                    src="./assets/2.gif"
+                                    alt="ACE agent workflow demo"
+                                    class="demo-media"
+                                />
+                                <figcaption class="demo-caption">
+                                    Agent workflow, tool execution, and live runtime feedback.
+                                </figcaption>
+                            </figure>
+                        </div>
+                    </article>
+                </section>
+
+                <section class="mt-6 grid gap-6 w-full">
+                    <article
+                        class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                    >
+                        <div class="eyebrow">Demonstration</div>
+                        <div class="mt-4 gap-4 flex flex-col sm:flex-row w-full">
+                            <div class="system-container-primary w-full rounded-[20px] p-4">
+                                <div class="text-md font-semibold text-slate-800">
+                                    Full video walkthrough
+                                </div>
+                                <p class="text-sm leading-5 mt-1 text-slate-600">
+                                    See the current ACE experience in motion, including the overlay
+                                    shell, package-driven UI surfaces, and the evolving agent
+                                    runtime.
+                                </p>
+                                <a
+                                    href="https://www.youtube.com/watch?v=f9zeMf6KNdQ"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    class="mt-4 inline-flex cta-primary"
+                                    >
+                                    <span class="cta-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.6 3.5 12 3.5 12 3.5s-7.6 0-9.4.6A3 3 0 0 0 .5 6.2 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.8.6 9.4.6 9.4.6s7.6 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8ZM9.6 15.8V8.2l6.7 3.8-6.7 3.8Z" />
+                                        </svg>
+                                    </span>
+                                    <span>Open YouTube demonstration</span></a
+                                >
+                            </div>
+                        </div>
+                    </article>
+                </section>
+
+                <aside class="flex flex-col sm:flex-row gap-6">
+                    <section
+                        class="system-shell system-shell-primary rounded-[30px] px-5 py-5 shadow-panel-fade"
+                    >
+                        <div class="eyebrow">System principles</div>
+                        <div class="mt-4 space-y-3">
+                            <div class="system-container-primary rounded-[18px] p-4">
+                                <div class="text-md font-semibold text-slate-800">
+                                    Process isolation
+                                </div>
+                                <p class="text-sm leading-5 mt-1 text-slate-600">
+                                    Desktop renderer and background runtime do not share heap
+                                    memory. Shared code is contract reuse, not shared state.
+                                </p>
+                            </div>
+                            <div class="system-container-primary rounded-[18px] p-4">
+                                <div class="text-md font-semibold text-slate-800">
+                                    RPC where results matter
+                                </div>
+                                <p class="text-sm leading-5 mt-1 text-slate-600">
+                                    Cross-runtime commands use RPC semantics, while observability
+                                    and live lifecycle updates travel through stream events.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section
+                        class="system-shell system-shell-primary rounded-[30px] px-5 py-5 shadow-panel-fade"
+                    >
+                        <div class="eyebrow">Core stack</div>
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            <div class="stack-card">
+                                <div class="stack-icon">TS</div>
+                                <div>
+                                    <div class="stack-title">TypeScript</div>
+                                    <div class="stack-copy">Typed contracts and engine APIs.</div>
+                                </div>
+                            </div>
+                            <div class="stack-card">
+                                <div class="stack-icon">R</div>
+                                <div>
+                                    <div class="stack-title">React</div>
+                                    <div class="stack-copy">Overlay UI, windows, and system surfaces.</div>
+                                </div>
+                            </div>
+                            <div class="stack-card">
+                                <div class="stack-icon">EL</div>
+                                <div>
+                                    <div class="stack-title">Electron</div>
+                                    <div class="stack-copy">Desktop host, process model, and IPC broker.</div>
+                                </div>
+                            </div>
+                            <div class="stack-card">
+                                <div class="stack-icon">V</div>
+                                <div>
+                                    <div class="stack-title">Vite</div>
+                                    <div class="stack-copy">Fast renderer iteration and build tooling.</div>
+                                </div>
+                            </div>
+                            <div class="stack-card">
+                                <div class="stack-icon">TW</div>
+                                <div>
+                                    <div class="stack-title">Tailwind CSS</div>
+                                    <div class="stack-copy">Glass styling language for shells and panels.</div>
+                                </div>
+                            </div>
+                            <div class="stack-card stack-card-accent">
+                                <div class="stack-icon">AI</div>
+                                <div>
+                                    <div class="stack-title">DeepAgents</div>
+                                    <div class="stack-copy">Background orchestration, tool flows, and streaming.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </aside>
+            </main>
+
+            <section id="architecture" class="mt-6 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+                <article
+                    class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                >
+                    <div class="eyebrow">Architecture</div>
+                    <h2 class="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-900">
+                        Three runtime layers with explicit transport boundaries.
+                    </h2>
+                    <div class="mt-5 space-y-3 text-sm leading-5 text-slate-600">
+                        <p>
+                            Electron main hosts the process model and brokers RPC. The desktop
+                            renderer owns interface surfaces and UI state. The background runtime
+                            owns execution, orchestration, and non-visual AI behavior.
+                        </p>
+                        <p>
+                            The result is a workspace that can expose agent activity live, render
+                            tool outputs richly, and keep runtime boundaries honest instead of
+                            collapsing everything into one renderer-side assistant.
+                        </p>
+                    </div>
+                </article>
+
+                <article
+                    class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                >
+                    <div class="eyebrow">RPC bridge</div>
+                    <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div class="flow-card">
+                            <div class="flow-title">Desktop renderer</div>
+                            <p class="flow-copy">
+                                Owns overlays, windows, widgets, and state presentation.
+                            </p>
+                        </div>
+                        <div class="flow-card">
+                            <div class="flow-title">Electron main</div>
+                            <p class="flow-copy">Acts as process host and transport broker.</p>
+                        </div>
+                        <div class="flow-card">
+                            <div class="flow-title">Background runtime</div>
+                            <p class="flow-copy">Owns agents, tools, and orchestration logic.</p>
+                        </div>
+                    </div>
+                    <div
+                        class="mt-4 rounded-[22px] border border-white/50 bg-white/35 p-4 font-mono text-[11px] leading-6 text-slate-600"
+                    >
+                        renderer -> main -> background<br />
+                        background -> main -> desktop<br />
+                        stream events -> main -> renderer
+                    </div>
+                </article>
+            </section>
+
+            <section class="mt-6 grid gap-6 w-full">
+                <article
+                    class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                >
+                    <div class="eyebrow">Registry model</div>
+                    <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div class="system-container-primary rounded-[18px] p-4">
+                            <div class="text-md font-semibold text-slate-800">Desktop domains</div>
+                            <p class="text-sm leading-5 mt-1 text-slate-600">
+                                Windows, widgets, components, and renderers feed the visual
+                                workspace layer.
+                            </p>
+                        </div>
+                        <div class="system-container-primary rounded-[18px] p-4">
+                            <div class="text-md font-semibold text-slate-800">
+                                Background domains
+                            </div>
+                            <p class="text-sm leading-5 mt-1 text-slate-600">
+                                Tools, processes, pipelines, and runtime behaviors power
+                                orchestration and execution.
+                            </p>
+                        </div>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </body>
+</html>

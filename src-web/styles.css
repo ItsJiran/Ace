@@ -1,0 +1,220 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(86, 86, 133, 0.85) transparent;
+  }
+
+  html::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: rgba(45, 52, 78, 0.88);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  .page-noise {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.55), transparent 34%),
+      radial-gradient(circle at 80% 20%, rgba(160, 176, 215, 0.22), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.35), transparent 28%);
+    opacity: 0.9;
+  }
+
+  .system-shell {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .system-shell-primary {
+    @apply backdrop-blur-glass;
+    background: linear-gradient(160deg, rgba(219, 226, 236, 0.62) 0%, rgba(214, 221, 235, 0.34) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    color: rgba(66, 75, 102, 0.92);
+  }
+
+  .system-container-primary {
+    background: linear-gradient(145deg, rgba(238, 240, 245, 0.58), rgba(216, 221, 240, 0.48));
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    color: rgba(40, 48, 72, 0.85);
+  }
+
+  .system-btn-secondary {
+    border: 1px solid rgba(160, 175, 225, 0.5);
+    background: linear-gradient(145deg, rgba(130, 148, 210, 0.55), rgba(100, 120, 185, 0.45));
+    box-shadow: 0 2px 6px rgba(90, 110, 170, 0.2), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+    color: rgba(252, 253, 255, 0.92);
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.24em;
+    color: rgba(96, 110, 148, 0.72);
+  }
+
+  .status-pill,
+  .tech-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    background: rgba(255, 255, 255, 0.34);
+    padding: 0.45rem 0.75rem;
+    color: rgba(75, 88, 125, 0.84);
+  }
+
+  .status-pill {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .tech-chip {
+    font-size: 12px;
+  }
+
+  .cta-primary,
+  .cta-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    border-radius: 14px;
+    padding: 0.7rem 1rem;
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .cta-primary {
+    border: 1px solid rgba(160, 175, 225, 0.5);
+    background: linear-gradient(145deg, rgba(130, 148, 210, 0.55), rgba(100, 120, 185, 0.45));
+    box-shadow: 0 2px 6px rgba(90, 110, 170, 0.2), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+    color: rgba(252, 253, 255, 0.92);
+  }
+
+  .cta-secondary {
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    background: rgba(255, 255, 255, 0.34);
+    color: rgba(76, 86, 122, 0.92);
+  }
+
+  .cta-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+  }
+
+  .cta-icon svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .flow-card {
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    background: linear-gradient(145deg, rgba(238, 240, 245, 0.5), rgba(216, 221, 240, 0.42));
+    padding: 1rem;
+  }
+
+  .flow-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(45, 54, 83, 0.94);
+  }
+
+  .flow-copy {
+    margin-top: 0.5rem;
+    font-size: 12px;
+    line-height: 1.65;
+    color: rgba(88, 102, 145, 0.78);
+  }
+
+  .stack-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    background: linear-gradient(145deg, rgba(238, 240, 245, 0.5), rgba(216, 221, 240, 0.42));
+    padding: 0.95rem;
+  }
+
+  .stack-card-accent {
+    background: linear-gradient(145deg, rgba(202, 212, 252, 0.52), rgba(178, 191, 241, 0.42));
+  }
+
+  .stack-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    background: rgba(255, 255, 255, 0.52);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: rgba(66, 75, 102, 0.92);
+  }
+
+  .stack-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(45, 54, 83, 0.94);
+  }
+
+  .stack-copy {
+    margin-top: 0.25rem;
+    font-size: 12px;
+    line-height: 1.55;
+    color: rgba(88, 102, 145, 0.78);
+  }
+
+  .demo-frame {
+    overflow: hidden;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    background: linear-gradient(145deg, rgba(238, 240, 245, 0.5), rgba(216, 221, 240, 0.42));
+    padding: 0.9rem;
+  }
+
+  .demo-media {
+    display: block;
+    width: 100%;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.54);
+    object-fit: cover;
+    box-shadow: 0 10px 28px rgba(82, 98, 136, 0.14);
+  }
+
+  .demo-caption {
+    margin-top: 0.85rem;
+    font-size: 12px;
+    line-height: 1.65;
+    color: rgba(88, 102, 145, 0.78);
+  }
+}
