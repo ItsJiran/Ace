@@ -152,13 +152,6 @@ function registerMainIPCHandlers({
         return false;
     };
 
-    const unsubscribeBackgroundStream = backgroundRuntime.onStreamEvent((payload) => {
-        for (const window of BrowserWindow.getAllWindows()) {
-            if (!window.isDestroyed()) {
-                window.webContents.send('ace:background:stream:event', payload);
-            }
-        }
-    });
     const unsubscribeRpcMessages = backgroundRuntime.onRpcMessage((message) => {
         if (handleRpcControlMessage(message)) {
             return;
@@ -166,6 +159,7 @@ function registerMainIPCHandlers({
 
         sendRpcMessageToDesktop(message);
     });
+    
     const unsubscribeRuntimeEvents = backgroundRuntime.onRuntimeEvent((message) => {
         for (const window of BrowserWindow.getAllWindows()) {
             if (!window.isDestroyed()) {
@@ -273,37 +267,12 @@ function registerMainIPCHandlers({
             console.error('[electron] Failed to relay runtime event:', error);
         });
     });
-    ipcMain.handle('ace:background:invoke', async (_event, method, payload) => {
-        return await backgroundRuntime.invoke(
-            String(method || ''),
-            payload && typeof payload === 'object' ? payload : {},
-        );
-    });
-    ipcMain.handle('ace:background:fetch-models', async (_event, provider) => {
-        return await backgroundRuntime.invoke('ai.fetchAvailableModels', { provider });
-    });
-    ipcMain.handle('ace:background:sync-models', async (_event, provider) => {
-        return await backgroundRuntime.invoke('ai.syncAvailableModels', { provider });
-    });
-    ipcMain.handle('ace:background:create-thread', async (_event, initialState) => {
-        return await backgroundRuntime.invoke('ai.createThread', { initialState });
-    });
-    ipcMain.handle('ace:background:read-thread', async (_event, thread_uid) => {
-        return await backgroundRuntime.invoke('ai.readThread', { thread_uid });
-    });
-    ipcMain.handle('ace:background:sync-thread', async (_event, thread_uid, thread) => {
-        return await backgroundRuntime.invoke('ai.syncThread', { thread_uid, thread });
-    });
-    ipcMain.handle('ace:background:delete-thread', async (_event, thread_uid) => {
-        return await backgroundRuntime.invoke('ai.deleteThread', { thread_uid });
-    });
 
     ipcMain.handle('ace:path:app-config-dir', () => getAppConfigRootDir(app));
     ipcMain.handle('ace:path:app-cache-dir', () => getAppCacheRootDir(app));
     ipcMain.handle('ace:path:app-local-dir', () => getAppLocalRootDir(app));
 
     return () => {
-        unsubscribeBackgroundStream?.();
         unsubscribeRpcMessages?.();
         unsubscribeRuntimeEvents?.();
         ipcMain.removeHandler('ace:window:focus');
@@ -320,13 +289,6 @@ function registerMainIPCHandlers({
         ipcMain.removeHandler('ace:background:status');
         ipcMain.removeAllListeners('ace:rpc:message');
         ipcMain.removeAllListeners('ace:runtime:event');
-        ipcMain.removeHandler('ace:background:invoke');
-        ipcMain.removeHandler('ace:background:fetch-models');
-        ipcMain.removeHandler('ace:background:sync-models');
-        ipcMain.removeHandler('ace:background:create-thread');
-        ipcMain.removeHandler('ace:background:read-thread');
-        ipcMain.removeHandler('ace:background:sync-thread');
-        ipcMain.removeHandler('ace:background:delete-thread');
         ipcMain.removeHandler('ace:path:app-config-dir');
         ipcMain.removeHandler('ace:path:app-cache-dir');
         ipcMain.removeHandler('ace:path:app-local-dir');

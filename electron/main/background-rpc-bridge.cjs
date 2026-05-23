@@ -10,7 +10,7 @@ const { spawn } = require('child_process');
  * - spawn and supervise the background runtime child process
  * - broker request/response RPC between Electron main and the background runtime
  * - relay one-way runtime events between background and the desktop renderer
- * - fan out one-way background stream events to Electron-side listeners
+ * - relay runtime events and RPC envelopes between Electron main and the background runtime
  *
  * This module is intentionally a bridge, not the background runtime itself.
  * Electron main remains the broker/process host, the background runtime remains
@@ -23,7 +23,6 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode }) 
     let backgroundReadyRejecter = null;
     let backgroundRequestCounter = 0;
     const backgroundPendingRequests = new Map();
-    const backgroundStreamListeners = new Set();
     const rpcMessageListeners = new Set();
     const runtimeEventListeners = new Set();
 
@@ -62,7 +61,7 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode }) 
         backgroundPendingRequests.clear();
     }
 
-    // Handle all child-process IPC messages: runtime events, ready state, streams, and RPC results.
+    // Handle all child-process IPC messages: runtime events, ready state, and RPC results.
     function handleMessage(message) {
         if (!message || typeof message !== 'object') {
             return;
@@ -92,13 +91,6 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode }) 
 
         if (message.type === 'ace:background:ready') {
             backgroundReadyResolver?.();
-            return;
-        }
-
-        if (message.type === 'ace:background:stream:event') {
-            for (const listener of backgroundStreamListeners) {
-                listener(message.payload);
-            }
             return;
         }
 
@@ -249,14 +241,6 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode }) 
         }
     }
 
-    // Subscribe Electron-side listeners to one-way background stream events.
-    function onStreamEvent(listener) {
-        backgroundStreamListeners.add(listener);
-        return () => {
-            backgroundStreamListeners.delete(listener);
-        };
-    }
-
     async function emitRpcMessage(message) {
         ensureStarted();
 
@@ -296,7 +280,6 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode }) 
         invoke,
         getStatus,
         dispose,
-        onStreamEvent,
         emitRpcMessage,
         onRpcMessage,
         emitRuntimeEvent,

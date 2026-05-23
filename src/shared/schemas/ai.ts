@@ -109,6 +109,8 @@ export type AgentThreadSyncPayloadType = Partial<AgentThreadSnapshotType> & {
  * update the UI in real-time when there is a new message from the agent thread.
  */
 
+export const AI_THREAD_STREAM_EVENT_SLUG = 'system:ai:thread:stream';
+
 export interface BackgroundAIStreamEventPayloadType {
     thread_uid: string;
     message: ProtocolMessage;

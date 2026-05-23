@@ -14,9 +14,13 @@ import SingletonAgentInstance from './ai/agent-instance';
 import resolveApiKey from '../lib/utils/ai/resolve-api-key';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
+import { EventBus } from '#/shared/engines/event-engine';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
-import { emitBackgroundAIStreamEvent } from './ai-stream-events';
+import {
+    AI_THREAD_STREAM_EVENT_SLUG,
+    type BackgroundAIStreamEventPayloadType,
+} from '#/shared/schemas/ai.ts';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
@@ -63,13 +67,6 @@ function resolveStreamTextContent(content: unknown): string {
     return '';
 }
 
-function emitProtocolThreadEvent(thread_uid: string, message: Record<string, unknown>) {
-    emitBackgroundAIStreamEvent({
-        thread_uid,
-        message: message as never,
-    });
-}
-
 function resolveToolDisplayName(eventData: Record<string, unknown>, node?: string) {
     if (typeof eventData.name === 'string' && eventData.name.trim()) {
         return eventData.name;
@@ -89,6 +86,21 @@ function resolveToolDisplayName(eventData: Record<string, unknown>, node?: strin
 class AIEngineSingleton extends Engine {
     public ai_threads_uids_memory_uid = 'system:ai_engine:thread:uids';
     public ai_threads_memory_uid = (thread_uid: string) => `system:ai_engine:thread:${thread_uid}`;
+
+    private emitThreadStreamEvent(payload: BackgroundAIStreamEventPayloadType) {
+        void EventBus.emit(AI_THREAD_STREAM_EVENT_SLUG, {
+            payload: payload as unknown as Record<string, unknown>,
+        }, {
+            target: 'desktop',
+        });
+    }
+
+    private emitProtocolThreadEvent(thread_uid: string, message: Record<string, unknown>) {
+        this.emitThreadStreamEvent({
+            thread_uid,
+            message: message as never,
+        });
+    }
 
     private readThreadIndex(): Record<string, string> {
         return (
@@ -331,7 +343,7 @@ class AIEngineSingleton extends Engine {
         let hasStartedAssistantBlock = false;
 
         const emitLifecycle = (event: 'started' | 'completed' | 'failed', error?: string) => {
-            emitProtocolThreadEvent(thread_uid, {
+            this.emitProtocolThreadEvent(thread_uid, {
                 type: 'event',
                 event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
                 seq: protocolSeq,
@@ -365,7 +377,7 @@ class AIEngineSingleton extends Engine {
                 output: eventData.output ?? null,
                 error: eventData.error ?? null,
             });
-            emitProtocolThreadEvent(thread_uid, {
+            this.emitProtocolThreadEvent(thread_uid, {
                 type: 'event',
                 event_id,
                 seq: protocolSeq,
@@ -390,7 +402,7 @@ class AIEngineSingleton extends Engine {
         const ensureAssistantMessageStarted = (node?: string, metadata?: Record<string, unknown>) => {
             if (!activeAssistantMessageId) {
                 activeAssistantMessageId = `assistant:${thread_uid}:${run_id}`;
-                emitProtocolThreadEvent(thread_uid, {
+                this.emitProtocolThreadEvent(thread_uid, {
                     type: 'event',
                     event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
                     seq: protocolSeq,
@@ -411,7 +423,7 @@ class AIEngineSingleton extends Engine {
 
             if (!hasStartedAssistantBlock) {
                 hasStartedAssistantBlock = true;
-                emitProtocolThreadEvent(thread_uid, {
+                this.emitProtocolThreadEvent(thread_uid, {
                     type: 'event',
                     event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
                     seq: protocolSeq,
@@ -440,7 +452,7 @@ class AIEngineSingleton extends Engine {
 
             ensureAssistantMessageStarted(node, metadata);
             activeAssistantText += text;
-            emitProtocolThreadEvent(thread_uid, {
+            this.emitProtocolThreadEvent(thread_uid, {
                 type: 'event',
                 event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
                 seq: protocolSeq,
@@ -466,7 +478,7 @@ class AIEngineSingleton extends Engine {
                 return;
             }
 
-            emitProtocolThreadEvent(thread_uid, {
+            this.emitProtocolThreadEvent(thread_uid, {
                 type: 'event',
                 event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
                 seq: protocolSeq,
@@ -486,7 +498,7 @@ class AIEngineSingleton extends Engine {
                 },
             });
 
-            emitProtocolThreadEvent(thread_uid, {
+            this.emitProtocolThreadEvent(thread_uid, {
                 type: 'event',
                 event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
                 seq: protocolSeq,

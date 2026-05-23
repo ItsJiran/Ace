@@ -4,7 +4,12 @@ import { Client as LangGraphClient } from '@langchain/langgraph-sdk/client';
 import type { Command, Message } from '@langchain/protocol';
 
 import { AIEngine } from '#/app-desktop/engines/ai-engine';
-import type { AgentThread, BackgroundAIStreamEventPayloadType } from '#/shared/schemas/ai';
+import { EventBus } from '#/shared/engines/event-engine';
+import {
+	AI_THREAD_STREAM_EVENT_SLUG,
+	type AgentThread,
+	type BackgroundAIStreamEventPayloadType,
+} from '#/shared/schemas/ai';
 
 import {
 	resolvePromptFromInput,
@@ -85,12 +90,18 @@ function resolveSessionKeysForPayload(threadUid: string) {
 }
 
 function ensureBackgroundAIStreamListener() {
-	if (removeBackgroundAIStreamListener || !window.electronAPI?.onBackgroundAIStreamEvent) {
+	if (removeBackgroundAIStreamListener) {
 		return;
 	}
 
-	removeBackgroundAIStreamListener = window.electronAPI.onBackgroundAIStreamEvent(
-		(payload: BackgroundAIStreamEventPayloadType) => {
+	removeBackgroundAIStreamListener = EventBus.listen<BackgroundAIStreamEventPayloadType>(
+		AI_THREAD_STREAM_EVENT_SLUG,
+		(event) => {
+			const payload = event?.payload;
+			if (!payload) {
+				return;
+			}
+
 			for (const sessionKey of resolveSessionKeysForPayload(payload.thread_uid)) {
 				threadTransportSessions.get(sessionKey)?.queue.push(payload.message);
 			}

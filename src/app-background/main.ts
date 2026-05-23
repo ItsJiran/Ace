@@ -1,6 +1,5 @@
 import { AIEngine } from './engines/ai-engine';
 import { bootBackgroundRuntime } from '../background';
-import { setBackgroundAIStreamEmitter } from './engines/ai-stream-events';
 import type {
 	BackgroundRPCInboundMessage,
 	BackgroundRPCOutboundMessage,
@@ -16,13 +15,6 @@ function sendToParent(
 		process.send(message);
 	}
 }
-
-setBackgroundAIStreamEmitter((payload) => {
-	sendToParent({
-		type: 'ace:background:stream:event',
-		payload,
-	});
-});
 
 async function ensureBackgroundRuntimeBooted() {
 	if (!backgroundReadyPromise) {

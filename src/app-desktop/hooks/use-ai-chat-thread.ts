@@ -3,12 +3,14 @@ import { useStream } from '@langchain/react';
 import { HumanMessage } from '@langchain/core/messages';
 
 import { AIEngine } from '#/app-desktop/engines/ai-engine';
+import { EventBus } from '#/shared/engines/event-engine';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
-import type {
-	AgentConfigurableType,
-	AgentThread,
-	AIProviderType,
-	BackgroundAIStreamEventPayloadType,
+import {
+	AI_THREAD_STREAM_EVENT_SLUG,
+	type AgentConfigurableType,
+	type AgentThread,
+	type AIProviderType,
+	type BackgroundAIStreamEventPayloadType,
 } from '#/shared/schemas/ai';
 import {
 	createStreamOptions,
@@ -69,11 +71,12 @@ export function useAIChatThread() {
 	}, [current_thread_uid]);
 
 	useEffect(() => {
-		if (!window.electronAPI?.onBackgroundAIStreamEvent) {
-			return;
-		}
+		return EventBus.listen<BackgroundAIStreamEventPayloadType>(AI_THREAD_STREAM_EVENT_SLUG, (event) => {
+			const payload = event?.payload;
+			if (!payload) {
+				return;
+			}
 
-		return window.electronAPI.onBackgroundAIStreamEvent((payload: BackgroundAIStreamEventPayloadType) => {
 			const observedThreadUid = resolveActiveThreadUid(current_thread_uid);
 			console.log('[useAIChatThread stream-event]', {
 				payload_thread_uid: payload.thread_uid,

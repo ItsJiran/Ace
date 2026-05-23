@@ -6,254 +6,282 @@ import { StateEngine } from '#/app-desktop/engines/state-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
 import readProcessEnv from '#/shared/lib/read-process-env';
 import type {
-	AgentConfigurableType,
-	AgentInvokeContextType,
-	AgentThread,
-	AgentThreadSnapshotType,
-	AgentThreadSyncPayloadType,
-	AIProviderType,
+    AgentConfigurableType,
+    AgentInvokeContextType,
+    AgentThread,
+    AgentThreadSnapshotType,
+    AgentThreadSyncPayloadType,
+    AIProviderType,
 } from '#/shared/schemas/ai';
 
 type BackgroundThreadListEntryType = {
-	thread_uid: string;
-	memory_uid: string;
-	thread: AgentThread;
+    thread_uid: string;
+    memory_uid: string;
+    thread: AgentThread;
 };
 
 type BackgroundThreadListPayloadType = {
-	index: Record<string, string>;
-	threads: BackgroundThreadListEntryType[];
+    index: Record<string, string>;
+    threads: BackgroundThreadListEntryType[];
 };
 
 async function resolveAgentInvokeContext(): Promise<AgentInvokeContextType> {
-	const desktopState = StateEngine.readDesktopState();
-	const username = await readProcessEnv('USER');
-	const homeDir = username ? `/home/${username}/` : null;
-	return {
-		user: {
-			username,
-			home_dir: homeDir,
-		},
-		desktop: {
-			mode: desktopState.mode,
-			window_display_mode: desktopState.window_display_mode,
-			screen_width: desktopState.screen_width,
-			screen_height: desktopState.screen_height,
-			available_screen_width: desktopState.available_screen_width,
-			available_screen_height: desktopState.available_screen_height,
-			viewport_width: desktopState.viewport_width,
-			viewport_height: desktopState.viewport_height,
-			viewport_center_x: Math.round(desktopState.viewport_width / 2),
-			viewport_center_y: Math.round(desktopState.viewport_height / 2),
-			device_pixel_ratio: desktopState.device_pixel_ratio,
-			cursor_x: desktopState.mouse_x,
-			cursor_y: desktopState.mouse_y,
-			focused_window_uid:
-				(KernelEngine.readMemory('system:global_state:focused_window') as string | null | undefined) ??
-				null,
-			active_window_uid:
-				(KernelEngine.readMemory('system:global_state:active_window') as string | null | undefined) ??
-				null,
-		},
-	};
+    const desktopState = StateEngine.readDesktopState();
+    const username = await readProcessEnv('USER');
+    const homeDir = username ? `/home/${username}/` : null;
+    return {
+        user: {
+            username,
+            home_dir: homeDir,
+        },
+        desktop: {
+            mode: desktopState.mode,
+            window_display_mode: desktopState.window_display_mode,
+            screen_width: desktopState.screen_width,
+            screen_height: desktopState.screen_height,
+            available_screen_width: desktopState.available_screen_width,
+            available_screen_height: desktopState.available_screen_height,
+            viewport_width: desktopState.viewport_width,
+            viewport_height: desktopState.viewport_height,
+            viewport_center_x: Math.round(desktopState.viewport_width / 2),
+            viewport_center_y: Math.round(desktopState.viewport_height / 2),
+            device_pixel_ratio: desktopState.device_pixel_ratio,
+            cursor_x: desktopState.mouse_x,
+            cursor_y: desktopState.mouse_y,
+            focused_window_uid:
+                (KernelEngine.readMemory('system:global_state:focused_window') as
+                    | string
+                    | null
+                    | undefined) ?? null,
+            active_window_uid:
+                (KernelEngine.readMemory('system:global_state:active_window') as
+                    | string
+                    | null
+                    | undefined) ?? null,
+        },
+    };
 }
 
 class DesktopAIEngineSingleton extends Engine {
-	public readonly memory_uid = DefaultConfigAI.memory_uid;
-	public readonly thread_uids_memory_uid = 'system:ai_engine:thread:uids';
-	public readonly current_thread_uid_memory_uid = 'system:ai_engine:thread:active_uid';
-	public readonly thread_memory_uid = (thread_uid: string) => `system:ai_engine:thread:${thread_uid}`;
+    public readonly memory_uid = DefaultConfigAI.memory_uid;
+    public readonly thread_uids_memory_uid = 'system:ai_engine:thread:uids';
+    public readonly current_thread_uid_memory_uid = 'system:ai_engine:thread:active_uid';
+    public readonly thread_memory_uid = (thread_uid: string) =>
+        `system:ai_engine:thread:${thread_uid}`;
 
-	async boot() {
-		await this.syncAIMemory();
-	}
+    // + --------------- ABSTRACT METHODS ----------------- +
 
-	async setupEventRoutes() {}
-	async setupKernelSpace() {
-		KernelEngine.registerSystemMemory(this.thread_uids_memory_uid, {} as Record<string, string>);
-		KernelEngine.registerSystemMemory(this.current_thread_uid_memory_uid, null as string | null);
-	}
-	async setupKernelTerminationHook() {}
+    async boot() {
+        await this.syncAIMemory();
+    }
 
-	async getBackgroundStatus() {
-		return (
-			(await window.electronAPI?.backgroundStatus()) ?? {
-				active: false,
-				runtime_mode: 'desktop',
-				pid: null,
-			}
-		);
-	}
+    async setupEventRoutes() {}
+    async setupKernelSpace() {
+        KernelEngine.registerSystemMemory(
+            this.thread_uids_memory_uid,
+            {} as Record<string, string>,
+        );
+        KernelEngine.registerSystemMemory(
+            this.current_thread_uid_memory_uid,
+            null as string | null,
+        );
+    }
+    async setupKernelTerminationHook() {}
 
-	async syncConfigFromBackground() {
-		await ConfigEngine.syncConfigFileToRam('ai');
-		return ConfigEngine.getConfigItems<Record<string, unknown>>('ai');
-	}
+    // + --------------- THREADS API METHODS --------------- +
 
-	readThreadFromMemory(threadUid: string) {
-		return KernelEngine.readMemory(this.thread_memory_uid(threadUid)) as AgentThread | undefined;
-	}
+    async fetchModels(provider: AIProviderType | string) {
+        const models = ((await RPCEngine.invoke('ai.syncAvailableModels', {
+            provider: String(provider),
+        })) ?? []) as string[];
+        await this.syncConfigFromBackground();
+        return models;
+    }
 
-	readThreadIndexFromMemory() {
-		return (
-			(KernelEngine.readMemory(this.thread_uids_memory_uid) as Record<string, string> | undefined) ?? {}
-		);
-	}
+    setCurrentThread(threadUid: string | null) {
+        KernelEngine.writeMemory(this.current_thread_uid_memory_uid, threadUid);
+        return threadUid;
+    }
 
-	readCurrentThreadUidFromMemory() {
-		return (KernelEngine.readMemory(this.current_thread_uid_memory_uid) as string | null | undefined) ?? null;
-	}
+    syncThreadIndex(index: Record<string, string>) {
+        KernelEngine.writeMemory(this.thread_uids_memory_uid, index);
+        return index;
+    }
 
-	setCurrentThread(threadUid: string | null) {
-		KernelEngine.writeMemory(this.current_thread_uid_memory_uid, threadUid);
-		return threadUid;
-	}
+    async listThreads() {
+        const payload = await this.syncAIMemory();
+        return payload.threads ?? [];
+    }
 
-	syncThreadMemory(thread: AgentThread) {
-		const memoryUid = this.thread_memory_uid(thread.thread_uid);
-		const existingThread = KernelEngine.readMemory(memoryUid);
+    async createThread(initialState: Partial<AgentThreadSnapshotType> = {}) {
+        const thread = ((await RPCEngine.invoke('ai.createThread', {
+            initialState: initialState as Record<string, unknown>,
+        })) ?? {
+            thread_id: initialState.thread_uid ?? crypto.randomUUID(),
+        }) as AgentConfigurableType;
 
-		if (existingThread === undefined) {
-			KernelEngine.registerSystemMemory(memoryUid, thread);
-		} else {
-			KernelEngine.writeMemory(memoryUid, thread);
-		}
+        this.setCurrentThread(thread.thread_id);
+        await this.syncCurrentThreadFromBackground(thread.thread_id);
+        return thread;
+    }
 
-		const currentIndex = this.readThreadIndexFromMemory();
-		if (currentIndex[thread.thread_uid] !== memoryUid) {
-			KernelEngine.writeMemory(this.thread_uids_memory_uid, {
-				...currentIndex,
-				[thread.thread_uid]: memoryUid,
-			});
-		}
+    async readThread(threadUid: string) {
+        return await this.syncCurrentThreadFromBackground(threadUid);
+    }
 
-		return memoryUid;
-	}
+    async syncThread(threadUid: string, payload: AgentThreadSyncPayloadType = {}) {
+        const memoryUid = ((await RPCEngine.invoke('ai.syncThread', {
+            thread_uid: threadUid,
+            thread: payload as Record<string, unknown>,
+        })) ?? '') as string;
 
-	syncThreadIndex(index: Record<string, string>) {
-		KernelEngine.writeMemory(this.thread_uids_memory_uid, index);
-		return index;
-	}
+        await this.syncCurrentThreadFromBackground(threadUid);
+        return memoryUid;
+    }
 
-	async syncCurrentThreadFromBackground(threadUid: string) {
-		const thread = ((await this.invoke('ai.readThread', {
-			thread_uid: threadUid,
-		})) ?? null) as AgentThread | null;
+    async streamThreadPrompt(
+        threadUid: string,
+        prompt: string,
+        overrides: Partial<AgentConfigurableType> = {},
+    ) {
+        const thread = ((await RPCEngine.invoke('ai.streamThreadPrompt', {
+            thread_uid: threadUid,
+            prompt,
+            overrides,
+            context: await resolveAgentInvokeContext(),
+        })) ?? null) as AgentThread | null;
 
-		if (!thread) {
-			return null;
-		}
+        if (thread) {
+            this.syncThreadMemory(thread);
+            this.setCurrentThread(thread.thread_uid);
+            return thread;
+        }
 
-		this.syncThreadMemory(thread);
-		return thread;
-	}
+        return await this.syncCurrentThreadFromBackground(threadUid);
+    }
 
-	async syncAIMemory() {
-		await this.syncConfigFromBackground();
+    async deleteThread(threadUid: string) {
+        const deleted = ((await RPCEngine.invoke('ai.deleteThread', {
+            thread_uid: threadUid,
+        })) ?? false) as boolean;
+        if (!deleted) {
+            return false;
+        }
 
-		const payload = ((await this.invoke('ai.listThreads')) ?? {
-			index: {},
-			threads: [],
-		}) as BackgroundThreadListPayloadType;
+        KernelEngine.deleteMemory(this.thread_memory_uid(threadUid));
+        const nextIndex = { ...this.readThreadIndexFromMemory() };
+        delete nextIndex[threadUid];
+        this.syncThreadIndex(nextIndex);
 
-		this.syncThreadIndex(payload.index ?? {});
-		for (const entry of payload.threads ?? []) {
-			this.syncThreadMemory(entry.thread);
-		}
+        if (this.readCurrentThreadUidFromMemory() === threadUid) {
+            this.setCurrentThread(Object.keys(nextIndex)[0] ?? null);
+        }
 
-		const nextActiveThreadUid = this.readCurrentThreadUidFromMemory();
-		if (nextActiveThreadUid && payload.index?.[nextActiveThreadUid]) {
-			return payload;
-		}
+        return true;
+    }
 
-		const fallbackThreadUid = payload.threads?.[0]?.thread_uid ?? null;
-		this.setCurrentThread(fallbackThreadUid);
-		return payload;
-	}
+    async invoke(method: string, payload: Record<string, unknown> = {}) {
+        return await RPCEngine.invoke(method, payload);
+    }
 
-	async fetchModels(provider: AIProviderType | string) {
-		const models = ((await this.invoke('ai.syncAvailableModels', {
-			provider: String(provider),
-		})) ?? []) as string[];
-		await this.syncConfigFromBackground();
-		return models;
-	}
+    // + ----------- THREADS MEMORIES METHODS -------------- +
 
-	async listThreads() {
-		const payload = await this.syncAIMemory();
-		return payload.threads ?? [];
-	}
+    readThreadFromMemory(threadUid: string) {
+        return KernelEngine.readMemory(this.thread_memory_uid(threadUid)) as
+            | AgentThread
+            | undefined;
+    }
 
-	async createThread(initialState: Partial<AgentThreadSnapshotType> = {}) {
-		const thread = ((await this.invoke('ai.createThread', {
-			initialState: initialState as Record<string, unknown>,
-		})) ?? {
-			thread_id: initialState.thread_uid ?? crypto.randomUUID(),
-		}) as AgentConfigurableType;
+    readThreadIndexFromMemory() {
+        return (
+            (KernelEngine.readMemory(this.thread_uids_memory_uid) as
+                | Record<string, string>
+                | undefined) ?? {}
+        );
+    }
 
-		this.setCurrentThread(thread.thread_id);
-		await this.syncCurrentThreadFromBackground(thread.thread_id);
-		return thread;
-	}
+    readCurrentThreadUidFromMemory() {
+        return (
+            (KernelEngine.readMemory(this.current_thread_uid_memory_uid) as
+                | string
+                | null
+                | undefined) ?? null
+        );
+    }
 
-	async readThread(threadUid: string) {
-		return await this.syncCurrentThreadFromBackground(threadUid);
-	}
+    syncThreadMemory(thread: AgentThread) {
+        const memoryUid = this.thread_memory_uid(thread.thread_uid);
+        const existingThread = KernelEngine.readMemory(memoryUid);
 
-	async syncThread(threadUid: string, payload: AgentThreadSyncPayloadType = {}) {
-		const memoryUid = ((await this.invoke('ai.syncThread', {
-			thread_uid: threadUid,
-			thread: payload as Record<string, unknown>,
-		})) ?? '') as string;
+        if (existingThread === undefined) {
+            KernelEngine.registerSystemMemory(memoryUid, thread);
+        } else {
+            KernelEngine.writeMemory(memoryUid, thread);
+        }
 
-		await this.syncCurrentThreadFromBackground(threadUid);
-		return memoryUid;
-	}
+        const currentIndex = this.readThreadIndexFromMemory();
+        if (currentIndex[thread.thread_uid] !== memoryUid) {
+            KernelEngine.writeMemory(this.thread_uids_memory_uid, {
+                ...currentIndex,
+                [thread.thread_uid]: memoryUid,
+            });
+        }
 
-	async streamThreadPrompt(
-		threadUid: string,
-		prompt: string,
-		overrides: Partial<AgentConfigurableType> = {},
-	) {
-		const thread = ((await this.invoke('ai.streamThreadPrompt', {
-			thread_uid: threadUid,
-			prompt,
-			overrides,
-			context: await resolveAgentInvokeContext(),
-		})) ?? null) as AgentThread | null;
+        return memoryUid;
+    }
 
-		if (thread) {
-			this.syncThreadMemory(thread);
-			this.setCurrentThread(thread.thread_uid);
-			return thread;
-		}
+    async syncAIMemory() {
+        await this.syncConfigFromBackground();
 
-		return await this.syncCurrentThreadFromBackground(threadUid);
-	}
+        const payload = ((await this.invoke('ai.listThreads')) ?? {
+            index: {},
+            threads: [],
+        }) as BackgroundThreadListPayloadType;
 
-	async deleteThread(threadUid: string) {
-		const deleted = ((await this.invoke('ai.deleteThread', {
-			thread_uid: threadUid,
-		})) ?? false) as boolean;
-		if (!deleted) {
-			return false;
-		}
+        this.syncThreadIndex(payload.index ?? {});
+        for (const entry of payload.threads ?? []) {
+            this.syncThreadMemory(entry.thread);
+        }
 
-		KernelEngine.deleteMemory(this.thread_memory_uid(threadUid));
-		const nextIndex = { ...this.readThreadIndexFromMemory() };
-		delete nextIndex[threadUid];
-		this.syncThreadIndex(nextIndex);
+        const nextActiveThreadUid = this.readCurrentThreadUidFromMemory();
+        if (nextActiveThreadUid && payload.index?.[nextActiveThreadUid]) {
+            return payload;
+        }
 
-		if (this.readCurrentThreadUidFromMemory() === threadUid) {
-			this.setCurrentThread(Object.keys(nextIndex)[0] ?? null);
-		}
+        const fallbackThreadUid = payload.threads?.[0]?.thread_uid ?? null;
+        this.setCurrentThread(fallbackThreadUid);
+        return payload;
+    }
 
-		return true;
-	}
+    // + ------------- BACKGROUND API METHODS -------------- +
 
-	async invoke(method: string, payload: Record<string, unknown> = {}) {
-		return await RPCEngine.invoke(method, payload);
-	}
+    async syncCurrentThreadFromBackground(threadUid: string) {
+        const thread = ((await RPCEngine.invoke('ai.readThread', {
+            thread_uid: threadUid,
+        })) ?? null) as AgentThread | null;
+
+        if (!thread) {
+            return null;
+        }
+
+        this.syncThreadMemory(thread);
+        return thread;
+    }
+
+    async getBackgroundStatus() {
+        return (
+            (await window.electronAPI?.backgroundStatus()) ?? {
+                active: false,
+                runtime_mode: 'desktop',
+                pid: null,
+            }
+        );
+    }
+
+    async syncConfigFromBackground() {
+        await ConfigEngine.syncConfigFileToRam('ai');
+        return ConfigEngine.getConfigItems<Record<string, unknown>>('ai');
+    }
 }
 
 export const AIEngine = new DesktopAIEngineSingleton();
