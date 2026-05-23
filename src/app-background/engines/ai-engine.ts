@@ -15,6 +15,7 @@ import resolveApiKey from '../lib/utils/ai/resolve-api-key';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
+import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { emitBackgroundAIStreamEvent } from './ai-stream-events';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
@@ -115,6 +116,53 @@ class AIEngineSingleton extends Engine {
     async boot() {}
 
     async setupEventRoutes() {}
+
+    async setupRpcRoutes() {
+        await RPCEngine.handle('ai.fetchAvailableModels', async (payload: { provider?: string }) => {
+            return await this.fetchAvailableModels(String(payload.provider || 'openai') as never);
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.syncAvailableModels', async (payload: { provider?: string }) => {
+            return await this.syncAvailableModels(String(payload.provider || 'openai') as never);
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.listThreads', async () => {
+            return this.listThreads();
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.createThread', async (payload: { initialState?: Record<string, unknown> }) => {
+            return this.createThread((payload.initialState as Record<string, unknown>) ?? {});
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.readThread', async (payload: { thread_uid?: string }) => {
+            return this.readThread(String(payload.thread_uid || ''));
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.syncThread', async (payload: { thread_uid?: string; thread?: Record<string, unknown> }) => {
+            return this.syncThread(
+                String(payload.thread_uid || ''),
+                (payload.thread as Record<string, unknown>) ?? {},
+            );
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.streamThreadPrompt', async (payload: {
+            thread_uid?: string;
+            prompt?: string;
+            overrides?: Record<string, unknown>;
+            context?: Record<string, unknown>;
+        }) => {
+            return await this.streamThreadPrompt(
+                String(payload.thread_uid || ''),
+                String(payload.prompt || ''),
+                (payload.overrides as Record<string, unknown>) ?? {},
+                payload.context,
+            );
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.deleteThread', async (payload: { thread_uid?: string }) => {
+            return await this.deleteThread(String(payload.thread_uid || ''));
+        }, { owner: this.constructor.name });
+    }
 
     async setupKernelSpace() {
         KernelEngine.registerSystemMemory(

@@ -3,6 +3,7 @@ import { ConfigEngine } from '#/shared/engines/config-engine';
 import { DefaultConfigAI } from '#/shared/constants/config';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { StateEngine } from '#/app-desktop/engines/state-engine';
+import { RPCEngine } from '#/shared/engines/rpc-engine';
 import readProcessEnv from '#/shared/lib/read-process-env';
 import type {
 	AgentConfigurableType,
@@ -171,7 +172,9 @@ class DesktopAIEngineSingleton extends Engine {
 	}
 
 	async fetchModels(provider: AIProviderType | string) {
-		const models = (await window.electronAPI?.backgroundSyncModels(String(provider))) ?? [];
+		const models = ((await this.invoke('ai.syncAvailableModels', {
+			provider: String(provider),
+		})) ?? []) as string[];
 		await this.syncConfigFromBackground();
 		return models;
 	}
@@ -182,13 +185,11 @@ class DesktopAIEngineSingleton extends Engine {
 	}
 
 	async createThread(initialState: Partial<AgentThreadSnapshotType> = {}) {
-		const thread = (
-			(await window.electronAPI?.backgroundCreateThread(
-				initialState as Record<string, unknown>,
-			)) ?? {
-				thread_id: initialState.thread_uid ?? crypto.randomUUID(),
-			}
-		) as AgentConfigurableType;
+		const thread = ((await this.invoke('ai.createThread', {
+			initialState: initialState as Record<string, unknown>,
+		})) ?? {
+			thread_id: initialState.thread_uid ?? crypto.randomUUID(),
+		}) as AgentConfigurableType;
 
 		this.setCurrentThread(thread.thread_id);
 		await this.syncCurrentThreadFromBackground(thread.thread_id);
@@ -200,12 +201,10 @@ class DesktopAIEngineSingleton extends Engine {
 	}
 
 	async syncThread(threadUid: string, payload: AgentThreadSyncPayloadType = {}) {
-		const memoryUid = (
-			(await window.electronAPI?.backgroundSyncThread(
-				threadUid,
-				payload as Record<string, unknown>,
-			)) ?? ''
-		);
+		const memoryUid = ((await this.invoke('ai.syncThread', {
+			thread_uid: threadUid,
+			thread: payload as Record<string, unknown>,
+		})) ?? '') as string;
 
 		await this.syncCurrentThreadFromBackground(threadUid);
 		return memoryUid;
@@ -233,7 +232,9 @@ class DesktopAIEngineSingleton extends Engine {
 	}
 
 	async deleteThread(threadUid: string) {
-		const deleted = (await window.electronAPI?.backgroundDeleteThread(threadUid)) ?? false;
+		const deleted = ((await this.invoke('ai.deleteThread', {
+			thread_uid: threadUid,
+		})) ?? false) as boolean;
 		if (!deleted) {
 			return false;
 		}
@@ -251,7 +252,7 @@ class DesktopAIEngineSingleton extends Engine {
 	}
 
 	async invoke(method: string, payload: Record<string, unknown> = {}) {
-		return await window.electronAPI?.backgroundInvoke(method, payload);
+		return await RPCEngine.invoke(method, payload);
 	}
 }
 

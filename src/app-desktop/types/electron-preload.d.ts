@@ -27,12 +27,16 @@ interface ElectronAPI {
     quitApp: () => Promise<boolean>;
     backgroundStatus: () => Promise<{ active: boolean; runtime_mode: string; pid: number | null }>;
     backgroundInvoke: (method: string, payload?: Record<string, unknown>) => Promise<unknown>;
+    emitRpcMessage: (message: import('#/shared/schemas/rpc').RPCMessage<object>) => void;
+    emitRuntimeEvent: (message: import('#/shared/schemas/events').CrossRuntimeEventMessage) => void;
     backgroundFetchModels: (provider: string) => Promise<string[]>;
     backgroundSyncModels: (provider: string) => Promise<string[]>;
     backgroundCreateThread: (initialState?: Record<string, unknown>) => Promise<{ thread_id: string; checkpoint_id?: string; model?: string; provider?: string; apiKey?: string }>;
     backgroundReadThread: (threadUid: string) => Promise<unknown>;
     backgroundSyncThread: (threadUid: string, thread?: Record<string, unknown>) => Promise<string>;
     backgroundDeleteThread: (threadUid: string) => Promise<boolean>;
+    onRpcMessage: (callback: (payload: import('#/shared/schemas/rpc').RPCMessage<object>) => void) => () => void;
+    onRuntimeEvent: (callback: (payload: import('#/shared/schemas/events').CrossRuntimeEventMessage) => void) => () => void;
     onBackgroundAIStreamEvent: (callback: (payload: import('#/shared/schemas/ai').BackgroundAIStreamEventPayloadType) => void) => () => void;
 }
 

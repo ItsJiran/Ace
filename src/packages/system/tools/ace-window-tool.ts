@@ -1,5 +1,6 @@
 import { defineTool } from '#/lib/define-registry';
-import { DesktopRPCEngine } from '#/app-background/engines/desktop-rpc-engine';
+import { RPCEngine } from '#/shared/engines/rpc-engine';
+import type { WindowRPCPayloadMap, WindowRPCResultMap } from '#/shared/schemas/window-rpc';
 
 type AceWindowToolInput = {
 	action:
@@ -31,39 +32,39 @@ type AceWindowToolInput = {
 async function AceWindowTool(input: AceWindowToolInput) {
 	switch (input.action) {
 		case 'list_windows':
-			return await DesktopRPCEngine.invoke('window.list');
+			return await RPCEngine.invoke<WindowRPCResultMap['window.list'], WindowRPCPayloadMap['window.list']>('window.list', {});
 		case 'get_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for get_window.');
 			}
-			return await DesktopRPCEngine.invoke('window.get', { window_uid: input.window_uid });
+			return await RPCEngine.invoke<WindowRPCResultMap['window.get'], WindowRPCPayloadMap['window.get']>('window.get', { window_uid: input.window_uid });
 		case 'focus_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for focus_window.');
 			}
-			return await DesktopRPCEngine.invoke('window.focus', { window_uid: input.window_uid });
+			return await RPCEngine.invoke<WindowRPCResultMap['window.focus'], WindowRPCPayloadMap['window.focus']>('window.focus', { window_uid: input.window_uid });
 		case 'minimize_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for minimize_window.');
 			}
-			return await DesktopRPCEngine.invoke('window.minimize', { window_uid: input.window_uid });
+			return await RPCEngine.invoke<WindowRPCResultMap['window.minimize'], WindowRPCPayloadMap['window.minimize']>('window.minimize', { window_uid: input.window_uid });
 		case 'restore_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for restore_window.');
 			}
-			return await DesktopRPCEngine.invoke('window.restore', { window_uid: input.window_uid });
+			return await RPCEngine.invoke<WindowRPCResultMap['window.restore'], WindowRPCPayloadMap['window.restore']>('window.restore', { window_uid: input.window_uid });
 		case 'close_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for close_window.');
 			}
-			return await DesktopRPCEngine.invoke('window.close', { window_uid: input.window_uid });
+			return await RPCEngine.invoke<WindowRPCResultMap['window.close'], WindowRPCPayloadMap['window.close']>('window.close', { window_uid: input.window_uid });
 		case 'move_window':
 		case 'resize_window':
 		case 'update_window':
 			if (!input.window_uid) {
 				throw new Error('window_uid is required for window updates.');
 			}
-			return await DesktopRPCEngine.invoke('window.update', {
+			return await RPCEngine.invoke<WindowRPCResultMap['window.update'], WindowRPCPayloadMap['window.update']>('window.update', {
 				window_uid: input.window_uid,
 				x: input.x,
 				y: input.y,
@@ -80,7 +81,7 @@ async function AceWindowTool(input: AceWindowToolInput) {
 			if (!input.package || !input.window) {
 				throw new Error('package and window are required for spawn_window.');
 			}
-			return await DesktopRPCEngine.invoke('window.spawn', {
+			return await RPCEngine.invoke<WindowRPCResultMap['window.spawn'], WindowRPCPayloadMap['window.spawn']>('window.spawn', {
 				package: input.package,
 				window: input.window,
 				title: input.title,

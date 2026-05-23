@@ -9,14 +9,14 @@ const { spawn } = require('child_process');
  * Responsibilities:
  * - spawn and supervise the background runtime child process
  * - broker request/response RPC between Electron main and the background runtime
- * - relay desktop-only RPC requests coming from background to the desktop renderer
+ * - relay one-way runtime events between background and the desktop renderer
  * - fan out one-way background stream events to Electron-side listeners
  *
  * This module is intentionally a bridge, not the background runtime itself.
  * Electron main remains the broker/process host, the background runtime remains
  * the execution runtime, and the desktop renderer remains the UI runtime.
  */
-function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, invokeDesktop }) {
+function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode }) {
     let backgroundRuntimeProcess = null;
     let backgroundReadyPromise = null;
     let backgroundReadyResolver = null;
@@ -24,6 +24,8 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
     let backgroundRequestCounter = 0;
     const backgroundPendingRequests = new Map();
     const backgroundStreamListeners = new Set();
+    const rpcMessageListeners = new Set();
+    const runtimeEventListeners = new Set();
 
     // Determine whether the background child process is currently alive and usable.
     function isAlive() {
@@ -60,46 +62,31 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         backgroundPendingRequests.clear();
     }
 
-    // Forward background-originated desktop RPC calls into the desktop renderer host bridge.
-    async function handleDesktopRpcRequest(message) {
-        if (!backgroundRuntimeProcess || typeof backgroundRuntimeProcess.send !== 'function') {
-            return;
-        }
-
-        try {
-            const result = await invokeDesktop(
-                String(message.method || ''),
-                message.payload && typeof message.payload === 'object' ? message.payload : {},
-            );
-
-            backgroundRuntimeProcess.send({
-                type: 'ace:background:desktop:response',
-                id: message.id,
-                success: true,
-                result,
-            });
-        } catch (error) {
-            const err = error instanceof Error ? error : new Error(String(error));
-            backgroundRuntimeProcess.send({
-                type: 'ace:background:desktop:response',
-                id: message.id,
-                success: false,
-                error: {
-                    message: err.message,
-                    stack: err.stack,
-                },
-            });
-        }
-    }
-
-    // Handle all child-process IPC messages: desktop RPC, ready state, streams, and RPC results.
+    // Handle all child-process IPC messages: runtime events, ready state, streams, and RPC results.
     function handleMessage(message) {
         if (!message || typeof message !== 'object') {
             return;
         }
 
-        if (message.type === 'ace:background:desktop:request' && message.id) {
-            void handleDesktopRpcRequest(message);
+        if (message.type === 'ace:runtime:event') {
+            for (const listener of runtimeEventListeners) {
+                listener(message);
+            }
+            return;
+        }
+
+        if (
+            message.type === 'ace:rpc:request' ||
+            message.type === 'ace:rpc:response' ||
+            message.type === 'ace:rpc:claim-route' ||
+            message.type === 'ace:rpc:claim-route:result' ||
+            message.type === 'ace:rpc:release-route' ||
+            message.type === 'ace:rpc:registry-sync:request' ||
+            message.type === 'ace:rpc:registry-sync'
+        ) {
+            for (const listener of rpcMessageListeners) {
+                listener(message);
+            }
             return;
         }
 
@@ -206,6 +193,18 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         return await start();
     }
 
+    function ensureStarted() {
+        if (resolveElectronRuntimeMode() === 'background') {
+            return;
+        }
+
+        if (isAlive()) {
+            return;
+        }
+
+        void start();
+    }
+
     // Invoke a request/response RPC against the background child runtime.
     async function invoke(method, payload = {}) {
         await ensure();
@@ -258,12 +257,50 @@ function createBackgroundRpcBridge({ projectRoot, resolveElectronRuntimeMode, in
         };
     }
 
+    async function emitRpcMessage(message) {
+        ensureStarted();
+
+        if (!backgroundRuntimeProcess || typeof backgroundRuntimeProcess.send !== 'function') {
+            throw new Error('Background runtime IPC channel is unavailable.');
+        }
+
+        backgroundRuntimeProcess.send(message);
+    }
+
+    function onRpcMessage(listener) {
+        rpcMessageListeners.add(listener);
+        return () => {
+            rpcMessageListeners.delete(listener);
+        };
+    }
+
+    async function emitRuntimeEvent(message) {
+        ensureStarted();
+
+        if (!backgroundRuntimeProcess || typeof backgroundRuntimeProcess.send !== 'function') {
+            throw new Error('Background runtime IPC channel is unavailable.');
+        }
+
+        backgroundRuntimeProcess.send(message);
+    }
+
+    function onRuntimeEvent(listener) {
+        runtimeEventListeners.add(listener);
+        return () => {
+            runtimeEventListeners.delete(listener);
+        };
+    }
+
     return {
         ensure,
         invoke,
         getStatus,
         dispose,
         onStreamEvent,
+        emitRpcMessage,
+        onRpcMessage,
+        emitRuntimeEvent,
+        onRuntimeEvent,
     };
 }
 

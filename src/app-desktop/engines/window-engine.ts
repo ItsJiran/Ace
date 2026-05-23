@@ -8,12 +8,80 @@ import type { WindowAnimationSequence } from './window/window-animation-engine';
 import type { WindowConfig, SpawnWindowOptions } from '#/shared/schemas/window';
 import type { DesktopState } from '#/shared/schemas/state';
 import { Engine } from '#/shared/engines/engine';
+import { EventBus } from '#/shared/engines/event-engine';
+import { RPCEngine } from '#/shared/engines/rpc-engine';
+import type { WindowRPCPayloadMap, WindowRPCResultMap, WindowRPCSnapshot, WindowRPCUpdatePayload } from '#/shared/schemas/window-rpc';
+
+type WindowCommandPayload = {
+    window_uid: string;
+};
+
+type WindowUpdateEventPayload = WindowRPCUpdatePayload;
 
 class WindowEngineSingleton extends Engine {
     private highest_z_index = 100;
     private lifecycleManager: WindowLifecycleManager = null as unknown as WindowLifecycleManager;
     private windowMemoryUid(window_uid: string) {
         return `system:window:${window_uid}`;
+    }
+
+    private resolveWindowSnapshot(windowUid: string): WindowRPCSnapshot | null {
+        const windowConfig = KernelEngine.readMemory(this.windowMemoryUid(windowUid)) as WindowConfig | undefined;
+        const windowEntry = KernelEngine.getWindowEntry(windowUid);
+        if (!windowConfig || !windowEntry) {
+            return null;
+        }
+
+        const [package_ref, , window_slug] = String(windowConfig.component || '').split(':');
+
+        return {
+            window_uid: windowConfig.window_uid,
+            title: windowConfig.title,
+            component: windowConfig.component,
+            x: windowConfig.x,
+            y: windowConfig.y,
+            width: windowConfig.width,
+            height: windowConfig.height,
+            z_index: windowConfig.z_index,
+            opacity: windowConfig.opacity,
+            is_locked: windowConfig.is_locked,
+            is_resizeable: windowConfig.is_resizeable,
+            always_on_top: windowConfig.always_on_top,
+            is_minimized: windowConfig.is_minimized,
+            window_style: windowConfig.window_style,
+            package_ref,
+            window_slug,
+            process_uid: windowEntry.process_uid,
+        };
+    }
+
+    private applyWindowUpdate(payload: WindowUpdateEventPayload): WindowRPCSnapshot | null {
+        const {
+            window_uid,
+            x,
+            y,
+            width,
+            height,
+            ...configUpdates
+        } = payload;
+
+        const currentConfig = KernelEngine.readMemory(this.windowMemoryUid(window_uid)) as
+            | WindowConfig
+            | undefined;
+        if (!currentConfig) {
+            return null;
+        }
+
+        this.updateWindowBounds(
+            window_uid,
+            x ?? currentConfig.x,
+            y ?? currentConfig.y,
+            width ?? currentConfig.width,
+            height ?? currentConfig.height,
+        );
+        this.updateWindowConfig(window_uid, configUpdates);
+
+        return this.resolveWindowSnapshot(window_uid);
     }
 
     private resolveOverlayModeAtPoint(x: number, y: number): DesktopState['mode'] {
@@ -129,16 +197,134 @@ class WindowEngineSingleton extends Engine {
         );
     }
 
-    async setupEventRoutes() {
-        if (typeof window === 'undefined') {
-            return;
-        }
+    async setupRpcRoutes() {
+        await RPCEngine.handle<WindowRPCPayloadMap['window.list'], WindowRPCResultMap['window.list']>(
+            'window.list',
+            async () => {
+                return KernelEngine.getRenderedWindows()
+                    .map((entry) => this.resolveWindowSnapshot(entry.uid))
+                    .filter((entry): entry is WindowRPCSnapshot => Boolean(entry));
+            },
+            { owner: this.constructor.name },
+        );
 
+        await RPCEngine.handle<WindowRPCPayloadMap['window.get'], WindowRPCResultMap['window.get']>(
+            'window.get',
+            async (payload) => this.resolveWindowSnapshot(payload.window_uid),
+            { owner: this.constructor.name },
+        );
+
+        await RPCEngine.handle<WindowRPCPayloadMap['window.focus'], WindowRPCResultMap['window.focus']>(
+            'window.focus',
+            async (payload) => {
+                this.focusWindow(payload.window_uid);
+                return this.resolveWindowSnapshot(payload.window_uid);
+            },
+            { owner: this.constructor.name },
+        );
+
+        await RPCEngine.handle<WindowRPCPayloadMap['window.close'], WindowRPCResultMap['window.close']>(
+            'window.close',
+            async (payload) => {
+                this.closeWindow(payload.window_uid);
+                return { ok: true, window_uid: payload.window_uid };
+            },
+            { owner: this.constructor.name },
+        );
+
+        await RPCEngine.handle<WindowRPCPayloadMap['window.minimize'], WindowRPCResultMap['window.minimize']>(
+            'window.minimize',
+            async (payload) => {
+                this.minimizeWindow(payload.window_uid);
+                return this.resolveWindowSnapshot(payload.window_uid);
+            },
+            { owner: this.constructor.name },
+        );
+
+        await RPCEngine.handle<WindowRPCPayloadMap['window.restore'], WindowRPCResultMap['window.restore']>(
+            'window.restore',
+            async (payload) => {
+                this.restoreWindow(payload.window_uid);
+                return this.resolveWindowSnapshot(payload.window_uid);
+            },
+            { owner: this.constructor.name },
+        );
+
+        await RPCEngine.handle<WindowRPCPayloadMap['window.spawn'], WindowRPCResultMap['window.spawn']>(
+            'window.spawn',
+            async (payload) => {
+                const windowUid = this.spawnWindow(payload);
+                return windowUid ? this.resolveWindowSnapshot(windowUid) : null;
+            },
+            { owner: this.constructor.name },
+        );
+
+        await RPCEngine.handle<WindowRPCPayloadMap['window.update'], WindowRPCResultMap['window.update']>(
+            'window.update',
+            async (payload) => this.applyWindowUpdate(payload),
+            { owner: this.constructor.name },
+        );
+    }
+
+    async setupEventRoutes() {
         if (window.electronAPI?.onMouseTracking) {
             window.electronAPI.onMouseTracking((payload) => {
                 this.handleMouseTracking(payload);
             });
         }
+
+        EventBus.listen<SpawnWindowOptions>('system:window:spawn', (event) => {
+            if (!event?.payload) {
+                return;
+            }
+
+            this.spawnWindow(event.payload);
+        });
+
+        EventBus.listen<WindowCommandPayload>('system:window:focus', (event) => {
+            const windowUid = event?.payload?.window_uid;
+            if (!windowUid) {
+                return;
+            }
+
+            this.focusWindow(windowUid);
+        });
+
+        EventBus.listen<WindowCommandPayload>('system:window:close', (event) => {
+            const windowUid = event?.payload?.window_uid;
+            if (!windowUid) {
+                return;
+            }
+
+            this.closeWindow(windowUid);
+        });
+
+        EventBus.listen<WindowCommandPayload>('system:window:minimize', (event) => {
+            const windowUid = event?.payload?.window_uid;
+            if (!windowUid) {
+                return;
+            }
+
+            this.minimizeWindow(windowUid);
+        });
+
+        EventBus.listen<WindowCommandPayload>('system:window:restore', (event) => {
+            const windowUid = event?.payload?.window_uid;
+            if (!windowUid) {
+                return;
+            }
+
+            this.restoreWindow(windowUid);
+        });
+
+        EventBus.listen<WindowUpdateEventPayload>('system:window:update', (event) => {
+            const payload = event?.payload;
+            if (!payload?.window_uid) {
+                return;
+            }
+
+            this.applyWindowUpdate(payload);
+        });
     }
 
     getRegistry({ packageRef, slug }: { packageRef: string; slug: string }) {

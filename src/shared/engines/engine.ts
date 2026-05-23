@@ -4,36 +4,44 @@ export abstract class Engine {
     private isBoot = false;
     private isKernelInitialized = false;
     private isEventRouteInitialized = false;
+    private isRpcRouteInitialized = false;
     private isTerminationHookBound = false;
 
-    _boot() {
+    async _boot() {
         if(this.isBoot) return;
-        this.boot();
+        await this.boot();
         this.isBoot = true;
     }
 
-    _setupKernelSpace() {
+    async _setupKernelSpace() {
         if(this.isKernelInitialized) return;
-        this.setupKernelSpace();
+        await this.setupKernelSpace();
         this.isKernelInitialized = true;
     }
 
-    _setupEventRoutes() {
+    async _setupEventRoutes() {
         if(this.isEventRouteInitialized) return;
-        this.setupEventRoutes();
+        await this.setupEventRoutes();
         this.isEventRouteInitialized = true;
-    } 
+    }
 
-    _setupKernelTerminationHook() {
+    async _setupRpcRoutes() {
+        if(this.isRpcRouteInitialized) return;
+        await this.setupRpcRoutes();
+        this.isRpcRouteInitialized = true;
+    }
+
+    async _setupKernelTerminationHook() {
         if(this.isTerminationHookBound) return;
-        this.setupKernelTerminationHook();
+        await this.setupKernelTerminationHook();
         this.isTerminationHookBound = true;
     }
 
-    abstract boot(): void;
-    abstract setupEventRoutes(): void;
-    abstract setupKernelSpace(): void;
-    abstract setupKernelTerminationHook(): void;
+    abstract boot(): void | Promise<void>;
+    abstract setupEventRoutes(): void | Promise<void>;
+    setupRpcRoutes(): void | Promise<void> {}
+    abstract setupKernelSpace(): void | Promise<void>;
+    abstract setupKernelTerminationHook(): void | Promise<void>;
 
     public log(...args: any[]) {
         console.log(`[${this.engine_name}]`, ...args);

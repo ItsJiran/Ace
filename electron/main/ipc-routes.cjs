@@ -11,10 +11,165 @@ function registerMainIPCHandlers({
     resolveElectronRuntimeMode,
     app,
 }) {
+    const rpcRouteRegistry = new Map();
+
+    const serializeRpcRouteRegistry = () => Object.fromEntries(rpcRouteRegistry.entries());
+
+    const sendRpcMessageToDesktop = (message) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+            if (!window.isDestroyed()) {
+                window.webContents.send('ace:rpc:message', message);
+            }
+        }
+    };
+
+    const sendRpcMessageToRuntime = (target, message) => {
+        if (target === 'desktop') {
+            sendRpcMessageToDesktop(message);
+            return;
+        }
+
+        if (target === 'background') {
+            void backgroundRuntime.emitRpcMessage(message).catch((error) => {
+                console.error('[electron] Failed to send RPC message to background runtime:', error);
+            });
+        }
+    };
+
+    const broadcastRpcRegistrySync = (target = 'broadcast') => {
+        const message = {
+            type: 'ace:rpc:registry-sync',
+            target,
+            registry: serializeRpcRouteRegistry(),
+        };
+
+        if (target === 'broadcast' || target === 'desktop') {
+            sendRpcMessageToDesktop(message);
+        }
+
+        if (target === 'broadcast' || target === 'background') {
+            void backgroundRuntime.emitRpcMessage(message).catch((error) => {
+                console.error('[electron] Failed to sync RPC registry to background runtime:', error);
+            });
+        }
+    };
+
+    const handleRpcControlMessage = (message) => {
+        if (!message || typeof message !== 'object') {
+            return false;
+        }
+
+        if (message.type === 'ace:rpc:claim-route') {
+            const route = typeof message.route === 'string' ? message.route : '';
+            const owner = typeof message.owner === 'string' ? message.owner : 'anonymous';
+            const runtime = message.source === 'desktop' || message.source === 'background'
+                ? message.source
+                : null;
+
+            if (!route || !runtime || !message.id) {
+                return true;
+            }
+
+            const existingEntry = rpcRouteRegistry.get(route);
+            if (
+                existingEntry &&
+                (existingEntry.owner_runtime !== runtime || existingEntry.owner_engine !== owner)
+            ) {
+                sendRpcMessageToRuntime(runtime, {
+                    type: 'ace:rpc:claim-route:result',
+                    id: message.id,
+                    target: runtime,
+                    success: false,
+                    error: {
+                        message: `RPC route "${route}" is already owned by ${existingEntry.owner_runtime}:${existingEntry.owner_engine}.`,
+                    },
+                    entry: existingEntry,
+                    registry: serializeRpcRouteRegistry(),
+                });
+                return true;
+            }
+
+            const nextEntry = existingEntry ?? {
+                route,
+                owner_runtime: runtime,
+                owner_engine: owner,
+                registered_at: Date.now(),
+            };
+            rpcRouteRegistry.set(route, nextEntry);
+
+            sendRpcMessageToRuntime(runtime, {
+                type: 'ace:rpc:claim-route:result',
+                id: message.id,
+                target: runtime,
+                success: true,
+                entry: nextEntry,
+                registry: serializeRpcRouteRegistry(),
+            });
+            broadcastRpcRegistrySync('broadcast');
+            return true;
+        }
+
+        if (message.type === 'ace:rpc:release-route') {
+            const route = typeof message.route === 'string' ? message.route : '';
+            const owner = typeof message.owner === 'string' ? message.owner : '';
+            const runtime = message.source === 'desktop' || message.source === 'background'
+                ? message.source
+                : null;
+
+            if (!route || !owner || !runtime) {
+                return true;
+            }
+
+            const existingEntry = rpcRouteRegistry.get(route);
+            if (
+                existingEntry &&
+                existingEntry.owner_runtime === runtime &&
+                existingEntry.owner_engine === owner
+            ) {
+                rpcRouteRegistry.delete(route);
+                broadcastRpcRegistrySync('broadcast');
+            }
+
+            return true;
+        }
+
+        if (message.type === 'ace:rpc:registry-sync:request') {
+            const runtime = message.source === 'desktop' || message.source === 'background'
+                ? message.source
+                : null;
+            if (!runtime) {
+                return true;
+            }
+
+            sendRpcMessageToRuntime(runtime, {
+                type: 'ace:rpc:registry-sync',
+                target: runtime,
+                registry: serializeRpcRouteRegistry(),
+            });
+            return true;
+        }
+
+        return false;
+    };
+
     const unsubscribeBackgroundStream = backgroundRuntime.onStreamEvent((payload) => {
         for (const window of BrowserWindow.getAllWindows()) {
             if (!window.isDestroyed()) {
                 window.webContents.send('ace:background:stream:event', payload);
+            }
+        }
+    });
+    const unsubscribeRpcMessages = backgroundRuntime.onRpcMessage((message) => {
+        if (handleRpcControlMessage(message)) {
+            return;
+        }
+
+        sendRpcMessageToDesktop(message);
+    });
+    const unsubscribeRuntimeEvents = backgroundRuntime.onRuntimeEvent((message) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+            if (!window.isDestroyed()) {
+                window.webContents.send('ace:runtime:event', message);
             }
         }
     });
@@ -104,6 +259,20 @@ function registerMainIPCHandlers({
     });
 
     ipcMain.handle('ace:background:status', () => backgroundRuntime.getStatus());
+    ipcMain.on('ace:rpc:message', (_event, message) => {
+        if (handleRpcControlMessage(message)) {
+            return;
+        }
+
+        void backgroundRuntime.emitRpcMessage(message).catch((error) => {
+            console.error('[electron] Failed to relay RPC message:', error);
+        });
+    });
+    ipcMain.on('ace:runtime:event', (_event, message) => {
+        void backgroundRuntime.emitRuntimeEvent(message).catch((error) => {
+            console.error('[electron] Failed to relay runtime event:', error);
+        });
+    });
     ipcMain.handle('ace:background:invoke', async (_event, method, payload) => {
         return await backgroundRuntime.invoke(
             String(method || ''),
@@ -135,6 +304,8 @@ function registerMainIPCHandlers({
 
     return () => {
         unsubscribeBackgroundStream?.();
+        unsubscribeRpcMessages?.();
+        unsubscribeRuntimeEvents?.();
         ipcMain.removeHandler('ace:window:focus');
         ipcMain.removeHandler('ace:window:get-bounds');
         ipcMain.removeHandler('ace:screen:ignore-mouse-events');
@@ -147,6 +318,8 @@ function registerMainIPCHandlers({
         ipcMain.removeHandler('ace:app:platform');
         ipcMain.removeHandler('ace:app:quit');
         ipcMain.removeHandler('ace:background:status');
+        ipcMain.removeAllListeners('ace:rpc:message');
+        ipcMain.removeAllListeners('ace:runtime:event');
         ipcMain.removeHandler('ace:background:invoke');
         ipcMain.removeHandler('ace:background:fetch-models');
         ipcMain.removeHandler('ace:background:sync-models');

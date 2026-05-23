@@ -1,4 +1,5 @@
 import type { BackgroundAIStreamEventPayloadType } from './ai';
+import type { CrossRuntimeEventMessage } from './events';
 
 export type BackgroundRPCRequestMessage = {
 	type: 'ace:background:rpc:request';
@@ -30,10 +31,11 @@ export type BackgroundRPCStreamEventMessage = {
 	payload: BackgroundAIStreamEventPayloadType;
 };
 
-export type BackgroundRPCInboundMessage = BackgroundRPCRequestMessage;
+export type BackgroundRPCInboundMessage = BackgroundRPCRequestMessage | CrossRuntimeEventMessage;
 
 export type BackgroundRPCOutboundMessage =
 	| BackgroundRPCResultSuccessMessage
 	| BackgroundRPCResultFailureMessage
 	| BackgroundRPCReadyMessage
-	| BackgroundRPCStreamEventMessage;
+	| BackgroundRPCStreamEventMessage
+	| CrossRuntimeEventMessage;

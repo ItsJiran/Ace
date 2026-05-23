@@ -2,6 +2,7 @@ import { EventBus } from './shared/engines/event-engine';
 import { ConfigEngine } from './shared/engines/config-engine';
 import { KernelEngine } from './shared/engines/kernel-engine';
 import { RegistryEngine } from './shared/engines/registry-engine';
+import { RPCEngine } from './shared/engines/rpc-engine';
 import { AIEngine } from './app-background/engines/ai-engine';
 
 let backgroundBootPromise: Promise<void> | null = null;
@@ -42,6 +43,9 @@ export async function bootBackgroundRuntime() {
 		console.group('Background Runtime: Booting System...');
 
 		EventBus.setupKernelSpace();
+		RPCEngine.setupKernelSpace();
+		RPCEngine.setupRuntimeBridge();
+		await EventBus.setupRuntimeBridge();
 		ConfigEngine.setupKernelSpace();
 		AIEngine.setupKernelSpace();
 
@@ -49,7 +53,8 @@ export async function bootBackgroundRuntime() {
 			await RegistryEngine.boot();
 			await ConfigEngine.boot();
 			await AIEngine.boot();
-			await AIEngine.setupEventRoutes?.();
+			await AIEngine._setupRpcRoutes();
+			await AIEngine._setupEventRoutes();
 
 			console.log('ACE Background Runtime Ready.');
 		} catch (error) {

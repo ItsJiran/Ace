@@ -7,119 +7,9 @@ import { StateEngine } from './app-desktop/engines/state-engine';
 import { LoggerEngine } from './app-desktop/engines/logger-engine';
 import { KernelEngine } from './shared/engines/kernel-engine';
 import { AIEngine } from './app-desktop/engines/ai-engine';
-import type {
-	DesktopHostInvokeMethod,
-	DesktopHostInvokePayloadMap,
-	DesktopHostWindowSnapshot,
-} from '#/shared/schemas/desktop-host';
-import type { WindowConfig } from '#/shared/schemas/window';
+import { RPCEngine } from './shared/engines/rpc-engine';
 
 let bootPromise: Promise<void> | null = null;
-
-function resolveDesktopWindowSnapshot(windowUid: string): DesktopHostWindowSnapshot | null {
-	const windowConfig = KernelEngine.readMemory(`system:window:${windowUid}`) as WindowConfig | undefined;
-	const windowEntry = KernelEngine.getWindowEntry(windowUid);
-	if (!windowConfig || !windowEntry) {
-		return null;
-	}
-
-	const [package_ref, , window_slug] = String(windowConfig.component || '').split(':');
-
-	return {
-		window_uid: windowConfig.window_uid,
-		title: windowConfig.title,
-		component: windowConfig.component,
-		x: windowConfig.x,
-		y: windowConfig.y,
-		width: windowConfig.width,
-		height: windowConfig.height,
-		z_index: windowConfig.z_index,
-		opacity: windowConfig.opacity,
-		is_locked: windowConfig.is_locked,
-		is_resizeable: windowConfig.is_resizeable,
-		always_on_top: windowConfig.always_on_top,
-		is_minimized: windowConfig.is_minimized,
-		window_style: windowConfig.window_style,
-		package_ref,
-		window_slug,
-		process_uid: windowEntry.process_uid,
-	};
-}
-
-async function invokeDesktopHostBridge<Method extends DesktopHostInvokeMethod>(
-	method: Method,
-	payload: DesktopHostInvokePayloadMap[Method],
-) {
-	switch (method) {
-		case 'window.list': {
-			const entries = KernelEngine.getRenderedWindows()
-				.map((entry) => resolveDesktopWindowSnapshot(entry.uid))
-				.filter((entry): entry is DesktopHostWindowSnapshot => Boolean(entry));
-
-			return entries;
-		}
-		case 'window.get': {
-			const request = payload as DesktopHostInvokePayloadMap['window.get'];
-			return resolveDesktopWindowSnapshot(request.window_uid);
-		}
-		case 'window.focus': {
-			const request = payload as DesktopHostInvokePayloadMap['window.focus'];
-			window.ACE.window.focusWindow(request.window_uid);
-			return resolveDesktopWindowSnapshot(request.window_uid);
-		}
-		case 'window.close': {
-			const request = payload as DesktopHostInvokePayloadMap['window.close'];
-			window.ACE.window.closeWindow(request.window_uid);
-			return { ok: true, window_uid: request.window_uid };
-		}
-		case 'window.minimize': {
-			const request = payload as DesktopHostInvokePayloadMap['window.minimize'];
-			window.ACE.window.minimizeWindow(request.window_uid);
-			return resolveDesktopWindowSnapshot(request.window_uid);
-		}
-		case 'window.restore': {
-			const request = payload as DesktopHostInvokePayloadMap['window.restore'];
-			window.ACE.window.restoreWindow(request.window_uid);
-			return resolveDesktopWindowSnapshot(request.window_uid);
-		}
-		case 'window.spawn': {
-			const request = payload as DesktopHostInvokePayloadMap['window.spawn'];
-			const windowUid = window.ACE.window.spawnWindow(request);
-			if (!windowUid) {
-				return null;
-			}
-
-			return resolveDesktopWindowSnapshot(windowUid);
-		}
-		case 'window.update': {
-			const request = payload as DesktopHostInvokePayloadMap['window.update'];
-			const {
-				window_uid,
-				x,
-				y,
-				width,
-				height,
-				...configUpdates
-			} = request;
-
-			const currentConfig = KernelEngine.readMemory(`system:window:${window_uid}`) as WindowConfig | undefined;
-			if (!currentConfig) {
-				return null;
-			}
-
-			const nextX = x ?? currentConfig.x;
-			const nextY = y ?? currentConfig.y;
-			const nextWidth = width ?? currentConfig.width;
-			const nextHeight = height ?? currentConfig.height;
-
-			window.ACE.window.updateWindowBounds(window_uid, nextX, nextY, nextWidth, nextHeight);
-			window.ACE.window.updateWindowConfig(window_uid, configUpdates);
-			return resolveDesktopWindowSnapshot(window_uid);
-		}
-		default:
-			throw new Error(`Unsupported desktop host bridge method: ${method}`);
-	}
-}
 
 function resolveRuntimeMode() {
 	const viteMode = import.meta.env.VITE_ACE_RUNTIME_MODE;
@@ -259,12 +149,20 @@ async function initEngineEventRoutesStep() {
 	const windowEngine = window.ACE.window;
 	const keybindEngine = window.ACE.keybind;
 
-	await windowEngine.setupEventRoutes?.();
-	await keybindEngine.setupEventRoutes?.();
+	await windowEngine._setupEventRoutes();
+	await keybindEngine._setupEventRoutes();
 
 	console.log(
 		'[Boot] Phase 7: Engine event routes registered (window, keybind, ai_gateway, tool, ai_context, parser).',
 	);
+}
+
+async function initEngineRpcRoutesStep() {
+	const windowEngine = window.ACE.window;
+
+	await windowEngine._setupRpcRoutes();
+
+	console.log('[Boot] Phase 6: Engine RPC routes registered (window).');
 }
 
 export async function bootACE() {
@@ -287,6 +185,9 @@ export async function bootACE() {
 		console.group('Desktop Runtime: Booting System...');
 
 		EventBus.setupKernelSpace();
+		RPCEngine.setupKernelSpace();
+		RPCEngine.setupRuntimeBridge();
+		await EventBus.setupRuntimeBridge();
 		StateEngine.setupKernelSpace();
 		ConfigEngine.setupKernelSpace();
 		AIEngine.setupKernelSpace();
@@ -302,6 +203,7 @@ export async function bootACE() {
 				kernel: KernelEngine,
 				window: WindowEngine,
 				event: EventBus,
+				rpc: RPCEngine,
 				storage: KernelEngine,
 				config: ConfigEngine,
 				ai: AIEngine,
@@ -310,18 +212,6 @@ export async function bootACE() {
 				state: StateEngine,
 				global: StateEngine,
 				logger: LoggerEngine,
-			};
-			(
-				window as typeof window & {
-					__ACE_DESKTOP_HOST_BRIDGE__?: {
-						invoke: (
-							method: DesktopHostInvokeMethod,
-							payload: DesktopHostInvokePayloadMap[DesktopHostInvokeMethod],
-						) => Promise<unknown> | unknown;
-					};
-				}
-			).__ACE_DESKTOP_HOST_BRIDGE__ = {
-				invoke: (method, payload) => invokeDesktopHostBridge(method, payload),
 			};
 			console.log('ACE Desktop Registry Bridge Initialized.');
 		}
@@ -332,6 +222,7 @@ export async function bootACE() {
 			await initGlobalStateStep();
 			await initGlobalInputHandlersStep();
 			await initAutoStartWidgetsStep();
+			await initEngineRpcRoutesStep();
 			await initEngineEventRoutesStep();
 
 			console.log('ACE Desktop Runtime Ready.');

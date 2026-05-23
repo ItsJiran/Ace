@@ -85,7 +85,7 @@ If a module is treated like a subsystem and follows the engine lifecycle pattern
 Examples:
 - `KernelEngine`
 - `AIEngine`
-- `DesktopRPCEngine`
+- `WindowEngine`
 
 If a module is only a helper or adapter, it should not be named as an engine.
 
