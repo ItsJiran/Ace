@@ -47,6 +47,7 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 	);
 	const pending_prompt = null;
 	const [is_submitting_prompt, setIsSubmittingPrompt] = useState(false);
+	const [is_waiting_for_backend_run, setIsWaitingForBackendRun] = useState(false);
 	const [running_tool_streams, setRunningToolStreams] = useState<RunningToolStreamItem[]>([]);
 
 	useEffect(() => {
@@ -64,6 +65,7 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 	useEffect(() => {
 		if (!current_thread_uid) {
 			setCurrentThreadState(null);
+			setIsWaitingForBackendRun(false);
 			setRunningToolStreams([]);
 			return;
 		}
@@ -103,8 +105,21 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 						? ((message.params as Record<string, unknown>).data as Record<string, unknown> | undefined)
 						: undefined;
 
+				if (lifecycleData?.event === 'started') {
+					setIsWaitingForBackendRun(true);
+					return;
+				}
+
 				if (lifecycleData?.event === 'completed' || lifecycleData?.event === 'failed') {
+					setIsWaitingForBackendRun(false);
 					setRunningToolStreams([]);
+					void AIEngine.syncCurrentThreadFromBackground(payload.thread_uid).then((thread) => {
+						if (resolveActiveThreadUid(current_thread_uid) !== payload.thread_uid) {
+							return;
+						}
+
+						setCurrentThreadState(thread ?? null);
+					});
 				}
 				return;
 			}
@@ -234,10 +249,10 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 		}
 
 		setIsSubmittingPrompt(true);
+		setIsWaitingForBackendRun(true);
 
 		try {
 			let threadUid = current_thread_uid;
-			const shouldSubmitViaDirectTransport = !threadUid;
 			if (!threadUid) {
 				const created = await createThread({
 					provider: selectedProvider,
@@ -268,18 +283,7 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 			setCurrentThreadUidState(threadUid);
 			setCurrentThreadState(AIEngine.readThreadFromMemory(threadUid) ?? null);
 
-			if (shouldSubmitViaDirectTransport) {
-				submitPromptToThread(threadUid, normalizedPrompt);
-			} else {
-				await stream.submit({
-					messages: [
-						{
-							type: 'human' as const,
-							content: normalizedPrompt,
-						},
-					],
-				});
-			}
+			submitPromptToThread(threadUid, normalizedPrompt);
 
 			return AIEngine.readThreadFromMemory(resolveActiveThreadUid(threadUid) ?? threadUid) ?? null;
 		} finally {
@@ -291,9 +295,9 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 		const activeThreadUid = resolveActiveThreadUid(current_thread_uid);
 		if (activeThreadUid) {
 			await AIEngine.stopThreadPrompt(activeThreadUid);
-			await AIEngine.syncCurrentThreadFromBackground(activeThreadUid);
+			const syncedThread = await AIEngine.syncCurrentThreadFromBackground(activeThreadUid);
+			setCurrentThreadState(syncedThread ?? null);
 		}
-		await stream.stop();
 	};
 
 	const messages = useMemo(() => {
@@ -301,7 +305,7 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 			persisted_messages.length > stream.messages.length ? persisted_messages : stream.messages;
 		return baseMessages;
 	}, [persisted_messages, stream.messages]);
-	const is_streaming = stream.isLoading || is_submitting_prompt;
+	const is_streaming = is_waiting_for_backend_run || is_submitting_prompt;
 	const ai_status = useMemo<AIThreadStatus>(() => {
 		const runningToolNames = running_tool_streams.map((item) => item.toolName);
 

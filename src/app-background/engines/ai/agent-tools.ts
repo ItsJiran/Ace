@@ -10,7 +10,6 @@ const ORCHESTRATOR_CONTEXT_TOOL_NAMES = [
     'grep',
     'read_file',
     planningExecutionBatchTool.name,
-    'write_todos',
 ];
 
 function dedupeTools(tools: StructuredToolInterface[]) {
@@ -55,7 +54,6 @@ export function createOrchestratorToolFilterMiddleware() {
 export function createCompiledToolFilterMiddleware() {
     return createToolFilterMiddleware('CompiledToolFilterMiddleware', [
         updateExecutionBatchTool.name,
-        'write_todos',
     ]);
 }
 

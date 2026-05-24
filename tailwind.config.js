@@ -44,10 +44,10 @@ module.exports = {
         chip:   '8px',
       },
       boxShadow: {
-        "panel-fade":  '0 2px 0 0 rgba(255, 255, 255, 0.47) inset, 0 -1px 0 0 rgba(150, 165, 195, 0.07) inset, 0 12px 40px rgba(80, 95, 130, 0.09), 0 2px 10px rgba(80, 95, 130, 0.06)',
-        panel:  '0 2px 0 0 rgba(255,255,255,0.65) inset, 0 -1px 0 0 rgba(150,165,195,0.18) inset, 0 12px 40px rgba(80,95,130,0.20), 0 2px 10px rgba(80,95,130,0.10)',
-        bubble: '0 2px 8px rgba(85,100,140,0.10)',
-        send:   '0 2px 6px rgba(85,108,178,0.22), 0 1px 0 rgba(255,255,255,0.50) inset',
+        // "panel-fade":  '0 2px 0 0 rgba(255, 255, 255, 0.47) inset, 0 -1px 0 0 rgba(150, 165, 195, 0.07) inset, 0 12px 40px rgba(80, 95, 130, 0.09), 0 2px 10px rgba(80, 95, 130, 0.06)',
+        // panel:  '0 2px 0 0 rgba(255,255,255,0.65) inset, 0 -1px 0 0 rgba(150,165,195,0.18) inset, 0 12px 40px rgba(80,95,130,0.20), 0 2px 10px rgba(80,95,130,0.10)',
+        // bubble: '0 2px 8px rgba(85,100,140,0.10)',
+        // send:   '0 2px 6px rgba(85,108,178,0.22), 0 1px 0 rgba(255,255,255,0.50) inset',
       },
       backgroundImage: {
         'scene-gradient':  'linear-gradient(145deg, #b8c5d8 0%, #cdd6e5 30%, #dde3ef 55%, #c9d4e4 80%, #bdc9dc 100%)',

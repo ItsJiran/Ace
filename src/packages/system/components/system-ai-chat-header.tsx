@@ -27,8 +27,6 @@ export function SystemAIChatHeader({
 	threadOptions,
 	onSelectThread,
 	onOpenThreadMonitor,
-	messageCount,
-	threadCount,
 }: SystemAIChatHeaderProps) {
 	const { targets } = useAceTheme();
 
@@ -65,8 +63,6 @@ export function SystemAIChatHeader({
 						</option>
 					))}
 				</select>
-				<span className={[targets.btn.first, 'text-sm px-3 w-fit'].join(' ')}>messages: {messageCount}</span>
-				<span className={[targets.btn.first, 'text-sm px-3 w-fit'].join(' ')}>threads: {threadCount}</span>
 			</div>
 		</div>
 	);

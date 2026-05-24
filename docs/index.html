@@ -13,13 +13,13 @@
         <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
         <link rel="stylesheet" href="./assets/web.css" />
     </head>
-    <body class="min-h-screen bg-scene-gradient text-slate-800 antialiased">
+    <body data-ace-theme="dark" class="ace-page min-h-screen antialiased">
         <div class="page-noise"></div>
         <div
             class="relative mx-auto flex min-h-screen max-w-7xl flex-col px-5 pb-12 pt-6 sm:px-8 lg:px-10"
         >
             <header
-                class="system-shell system-shell-primary rounded-[28px] px-5 py-4 shadow-panel-fade"
+                class="ace-shell ace-shell-first rounded-[28px] px-5 py-4 shadow-panel-fade"
             >
                 <div class="flex flex-col gap-4 md:flex-row md:items-center h-fit md:justify-between">
                     <div class="flex items-center gap-4">
@@ -31,38 +31,37 @@
                             />
                         </div>
                         <div class="hidden sm:block">
-                            <div class="hidden sm:block text-lg font-semibold text-slate-800">ACE</div>
-                            <div class="hidden sm:block text-[11px] uppercase tracking-[0.1em] text-slate-500">
+                            <div class="hidden sm:block text-lg font-semibold ace-text-primary">ACE</div>
+                            <div class="hidden sm:block text-[11px] uppercase tracking-[0.1em] ace-text-subtle">
                                 Agentic Client Environment
                             </div>
                         </div>
                     </div>
                     <div
-                        class="hidden sm:flex flex-wrap items-center gap-2 text-[11px] capitalize tracking-[0.18em] text-slate-500"
+                        class="hidden sm:flex flex-wrap items-center gap-2 text-[11px] capitalize tracking-[0.18em] ace-text-subtle"
                     >
-                        <span class="hidden sm:inline-flex status-pill">local-first</span>
-                        <span class="hidden sm:inline-flex status-pill">electron</span>
-                        <span class="hidden sm:inline-flex status-pill">deepagents</span>
-                        <span class="hidden sm:inline-flex status-pill">experimental</span>
+                        <button id="theme-toggle" type="button" class="ace-theme-toggle" aria-label="Toggle theme">
+                            <span id="theme-toggle-label">Light mode</span>
+                        </button>
                     </div>
                 </div>
             </header>
 
             <main class="mt-6 flex-1 gap-6 flex flex-col">
                 <section
-                    class="system-shell system-shell-primary overflow-hidden rounded-[34px] px-6 py-7 shadow-panel"
+                    class="ace-shell ace-shell-first overflow-hidden rounded-[34px] px-6 py-7 shadow-panel"
                 >
                     <div class="max-w-full">
                         <div
-                            class="hidden sm:inline-flex items-center rounded-full border border-white/50 bg-white/40 px-3 py-1 text-[11px] font-semibold tracking-[0.22em] text-slate-500"
+                            class="ace-kicker hidden sm:inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold tracking-[0.22em]"
                         >
                             Overlay developer workspace
                         </div>
-                        <h1 class="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-900">
+                        <h1 class="ace-text-display mt-3 text-2xl font-semibold tracking-[-0.03em]">
                             A local-first agent runtime that lives on top of your desktop, not
                             behind another tab.
                         </h1>
-                        <p class="mt-5 space-y-3 text-sm leading-5 text-slate-600">
+                        <p class="ace-text-muted mt-5 space-y-3 text-sm leading-5">
                             ACE combines an Electron shell, React overlay surfaces, a background
                             DeepAgents runtime, live tool execution, and a package-driven registry
                             model into one ambient environment for building and operating AI
@@ -72,7 +71,7 @@
                             <a
                                 href="https://github.com/itsjiran/ace"
                                 target="_blank"
-                                class="cta-primary"
+                                class="ace-btn ace-btn-first"
                             >
                                 <span class="cta-icon" aria-hidden="true">
                                     <svg
@@ -93,7 +92,7 @@
                             <a
                                 href="https://jiran.dev/projects/ace"
                                 target="_blank"
-                                class="cta-primary"
+                                class="ace-btn ace-btn-first"
                             >
                                 <span class="cta-icon" aria-hidden="true">
                                     <svg
@@ -113,7 +112,7 @@
                                 </span>
                                 <span>Blog Post</span>
                             </a>
-                            <a href="#architecture" class="cta-secondary">
+                            <a href="#architecture" class="ace-btn ace-btn-secondary">
                                 <span class="cta-icon" aria-hidden="true">
                                     <svg
                                         viewBox="0 0 24 24"
@@ -228,15 +227,15 @@
 
                 <section class="mt-2 grid gap-6 w-full">
                     <article
-                        class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                        class="ace-shell ace-shell-first rounded-[30px] px-6 py-6 shadow-panel-fade"
                     >
                         <div class="eyebrow">Demonstration</div>
                         <div class="mt-4 gap-4 flex flex-col sm:flex-row w-full">
-                            <div class="system-container-primary w-full rounded-[20px] p-4">
-                                <div class="text-md font-semibold text-slate-800">
+                            <div class="ace-container-first w-full rounded-[20px] p-4">
+                                <div class="text-md font-semibold ace-text-primary">
                                     Full video walkthrough
                                 </div>
-                                <p class="text-sm leading-5 mt-1 text-slate-600">
+                                <p class="ace-text-muted text-sm leading-5 mt-1">
                                     See the current ACE experience in motion, including the overlay
                                     shell, package-driven UI surfaces, and the evolving agent
                                     runtime.
@@ -245,7 +244,7 @@
                                     href="https://www.youtube.com/watch?v=f9zeMf6KNdQ"
                                     target="_blank"
                                     rel="noreferrer"
-                                    class="mt-4 inline-flex cta-primary"
+                                    class="mt-4 inline-flex ace-btn ace-btn-first"
                                 >
                                     <span class="cta-icon" aria-hidden="true">
                                         <svg viewBox="0 0 24 24" fill="currentColor">
@@ -263,24 +262,24 @@
 
                 <aside class="flex flex-col sm:flex-row gap-6">
                     <section
-                        class="system-shell system-shell-primary rounded-[30px] px-5 py-5 shadow-panel-fade"
+                        class="ace-shell ace-shell-first rounded-[30px] px-5 py-5 shadow-panel-fade"
                     >
                         <div class="eyebrow">System principles</div>
                         <div class="mt-4 space-y-3">
-                            <div class="system-container-primary rounded-[18px] p-4">
-                                <div class="text-md font-semibold text-slate-800">
+                            <div class="ace-container-first rounded-[18px] p-4">
+                                <div class="text-md font-semibold ace-text-primary">
                                     Process isolation
                                 </div>
-                                <p class="text-sm leading-5 mt-1 text-slate-600">
+                                <p class="ace-text-muted text-sm leading-5 mt-1">
                                     Desktop renderer and background runtime do not share heap
                                     memory. Shared code is contract reuse, not shared state.
                                 </p>
                             </div>
-                            <div class="system-container-primary rounded-[18px] p-4">
-                                <div class="text-md font-semibold text-slate-800">
+                            <div class="ace-container-first rounded-[18px] p-4">
+                                <div class="text-md font-semibold ace-text-primary">
                                     RPC where results matter
                                 </div>
-                                <p class="text-sm leading-5 mt-1 text-slate-600">
+                                <p class="ace-text-muted text-sm leading-5 mt-1">
                                     Cross-runtime commands use RPC semantics, while observability
                                     and live lifecycle updates travel through stream events.
                                 </p>
@@ -289,7 +288,7 @@
                     </section>
 
                     <section
-                        class="system-shell system-shell-primary rounded-[30px] px-5 py-5 shadow-panel-fade"
+                        class="ace-shell ace-shell-first rounded-[30px] px-5 py-5 shadow-panel-fade"
                     >
                         <div class="eyebrow">Core stack</div>
                         <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -352,13 +351,13 @@
 
             <section id="architecture" class="mt-6 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
                 <article
-                    class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                    class="ace-shell ace-shell-first rounded-[30px] px-6 py-6 shadow-panel-fade"
                 >
                     <div class="eyebrow">Architecture</div>
-                    <h2 class="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-900">
+                    <h2 class="ace-text-display mt-3 text-2xl font-semibold tracking-[-0.03em]">
                         Three runtime layers with explicit transport boundaries.
                     </h2>
-                    <div class="mt-5 space-y-3 text-sm leading-5 text-slate-600">
+                    <div class="ace-text-muted mt-5 space-y-3 text-sm leading-5">
                         <p>
                             Electron main hosts the process model and brokers RPC. The desktop
                             renderer owns interface surfaces and UI state. The background runtime
@@ -373,7 +372,7 @@
                 </article>
 
                 <article
-                    class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                    class="ace-shell ace-shell-first rounded-[30px] px-6 py-6 shadow-panel-fade"
                 >
                     <div class="eyebrow">RPC bridge</div>
                     <div class="mt-4 grid gap-3 sm:grid-cols-3">
@@ -393,7 +392,7 @@
                         </div>
                     </div>
                     <div
-                        class="mt-4 rounded-[22px] border border-white/50 bg-white/35 p-4 font-mono text-[11px] leading-6 text-slate-600"
+                        class="ace-inline-panel mt-4 rounded-[22px] p-4 font-mono text-[11px] leading-6"
                     >
                         renderer -> main -> background<br />
                         background -> main -> desktop<br />
@@ -404,22 +403,22 @@
 
             <section class="mt-6 grid gap-6 w-full">
                 <article
-                    class="system-shell system-shell-primary rounded-[30px] px-6 py-6 shadow-panel-fade"
+                    class="ace-shell ace-shell-first rounded-[30px] px-6 py-6 shadow-panel-fade"
                 >
                     <div class="eyebrow">Registry model</div>
                     <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div class="system-container-primary rounded-[18px] p-4">
-                            <div class="text-md font-semibold text-slate-800">Desktop domains</div>
-                            <p class="text-sm leading-5 mt-1 text-slate-600">
+                        <div class="ace-container-first rounded-[18px] p-4">
+                            <div class="text-md font-semibold ace-text-primary">Desktop domains</div>
+                            <p class="ace-text-muted text-sm leading-5 mt-1">
                                 Windows, widgets, components, and renderers feed the visual
                                 workspace layer.
                             </p>
                         </div>
-                        <div class="system-container-primary rounded-[18px] p-4">
-                            <div class="text-md font-semibold text-slate-800">
+                        <div class="ace-container-first rounded-[18px] p-4">
+                            <div class="text-md font-semibold ace-text-primary">
                                 Background domains
                             </div>
-                            <p class="text-sm leading-5 mt-1 text-slate-600">
+                            <p class="ace-text-muted text-sm leading-5 mt-1">
                                 Tools, processes, pipelines, and runtime behaviors power
                                 orchestration and execution.
                             </p>
@@ -428,5 +427,32 @@
                 </article>
             </section>
         </div>
+        <script>
+            const storageKey = 'ace:web-theme';
+            const themeRoot = document.body;
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeToggleLabel = document.getElementById('theme-toggle-label');
+
+            const applyTheme = (theme) => {
+                themeRoot.setAttribute('data-ace-theme', theme);
+
+                if (themeToggleLabel) {
+                    themeToggleLabel.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+                }
+
+                if (themeToggle) {
+                    themeToggle.setAttribute('aria-pressed', String(theme === 'light'));
+                }
+            };
+
+            const savedTheme = window.localStorage.getItem(storageKey);
+            applyTheme(savedTheme === 'light' ? 'light' : 'dark');
+
+            themeToggle?.addEventListener('click', () => {
+                const nextTheme = themeRoot.getAttribute('data-ace-theme') === 'dark' ? 'light' : 'dark';
+                window.localStorage.setItem(storageKey, nextTheme);
+                applyTheme(nextTheme);
+            });
+        </script>
     </body>
 </html>

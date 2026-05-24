@@ -1,5 +1,5 @@
 import { createCodeInterpreterMiddleware } from '@langchain/quickjs';
-import { summarizationMiddleware, llmToolSelectorMiddleware, todoListMiddleware } from 'langchain';
+import { summarizationMiddleware, llmToolSelectorMiddleware } from 'langchain';
 
 import configurableModelMiddleware from './middlewares/configurable-model';
 import contextEditingMiddleware from './middlewares/context-editing';
@@ -16,8 +16,6 @@ export function createBaseAgentMiddlewares(mode: AgentModelModeType = AgentModel
         configurableModelMiddleware(mode),
         threadLivenessGuardMiddleware,
         syncDesktopKernelSpaceMiddleware,
-        todoListMiddleware(),
-
         summarizationMiddleware,
         llmToolSelectorMiddleware,
         contextEditingMiddleware,
