@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { RunnableConfig } from '@langchain/core/runnables';
+import type { BaseMessage } from '@langchain/core/messages';
 import type { Message as ProtocolMessage } from '@langchain/protocol';
 
 import { AIProviders, AIProviderEnvKeys } from '#/shared/constants/ai';
@@ -13,55 +14,68 @@ export const AgentModelModes = {
     SELECTED: 'selected',
 } as const;
 export type AgentModelModeType = (typeof AgentModelModes)[keyof typeof AgentModelModes];
-export const ExecutionBatchStatuses = {
+export const WorkflowNodeNames = {
+    AGENT: 'agent',
+} as const;
+export type WorkflowNodeType = (typeof WorkflowNodeNames)[keyof typeof WorkflowNodeNames];
+
+export const WorkflowTaskStatuses = {
     PENDING: 'pending',
-    IN_PROGRESS: 'in_progress',
+    IN_PROGRESS: 'in-progress',
+    COMPLETE: 'complete',
+    BLOCKED: 'blocked',
+} as const;
+export type WorkflowTaskStatusType =
+    (typeof WorkflowTaskStatuses)[keyof typeof WorkflowTaskStatuses];
+
+export const WorkflowReviewStatuses = {
+    COMPLETE: 'complete',
+    NEEDS_MORE_WORK: 'needs-more-work',
+    NEEDS_REPLAN: 'needs-replan',
+    FAILED: 'failed',
+} as const;
+export type WorkflowReviewStatusType =
+    (typeof WorkflowReviewStatuses)[keyof typeof WorkflowReviewStatuses];
+
+export const WorkflowStatuses = {
+    IDLE: 'idle',
+    PLANNING: 'planning',
+    EXECUTING: 'executing',
+    EVALUATING: 'evaluating',
     COMPLETED: 'completed',
     FAILED: 'failed',
 } as const;
-export type ExecutionBatchStatusType =
-    (typeof ExecutionBatchStatuses)[keyof typeof ExecutionBatchStatuses];
+export type WorkflowStatusType = (typeof WorkflowStatuses)[keyof typeof WorkflowStatuses];
 
-export const ExecutionBatchItemSchema = z.object({
-    item_id: z.string().optional(),
-    title: z.string(),
+export const WorkflowTaskSchema = z.object({
+    id: z.string(),
+    description: z.string(),
     instructions: z.string().optional(),
-    status: z.enum(['pending', 'in_progress', 'completed', 'failed']).default('pending'),
+    status: z.enum(['pending', 'in-progress', 'complete', 'blocked']).default('pending'),
     notes: z.array(z.string()).default([]),
-    updated_at: z.number().int().optional(),
+    updatedAt: z.number().int(),
 });
-export type ExecutionBatchItemType = z.infer<typeof ExecutionBatchItemSchema>;
+export type WorkflowTaskType = z.infer<typeof WorkflowTaskSchema>;
 
-export const ExecutionBatchSchema = z.object({
-    batch_id: z.string(),
-    title: z.string(),
-    objective: z.string(),
-    status: z.enum(['pending', 'in_progress', 'completed', 'failed']).default('pending'),
-    summary: z.string().optional(),
-    notes: z.array(z.string()).default([]),
-    items: z.array(ExecutionBatchItemSchema).default([]),
-    created_at: z.number().int(),
-    updated_at: z.number().int(),
-});
-export type ExecutionBatchType = z.infer<typeof ExecutionBatchSchema>;
-
-export const ExecutionBatchRequestSchema = z.object({
-    batch: z.object({
-        batch_id: z.string().optional(),
-        title: z.string(),
-        objective: z.string(),
-        notes: z.array(z.string()).default([]),
-        items: z.array(ExecutionBatchItemSchema).default([]),
-    }),
-});
-export type ExecutionBatchRequestType = z.infer<typeof ExecutionBatchRequestSchema>;
-
-export const ExecutionBatchResultSchema = z.object({
-    ok: z.boolean(),
-    batch: ExecutionBatchSchema,
+export const WorkflowJournalSchema = z.object({
+    round: z.number().int(),
+    node: z.enum(['orchestrator', 'executioner', 'evaluator']),
     summary: z.string(),
+    createdAt: z.number().int(),
 });
-export type ExecutionBatchResultType = z.infer<typeof ExecutionBatchResultSchema>;
+export type WorkflowJournalType = z.infer<typeof WorkflowJournalSchema>;
+
+export const WorkflowReviewSchema = z.object({
+    approved: z.boolean(),
+    status: z.enum(['complete', 'needs-more-work', 'needs-replan', 'failed']),
+    summary: z.string(),
+    notes: z.array(z.string()).default([]),
+});
+export type WorkflowReviewType = z.infer<typeof WorkflowReviewSchema>;
+
+export interface AceAgentWorkflowState {
+    messages: BaseMessage[];
+}
 
 /**
  * Schema that get injected into the agent context when invoking an agent. This is what the agent will 
@@ -166,6 +180,15 @@ export type AgentThreadSyncPayloadType = Partial<AgentThreadSnapshotType> & {
  */
 
 export const AI_THREAD_STREAM_EVENT_SLUG = 'system:ai:thread:stream';
+
+export const AIThreadStreamMethods = {
+    LIFECYCLE: 'lifecycle',
+    MESSAGES: 'messages',
+    TOOL: 'tool',
+    STEP: 'step',
+} as const;
+export type AIThreadStreamMethodType =
+    (typeof AIThreadStreamMethods)[keyof typeof AIThreadStreamMethods];
 
 export interface BackgroundAIStreamEventPayloadType {
     thread_uid: string;

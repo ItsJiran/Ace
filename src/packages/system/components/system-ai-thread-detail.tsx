@@ -207,8 +207,8 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 	const snapshotTokenSummary = useMemo(() => resolveTokenSummary(snapshotMessages), [snapshotMessages]);
 
 	return (
-		<div className="flex h-full min-h-0 flex-col gap-4 p-4">
-			<section className={[targets.shell.first, 'flex flex-col items-start justify-between gap-4 rounded-2xl p-5'].join(' ')}>
+		<div className="flex h-full min-h-0 flex-col gap-4 p-4 overflow-auto">
+			<section className={[targets.shell.first, 'flex flex-col items-start justify-between gap-4 rounded-2xl p-5 overflow-auto'].join(' ')}>
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em]">AI Thread Detail</div>
 					<div className="mt-2 text-2xl font-semibold">Formatted Persisted Thread Snapshot</div>
@@ -292,7 +292,7 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 
 			<SectionShell
 				title="State Payload"
-				description="Full persisted state object for this thread, including nested control flags and graph values."
+				description="Full persisted state object for this thread. The simplified workflow now keeps only messages here by default."
 				icon={Workflow}
 			>
 				<StructuredValueBlock value={payload?.state ?? {}} />

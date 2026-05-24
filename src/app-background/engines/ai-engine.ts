@@ -1,3 +1,4 @@
+import { HumanMessage } from '@langchain/core/messages';
 import { AIProviders } from '#/shared/constants/ai.ts';
 
 import type {
@@ -11,6 +12,7 @@ import type {
 
 
 import SingletonAgentInstance from './ai/agent-instance';
+import { createAIStreamEventBridge } from './ai/ai-stream-events';
 import resolveApiKey from '../lib/utils/ai/resolve-api-key';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
@@ -23,65 +25,6 @@ import {
 } from '#/shared/schemas/ai.ts';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
-
-function resolveStreamTextContent(content: unknown): string {
-    if (typeof content === 'string') {
-        return content;
-    }
-
-    if (Array.isArray(content)) {
-        return content
-            .map((item) => {
-                if (typeof item === 'string') {
-                    return item;
-                }
-
-                if (!item || typeof item !== 'object') {
-                    return '';
-                }
-
-                const record = item as Record<string, unknown>;
-                if (typeof record.text === 'string') {
-                    return record.text;
-                }
-
-                if (typeof record.content === 'string') {
-                    return record.content;
-                }
-
-                return '';
-            })
-            .join('');
-    }
-
-    if (content && typeof content === 'object') {
-        const record = content as Record<string, unknown>;
-        if (typeof record.content === 'string') {
-            return record.content;
-        }
-        if (Array.isArray(record.content)) {
-            return resolveStreamTextContent(record.content);
-        }
-    }
-
-    return '';
-}
-
-function resolveToolDisplayName(eventData: Record<string, unknown>, node?: string) {
-    if (typeof eventData.name === 'string' && eventData.name.trim()) {
-        return eventData.name;
-    }
-
-    if (typeof eventData.tool_name === 'string' && eventData.tool_name.trim()) {
-        return eventData.tool_name;
-    }
-
-    if (typeof node === 'string' && node.trim()) {
-        return node;
-    }
-
-    return 'tool';
-}
 
 class AIEngineSingleton extends Engine {
     public ai_threads_uids_memory_uid = 'system:ai_engine:thread:uids';
@@ -357,299 +300,31 @@ class AIEngineSingleton extends Engine {
         const stream = await SingletonAgentInstance.getInstance().stream(
             {
                 messages: [
-                    {
-                        role: 'user',
-                        content: normalizedPrompt,
-                    },
+                    new HumanMessage(normalizedPrompt),
                 ],
             },
             streamRuntimeConfig,
         );
 
         const run_id = crypto.randomUUID();
-        let protocolSeq = 0;
-        let activeAssistantMessageId: string | null = null;
-        let activeAssistantText = '';
-        let hasStartedAssistantBlock = false;
+        const streamEvents = createAIStreamEventBridge({
+            threadUid: thread_uid,
+            runId: run_id,
+            emitProtocolThreadEvent: (nextThreadUid, message) => {
+                this.emitProtocolThreadEvent(nextThreadUid, message);
+            },
+        });
 
-        const emitLifecycle = (event: 'started' | 'completed' | 'failed', error?: string) => {
-            this.emitProtocolThreadEvent(thread_uid, {
-                type: 'event',
-                event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
-                seq: protocolSeq,
-                method: 'lifecycle',
-                params: {
-                    namespace: [],
-                    timestamp: Date.now(),
-                    data: {
-                        event,
-                        ...(error ? { error } : {}),
-                    },
-                },
-            });
-        };
-
-        const emitToolStatus = (
-            event: 'tool-start' | 'tool-finish' | 'tool-error',
-            eventData: Record<string, unknown>,
-            node?: string,
-            metadata?: Record<string, unknown>,
-        ) => {
-            const event_id = `${thread_uid}:${run_id}:${++protocolSeq}`;
-            console.log('[AIEngine tool-stream]', {
-                thread_uid,
-                run_id,
-                event,
-                event_id,
-                node: node ?? null,
-                tool_name: resolveToolDisplayName(eventData, node),
-                input: eventData.input ?? null,
-                output: eventData.output ?? null,
-                error: eventData.error ?? null,
-            });
-            this.emitProtocolThreadEvent(thread_uid, {
-                type: 'event',
-                event_id,
-                seq: protocolSeq,
-                method: 'tool',
-                params: {
-                    namespace: [],
-                    timestamp: Date.now(),
-                    ...(node ? { node } : {}),
-                    data: {
-                        event,
-                        tool_event_stream_uid: event_id,
-                        tool_name: resolveToolDisplayName(eventData, node),
-                        input: eventData.input ?? null,
-                        output: eventData.output ?? null,
-                        error: eventData.error ?? null,
-                        ...(metadata ? { metadata } : {}),
-                    },
-                },
-            });
-        };
-
-        const ensureAssistantMessageStarted = (node?: string, metadata?: Record<string, unknown>) => {
-            if (!activeAssistantMessageId) {
-                activeAssistantMessageId = `assistant:${thread_uid}:${run_id}`;
-                this.emitProtocolThreadEvent(thread_uid, {
-                    type: 'event',
-                    event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
-                    seq: protocolSeq,
-                    method: 'messages',
-                    params: {
-                        namespace: [],
-                        timestamp: Date.now(),
-                        ...(node ? { node } : {}),
-                        data: {
-                            event: 'message-start',
-                            role: 'ai',
-                            id: activeAssistantMessageId,
-                            ...(metadata ? { metadata } : {}),
-                        },
-                    },
-                });
-            }
-
-            if (!hasStartedAssistantBlock) {
-                hasStartedAssistantBlock = true;
-                this.emitProtocolThreadEvent(thread_uid, {
-                    type: 'event',
-                    event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
-                    seq: protocolSeq,
-                    method: 'messages',
-                    params: {
-                        namespace: [],
-                        timestamp: Date.now(),
-                        ...(node ? { node } : {}),
-                        data: {
-                            event: 'content-block-start',
-                            index: 0,
-                            content: {
-                                type: 'text',
-                                text: '',
-                            },
-                        },
-                    },
-                });
-            }
-        };
-
-        const emitAssistantTextDelta = (text: string, node?: string, metadata?: Record<string, unknown>) => {
-            if (!text) {
-                return;
-            }
-
-            ensureAssistantMessageStarted(node, metadata);
-            activeAssistantText += text;
-            this.emitProtocolThreadEvent(thread_uid, {
-                type: 'event',
-                event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
-                seq: protocolSeq,
-                method: 'messages',
-                params: {
-                    namespace: [],
-                    timestamp: Date.now(),
-                    ...(node ? { node } : {}),
-                    data: {
-                        event: 'content-block-delta',
-                        index: 0,
-                        delta: {
-                            type: 'text-delta',
-                            text,
-                        },
-                    },
-                },
-            });
-        };
-
-        const finishAssistantMessage = (node?: string) => {
-            if (!activeAssistantMessageId || !hasStartedAssistantBlock) {
-                return;
-            }
-
-            this.emitProtocolThreadEvent(thread_uid, {
-                type: 'event',
-                event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
-                seq: protocolSeq,
-                method: 'messages',
-                params: {
-                    namespace: [],
-                    timestamp: Date.now(),
-                    ...(node ? { node } : {}),
-                    data: {
-                        event: 'content-block-finish',
-                        index: 0,
-                        content: {
-                            type: 'text',
-                            text: activeAssistantText,
-                        },
-                    },
-                },
-            });
-
-            this.emitProtocolThreadEvent(thread_uid, {
-                type: 'event',
-                event_id: `${thread_uid}:${run_id}:${++protocolSeq}`,
-                seq: protocolSeq,
-                method: 'messages',
-                params: {
-                    namespace: [],
-                    timestamp: Date.now(),
-                    ...(node ? { node } : {}),
-                    data: {
-                        event: 'message-finish',
-                        reason: 'stop',
-                    },
-                },
-            });
-
-            activeAssistantMessageId = null;
-            activeAssistantText = '';
-            hasStartedAssistantBlock = false;
-        };
-
-        emitLifecycle('started');
+        streamEvents.start();
 
         try {
             for await (const event of stream) {
-				const eventRecord = event as unknown as Record<string, unknown>;
-                const eventName = typeof eventRecord.event === 'string' ? eventRecord.event : '';
-                const eventMethod = typeof eventRecord.method === 'string' ? eventRecord.method : '';
-                const eventData =
-                    eventRecord.data && typeof eventRecord.data === 'object'
-                        ? (eventRecord.data as Record<string, unknown>)
-                        : {};
-                const eventParams =
-                    eventRecord.params && typeof eventRecord.params === 'object'
-                        ? (eventRecord.params as Record<string, unknown>)
-                        : undefined;
-                const protocolData =
-                    eventParams?.data && typeof eventParams.data === 'object'
-                        ? (eventParams.data as Record<string, unknown>)
-                        : undefined;
-                const node = typeof eventRecord.name === 'string' ? eventRecord.name : undefined;
-                const metadata =
-                    typeof eventRecord.metadata === 'object' && eventRecord.metadata
-                        ? (eventRecord.metadata as Record<string, unknown>)
-                        : undefined;
-
-                if (eventMethod === 'tools' && protocolData) {
-                    console.log('[AIEngine raw-tools-event]', {
-                        thread_uid,
-                        run_id,
-                        event_method: eventMethod,
-                        node: node ?? null,
-                        data: protocolData,
-                    });
-
-                    const normalizedToolData: Record<string, unknown> = {
-                        name: protocolData.tool_name,
-                        tool_name: protocolData.tool_name,
-                        input: protocolData.input ?? null,
-                        output: protocolData.output ?? null,
-                        error: protocolData.error ?? protocolData.message ?? null,
-                    };
-
-                    if (protocolData.event === 'tool-started') {
-                        emitToolStatus('tool-start', normalizedToolData, node, metadata);
-                        continue;
-                    }
-
-                    if (protocolData.event === 'tool-finished') {
-                        emitToolStatus('tool-finish', normalizedToolData, node, metadata);
-                        continue;
-                    }
-
-                    if (protocolData.event === 'tool-error') {
-                        emitToolStatus('tool-error', normalizedToolData, node, metadata);
-                        continue;
-                    }
-                }
-
-                if (eventName === 'on_chat_model_start') {
-                    ensureAssistantMessageStarted(node, metadata);
-                    continue;
-                }
-
-                if (eventName === 'on_chat_model_stream') {
-                    const chunk = eventData.chunk as Record<string, unknown> | undefined;
-                    emitAssistantTextDelta(resolveStreamTextContent(chunk?.content), node, metadata);
-                    continue;
-                }
-
-                if (eventName === 'on_chat_model_end') {
-                    const finalOutput =
-                        resolveStreamTextContent(eventData.output) ||
-                        resolveStreamTextContent((eventData.chunk as Record<string, unknown> | undefined)?.content);
-
-                    if (finalOutput && !activeAssistantText) {
-                        emitAssistantTextDelta(finalOutput, node, metadata);
-                    }
-
-                    finishAssistantMessage(node);
-                    continue;
-                }
-
-                if (eventName === 'on_tool_start') {
-                    emitToolStatus('tool-start', eventData, node, metadata);
-                    continue;
-                }
-
-                if (eventName === 'on_tool_end') {
-                    emitToolStatus('tool-finish', eventData, node, metadata);
-                    continue;
-                }
-
-                if (eventName === 'on_tool_error') {
-                    emitToolStatus('tool-error', eventData, node, metadata);
-                }
+                streamEvents.process(event);
             }
 
-            emitLifecycle('completed');
+            streamEvents.complete();
         } catch (error) {
-            finishAssistantMessage();
-            emitLifecycle('failed', error instanceof Error ? error.message : String(error));
+            streamEvents.fail(error);
             throw error;
         }
 

@@ -1,8 +1,13 @@
 import type { RefObject } from 'react';
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
-import { Sparkles } from 'lucide-react';
+import { ExternalLink, Sparkles } from 'lucide-react';
 
+import { AIEngine } from '#/app-desktop/engines/ai-engine';
 import type { RunningToolStreamItem } from '#/app-desktop/hooks/use-ai-chat-thread';
+import type {
+	RunningStepStreamItem,
+	WorkflowEventFeedItem,
+} from '#/app-desktop/hooks/use-ai-chat-thread';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { resolveMessageText } from './system-ai-chat-shared';
 import { SystemAIChatToolMessage } from './system-ai-chat-tool-message';
@@ -12,8 +17,27 @@ type SystemAIChatMessagesProps = {
 	isStreaming: boolean;
 	pendingPrompt: string | null;
 	runningToolStreams: RunningToolStreamItem[];
+	runningStepStreams: RunningStepStreamItem[];
+	workflowEventFeed: WorkflowEventFeedItem[];
+	currentThreadUid: string | null;
 	bottomRef: RefObject<HTMLDivElement | null>;
 };
+
+function openThreadDetailWindow(threadUid: string) {
+	window.ACE.window.spawnWindow({
+		package: 'itsjiran/ace-system',
+		window: 'system-ai-thread-detail-window',
+		title: `AI Thread ${threadUid.slice(0, 8)}`,
+		width: 1220,
+		height: 820,
+		x: 440,
+		y: 140,
+		metadata: {
+			memory_uid: AIEngine.thread_memory_uid(threadUid),
+			thread_uid: threadUid,
+		},
+	});
+}
 
 function resolveToolInputLabel(input: unknown) {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -93,6 +117,9 @@ export function SystemAIChatMessages({
 	isStreaming,
 	pendingPrompt,
 	runningToolStreams,
+	runningStepStreams,
+	workflowEventFeed,
+	currentThreadUid,
 	bottomRef,
 }: SystemAIChatMessagesProps) {
 	const { targets } = useAceTheme();
@@ -177,38 +204,78 @@ export function SystemAIChatMessages({
 					);
 				})}
 
-				{runningToolStreams.length > 0 ? (
+				{workflowEventFeed.length > 0 || runningToolStreams.length > 0 || runningStepStreams.length > 0 ? (
 					<div className="flex justify-start">
 						<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
 							<div className="ace-chat-turn-label">Assistant</div>
 							<div className={[targets.container.first, 'w-full rounded-[14px_14px_14px_4px] px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm'].join(' ')}>
 								<div className="flex flex-col gap-3">
-									<div className="flex items-center gap-2 text-zinc-500">
-										<span className="ace-chat-status-pill is-streaming">running tools</span>
-										<span className="whitespace-pre-wrap">Agent sedang menjalankan tool aktif.</span>
+									<div className="flex flex-wrap items-center gap-2 text-zinc-500">
+										{runningStepStreams.length > 0 ? <span className="ace-chat-status-pill is-streaming">workflow active</span> : null}
+										{runningToolStreams.length > 0 ? <span className="ace-chat-status-pill is-streaming">running tools</span> : null}
+										{currentThreadUid ? (
+											<button
+												type="button"
+												onClick={() => openThreadDetailWindow(currentThreadUid)}
+												className={[targets.btn.secondary, 'inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-[11px]'].join(' ')}
+											>
+												<ExternalLink size={13} />
+												<span>Open thread detail</span>
+											</button>
+										) : null}
 									</div>
-									<div className="flex flex-col gap-2">
-										{runningToolStreams.map((toolItem) => (
-											<div key={toolItem.uid} className={[targets.container.first, 'rounded-2xl animate-pulse px-3 py-3'].join(' ')}>
-												<div className="flex items-center gap-2 text-xs">
-													<span className={[targets.container.second, 'inline-flex h-2.5 w-2.5 rounded-full'].join(' ')} />
-													<span>Sedang menjalankan {toolItem.toolName}</span>
-												</div>
-												{resolveToolInputLabel(toolItem.input) ? (
-													<div className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-400">
-														{resolveToolInputLabel(toolItem.input)}
+
+									{workflowEventFeed.length > 0 ? (
+										<div className="flex flex-col gap-2">
+											{workflowEventFeed.map((item) => {
+												return (
+													<div key={item.uid} className={[targets.container.first, 'rounded-2xl px-3 py-2 text-xs text-zinc-400'].join(' ')}>
+														<span className="font-medium text-zinc-300">{item.title}</span>
+														<span className="ml-2 uppercase tracking-[0.18em] text-zinc-500">{item.event}</span>
 													</div>
-												) : null}
-											</div>
-										))}
-									</div>
+												);
+											})}
+										</div>
+									) : null}
+
+									{runningStepStreams.length > 0 ? (
+										<div className="flex flex-col gap-2">
+											{runningStepStreams.map((stepItem) => (
+												<div key={stepItem.uid} className={[targets.container.first, 'rounded-2xl animate-pulse px-3 py-3'].join(' ')}>
+													<div className="flex items-center gap-2 text-xs">
+														<span className={[targets.container.second, 'inline-flex h-2.5 w-2.5 rounded-full'].join(' ')} />
+														<span>{stepItem.title}</span>
+													</div>
+													<div className="mt-2 text-[11px] uppercase tracking-[0.18em] text-zinc-500">{stepItem.node}</div>
+												</div>
+											))}
+										</div>
+									) : null}
+
+									{runningToolStreams.length > 0 ? (
+										<div className="flex flex-col gap-2">
+											{runningToolStreams.map((toolItem) => (
+												<div key={toolItem.uid} className={[targets.container.first, 'rounded-2xl animate-pulse px-3 py-3'].join(' ')}>
+													<div className="flex items-center gap-2 text-xs">
+														<span className={[targets.container.second, 'inline-flex h-2.5 w-2.5 rounded-full'].join(' ')} />
+														<span>Sedang menjalankan {toolItem.toolName}</span>
+													</div>
+													{resolveToolInputLabel(toolItem.input) ? (
+														<div className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-400">
+															{resolveToolInputLabel(toolItem.input)}
+														</div>
+													) : null}
+												</div>
+											))}
+										</div>
+									) : null}
 								</div>
 							</div>
 						</div>
 					</div>
 				) : null}
 
-				{isStreaming && runningToolStreams.length === 0 ? (
+				{isStreaming && runningToolStreams.length === 0 && runningStepStreams.length === 0 && workflowEventFeed.length === 0 ? (
 					<div className="flex justify-start">
 						<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
 							<div className="ace-chat-turn-label">Assistant</div>

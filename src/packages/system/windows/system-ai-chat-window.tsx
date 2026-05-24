@@ -78,6 +78,8 @@ function SystemAIChatWindowBody({
 		ai_status,
 		is_streaming,
 		running_tool_streams,
+		running_step_streams,
+		workflow_event_feed,
 		pending_prompt,
 		createThread,
 		setCurrentThread,
@@ -165,6 +167,9 @@ function SystemAIChatWindowBody({
 					isStreaming={is_streaming}
 					pendingPrompt={pending_prompt}
 					runningToolStreams={running_tool_streams}
+					runningStepStreams={running_step_streams}
+					workflowEventFeed={workflow_event_feed}
+					currentThreadUid={current_thread_uid}
 					bottomRef={bottomRef}
 				/>
 			</section>

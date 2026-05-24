@@ -5,6 +5,7 @@ import { AIEngine } from '#/app-desktop/engines/ai-engine';
 import { EventBus } from '#/shared/engines/event-engine';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import {
+	AIThreadStreamMethods,
 	AI_THREAD_STREAM_EVENT_SLUG,
 	type AgentConfigurableType,
 	type AgentThread,
@@ -26,6 +27,23 @@ export type RunningToolStreamItem = {
 	input: unknown;
 	startedAt: number;
 };
+
+export type RunningStepStreamItem = {
+	uid: string;
+	node: string;
+	title: string;
+	startedAt: number;
+};
+
+export type WorkflowEventFeedItem =
+	{
+		uid: string;
+		kind: 'step';
+		node: string;
+		title: string;
+		event: 'start' | 'finish';
+		createdAt: number;
+	  };
 
 export type AIThreadStatus = {
 	label: 'idle' | 'orchestrating' | 'delegating' | 'executing';
@@ -49,6 +67,8 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 	const [is_submitting_prompt, setIsSubmittingPrompt] = useState(false);
 	const [is_waiting_for_backend_run, setIsWaitingForBackendRun] = useState(false);
 	const [running_tool_streams, setRunningToolStreams] = useState<RunningToolStreamItem[]>([]);
+	const [running_step_streams, setRunningStepStreams] = useState<RunningStepStreamItem[]>([]);
+	const [workflow_event_feed, setWorkflowEventFeed] = useState<WorkflowEventFeedItem[]>([]);
 
 	useEffect(() => {
 		void AIEngine.syncAIMemory();
@@ -67,6 +87,8 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 			setCurrentThreadState(null);
 			setIsWaitingForBackendRun(false);
 			setRunningToolStreams([]);
+			setRunningStepStreams([]);
+			setWorkflowEventFeed([]);
 			return;
 		}
 
@@ -99,7 +121,7 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 			}
 
 			const message = payload.message as unknown as Record<string, unknown>;
-			if (message.method === 'lifecycle') {
+			if (message.method === AIThreadStreamMethods.LIFECYCLE) {
 				const lifecycleData =
 					message.params && typeof message.params === 'object'
 						? ((message.params as Record<string, unknown>).data as Record<string, unknown> | undefined)
@@ -113,6 +135,7 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 				if (lifecycleData?.event === 'completed' || lifecycleData?.event === 'failed') {
 					setIsWaitingForBackendRun(false);
 					setRunningToolStreams([]);
+					setRunningStepStreams([]);
 					void AIEngine.syncCurrentThreadFromBackground(payload.thread_uid).then((thread) => {
 						if (resolveActiveThreadUid(current_thread_uid) !== payload.thread_uid) {
 							return;
@@ -124,7 +147,63 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 				return;
 			}
 
-			if (message.method !== 'tool') {
+			if (message.method === AIThreadStreamMethods.STEP) {
+				const params =
+					message.params && typeof message.params === 'object'
+						? (message.params as Record<string, unknown>)
+						: null;
+				const data =
+					params?.data && typeof params.data === 'object'
+						? (params.data as Record<string, unknown>)
+						: null;
+
+				if (
+					!data ||
+					typeof data.event !== 'string' ||
+					typeof data.node !== 'string' ||
+					typeof data.step_uid !== 'string'
+				) {
+					return;
+				}
+
+				const stepNode = data.node;
+				const stepUid = data.step_uid;
+				const stepTitle = typeof data.title === 'string' ? data.title : stepNode;
+				const createdAt = typeof params?.timestamp === 'number' ? params.timestamp : Date.now();
+				if (data.event === 'start') {
+					setRunningStepStreams((currentItems) => [
+						...currentItems,
+						{
+							uid: stepUid,
+							node: stepNode,
+							title: stepTitle,
+							startedAt: createdAt,
+						},
+					]);
+				}
+
+				if (data.event === 'finish') {
+					setRunningStepStreams((currentItems) =>
+						currentItems.filter((item) => item.uid !== stepUid),
+					);
+				}
+
+				setWorkflowEventFeed((currentItems) => {
+					const nextItem: WorkflowEventFeedItem = {
+						uid: `${stepUid}:${data.event}`,
+						kind: 'step',
+						node: stepNode,
+						title: stepTitle,
+						event: data.event === 'finish' ? 'finish' : 'start',
+						createdAt,
+					};
+
+					return [...currentItems.slice(-11), nextItem];
+				});
+				return;
+			}
+
+			if (message.method !== AIThreadStreamMethods.TOOL) {
 				return;
 			}
 
@@ -169,7 +248,9 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 
 			if (data.event === 'tool-finish' || data.event === 'tool-error') {
 				setRunningToolStreams((currentItems) => {
-					const matchedIndex = currentItems.findIndex((item) => item.toolName === data.tool_name);
+					const matchedIndex = currentItems.findIndex(
+						(item) => item.uid === data.tool_event_stream_uid,
+					);
 					if (matchedIndex === -1) {
 						return currentItems;
 					}
@@ -250,6 +331,9 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 
 		setIsSubmittingPrompt(true);
 		setIsWaitingForBackendRun(true);
+		setRunningStepStreams([]);
+		setWorkflowEventFeed([]);
+		setRunningToolStreams([]);
 
 		try {
 			let threadUid = current_thread_uid;
@@ -307,19 +391,13 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 	}, [persisted_messages, stream.messages]);
 	const is_streaming = is_waiting_for_backend_run || is_submitting_prompt;
 	const ai_status = useMemo<AIThreadStatus>(() => {
+		const runningStepNodes = running_step_streams.map((item) => item.node);
 		const runningToolNames = running_tool_streams.map((item) => item.toolName);
 
-		if (runningToolNames.includes('planning_execution_batch')) {
+		if (runningStepNodes.includes('agent')) {
 			return {
-				label: 'delegating',
-				detail: 'planning execution batch',
-			};
-		}
-
-		if (runningToolNames.includes('update_execution_batch')) {
-			return {
-				label: 'executing',
-				detail: 'updating execution batch',
+				label: 'orchestrating',
+				detail: 'running single agent node',
 			};
 		}
 
@@ -333,7 +411,7 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 		if (is_streaming) {
 			return {
 				label: 'orchestrating',
-				detail: 'planning next step',
+				detail: 'waiting for agent output',
 			};
 		}
 
@@ -341,7 +419,7 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 			label: 'idle',
 			detail: current_thread_uid ? 'ready on selected thread' : 'ready with no thread selected',
 		};
-	}, [current_thread_uid, is_streaming, running_tool_streams]);
+	}, [current_thread_uid, is_streaming, running_step_streams, running_tool_streams]);
 
 	return {
 		list_threads,
@@ -349,6 +427,8 @@ export function useAIChatThread(options?: { scopeKey?: string | null }) {
 		current_thread,
 		messages,
 		running_tool_streams,
+		running_step_streams,
+		workflow_event_feed,
 		ai_status,
 		pending_prompt,
 		is_streaming,

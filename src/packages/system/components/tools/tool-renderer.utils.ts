@@ -1,4 +1,4 @@
-export type ToolRendererKind = 'planning' | 'window' | 'filesystem' | 'duckduckgo' | 'execution' | 'error' | 'generic';
+export type ToolRendererKind = 'planning' | 'window' | 'filesystem' | 'duckduckgo' | 'error' | 'generic';
 
 export type ToolRendererProps = {
 	toolName: string;
@@ -75,21 +75,6 @@ function looksLikePlanningPayload(value: unknown): boolean {
 	}
 
 	return ['plan', 'steps', 'tasks', 'todo', 'todos', 'checklist', 'next_steps'].some((key) => key in record);
-}
-
-function looksLikeExecutionBatchPayload(value: unknown): boolean {
-	const normalizedValue = parseStructuredValue(value);
-	const record = asRecord(normalizedValue);
-	if (!record) {
-		return false;
-	}
-
-	const batch = asRecord(record.batch) ?? record;
-	if (!batch) {
-		return false;
-	}
-
-	return ['batch_id', 'objective', 'items', 'summary'].some((key) => key in batch);
 }
 
 function looksLikeWindowPayload(value: unknown): boolean {
@@ -173,15 +158,11 @@ export function resolveToolRendererKind({ toolName, content, artifact, record }:
 		return 'planning';
 	}
 
-	if (/(planning_execution_batch|update_execution_batch)/.test(normalizedToolName)) {
-		return 'execution';
-	}
-
 	if (/(window|ace_window)/.test(normalizedToolName)) {
 		return 'window';
 	}
 
-	if (/(filesystem|file_system|\bfs\b|file|directory|path|\bls\b|\bglob\b|\bgrep\b|read_file|write_file|edit_file|mkdir|delete_file|move_file|copy_file|execute|local_shell_tool|shell|command)/.test(normalizedToolName)) {
+	if (/(filesystem|file_system|\bfs\b|file|directory|path|\bls\b|\bglob\b|\bgrep\b|read_file|write_file|edit_file|mkdir|delete_file|move_file|copy_file|\bmove\b|shell|command|script)/.test(normalizedToolName)) {
 		return 'filesystem';
 	}
 
@@ -193,14 +174,6 @@ export function resolveToolRendererKind({ toolName, content, artifact, record }:
 
 	if (looksLikePlanningPayload(artifact) || looksLikePlanningPayload(content)) {
 		return 'planning';
-	}
-
-	if (
-		looksLikeExecutionBatchPayload(artifact) ||
-		looksLikeExecutionBatchPayload(content) ||
-		looksLikeExecutionBatchPayload(record)
-	) {
-		return 'execution';
 	}
 
 	if (looksLikeWindowPayload(artifact) || looksLikeWindowPayload(content) || looksLikeWindowPayload(record)) {

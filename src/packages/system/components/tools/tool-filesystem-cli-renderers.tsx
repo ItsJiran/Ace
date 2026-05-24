@@ -403,7 +403,7 @@ export function ToolFilesystemCliRenderer(props: ToolRendererProps) {
         return <ToolEditFileRenderer {...props} />;
     }
 
-    if (normalizedToolName === 'execute' || normalizedToolName === 'local_shell_tool') {
+    if (normalizedToolName === 'execute' || normalizedToolName === 'move') {
         return <ToolExecuteRenderer {...props} />;
     }
 

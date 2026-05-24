@@ -46,7 +46,7 @@ export function SectionShell({
 	const { targets } = useAceTheme();
 
 	return (
-		<section className={[targets.shell.first, 'rounded-2xl p-4 flex min-h-0 flex-col gap-4 overflow-hidden'].join(' ')}>
+		<section className={[targets.shell.first, 'rounded-2xl p-4 h-fit flex flex-col gap-4 overflow-hidden'].join(' ')}>
 			<div className="flex items-start gap-3">
 				<div className={[targets.btn.secondary, 'rounded-2xl p-3'].join(' ')}>
 					<Icon size={18} />
