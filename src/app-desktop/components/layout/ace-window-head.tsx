@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { GripHorizontal, Minus, X } from "lucide-react";
 import type { AceWindowRenderProps } from "#/app-desktop/hooks/use-ace-window";
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 
 type AceWindowHeadProps = {
   title?: string;
@@ -19,6 +20,8 @@ export function AceWindowHead({
   onClose,
   onMinimize,
 }: AceWindowHeadProps) {
+  const { targets } = useAceTheme();
+
   const stopDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
   };
@@ -27,7 +30,7 @@ export function AceWindowHead({
     <div
       {...dragHandleProps}
       className={[
-        "system-shell-head-primary",
+        'ace-shell-head',
         isFocused ? "focused" : "",
       ].join(" ")}
     >
@@ -50,7 +53,7 @@ export function AceWindowHead({
             type="button"
             onPointerDown={stopDrag}
             onClick={onMinimize}
-            className="system-btn-secondary"
+            className={targets.btn.secondary}
             aria-label="Minimize window"
           >
             <Minus size={14} />
@@ -60,7 +63,7 @@ export function AceWindowHead({
           type="button"
           onPointerDown={stopDrag}
           onClick={onClose}
-          className="system-btn-secondary"
+          className={targets.btn.secondary}
           aria-label="Close window"
         >
           <X size={14} />

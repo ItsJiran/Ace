@@ -86,6 +86,14 @@ function resolveToolDisplayName(eventData: Record<string, unknown>, node?: strin
 class AIEngineSingleton extends Engine {
     public ai_threads_uids_memory_uid = 'system:ai_engine:thread:uids';
     public ai_threads_memory_uid = (thread_uid: string) => `system:ai_engine:thread:${thread_uid}`;
+    private activeThreadRuns = new Map<
+        string,
+        {
+            controller: AbortController;
+            promise: Promise<AgentThread | null>;
+            started_at: number;
+        }
+    >();
 
     private emitThreadStreamEvent(payload: BackgroundAIStreamEventPayloadType) {
         void EventBus.emit(AI_THREAD_STREAM_EVENT_SLUG, {
@@ -169,6 +177,24 @@ class AIEngineSingleton extends Engine {
                 (payload.overrides as Record<string, unknown>) ?? {},
                 payload.context,
             );
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.startThreadPrompt', async (payload: {
+            thread_uid?: string;
+            prompt?: string;
+            overrides?: Record<string, unknown>;
+            context?: Record<string, unknown>;
+        }) => {
+            return await this.startThreadPrompt(
+                String(payload.thread_uid || ''),
+                String(payload.prompt || ''),
+                (payload.overrides as Record<string, unknown>) ?? {},
+                payload.context,
+            );
+        }, { owner: this.constructor.name });
+
+        await RPCEngine.handle('ai.stopThreadPrompt', async (payload: { thread_uid?: string }) => {
+            return await this.stopThreadPrompt(String(payload.thread_uid || ''));
         }, { owner: this.constructor.name });
 
         await RPCEngine.handle('ai.deleteThread', async (payload: { thread_uid?: string }) => {
@@ -286,6 +312,7 @@ class AIEngineSingleton extends Engine {
         prompt: string,
         overrides: Partial<AgentConfigurableType> = {},
         context?: Record<string, unknown>,
+        signal?: AbortSignal,
     ) {
         const normalizedPrompt = prompt.trim();
         if (!normalizedPrompt) {
@@ -313,6 +340,20 @@ class AIEngineSingleton extends Engine {
             updated_at: Date.now(),
         });
 
+        const streamRuntimeConfig = {
+            version: 'v3' as const,
+            ...(context ? { context: context as unknown as AgentInvokeContextType } : {}),
+            configurable: {
+                thread_id: thread_uid,
+                // checkpoint_id,
+                model,
+                provider,
+                apiKey,
+                ...overrides,
+            },
+            ...(signal ? { signal } : {}),
+        };
+
         const stream = await SingletonAgentInstance.getInstance().stream(
             {
                 messages: [
@@ -322,18 +363,7 @@ class AIEngineSingleton extends Engine {
                     },
                 ],
             },
-            {
-                version: 'v3',
-                ...(context ? { context: context as unknown as AgentInvokeContextType } : {}),
-                configurable: {
-                    thread_id: thread_uid,
-                    // checkpoint_id,
-                    model,
-                    provider,
-                    apiKey,
-                    ...overrides,
-                },
-            },
+            streamRuntimeConfig,
         );
 
         const run_id = crypto.randomUUID();
@@ -624,6 +654,76 @@ class AIEngineSingleton extends Engine {
         }
 
         return this.readThread(thread_uid);
+    }
+
+    public async startThreadPrompt(
+        thread_uid: string,
+        prompt: string,
+        overrides: Partial<AgentConfigurableType> = {},
+        context?: Record<string, unknown>,
+    ) {
+        const normalizedPrompt = prompt.trim();
+        if (!thread_uid || !normalizedPrompt) {
+            return {
+                ok: false,
+                started: false,
+                thread_uid,
+            };
+        }
+
+        const existingRun = this.activeThreadRuns.get(thread_uid);
+        if (existingRun) {
+            return {
+                ok: true,
+                started: false,
+                thread_uid,
+                already_running: true,
+                started_at: existingRun.started_at,
+            };
+        }
+
+        const controller = new AbortController();
+        const runPromise = this.streamThreadPrompt(
+            thread_uid,
+            normalizedPrompt,
+            overrides,
+            context,
+            controller.signal,
+        )
+            .catch((error) => {
+                this.log(`[AIEngine] thread run failed for ${thread_uid}:`, error);
+                return this.readThread(thread_uid);
+            })
+            .finally(() => {
+                const currentRun = this.activeThreadRuns.get(thread_uid);
+                if (currentRun?.promise === runPromise) {
+                    this.activeThreadRuns.delete(thread_uid);
+                }
+            });
+
+        this.activeThreadRuns.set(thread_uid, {
+            controller,
+            promise: runPromise,
+            started_at: Date.now(),
+        });
+
+        return {
+            ok: true,
+            started: true,
+            thread_uid,
+            started_at: Date.now(),
+        };
+    }
+
+    public async stopThreadPrompt(thread_uid: string) {
+        const activeRun = this.activeThreadRuns.get(thread_uid);
+        if (!activeRun) {
+            return false;
+        }
+
+        activeRun.controller.abort(new Error(`Thread ${thread_uid} aborted by user.`));
+        await activeRun.promise;
+        return true;
     }
 
 

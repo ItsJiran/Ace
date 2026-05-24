@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bot, Cpu, Database, Radio } from 'lucide-react';
 
 import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import { defineComponent } from '#/lib/define-registry';
 import { EventBus } from '#/shared/engines/event-engine';
@@ -68,8 +69,9 @@ function SummaryCard({
 	description: string;
 	icon: typeof Database;
 }) {
+	const { targets } = useAceTheme();
 	return (
-		<div className="system-container-tertiary rounded-2xl px-4 py-3">
+		<div className={[targets.container.third, 'rounded-2xl px-4 py-3'].join(' ')}>
 			<div className="flex items-start justify-between gap-3">
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em] text-zinc-500">{title}</div>
@@ -95,10 +97,11 @@ function SectionShell({
 	icon: typeof Database;
 	children: React.ReactNode;
 }) {
+	const { targets } = useAceTheme();
 	return (
-		<section className="system-shell-primary rounded-2xl p-4 flex min-h-0 flex-col gap-4 overflow-hidden">
+		<section className={[targets.shell.first, 'rounded-2xl p-4 flex min-h-0 flex-col gap-4 overflow-hidden'].join(' ')}>
 			<div className="flex items-start gap-3">
-				<div className="rounded-2xl bg-white/10 p-3 text-zinc-100">
+				<div className={[targets.btn.secondary, 'rounded-2xl p-3 text-zinc-100'].join(' ')}>
 					<Icon size={18} />
 				</div>
 				<div>
@@ -112,6 +115,7 @@ function SectionShell({
 }
 
 function SystemRuntimeMonitor() {
+	const { targets } = useAceTheme();
 	const processSystem = useAceMemory<ProcessSystemValueType>('system:process_system');
 	const eventStream = useAceMemory<EventEntryType[]>(EventBus.eventStreamMemoryUid) ?? [];
 	const [ramStats, setRamStats] = useState<RAMStatsType>(() => KernelEngine.getRAMStats() as RAMStatsType);
@@ -140,7 +144,7 @@ function SystemRuntimeMonitor() {
 		<div className="flex h-full min-h-0 flex-col gap-4 p-4 text-zinc-100">
 			<RenderCounterBadge componentName="system-runtime-monitor" />
 
-			<section className="system-shell-primary rounded-2xl p-5 flex items-start justify-between gap-4">
+			<section className={[targets.shell.first, 'rounded-2xl p-5 flex items-start justify-between gap-4'].join(' ')}>
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Runtime Monitor</div>
 					<div className="mt-2 text-2xl font-semibold text-zinc-100">Kernel Observability Workspace</div>

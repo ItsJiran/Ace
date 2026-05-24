@@ -3,6 +3,7 @@ import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/co
 import { Sparkles } from 'lucide-react';
 
 import type { RunningToolStreamItem } from '#/app-desktop/hooks/use-ai-chat-thread';
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { resolveMessageText } from './system-ai-chat-shared';
 import { SystemAIChatToolMessage } from './system-ai-chat-tool-message';
 
@@ -94,18 +95,19 @@ export function SystemAIChatMessages({
 	runningToolStreams,
 	bottomRef,
 }: SystemAIChatMessagesProps) {
+	const { targets } = useAceTheme();
 	const turns = resolveChatTurns(messages);
 
 	return (
 		<div className="h-full overflow-auto px-5 pb-5 pt-4 [scrollbar-color:rgb(82_82_91_/_0.85)_transparent] [scrollbar-width:thin]">
-			<div className="system-chat-message-list">
+			<div className="ace-chat-message-list">
 				{messages.length === 0 && !isStreaming ? (
-					<div className="system-container-primary px-3 py-8 items-center rounded-sm justify-center flex flex-col gap-3 text-center text-sm shadow-sm">
-						<div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full system-btn-secondary text-zinc-100">
+					<div className={[targets.container.first, 'px-3 py-8 items-center rounded-sm justify-center flex flex-col gap-3 text-center text-sm shadow-sm'].join(' ')}>
+						<div className={[targets.btn.secondary, 'mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-100'].join(' ')}>
 							<Sparkles size={18} />
 						</div>
 						<div className="text-zinc-500">No conversation yet</div>
-						<div className="system-chat-empty-copy text-zinc-400">
+						<div className="ace-chat-empty-copy text-zinc-400">
 							Start a prompt to open a live conversation stream for plans, tool calls, and assistant output.
 						</div>
 					</div>
@@ -117,8 +119,8 @@ export function SystemAIChatMessages({
 						return (
 							<div key={turn.key} className="flex justify-end">
 								<div className="flex min-w-0 max-w-[88%] flex-col items-end gap-2">
-									<div className="system-chat-turn-label is-user">You</div>
-									<div className="w-full rounded-[14px_14px_4px_14px] system-container-secondary px-4 py-3 text-sm leading-6">
+									<div className="ace-chat-turn-label is-user">You</div>
+									<div className={[targets.container.second, 'w-full rounded-[14px_14px_4px_14px] px-4 py-3 text-sm leading-6'].join(' ')}>
 										<div className="whitespace-pre-wrap">{message.text || resolveMessageText(message.content)}</div>
 									</div>
 								</div>
@@ -130,8 +132,8 @@ export function SystemAIChatMessages({
 						return (
 							<div key={turn.key} className="flex justify-start">
 								<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
-									<div className="system-chat-turn-label">Assistant</div>
-									<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
+									<div className="ace-chat-turn-label">Assistant</div>
+									<div className={[targets.container.first, 'w-full rounded-[14px_14px_14px_4px] px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm'].join(' ')}>
 										<div className="flex flex-col gap-4">
 											{turn.messages.map((message, index) => {
 												const sectionClassName = index === 0 ? '' : 'border-t border-white/10 pt-4';
@@ -166,8 +168,8 @@ export function SystemAIChatMessages({
 					return (
 						<div key={turn.key} className="flex justify-start">
 							<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
-								<div className="system-chat-turn-label">{message.getType()}</div>
-									<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
+								<div className="ace-chat-turn-label">{message.getType()}</div>
+									<div className={[targets.container.first, 'w-full rounded-[14px_14px_14px_4px] px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm'].join(' ')}>
 									<div className="whitespace-pre-wrap">{resolveMessageText(message.content) || JSON.stringify(message.content)}</div>
 								</div>
 							</div>
@@ -178,18 +180,18 @@ export function SystemAIChatMessages({
 				{runningToolStreams.length > 0 ? (
 					<div className="flex justify-start">
 						<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
-							<div className="system-chat-turn-label">Assistant</div>
-							<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
+							<div className="ace-chat-turn-label">Assistant</div>
+							<div className={[targets.container.first, 'w-full rounded-[14px_14px_14px_4px] px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm'].join(' ')}>
 								<div className="flex flex-col gap-3">
 									<div className="flex items-center gap-2 text-zinc-500">
-										<span className="system-chat-status-pill is-streaming">running tools</span>
+										<span className="ace-chat-status-pill is-streaming">running tools</span>
 										<span className="whitespace-pre-wrap">Agent sedang menjalankan tool aktif.</span>
 									</div>
 									<div className="flex flex-col gap-2">
 										{runningToolStreams.map((toolItem) => (
-											<div key={toolItem.uid} className="rounded-2xl system-container-primary animate-pulse px-3 py-3">
+											<div key={toolItem.uid} className={[targets.container.first, 'rounded-2xl animate-pulse px-3 py-3'].join(' ')}>
 												<div className="flex items-center gap-2 text-xs">
-													<span className="inline-flex h-2.5 w-2.5 rounded-full system-container-secondary" />
+													<span className={[targets.container.second, 'inline-flex h-2.5 w-2.5 rounded-full'].join(' ')} />
 													<span>Sedang menjalankan {toolItem.toolName}</span>
 												</div>
 												{resolveToolInputLabel(toolItem.input) ? (
@@ -209,15 +211,15 @@ export function SystemAIChatMessages({
 				{isStreaming && runningToolStreams.length === 0 ? (
 					<div className="flex justify-start">
 						<div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
-							<div className="system-chat-turn-label">Assistant</div>
-							<div className="w-full rounded-[14px_14px_14px_4px] system-container-primary px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm">
+							<div className="ace-chat-turn-label">Assistant</div>
+							<div className={[targets.container.first, 'w-full rounded-[14px_14px_14px_4px] px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm'].join(' ')}>
 								<div className="flex flex-col gap-3">
 									<div className="flex items-center gap-2 text-zinc-500">
-										<span className="system-chat-status-pill is-streaming">sending prompt</span>
+										<span className="ace-chat-status-pill is-streaming">sending prompt</span>
 										<span className="whitespace-pre-wrap">Mengirim prompt ke agent dan menunggu tool atau response pertama...</span>
 									</div>
-									<div className="flex items-center gap-2 rounded-2xl system-container-primary animate-pulse px-3 py-2 text-xs">
-										<span className="inline-flex h-2.5 w-2.5 system-container-secondary" />
+									<div className={[targets.container.first, 'flex items-center gap-2 rounded-2xl animate-pulse px-3 py-2 text-xs'].join(' ')}>
+										<span className={[targets.container.second, 'inline-flex h-2.5 w-2.5'].join(' ')} />
 										<span>{pendingPrompt ? `Sending: ${pendingPrompt}` : 'Sending prompt...'}</span>
 									</div>
 								</div>

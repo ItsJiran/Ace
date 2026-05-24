@@ -1,5 +1,6 @@
 import { Database } from 'lucide-react';
 
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { defineComponent } from '#/lib/define-registry';
 
@@ -15,10 +16,11 @@ import { SystemMemoryTable } from './system-memory-table';
 
 function SystemRAMMonitor() {
 	const { ramStats, topRamEntries } = useRuntimeMonitorSnapshots();
+	const { targets } = useAceTheme();
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-4 p-4">
-			<section className="system-shell-primary flex-col rounded-2xl p-5 flex items-start justify-between gap-4">
+			<section className={[targets.shell.first, 'flex flex-col items-start justify-between gap-4 rounded-2xl p-5'].join(' ')}>
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em]">Kernel RAM Monitor</div>
 					<div className="mt-2 text-2xl font-semibold">Live Memory Pressure Snapshot</div>
@@ -60,9 +62,9 @@ function SystemRAMMonitor() {
 				icon={Database}
 			>
 				<div className="grid grid-cols-3 gap-3 text-xs text-zinc-400">
-					<div className="rounded-xl system-container-primary px-3 py-2">Listeners: {ramStats.change_listener_total}</div>
-					<div className="rounded-xl system-container-primary px-3 py-2">Total KB: {ramStats.approx_total_kb.toFixed(1)}</div>
-					<div className="rounded-xl system-container-primary px-3 py-2">Total MB: {ramStats.approx_total_mb.toFixed(3)}</div>
+					<div className={[targets.container.first, 'rounded-xl px-3 py-2'].join(' ')}>Listeners: {ramStats.change_listener_total}</div>
+					<div className={[targets.container.first, 'rounded-xl px-3 py-2'].join(' ')}>Total KB: {ramStats.approx_total_kb.toFixed(1)}</div>
+					<div className={[targets.container.first, 'rounded-xl px-3 py-2'].join(' ')}>Total MB: {ramStats.approx_total_mb.toFixed(3)}</div>
 				</div>
 				<SystemMemoryTable
 					entries={topRamEntries}

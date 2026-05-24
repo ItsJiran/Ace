@@ -151,7 +151,8 @@ export class WindowLifecycleManager {
             is_resizeable: options.is_resizeable ?? defaultConfig.is_resizeable ?? true,
             always_on_top: options.always_on_top ?? defaultConfig.always_on_top ?? false,
             window_style: options.window_style ?? defaultConfig.window_style ?? 'standard', 
-            is_minimized: false
+            is_minimized: false,
+            metadata: options.metadata,
         };
 
         const ownerProcessUid = options.__process_uid;

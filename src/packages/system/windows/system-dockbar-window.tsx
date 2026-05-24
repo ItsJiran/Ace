@@ -8,6 +8,7 @@ function SystemDockbarWindow({ windowUid }: { windowUid: string }) {
         <AceWindow windowUid={windowUid} headless>
             {({
                 windowConfig,
+                currentTheme,
                 resolveWindowStateClass,
                 isDragging,
                 dragHandleProps,
@@ -20,8 +21,9 @@ function SystemDockbarWindow({ windowUid }: { windowUid: string }) {
 
                 return (
                     <div
+                        data-ace-theme={currentTheme}
                         className={[
-                            'system-shell flex h-full w-fit flex-col rounded-[24px] pointer-events-auto',
+                            'ace-shell flex h-full w-fit flex-col rounded-[24px] pointer-events-auto',
                             windowStateClass,
                             isDragging ? 'dragging active overflow-visible' : 'overflow-visible',
                         ]

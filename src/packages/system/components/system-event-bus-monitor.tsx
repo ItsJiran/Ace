@@ -1,6 +1,7 @@
 import { Radio } from 'lucide-react';
 
 import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { defineComponent } from '#/lib/define-registry';
 
 import { useRuntimeMonitorSnapshots } from './system-runtime-monitor-data';
@@ -11,12 +12,13 @@ import {
 
 function SystemEventBusMonitor() {
 	const { eventStream, recentEvents } = useRuntimeMonitorSnapshots();
+	const { targets } = useAceTheme();
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-4 p-4 text-zinc-100">
 			<RenderCounterBadge componentName="system-event-bus-monitor" />
 
-			<section className="system-shell-primary rounded-2xl p-5 flex items-start justify-between gap-4">
+			<section className={[targets.shell.first, 'rounded-2xl p-5 flex items-start justify-between gap-4'].join(' ')}>
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Event Bus Monitor</div>
 					<div className="mt-2 text-2xl font-semibold text-zinc-100">Recent Runtime Signal Feed</div>

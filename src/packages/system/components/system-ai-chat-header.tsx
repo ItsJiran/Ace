@@ -1,9 +1,15 @@
 import { Bot } from 'lucide-react';
 
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
+
 type SystemAIChatHeaderProps = {
 	selectedProvider: string;
 	resolvedModel: string;
 	isStreaming: boolean;
+	aiStatus: {
+		label: string;
+		detail: string;
+	};
 	currentThreadUid: string | null;
 	threadOptions: string[];
 	onSelectThread: (threadUid: string | null) => void;
@@ -16,6 +22,7 @@ export function SystemAIChatHeader({
 	// selectedProvider,
 	// resolvedModel,
 	isStreaming,
+	aiStatus,
 	currentThreadUid,
 	threadOptions,
 	onSelectThread,
@@ -23,13 +30,16 @@ export function SystemAIChatHeader({
 	messageCount,
 	threadCount,
 }: SystemAIChatHeaderProps) {
+	const { targets } = useAceTheme();
+
 	return (
 		<div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
-			<div className="flex px-3 system-btn-secondary">
+			<div className={[targets.btn.secondary, 'flex px-3'].join(' ')}>
 				<div className="flex flex-wrap items-center gap-2">
-					<span className={['system-chat-status-pill', isStreaming ? 'is-streaming' : ''].join(' ')}>
-						{isStreaming ? 'streaming' : 'idle'}
+					<span className={['ace-chat-status-pill', isStreaming ? 'is-streaming' : ''].join(' ')}>
+						{aiStatus.label}
 					</span>
+					<span className="text-xs text-zinc-400">{aiStatus.detail}</span>
 				</div>
 			</div>
 
@@ -37,7 +47,7 @@ export function SystemAIChatHeader({
 				<button
 					type="button"
 					onClick={onOpenThreadMonitor}
-					className="inline-flex items-center gap-2 system-btn-secondary rounded-2xl px-3 py-2 text-sm"
+					className={[targets.btn.secondary, 'inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm'].join(' ')}
 					title="Open AI thread state monitor"
 				>
 					<Bot size={14} />
@@ -46,7 +56,7 @@ export function SystemAIChatHeader({
 				<select
 					value={currentThreadUid || ''}
 					onChange={(event) => onSelectThread(event.target.value || null)}
-					className="system-input-primary min-w-[200px] rounded-2xl px-3 flex-1 py-2 text-sm"
+					className={[targets.input.first, 'min-w-[200px] rounded-2xl px-3 flex-1 py-2 text-sm'].join(' ')}
 				>
 					<option value="">active: none</option>
 					{threadOptions.map((threadUid) => (
@@ -55,8 +65,8 @@ export function SystemAIChatHeader({
 						</option>
 					))}
 				</select>
-				<span className="system-btn-primary text-sm px-3 w-fit">messages: {messageCount}</span>
-				<span className="system-btn-primary text-sm px-3 w-fit">threads: {threadCount}</span>
+				<span className={[targets.btn.first, 'text-sm px-3 w-fit'].join(' ')}>messages: {messageCount}</span>
+				<span className={[targets.btn.first, 'text-sm px-3 w-fit'].join(' ')}>threads: {threadCount}</span>
 			</div>
 		</div>
 	);

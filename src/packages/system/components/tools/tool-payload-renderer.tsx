@@ -1,4 +1,6 @@
 import { ToolDuckDuckGoRenderer } from './tool-duckduckgo-renderer';
+import { ToolErrorRenderer } from './tool-error-renderer';
+import { ToolExecutionBatchRenderer } from './tool-execution-batch-renderer';
 import { ToolFilesystemRenderer } from './tool-filesystem-renderer';
 import { ToolGenericRenderer } from './tool-generic-renderer';
 import { ToolPlanningRenderer } from './tool-planning-renderer';
@@ -15,6 +17,14 @@ export function ToolPayloadRenderer(props: ToolRendererProps) {
 
 	if (rendererKind === 'window') {
 		return <ToolWindowRenderer {...props} />;
+	}
+
+	if (rendererKind === 'execution') {
+		return <ToolExecutionBatchRenderer {...props} />;
+	}
+
+	if (rendererKind === 'error') {
+		return <ToolErrorRenderer {...props} />;
 	}
 
 	if (rendererKind === 'filesystem') {

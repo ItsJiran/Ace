@@ -85,18 +85,398 @@ body,
 }
 
 @layer components {
-    /* + ------------------------------------------------------------------------------------------------------+ */
-    /* + -------------------------------------- System Main Styling -------------------------------------------+ */
-    /* + ------------------------------------------------------------------------------------------------------+ */
+    [data-ace-theme] {
+        color-scheme: light;
+        --ace-shell-first-bg: linear-gradient(160deg, #dbe2ec67 0%, #d6ddeb31 100%);
+        --ace-shell-first-before-bg: linear-gradient(160deg, #dbe2ec 0%, #d6ddeb 100%);
+        --ace-shell-first-text: rgba(252, 253, 255, 0.92);
+        --ace-shell-first-active-text: rgba(66, 75, 102, 0.92);
+        --ace-shell-first-active-border: rgba(255, 255, 255, 0.56);
+        --ace-shell-head-border: rgba(155, 168, 200, 0.32);
+        --ace-container-first-bg: linear-gradient(
+            145deg,
+            rgba(238, 240, 245, 0.55),
+            rgba(216, 221, 240, 0.45)
+        );
+        --ace-container-first-border: rgba(255, 255, 255, 0.62);
+        --ace-container-first-border-bottom: rgba(165, 178, 210, 0.28);
+        --ace-container-first-text: rgba(40, 48, 72, 0.85);
+        --ace-container-second-bg: linear-gradient(145deg, rgb(156, 168, 212), rgb(164, 175, 212));
+        --ace-container-second-border: rgba(160, 175, 225, 0.5);
+        --ace-container-second-shadow:
+            0 2px 6px rgba(90, 110, 170, 0.2), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        --ace-container-second-text: rgba(40, 48, 72, 0.85);
+        --ace-container-third-bg: linear-gradient(
+            145deg,
+            rgba(104, 119, 170, 0.55),
+            rgba(83, 100, 155, 0.45)
+        );
+        --ace-container-third-border: rgba(255, 255, 255, 0.5);
+        --ace-container-third-border-bottom: rgba(180, 185, 195, 0.3);
+        --ace-container-third-text: rgba(236, 239, 245, 0.85);
+        --ace-container-fourth-bg: linear-gradient(
+            145deg,
+            rgba(118, 128, 155, 0.55),
+            rgba(115, 126, 158, 0.616)
+        );
+        --ace-container-fourth-border: rgba(255, 255, 255, 0.5);
+        --ace-container-fourth-border-bottom: rgba(180, 185, 195, 0.3);
+        --ace-container-fourth-text: rgba(236, 239, 245, 0.85);
+        --ace-container-fifth-bg: linear-gradient(
+            145deg,
+            rgba(210, 130, 134, 0.767),
+            rgba(185, 100, 100, 0.836)
+        );
+        --ace-container-fifth-border: rgba(255, 255, 255, 0.62);
+        --ace-container-fifth-border-bottom: rgba(34, 155, 50, 0.28);
+        --ace-container-fifth-text: rgba(40, 48, 72, 0.85);
+        --ace-container-sixth-bg: linear-gradient(
+            145deg,
+            rgba(137, 224, 121, 0.55),
+            rgba(56, 160, 53, 0.45)
+        );
+        --ace-container-sixth-border: rgba(255, 255, 255, 0.62);
+        --ace-container-sixth-border-bottom: rgba(34, 155, 50, 0.28);
+        --ace-container-sixth-text: rgba(40, 48, 72, 0.85);
+        --ace-btn-first-bg: linear-gradient(
+            145deg,
+            rgba(238, 240, 245, 0.55),
+            rgba(216, 221, 240, 0.45)
+        );
+        --ace-btn-first-border: rgba(160, 175, 225, 0.5);
+        --ace-btn-first-shadow:
+            0 2px 6px rgba(90, 110, 170, 0.2), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        --ace-btn-first-text: rgba(252, 253, 255, 0.92);
+        --ace-btn-first-hover-bg: rgba(255, 255, 255, 0.5);
+        --ace-btn-first-active-text: rgba(66, 75, 102, 0.92);
+        --ace-btn-second-bg: linear-gradient(
+            145deg,
+            rgba(130, 148, 210, 0.55),
+            rgba(100, 120, 185, 0.45)
+        );
+        --ace-btn-second-border: rgba(160, 175, 225, 0.5);
+        --ace-btn-second-shadow:
+            0 2px 6px rgba(90, 110, 170, 0.2), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        --ace-btn-second-text: rgba(252, 253, 255, 0.92);
+        --ace-btn-second-hover-bg: linear-gradient(
+            145deg,
+            rgba(140, 158, 220, 0.68),
+            rgba(110, 130, 195, 0.58)
+        );
+        --ace-btn-second-active-text: rgba(35, 45, 85, 0.85);
+        --ace-btn-fourth-bg: linear-gradient(
+            145deg,
+            rgba(210, 130, 134, 0.767),
+            rgba(185, 100, 100, 0.836)
+        );
+        --ace-btn-fourth-border: rgba(160, 175, 225, 0.5);
+        --ace-btn-fourth-shadow:
+            0 2px 6px rgba(90, 110, 170, 0.2), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        --ace-btn-fourth-text: rgba(252, 253, 255, 0.92);
+        --ace-btn-fourth-hover-bg: linear-gradient(
+            145deg,
+            rgba(199, 100, 105, 0.767),
+            rgba(175, 73, 73, 0.836)
+        );
+        --ace-btn-fourth-active-text: rgba(35, 45, 85, 0.85);
+        --ace-btn-sixth-bg: linear-gradient(
+            145deg,
+            rgba(131, 131, 131, 0.767),
+            rgba(104, 102, 102, 0.836)
+        );
+        --ace-btn-sixth-border: rgba(160, 175, 225, 0.5);
+        --ace-btn-sixth-shadow:
+            0 2px 6px rgba(90, 110, 170, 0.2), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        --ace-btn-sixth-text: rgba(252, 253, 255, 0.92);
+        --ace-btn-sixth-hover-bg: linear-gradient(
+            145deg,
+            rgba(94, 93, 93, 0.767),
+            rgba(68, 66, 66, 0.836)
+        );
+        --ace-input-first-bg: rgba(255, 255, 255, 0.28);
+        --ace-input-first-border: rgba(160, 172, 200, 0.38);
+        --ace-input-first-text: rgba(40, 48, 72, 0.85);
+        --ace-input-first-active-text: rgba(35, 45, 85, 0.85);
+        --ace-chat-pill-bg: rgba(255, 255, 255, 0.35);
+        --ace-chat-pill-border: rgba(160, 175, 225, 0.42);
+        --ace-chat-pill-text: rgba(60, 72, 110, 0.85);
+        --ace-chat-pill-stream-bg: rgba(116, 142, 215, 0.24);
+        --ace-chat-pill-stream-border: rgba(126, 150, 220, 0.45);
+        --ace-chat-pill-stream-text: rgba(42, 56, 98, 0.92);
+        --ace-chat-label-text: rgba(92, 104, 138, 0.78);
+        --ace-chat-label-user-text: rgba(59, 74, 118, 0.88);
+    }
 
-    .system-shell {
+    [data-ace-theme='dark'] {
+        color-scheme: dark;
+        --ace-shell-first-bg: linear-gradient(
+            160deg,
+            rgba(24, 24, 26, 0.97) 0%,
+            rgba(16, 16, 18, 0.97) 100%
+        );
+        --ace-shell-first-before-bg: linear-gradient(
+            160deg,
+            rgba(40, 40, 43, 0.99) 0%,
+            rgba(20, 20, 22, 0.99) 100%
+        );
+        --ace-shell-first-text: rgba(220, 220, 225, 0.94);
+        --ace-shell-first-active-text: rgba(240, 240, 244, 0.96);
+        --ace-shell-first-active-border: rgba(100, 100, 108, 0.5);
+        --ace-shell-head-border: rgba(68, 68, 75, 0.5);
+        --ace-container-first-bg: linear-gradient(
+            160deg,
+            rgba(40, 40, 43, 0.99) 0%,
+            rgba(20, 20, 22, 0.99) 100%
+        );
+        --ace-container-first-border: rgba(72, 72, 80, 0.55);
+        --ace-container-first-border-bottom: rgba(58, 58, 65, 0.6);
+        --ace-container-first-text: rgba(212, 212, 220, 0.92);
+        --ace-container-second-bg: linear-gradient(
+            145deg,
+            rgba(58, 58, 64, 0.92),
+            rgba(44, 44, 50, 0.96)
+        );
+        --ace-container-second-border: rgba(88, 88, 98, 0.55);
+        --ace-container-second-shadow:
+            0 2px 10px rgba(4, 4, 6, 0.55), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+        --ace-container-second-text: rgba(225, 225, 232, 0.96);
+        --ace-container-third-bg: linear-gradient(
+            145deg,
+            rgba(50, 50, 56, 0.95),
+            rgba(34, 34, 40, 0.96)
+        );
+        --ace-container-third-border: rgba(78, 78, 88, 0.5);
+        --ace-container-third-border-bottom: rgba(60, 60, 70, 0.58);
+        --ace-container-third-text: rgba(218, 218, 226, 0.92);
+        --ace-container-fourth-bg: linear-gradient(
+            145deg,
+            rgba(62, 54, 72, 0.92),
+            rgba(42, 36, 54, 0.95)
+        );
+        --ace-container-fourth-border: rgba(90, 80, 106, 0.5);
+        --ace-container-fourth-border-bottom: rgba(70, 62, 88, 0.56);
+        --ace-container-fourth-text: rgba(224, 220, 232, 0.92);
+        --ace-container-fifth-bg: linear-gradient(
+            145deg,
+            rgba(148, 60, 68, 0.92),
+            rgba(108, 34, 42, 0.95)
+        );
+        --ace-container-fifth-border: rgba(188, 106, 116, 0.44);
+        --ace-container-fifth-border-bottom: rgba(120, 40, 50, 0.6);
+        --ace-container-fifth-text: rgba(255, 232, 236, 0.94);
+        --ace-container-sixth-bg: linear-gradient(
+            145deg,
+            rgba(54, 112, 68, 0.92),
+            rgba(28, 78, 42, 0.95)
+        );
+        --ace-container-sixth-border: rgba(88, 158, 106, 0.44);
+        --ace-container-sixth-border-bottom: rgba(36, 98, 54, 0.6);
+        --ace-container-sixth-text: rgba(228, 252, 234, 0.94);
+        --ace-btn-first-bg: linear-gradient(145deg, rgba(46, 46, 52, 0.95), rgba(28, 28, 32, 0.97));
+        --ace-btn-first-border: rgba(76, 76, 86, 0.5);
+        --ace-btn-first-shadow:
+            0 2px 10px rgba(4, 4, 6, 0.5), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+        --ace-btn-first-text: rgba(218, 218, 226, 0.94);
+        --ace-btn-first-hover-bg: rgba(72, 72, 82, 0.6);
+        --ace-btn-first-active-text: rgba(245, 245, 252, 0.98);
+        --ace-btn-second-bg: linear-gradient(
+            145deg,
+            rgba(62, 62, 72, 0.95),
+            rgba(42, 42, 52, 0.97)
+        );
+        --ace-btn-second-border: rgba(96, 96, 112, 0.52);
+        --ace-btn-second-shadow:
+            0 2px 10px rgba(4, 4, 6, 0.5), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+        --ace-btn-second-text: rgba(228, 228, 238, 0.96);
+        --ace-btn-second-hover-bg: linear-gradient(
+            145deg,
+            rgba(78, 78, 90, 0.96),
+            rgba(56, 56, 68, 0.98)
+        );
+        --ace-btn-second-active-text: rgba(255, 255, 255, 0.98);
+        --ace-btn-fourth-bg: linear-gradient(
+            145deg,
+            rgba(152, 62, 78, 0.94),
+            rgba(114, 36, 52, 0.96)
+        );
+        --ace-btn-fourth-border: rgba(196, 106, 122, 0.5);
+        --ace-btn-fourth-shadow:
+            0 2px 10px rgba(20, 4, 6, 0.45), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+        --ace-btn-fourth-text: rgba(255, 234, 240, 0.96);
+        --ace-btn-fourth-hover-bg: linear-gradient(
+            145deg,
+            rgba(170, 76, 92, 0.97),
+            rgba(132, 48, 64, 0.99)
+        );
+        --ace-btn-fourth-active-text: rgba(255, 248, 250, 1);
+        --ace-btn-sixth-bg: linear-gradient(145deg, rgba(56, 56, 64, 0.95), rgba(36, 36, 42, 0.97));
+        --ace-btn-sixth-border: rgba(88, 88, 100, 0.44);
+        --ace-btn-sixth-shadow:
+            0 2px 10px rgba(4, 4, 6, 0.5), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+        --ace-btn-sixth-text: rgba(225, 225, 232, 0.94);
+        --ace-btn-sixth-hover-bg: linear-gradient(
+            145deg,
+            rgba(74, 74, 84, 0.98),
+            rgba(50, 50, 58, 0.99)
+        );
+        --ace-input-first-bg: rgba(14, 14, 16, 0.85);
+        --ace-input-first-border: rgba(66, 66, 78, 0.58);
+        --ace-input-first-text: rgba(214, 214, 222, 0.94);
+        --ace-input-first-active-text: rgba(240, 240, 248, 0.98);
+        --ace-chat-pill-bg: rgba(46, 46, 54, 0.55);
+        --ace-chat-pill-border: rgba(82, 82, 96, 0.55);
+        --ace-chat-pill-text: rgba(205, 205, 216, 0.92);
+        --ace-chat-pill-stream-bg: rgba(58, 58, 72, 0.45);
+        --ace-chat-pill-stream-border: rgba(92, 92, 110, 0.52);
+        --ace-chat-pill-stream-text: rgba(230, 230, 244, 0.98);
+        --ace-chat-label-text: rgba(130, 130, 142, 0.76);
+        --ace-chat-label-user-text: rgba(185, 185, 198, 0.92);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        [data-ace-theme='system'] {
+            color-scheme: dark;
+            --ace-shell-first-bg: linear-gradient(
+                160deg,
+                rgba(31, 37, 52, 0.92) 0%,
+                rgba(18, 24, 38, 0.9) 100%
+            );
+            --ace-shell-first-before-bg: linear-gradient(
+                160deg,
+                rgba(54, 63, 88, 0.98) 0%,
+                rgba(26, 32, 48, 0.98) 100%
+            );
+            --ace-shell-first-text: rgba(231, 236, 247, 0.94);
+            --ace-shell-first-active-text: rgba(245, 248, 255, 0.96);
+            --ace-shell-first-active-border: rgba(111, 130, 181, 0.48);
+            --ace-shell-head-border: rgba(84, 99, 140, 0.42);
+            --ace-container-first-bg: linear-gradient(
+                145deg,
+                rgba(51, 60, 84, 0.82),
+                rgba(31, 38, 58, 0.84)
+            );
+            --ace-container-first-border: rgba(92, 107, 148, 0.46);
+            --ace-container-first-border-bottom: rgba(74, 88, 128, 0.52);
+            --ace-container-first-text: rgba(227, 233, 247, 0.9);
+            --ace-container-second-bg: linear-gradient(
+                145deg,
+                rgba(88, 110, 178, 0.78),
+                rgba(63, 83, 152, 0.84)
+            );
+            --ace-container-second-border: rgba(123, 144, 210, 0.52);
+            --ace-container-second-shadow:
+                0 2px 10px rgba(8, 12, 24, 0.45), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+            --ace-container-second-text: rgba(239, 243, 255, 0.96);
+            --ace-container-third-bg: linear-gradient(
+                145deg,
+                rgba(73, 86, 127, 0.88),
+                rgba(46, 58, 97, 0.88)
+            );
+            --ace-container-third-border: rgba(102, 117, 162, 0.46);
+            --ace-container-third-border-bottom: rgba(78, 92, 136, 0.52);
+            --ace-container-third-text: rgba(236, 240, 250, 0.92);
+            --ace-container-fourth-bg: linear-gradient(
+                145deg,
+                rgba(98, 84, 118, 0.88),
+                rgba(67, 55, 94, 0.9)
+            );
+            --ace-container-fourth-border: rgba(118, 102, 145, 0.46);
+            --ace-container-fourth-border-bottom: rgba(95, 81, 124, 0.52);
+            --ace-container-fourth-text: rgba(238, 239, 247, 0.92);
+            --ace-container-fifth-bg: linear-gradient(
+                145deg,
+                rgba(160, 72, 80, 0.88),
+                rgba(119, 42, 51, 0.9)
+            );
+            --ace-container-fifth-border: rgba(202, 120, 130, 0.42);
+            --ace-container-fifth-border-bottom: rgba(133, 46, 57, 0.56);
+            --ace-container-fifth-text: rgba(255, 236, 239, 0.94);
+            --ace-container-sixth-bg: linear-gradient(
+                145deg,
+                rgba(70, 128, 86, 0.88),
+                rgba(36, 92, 52, 0.9)
+            );
+            --ace-container-sixth-border: rgba(104, 176, 124, 0.42);
+            --ace-container-sixth-border-bottom: rgba(44, 112, 64, 0.56);
+            --ace-container-sixth-text: rgba(235, 255, 240, 0.94);
+            --ace-btn-first-bg: linear-gradient(
+                145deg,
+                rgba(60, 71, 99, 0.88),
+                rgba(37, 45, 67, 0.9)
+            );
+            --ace-btn-first-border: rgba(102, 119, 166, 0.46);
+            --ace-btn-first-shadow:
+                0 2px 10px rgba(8, 12, 24, 0.42), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+            --ace-btn-first-text: rgba(235, 239, 250, 0.94);
+            --ace-btn-first-hover-bg: rgba(95, 108, 148, 0.55);
+            --ace-btn-first-active-text: rgba(248, 250, 255, 0.98);
+            --ace-btn-second-bg: linear-gradient(
+                145deg,
+                rgba(94, 117, 196, 0.88),
+                rgba(62, 83, 160, 0.9)
+            );
+            --ace-btn-second-border: rgba(121, 144, 220, 0.5);
+            --ace-btn-second-shadow:
+                0 2px 10px rgba(8, 12, 24, 0.42), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+            --ace-btn-second-text: rgba(244, 247, 255, 0.96);
+            --ace-btn-second-hover-bg: linear-gradient(
+                145deg,
+                rgba(109, 133, 214, 0.92),
+                rgba(73, 96, 176, 0.94)
+            );
+            --ace-btn-second-active-text: rgba(255, 255, 255, 0.98);
+            --ace-btn-fourth-bg: linear-gradient(
+                145deg,
+                rgba(164, 74, 90, 0.9),
+                rgba(126, 43, 58, 0.92)
+            );
+            --ace-btn-fourth-border: rgba(205, 116, 132, 0.48);
+            --ace-btn-fourth-shadow:
+                0 2px 10px rgba(24, 8, 10, 0.4), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+            --ace-btn-fourth-text: rgba(255, 238, 242, 0.96);
+            --ace-btn-fourth-hover-bg: linear-gradient(
+                145deg,
+                rgba(181, 86, 101, 0.94),
+                rgba(143, 53, 69, 0.96)
+            );
+            --ace-btn-fourth-active-text: rgba(255, 248, 250, 1);
+            --ace-btn-sixth-bg: linear-gradient(
+                145deg,
+                rgba(96, 98, 110, 0.9),
+                rgba(63, 65, 76, 0.92)
+            );
+            --ace-btn-sixth-border: rgba(133, 136, 154, 0.4);
+            --ace-btn-sixth-shadow:
+                0 2px 10px rgba(8, 12, 24, 0.42), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+            --ace-btn-sixth-text: rgba(239, 241, 246, 0.94);
+            --ace-btn-sixth-hover-bg: linear-gradient(
+                145deg,
+                rgba(118, 120, 133, 0.94),
+                rgba(79, 81, 94, 0.96)
+            );
+            --ace-input-first-bg: rgba(23, 28, 41, 0.72);
+            --ace-input-first-border: rgba(88, 100, 140, 0.52);
+            --ace-input-first-text: rgba(231, 236, 247, 0.94);
+            --ace-input-first-active-text: rgba(247, 249, 255, 0.98);
+            --ace-chat-pill-bg: rgba(65, 78, 115, 0.48);
+            --ace-chat-pill-border: rgba(110, 129, 182, 0.52);
+            --ace-chat-pill-text: rgba(223, 230, 247, 0.92);
+            --ace-chat-pill-stream-bg: rgba(83, 118, 214, 0.36);
+            --ace-chat-pill-stream-border: rgba(112, 145, 234, 0.5);
+            --ace-chat-pill-stream-text: rgba(239, 244, 255, 0.98);
+            --ace-chat-label-text: rgba(154, 167, 205, 0.76);
+            --ace-chat-label-user-text: rgba(205, 214, 238, 0.92);
+        }
+    }
+
+    .ace-shell {
         position: relative;
         overflow: hidden;
         opacity: 20%;
     }
 
-    .system-shell::before,
-    .system-shell-primary::before {
+    .ace-shell::before,
+    .ace-shell-first::before {
         @apply opacity-0;
         content: '';
         position: absolute;
@@ -108,263 +488,258 @@ body,
         z-index: -1;
     }
 
-    .system-shell:hover,
-    .system-shell.active,
-    .system-shell:hover::before,
-    .system-shell.active::before {
+    .ace-shell:hover,
+    .ace-shell.active,
+    .ace-shell:hover::before,
+    .ace-shell.active::before {
         @apply opacity-100;
     }
 
-    /* + ------------------------------------------------------------------------------------------------------+ */
-    /* + -------------------------------------- System Shell Shell --------------------------------------------+ */
-    /* + ------------------------------------------------------------------------------------------------------+ */
-
-    .system-shell-primary {
+    .ace-shell-first {
         @apply backdrop-blur-glass transition duration-300;
-        background: linear-gradient(160deg, #dbe2ec67 0%, #d6ddeb31 100%);
-        color: rgba(252, 253, 255, 0.92);
+        background: var(--ace-shell-first-bg);
+        color: var(--ace-shell-first-text);
         font-size: 13px;
         font-weight: 500;
         letter-spacing: 0.01em;
     }
 
-    .system-shell-primary::before {
-        background: linear-gradient(160deg, #dbe2ec 0%, #d6ddeb 100%);
+    .ace-shell-first::before {
+        background: var(--ace-shell-first-before-bg);
     }
 
-    .system-shell:hover.system-shell-primary,
-    .system-shell:hover .system-shell-primary,
-    .system-shell.active.system-shell-primary,
-    .system-shell.active .system-shell-primary,
-    .system-shell.active.system-shell-primary,
-    .system-shell.active .system-shell-primary {
-        @apply border border-glass-border;
-        color: rgba(66, 75, 102, 0.92);
+    .ace-shell:hover.ace-shell-first,
+    .ace-shell:hover .ace-shell-first,
+    .ace-shell.active.ace-shell-first,
+    .ace-shell.active .ace-shell-first,
+    .ace-shell.active.ace-shell-first,
+    .ace-shell.active .ace-shell-first {
+        border: 1px solid var(--ace-shell-first-active-border);
+        color: var(--ace-shell-first-active-text);
     }
 
-    .system-shell:hover .system-shell-primary::before,
-    .system-shell.active .system-shell-primary::before,
-    .system-shell.active .system-shell-primary::before {
+    .ace-shell:hover .ace-shell-first::before,
+    .ace-shell.active .ace-shell-first::before,
+    .ace-shell.active .ace-shell-first::before {
         @apply opacity-100;
     }
 
-    /* + ------------------------------------------------------------------------------------------------------+ */
-    /* + -------------------------------------- System Container Shell ----------------------------------------+ */
-    /* + ------------------------------------------------------------------------------------------------------+ */
-
-    .system-container-primary {
-        background: linear-gradient(145deg, rgba(238, 240, 245, 0.55), rgba(216, 221, 240, 0.45));
-        border: 1px solid rgba(255, 255, 255, 0.62);
-        border-bottom-color: rgba(255, 255, 255, 0.62);
-        border-bottom-color: rgba(165, 178, 210, 0.28);
-        /* box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1); */
-        color: rgba(40, 48, 72, 0.85);
+    .ace-container-first {
+        background: var(--ace-container-first-bg);
+        border: 1px solid var(--ace-container-first-border);
+        border-bottom-color: var(--ace-container-first-border-bottom);
+        color: var(--ace-container-first-text);
     }
 
-    .system-container-secondary {
+    .ace-container-second {
         border-radius: 8px;
-        border: 1px solid rgba(160, 175, 225, 0.5);
-        background: linear-gradient(145deg, rgb(156, 168, 212), rgb(164, 175, 212));
-        box-shadow:
-            0 2px 6px rgba(90, 110, 170, 0.2),
-            0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        border: 1px solid var(--ace-container-second-border);
+        background: var(--ace-container-second-bg);
+        box-shadow: var(--ace-container-second-shadow);
         padding: 4px;
-        color: rgba(252, 253, 255, 0.92);
-        /* box-shadow:
-      0 2px 6px rgba(90, 110, 170, 0.2),
-      0 1px 0 rgba(255, 255, 255, 0.5) inset; */
-        color: rgba(40, 48, 72, 0.85);
+        color: var(--ace-container-second-text);
     }
 
-    .system-container-tertiary {
-        background: linear-gradient(145deg, rgba(104, 119, 170, 0.55), rgba(83, 100, 155, 0.45));
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        border-bottom-color: rgba(180, 185, 195, 0.3);
-        /* box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1); */
-        color: rgba(236, 239, 245, 0.85);
+    .ace-container-third {
+        background: var(--ace-container-third-bg);
+        border: 1px solid var(--ace-container-third-border);
+        border-bottom-color: var(--ace-container-third-border-bottom);
+        color: var(--ace-container-third-text);
     }
 
-    .system-container-quaternary {
-        background: linear-gradient(145deg, rgba(118, 128, 155, 0.55), rgba(115, 126, 158, 0.616));
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        border-bottom-color: rgba(180, 185, 195, 0.3);
-        /* box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1); */
-        color: rgba(236, 239, 245, 0.85);
+    .ace-container-fourth {
+        background: var(--ace-container-fourth-bg);
+        border: 1px solid var(--ace-container-fourth-border);
+        border-bottom-color: var(--ace-container-fourth-border-bottom);
+        color: var(--ace-container-fourth-text);
     }
 
-    .system-container-5th {
-        background: linear-gradient(145deg, rgba(210, 130, 134, 0.767), rgba(185, 100, 100, 0.836));
-        border: 1px solid rgba(255, 255, 255, 0.62);
-        border-bottom-color: rgba(255, 255, 255, 0.62);
-        border-bottom-color: rgba(34, 155, 50, 0.28);
-        /* box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1); */
-        color: rgba(40, 48, 72, 0.85);
+    .ace-container-fifth {
+        background: var(--ace-container-fifth-bg);
+        border: 1px solid var(--ace-container-fifth-border);
+        border-bottom-color: var(--ace-container-fifth-border-bottom);
+        color: var(--ace-container-fifth-text);
     }
 
-    .system-container-6th {
-        background: linear-gradient(145deg, rgba(137, 224, 121, 0.55), rgba(56, 160, 53, 0.45));
-        border: 1px solid rgba(255, 255, 255, 0.62);
-        border-bottom-color: rgba(255, 255, 255, 0.62);
-        border-bottom-color: rgba(34, 155, 50, 0.28);
-        /* box-shadow: 0 2px 8px rgba(90, 100, 130, 0.1); */
-        color: rgba(40, 48, 72, 0.85);
+    .ace-container-sixth {
+        background: var(--ace-container-sixth-bg);
+        border: 1px solid var(--ace-container-sixth-border);
+        border-bottom-color: var(--ace-container-sixth-border-bottom);
+        color: var(--ace-container-sixth-text);
     }
 
-    /* + ------------------------------------------------------------------------------------------------------+ */
-    /* + -------------------------------------- System Head Shell -------------------------------------------+ */
-    /* + ------------------------------------------------------------------------------------------------------+ */
-
-    /* Keeping your header styling intact */
-    .system-shell-head-primary {
-        @apply flex cursor-grab items-center 
-  justify-between border-b 
-  bg-white/5 px-4 py-3 active:cursor-grabbing;
-        border-color: rgba(155, 168, 200, 0.32);
+    .ace-shell-head {
+        @apply flex cursor-grab items-center justify-between border-b bg-white/5 px-4 py-3 active:cursor-grabbing;
+        border-color: var(--ace-shell-head-border);
     }
 
-    /* + ------------------------------------------------------------------------------------------------------+ */
-    /* + -------------------------------------- System Border Styling -----------------------------------------+ */
-    /* + ------------------------------------------------------------------------------------------------------+ */
-
-    .system-btn,
-    .system-btn-primary,
-    .system-btn-secondary {
+    .ace-btn,
+    .ace-btn-first,
+    .ace-btn-secondary {
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
     }
 
-    /* PRIMARY */
-    .system-btn-primary {
+    .ace-btn-first {
         border-radius: 8px;
-        border: 1px solid rgba(160, 175, 225, 0.5);
-        background: linear-gradient(145deg, rgba(238, 240, 245, 0.55), rgba(216, 221, 240, 0.45));
-        box-shadow:
-            0 2px 6px rgba(90, 110, 170, 0.2),
-            0 1px 0 rgba(255, 255, 255, 0.5) inset;
-        color: rgba(252, 253, 255, 0.92);
+        border: 1px solid var(--ace-btn-first-border);
+        background: var(--ace-btn-first-bg);
+        box-shadow: var(--ace-btn-first-shadow);
+        color: var(--ace-btn-first-text);
         padding: 4px;
         transition: background 0.15s;
     }
 
-    .system-btn-primary:hover {
-        background: rgba(255, 255, 255, 0.5);
+    .ace-btn-first:hover {
+        background: var(--ace-btn-first-hover-bg);
     }
 
-    .system-shell:hover.system-btn-primary,
-    .system-shell:hover .system-btn-primary,
-    .system-shell.active.system-btn-primary,
-    .system-shell.active .system-btn-primary,
-    .system-shell.active.system-btn-primary,
-    .system-shell.active .system-btn-primary {
-        color: rgba(66, 75, 102, 0.92);
+    .ace-shell:hover.ace-btn-first,
+    .ace-shell:hover .ace-btn-first,
+    .ace-shell.active.ace-btn-first,
+    .ace-shell.active .ace-btn-first,
+    .ace-shell.active.ace-btn-first,
+    .ace-shell.active .ace-btn-first {
+        color: var(--ace-btn-first-active-text);
     }
 
-    /* SECONDARY */
-    .system-btn-secondary {
+    .ace-btn-secondary {
         border-radius: 8px;
-        border: 1px solid rgba(160, 175, 225, 0.5);
-        background: linear-gradient(145deg, rgba(130, 148, 210, 0.55), rgba(100, 120, 185, 0.45));
-        box-shadow:
-            0 2px 6px rgba(90, 110, 170, 0.2),
-            0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        border: 1px solid var(--ace-btn-second-border);
+        background: var(--ace-btn-second-bg);
+        box-shadow: var(--ace-btn-second-shadow);
         padding: 4px;
-        color: rgba(252, 253, 255, 0.92);
+        color: var(--ace-btn-second-text);
         transition: background 0.15s;
     }
 
-    .system-btn-secondary:hover {
-        background: linear-gradient(145deg, rgba(140, 158, 220, 0.68), rgba(110, 130, 195, 0.58));
+    .ace-btn-secondary:hover {
+        background: var(--ace-btn-second-hover-bg);
     }
 
-    .system-shell:hover.system-btn-secondary,
-    .system-shell:hover .system-btn-secondary,
-    .system-shell.active.system-btn-secondary,
-    .system-shell.active .system-btn-secondary,
-    .system-shell.active.system-btn-secondary,
-    .system-shell.active .system-btn-secondary {
-        color: rgba(35, 45, 85, 0.85);
+    .ace-shell:hover.ace-btn-secondary,
+    .ace-shell:hover .ace-btn-secondary,
+    .ace-shell.active.ace-btn-secondary,
+    .ace-shell.active .ace-btn-secondary,
+    .ace-shell.active.ace-btn-secondary,
+    .ace-shell.active .ace-btn-secondary {
+        color: var(--ace-btn-second-active-text);
     }
 
-    /* QUINARY */
-    .system-btn-quinary {
+    .ace-btn-fourth {
         border-radius: 8px;
-        border: 1px solid rgba(160, 175, 225, 0.5);
-        background: linear-gradient(145deg, rgba(210, 130, 134, 0.767), rgba(185, 100, 100, 0.836));
-        box-shadow:
-            0 2px 6px rgba(90, 110, 170, 0.2),
-            0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        border: 1px solid var(--ace-btn-fourth-border);
+        background: var(--ace-btn-fourth-bg);
+        box-shadow: var(--ace-btn-fourth-shadow);
         padding: 4px;
-        color: rgba(252, 253, 255, 0.92);
+        color: var(--ace-btn-fourth-text);
         transition: background 0.15s;
     }
 
-    .system-btn-quinary:hover {
-        background: linear-gradient(145deg, rgba(199, 100, 105, 0.767), rgba(175, 73, 73, 0.836));
+    .ace-btn-fourth:hover {
+        background: var(--ace-btn-fourth-hover-bg);
     }
 
-    .system-shell:hover.system-btn-quinary,
-    .system-shell:hover .system-btn-quinary,
-    .system-shell.active.system-btn-quinary,
-    .system-shell.active .system-btn-quinary,
-    .system-shell.active.system-btn-quinary,
-    .system-shell.active .system-btn-quinary {
-        color: rgba(35, 45, 85, 0.85);
+    .ace-shell:hover.ace-btn-fourth,
+    .ace-shell:hover .ace-btn-fourth,
+    .ace-shell.active.ace-btn-fourth,
+    .ace-shell.active .ace-btn-fourth,
+    .ace-shell.active.ace-btn-fourth,
+    .ace-shell.active .ace-btn-fourth {
+        color: var(--ace-btn-fourth-active-text);
     }
 
-    /* SENARY */
-    .system-btn-senary {
+    .ace-btn-sixth {
         border-radius: 8px;
-        border: 1px solid rgba(160, 175, 225, 0.5);
-        background: linear-gradient(145deg, rgba(131, 131, 131, 0.767), rgba(104, 102, 102, 0.836));
-        box-shadow:
-            0 2px 6px rgba(90, 110, 170, 0.2),
-            0 1px 0 rgba(255, 255, 255, 0.5) inset;
+        border: 1px solid var(--ace-btn-sixth-border);
+        background: var(--ace-btn-sixth-bg);
+        box-shadow: var(--ace-btn-sixth-shadow);
         padding: 4px;
-        color: rgba(252, 253, 255, 0.92);
+        color: var(--ace-btn-sixth-text);
         transition: background 0.15s;
     }
 
-    .system-btn-senary:hover {
-        background: linear-gradient(145deg, rgba(94, 93, 93, 0.767), rgba(68, 66, 66, 0.836));
+    .ace-btn-sixth:hover {
+        background: var(--ace-btn-sixth-hover-bg);
     }
 
-    .system-shell:hover.system-btn-senary,
-    .system-shell:hover .system-btn-senary,
-    .system-shell.active.system-btn-senary,
-    .system-shell.active .system-btn-senary,
-    .system-shell.active.system-btn-senary,
-    .system-shell.active .system-btn-senary {
-        color: rgba(252, 253, 255, 0.92);
+    .ace-shell:hover.ace-btn-sixth,
+    .ace-shell:hover .ace-btn-sixth,
+    .ace-shell.active.ace-btn-sixth,
+    .ace-shell.active .ace-btn-sixth,
+    .ace-shell.active.ace-btn-sixth,
+    .ace-shell.active .ace-btn-sixth {
+        color: var(--ace-btn-sixth-text);
     }
 
-    /* + ------------------------------------------------------------------------------------------------------+ */
-    /* + --------------------------------------- System Input Styling -----------------------------------------+ */
-    /* + ------------------------------------------------------------------------------------------------------+ */
-
-    .system-input-primary {
-        background: rgba(255, 255, 255, 0.28);
-        border: 1px solid rgba(160, 172, 200, 0.38);
+    .ace-input-first {
+        background: var(--ace-input-first-bg);
+        border: 1px solid var(--ace-input-first-border);
         border-radius: 12px;
-        color: rgba(40, 48, 72, 0.85);
+        color: var(--ace-input-first-text);
         transition:
             background 0.15s,
             border-color 0.15s;
     }
 
-    .system-shell:hover.system-input-primary,
-    .system-shell:hover .system-input-primary,
-    .system-shell.active.system-input-primary,
-    .system-shell.active .system-input-primary,
-    .system-shell.active.system-input-primary,
-    .system-shell.active .system-input-primary {
-        color: rgba(35, 45, 85, 0.85);
+    .ace-shell:hover.ace-input-first,
+    .ace-shell:hover .ace-input-first,
+    .ace-shell.active.ace-input-first,
+    .ace-shell.active .ace-input-first,
+    .ace-shell.active.ace-input-first,
+    .ace-shell.active .ace-input-first {
+        color: var(--ace-input-first-active-text);
     }
 
-    /* + ------------------------------------------------------------------------------------------------------+ */
-    /* + -------------------------------------- Utility Classes ----------------------------------------------+ */
-    /* + ------------------------------------------------------------------------------------------------------+ */
+    .ace-ai-chatbar {
+        min-height: 0;
+    }
+
+    .ace-chat-message-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .ace-chat-empty-copy {
+        max-width: 28rem;
+        line-height: 1.65;
+    }
+
+    .ace-chat-turn-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--ace-chat-label-text);
+    }
+
+    .ace-chat-turn-label.is-user {
+        color: var(--ace-chat-label-user-text);
+    }
+
+    .ace-chat-status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 1px solid var(--ace-chat-pill-border);
+        background: var(--ace-chat-pill-bg);
+        color: var(--ace-chat-pill-text);
+        padding: 0.3rem 0.65rem;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+    }
+
+    .ace-chat-status-pill.is-streaming {
+        border-color: var(--ace-chat-pill-stream-border);
+        background: var(--ace-chat-pill-stream-bg);
+        color: var(--ace-chat-pill-stream-text);
+    }
 
     .semi-transparent {
         opacity: 0.5;

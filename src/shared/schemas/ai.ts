@@ -7,6 +7,61 @@ import { WindowDisplayModeSchema } from '#/shared/schemas/state';
 
 export type AIProviderType = (typeof AIProviders)[keyof typeof AIProviders];
 export type AIProviderEnvKeyType = (typeof AIProviderEnvKeys)[AIProviderType][number];
+export const AgentModelModes = {
+    LOW: 'low',
+    MEDIUM: 'medium',
+    SELECTED: 'selected',
+} as const;
+export type AgentModelModeType = (typeof AgentModelModes)[keyof typeof AgentModelModes];
+export const ExecutionBatchStatuses = {
+    PENDING: 'pending',
+    IN_PROGRESS: 'in_progress',
+    COMPLETED: 'completed',
+    FAILED: 'failed',
+} as const;
+export type ExecutionBatchStatusType =
+    (typeof ExecutionBatchStatuses)[keyof typeof ExecutionBatchStatuses];
+
+export const ExecutionBatchItemSchema = z.object({
+    item_id: z.string().optional(),
+    title: z.string(),
+    instructions: z.string().optional(),
+    status: z.enum(['pending', 'in_progress', 'completed', 'failed']).default('pending'),
+    notes: z.array(z.string()).default([]),
+    updated_at: z.number().int().optional(),
+});
+export type ExecutionBatchItemType = z.infer<typeof ExecutionBatchItemSchema>;
+
+export const ExecutionBatchSchema = z.object({
+    batch_id: z.string(),
+    title: z.string(),
+    objective: z.string(),
+    status: z.enum(['pending', 'in_progress', 'completed', 'failed']).default('pending'),
+    summary: z.string().optional(),
+    notes: z.array(z.string()).default([]),
+    items: z.array(ExecutionBatchItemSchema).default([]),
+    created_at: z.number().int(),
+    updated_at: z.number().int(),
+});
+export type ExecutionBatchType = z.infer<typeof ExecutionBatchSchema>;
+
+export const ExecutionBatchRequestSchema = z.object({
+    batch: z.object({
+        batch_id: z.string().optional(),
+        title: z.string(),
+        objective: z.string(),
+        notes: z.array(z.string()).default([]),
+        items: z.array(ExecutionBatchItemSchema).default([]),
+    }),
+});
+export type ExecutionBatchRequestType = z.infer<typeof ExecutionBatchRequestSchema>;
+
+export const ExecutionBatchResultSchema = z.object({
+    ok: z.boolean(),
+    batch: ExecutionBatchSchema,
+    summary: z.string(),
+});
+export type ExecutionBatchResultType = z.infer<typeof ExecutionBatchResultSchema>;
 
 /**
  * Schema that get injected into the agent context when invoking an agent. This is what the agent will 
@@ -52,6 +107,7 @@ export interface AgentConfigurableType {
     checkpoint_id?: string;
     model?: string;
     provider?: AIProviderType;
+    model_mode?: AgentModelModeType;
 
     /**
      * Optional API key for the AI provider. If not provided, the system will attempt

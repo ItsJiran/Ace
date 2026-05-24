@@ -82,11 +82,7 @@ function getThreadTransportSession(threadUid: string | null) {
 }
 
 function resolveSessionKeysForPayload(threadUid: string) {
-	const sessionKeys = new Set<string>([threadUid]);
-	if (AIEngine.readCurrentThreadUidFromMemory() === threadUid) {
-		sessionKeys.add(PLACEHOLDER_THREAD_UID);
-	}
-	return Array.from(sessionKeys);
+	return [threadUid];
 }
 
 function ensureBackgroundAIStreamListener() {
@@ -130,7 +126,7 @@ export function submitPromptToThread(threadUid: string, prompt: string) {
 }
 
 export function resolveActiveThreadUid(threadUid: string | null) {
-	return AIEngine.readCurrentThreadUidFromMemory() ?? threadUid ?? null;
+	return threadUid ?? null;
 }
 
 export async function waitForThreadRun(threadUid: string) {

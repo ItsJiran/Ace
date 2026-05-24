@@ -1,5 +1,6 @@
 import { ArrowUp, PauseCircle, Plus, RefreshCcw } from 'lucide-react';
 
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import type { AIProviderType } from '#/shared/schemas/ai';
 
 type ModelOption = { id: string; name?: string };
@@ -33,13 +34,15 @@ export function SystemAIChatComposer({
 	handleSubmit,
 	handleInterrupt,
 }: SystemAIChatComposerProps) {
+	const { targets } = useAceTheme();
+
 	return (
-		<section className="system-shell-primary flex shrink-0 flex-col gap-3 overflow-hidden rounded-2xl p-4">
+		<section className={[targets.shell.first, 'flex shrink-0 flex-col gap-3 overflow-hidden rounded-2xl p-4'].join(' ')}>
 			<div className="flex flex-wrap items-center gap-2">
 				<select
 					value={selectedProvider}
 					onChange={(event) => setSelectedProvider(event.target.value as AIProviderType)}
-					className="min-w-[112px] rounded-xl px-3 py-2 text-sm system-input-primary"
+					className={[targets.input.first, 'min-w-[112px] rounded-xl px-3 py-2 text-sm'].join(' ')}
 				>
 					<option value="openai">openai</option>
 					<option value="google">google</option>
@@ -49,7 +52,7 @@ export function SystemAIChatComposer({
 				<select
 					value={resolvedModel}
 					onChange={(event) => setSelectedModel(event.target.value)}
-					className="min-w-0 flex-1 rounded-xl px-3 py-2 text-sm system-input-primary"
+					className={[targets.input.first, 'min-w-0 flex-1 rounded-xl px-3 py-2 text-sm'].join(' ')}
 				>
 					{modelOptions.length === 0 ? <option value={resolvedModel}>{resolvedModel}</option> : null}
 					{modelOptions.map((model) => (
@@ -57,12 +60,12 @@ export function SystemAIChatComposer({
 					))}
 				</select>
 
-				<button type="button" onClick={() => void fetchModels()} className="system-btn-secondary inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-sm">
+				<button type="button" onClick={() => void fetchModels()} className={[targets.btn.secondary, 'inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-sm'].join(' ')}>
 					<RefreshCcw size={15} />
 					<span>Sync</span>
 				</button>
 
-				<button type="button" onClick={() => void handleCreateThread()} className="system-btn-secondary inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-sm">
+				<button type="button" onClick={() => void handleCreateThread()} className={[targets.btn.secondary, 'inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-sm'].join(' ')}>
 					<Plus size={15} />
 					<span>New</span>
 				</button>
@@ -80,7 +83,7 @@ export function SystemAIChatComposer({
 					}}
 					placeholder={isStreaming ? 'Streaming... press Stop to interrupt.' : 'Type a prompt... Enter to send, Shift+Enter for newline.'}
 					rows={3}
-					className="h-[50px] flex-1 resize-none system-input-primary px-4 py-3 text-sm leading-6 outline-none"
+					className={[targets.input.first, 'h-[50px] flex-1 resize-none px-4 py-3 text-sm leading-6 outline-none'].join(' ')}
 					disabled={isStreaming}
 				/>
 
@@ -94,7 +97,7 @@ export function SystemAIChatComposer({
 
 						void handleSubmit();
 					}}
-					className="inline-flex h-[45px] shrink-0 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-medium system-btn-secondary"
+					className={[targets.btn.secondary, 'inline-flex h-[45px] shrink-0 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-medium'].join(' ')}
 				>
 					{isStreaming ? <PauseCircle size={16} /> : <ArrowUp size={16} />}
 					<span>{isStreaming ? 'Stop' : 'Send'}</span>

@@ -1,4 +1,4 @@
-export type ToolRendererKind = 'planning' | 'window' | 'filesystem' | 'duckduckgo' | 'generic';
+export type ToolRendererKind = 'planning' | 'window' | 'filesystem' | 'duckduckgo' | 'execution' | 'error' | 'generic';
 
 export type ToolRendererProps = {
 	toolName: string;
@@ -77,6 +77,21 @@ function looksLikePlanningPayload(value: unknown): boolean {
 	return ['plan', 'steps', 'tasks', 'todo', 'todos', 'checklist', 'next_steps'].some((key) => key in record);
 }
 
+function looksLikeExecutionBatchPayload(value: unknown): boolean {
+	const normalizedValue = parseStructuredValue(value);
+	const record = asRecord(normalizedValue);
+	if (!record) {
+		return false;
+	}
+
+	const batch = asRecord(record.batch) ?? record;
+	if (!batch) {
+		return false;
+	}
+
+	return ['batch_id', 'objective', 'items', 'summary'].some((key) => key in batch);
+}
+
 function looksLikeWindowPayload(value: unknown): boolean {
 	const normalizedValue = parseStructuredValue(value);
 	if (Array.isArray(normalizedValue)) {
@@ -136,11 +151,30 @@ function looksLikeDuckDuckGoPayload(value: unknown): boolean {
 	});
 }
 
+function looksLikeErrorPayload(value: unknown): boolean {
+	const normalizedValue = parseStructuredValue(value);
+	const record = asRecord(normalizedValue);
+	if (!record) {
+		return false;
+	}
+
+	return ['error', 'message', 'stderr', 'stack', 'exception'].some((key) => key in record);
+}
+
 export function resolveToolRendererKind({ toolName, content, artifact, record }: ToolRendererProps): ToolRendererKind {
 	const normalizedToolName = normalizeToolName(toolName);
+	const normalizedStatus = typeof record.status === 'string' ? record.status.toLowerCase() : '';
+
+	if (normalizedStatus === 'error' || normalizedStatus === 'failed') {
+		return 'error';
+	}
 
 	if (/(plan|planning|todo|task)/.test(normalizedToolName)) {
 		return 'planning';
+	}
+
+	if (/(planning_execution_batch|update_execution_batch)/.test(normalizedToolName)) {
+		return 'execution';
 	}
 
 	if (/(window|ace_window)/.test(normalizedToolName)) {
@@ -161,6 +195,14 @@ export function resolveToolRendererKind({ toolName, content, artifact, record }:
 		return 'planning';
 	}
 
+	if (
+		looksLikeExecutionBatchPayload(artifact) ||
+		looksLikeExecutionBatchPayload(content) ||
+		looksLikeExecutionBatchPayload(record)
+	) {
+		return 'execution';
+	}
+
 	if (looksLikeWindowPayload(artifact) || looksLikeWindowPayload(content) || looksLikeWindowPayload(record)) {
 		return 'window';
 	}
@@ -171,6 +213,10 @@ export function resolveToolRendererKind({ toolName, content, artifact, record }:
 
 	if (looksLikeDuckDuckGoPayload(artifact) || looksLikeDuckDuckGoPayload(content) || looksLikeDuckDuckGoPayload(record)) {
 		return 'duckduckgo';
+	}
+
+	if (looksLikeErrorPayload(artifact) || looksLikeErrorPayload(content) || looksLikeErrorPayload(record)) {
+		return 'error';
 	}
 
 	return 'generic';

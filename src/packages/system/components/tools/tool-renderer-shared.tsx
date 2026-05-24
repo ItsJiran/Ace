@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { isPrimitive, parseStructuredValue, stringifyValue } from './tool-renderer.utils';
 
 export function StructuredValueBlock({ value }: { value: unknown }) {
+	const { targets } = useAceTheme();
 	const normalizedValue = parseStructuredValue(value);
 
 	if (typeof normalizedValue === 'string') {
-		return <div className="p-2 system-container-primary rounded-sm shadow-sm"><div className="whitespace-pre-wrap break-words bg-zinc-600 text-white/60 py-3 rounded-sm">{normalizedValue}</div></div>;
+		return <div className={[targets.container.first, 'p-2 rounded-sm shadow-sm'].join(' ')}><div className="whitespace-pre-wrap break-words bg-zinc-600 text-white/60 py-3 rounded-sm">{normalizedValue}</div></div>;
 	}
 
 	if (Array.isArray(normalizedValue) && normalizedValue.every(isPrimitive)) {

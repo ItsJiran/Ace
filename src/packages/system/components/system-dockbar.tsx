@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import type { AceWindowRenderProps } from '#/app-desktop/hooks/use-ace-window';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import type { WindowConfig } from '#/shared/schemas/window';
@@ -31,9 +32,6 @@ type DockbarWindowEntry = {
     isFocused: boolean;
     component: string;
 };
-
-const launcherButtonClass =
-    'inline-flex h-11 w-11 items-center justify-center rounded-2xl system-btn-secondary';
 
 const menuItems = [
     {
@@ -146,9 +144,14 @@ function SystemDockbar({
 }: {
     dragHandleProps: AceWindowRenderProps['dragHandleProps'];
 }) {
+    const { targets } = useAceTheme();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const windowSystem = useAceMemory<Map<string, WindowSystemEntry>>('system:window_system');
     const focusedWindowUid = useAceMemory<string | null>('system:global_state:focused_window');
+    const launcherButtonClass = [
+        targets.btn.secondary,
+        'inline-flex h-11 w-11 items-center justify-center rounded-2xl',
+    ].join(' ');
 
     const windows = useMemo(
         () => resolveWindowEntries(windowSystem, focusedWindowUid),
@@ -170,7 +173,7 @@ function SystemDockbar({
     return (
         <>
             {isMenuOpen ? (
-                <div className="absolute bottom-[calc(100%+12px)] left-0 z-20 min-w-[240px] overflow-hidden rounded-[22px] px-3 py-3  system-shell-primary overflow-hidden">
+                <div className={[targets.shell.first, 'absolute bottom-[calc(100%+12px)] left-0 z-20 min-w-[240px] overflow-hidden rounded-[22px] px-3 py-3 overflow-hidden'].join(' ')}>
                     <div className="flex flex-col gap-3">
                         {menuItems.map((item) => {
                             const Icon = item.icon;
@@ -183,7 +186,7 @@ function SystemDockbar({
                                         setIsMenuOpen(false);
                                     }}
                                     onPointerDown={(event) => event.stopPropagation()}
-                                    className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm system-btn-primary transition hover:bg-white/[0.08] hover:text-white"
+                                    className={[targets.btn.first, 'flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm transition hover:bg-white/[0.08] hover:text-white'].join(' ')}
                                 >
                                     <Icon size={16} className="text-zinc-500" />
                                     <span className="text-zinc-500">{item.label}</span>
@@ -195,7 +198,7 @@ function SystemDockbar({
             ) : null}
             <div
                 {...dragHandleProps}
-                className="relative flex h-fit min-w-[150px] w-fit items-center gap-3 overflow-hidden rounded-[24px] px-4 py-4 system-shell-primary"
+                className={[targets.shell.first, 'relative flex h-fit min-w-[150px] w-fit items-center gap-3 overflow-hidden rounded-[24px] px-4 py-4'].join(' ')}
             >
                 <div className="flex shrink-0 items-center gap-2 ">
                     <button
@@ -233,7 +236,7 @@ function SystemDockbar({
                 <div className="min-w-0 flex-1 ">
                     <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         {windows.length === 0 ? (
-                            <div className="rounded-2xl system-btn-primary px-4 py-2 text-sm text-zinc-500">
+                            <div className={[targets.btn.first, 'rounded-2xl px-4 py-2 text-sm text-zinc-500'].join(' ')}>
                                 No active windows yet
                             </div>
                         ) : null}
@@ -254,8 +257,8 @@ function SystemDockbar({
                                 className={[
                                     'group min-w-0 shrink-0 rounded-2xl border px-4 py-2 text-left transition',
                                     entry.isFocused
-                                        ? 'system-btn-primary'
-                                        : 'system-btn-secondary',
+                                        ? targets.btn.first
+                                        : targets.btn.secondary,
                                 ].join(' ')}
                                 title={entry.component}
                             >
@@ -266,7 +269,7 @@ function SystemDockbar({
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <div className="hidden px-2 system-btn-senary text-zinc-400 md:flex md:items-center md:gap-2">
+                    <div className={[targets.btn.sixth, 'hidden px-2 text-zinc-400 md:flex md:items-center md:gap-2'].join(' ')}>
                         <Activity size={14} className="text-emerald-300" />
                         <span>{windows.length} windows</span>
                     </div>
@@ -275,7 +278,7 @@ function SystemDockbar({
                         type="button"
                         onClick={() => void window.electronAPI?.quitApp()}
                         onPointerDown={(event) => event.stopPropagation()}
-                        className="inline-flex h-11 w-11 items-center justify-center system-btn-quinary"
+                        className={[targets.btn.fourth, 'inline-flex h-11 w-11 items-center justify-center'].join(' ')}
                         aria-label="Shutdown ACE"
                         title="Shutdown ACE"
                     >

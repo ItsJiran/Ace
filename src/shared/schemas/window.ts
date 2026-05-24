@@ -28,6 +28,7 @@ export const WindowConfigSchema = z.object({
     is_resizeable: z.boolean().optional().default(true),
     always_on_top: z.boolean().optional().default(false),
     is_minimized: z.boolean(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type WindowPositionInput = number | `${number}%`;
@@ -37,6 +38,7 @@ export interface SpawnWindowOptions {
     package?: string;
     window?: string;
     window_style?: 'standard' | 'borderless';
+    metadata?: Record<string, unknown>;
 
     title?: string;
     x?: WindowPositionInput;

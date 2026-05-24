@@ -1,13 +1,15 @@
 import { DeferredWindowContent } from '#/app-desktop/components/layout/deferred-window-content';
 import { SpatialVirtualizer } from '#/app-desktop/components/layout/spatial-virtualizer';
-import { Share2, Power, MessageSquare, Bot, Settings2 } from 'lucide-react';
+import { Share2, Power, MessageSquare, Settings2 } from 'lucide-react';
 import type { DesktopState } from '#/shared/schemas/state.ts';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
 import { defineComponent } from '#/lib/define-registry';
 
 function DevMenu({ close }: { close: () => void }) {
     const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
+    const { targets } = useAceTheme();
     const isAmbient = overlayState?.mode === 'ambient';
 
     const spawnSystemAIChat = () => {
@@ -19,18 +21,6 @@ function DevMenu({ close }: { close: () => void }) {
             height: 660,
             x: 430,
             y: 100,
-        });
-    };
-
-    const spawnDevAIThreadChat = () => {
-        window.ACE.window.spawnWindow({
-            package: 'itsjiran/ace-system-dev',
-            window: 'dev-ai-chat-thread',
-            title: 'Dev AI Chat Thread',
-            width: 980,
-            height: 720,
-            x: 460,
-            y: 120,
         });
     };
 
@@ -94,19 +84,16 @@ function DevMenu({ close }: { close: () => void }) {
         });
     };
 
-    const buttonClass =
-        'flex items-center justify-start gap-2 system-btn-primary w-full px-3 py-2 mb-2 rounded-sm';
+    const buttonClass = [
+        targets.btn.first,
+        'flex items-center justify-start gap-2 w-full px-3 py-2 mb-2 rounded-sm',
+    ].join(' ');
 
     const menuItems = [
         {
             label: 'ACE Chat',
             icon: <MessageSquare size={14} className="text-sky-300" />,
             onClick: spawnSystemAIChat,
-        },
-        {
-            label: 'Dev AI Chat Thread',
-            icon: <Bot size={14} className="text-emerald-300" />,
-            onClick: spawnDevAIThreadChat,
         },
         {
             label: 'System Settings',
@@ -164,7 +151,7 @@ function DevMenu({ close }: { close: () => void }) {
 
                 <button
                     onClick={() => void close()}
-                    className="flex items-center system-btn-secondary py-3 gap-2"
+                    className={[targets.btn.secondary, 'flex items-center py-3 gap-2'].join(' ')}
                 >
                     <Power size={14} className="text-red-400" />
                     Quit Application

@@ -2,6 +2,8 @@ import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
+
 function stringifyMemoryValue(value: unknown) {
 	if (typeof value === 'string') {
 		return value;
@@ -60,11 +62,12 @@ export function SystemMemoryTable<TEntry extends { memory_uid: string }>({
 	resolveExpandedTitle,
 }: SystemMemoryTableProps<TEntry>) {
 	const [expandedMemoryUid, setExpandedMemoryUid] = useState<string | null>(null);
+	const { targets } = useAceTheme();
 
 	return (
 		<div className="min-h-0 flex-1 overflow-auto rounded-2xl">
 			<table className="min-w-full text-left text-xs text-zinc-300">
-				<thead className="sticky top-0 system-container-secondary z-10">
+				<thead className={[targets.container.second, 'sticky top-0 z-10'].join(' ')}>
 					<tr>
 						<th className="w-10 px-3 py-2 font-medium" aria-hidden />
 						{columns.map((column) => (
@@ -76,7 +79,7 @@ export function SystemMemoryTable<TEntry extends { memory_uid: string }>({
 				</thead>
 				<tbody>
 					{entries.length === 0 ? (
-						<tr className="system-container-primary align-top">
+						<tr className={[targets.container.first, 'align-top'].join(' ')}>
 							<td colSpan={columns.length + 1} className="px-3 py-6 text-center text-zinc-500">
 								{emptyMessage}
 							</td>
@@ -90,12 +93,12 @@ export function SystemMemoryTable<TEntry extends { memory_uid: string }>({
 
 						return (
 							<Fragment key={entry.memory_uid}>
-								<tr className="system-container-primary align-top">
+								<tr className={[targets.container.first, 'align-top'].join(' ')}>
 									<td className="px-3 py-2 align-top">
 										<button
 											type="button"
 											onClick={() => setExpandedMemoryUid(isExpanded ? null : entry.memory_uid)}
-											className="inline-flex h-7 w-7 items-center justify-center system-btn-primary"
+											className={[targets.btn.first, 'inline-flex h-7 w-7 items-center justify-center'].join(' ')}
 											aria-label={isExpanded ? 'Collapse memory entry' : 'Expand memory entry'}
 										>
 											<ChevronDown
@@ -112,7 +115,7 @@ export function SystemMemoryTable<TEntry extends { memory_uid: string }>({
 								</tr>
 
 								{isExpanded ? (
-									<tr className="system-container-primary">
+									<tr className={targets.container.first}>
 										<td colSpan={columns.length + 1} className="px-4 pb-4 pt-1">
 											<div className="rounded-2xl border border-white/10 bg-black/20 p-4">
 												<div className="mb-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500">

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStream } from '@langchain/react';
-import { HumanMessage } from '@langchain/core/messages';
 
 import { AIEngine } from '#/app-desktop/engines/ai-engine';
 import { EventBus } from '#/shared/engines/event-engine';
@@ -16,10 +15,8 @@ import {
 	createStreamOptions,
 	resolveActiveThreadUid,
 	submitPromptToThread,
-	waitForThreadRun,
 } from '#/app-desktop/hooks/use-ai-chat-thread.stream';
 import {
-	resolvePromptFromInput,
 	resolveThreadValues,
 } from '#/app-desktop/hooks/use-ai-chat-thread.utils';
 
@@ -30,10 +27,16 @@ export type RunningToolStreamItem = {
 	startedAt: number;
 };
 
-export function useAIChatThread() {
+export type AIThreadStatus = {
+	label: 'idle' | 'orchestrating' | 'delegating' | 'executing';
+	detail: string;
+};
+
+export function useAIChatThread(options?: { scopeKey?: string | null }) {
+	const scopeKey = options?.scopeKey ?? null;
 	const list_threads = useAceMemory<Record<string, string>>(AIEngine.thread_uids_memory_uid) ?? {};
 	const active_thread_uid =
-		useAceMemory<string | null>(AIEngine.current_thread_uid_memory_uid) ?? null;
+		useAceMemory<string | null>(AIEngine.current_thread_uid_memory_uid_for_scope(scopeKey)) ?? null;
 	const current_thread_memory_uid = active_thread_uid
 		? AIEngine.thread_memory_uid(active_thread_uid)
 		: '__ace_background_thread_empty__';
@@ -42,7 +45,7 @@ export function useAIChatThread() {
 	const [current_thread, setCurrentThreadState] = useState<AgentThread | null>(
 		current_thread_from_memory ?? null,
 	);
-	const [pending_prompt, setPendingPrompt] = useState<string | null>(null);
+	const pending_prompt = null;
 	const [is_submitting_prompt, setIsSubmittingPrompt] = useState(false);
 	const [running_tool_streams, setRunningToolStreams] = useState<RunningToolStreamItem[]>([]);
 
@@ -180,9 +183,9 @@ export function useAIChatThread() {
 		() =>
 			createStreamOptions(current_thread_uid, current_thread, (threadId: string) => {
 				setCurrentThreadUidState(threadId);
-				AIEngine.setCurrentThread(threadId);
+				AIEngine.setCurrentThread(threadId, scopeKey);
 			}),
-		[current_thread, current_thread_uid],
+		[current_thread, current_thread_uid, scopeKey],
 	);
 
 	const stream = useStream<Record<string, unknown>>(streamOptions);
@@ -197,7 +200,7 @@ export function useAIChatThread() {
 
 	const setCurrentThread = async (threadUid: string | null) => {
 		setCurrentThreadUidState(threadUid);
-		AIEngine.setCurrentThread(threadUid);
+		AIEngine.setCurrentThread(threadUid, scopeKey);
 		if (!threadUid) {
 			setCurrentThreadState(null);
 			return null;
@@ -230,7 +233,6 @@ export function useAIChatThread() {
 			return null;
 		}
 
-		setPendingPrompt(normalizedPrompt);
 		setIsSubmittingPrompt(true);
 
 		try {
@@ -248,11 +250,23 @@ export function useAIChatThread() {
 				return null;
 			}
 
+			const nextPersistedMessages = [
+				...(Array.isArray(current_thread?.messages) ? current_thread.messages : []),
+				{
+					type: 'human',
+					content: normalizedPrompt,
+				},
+			];
+
 			await AIEngine.syncThread(threadUid, {
 				provider: selectedProvider,
 				model: selectedModel,
+				messages: nextPersistedMessages,
+				state: current_thread?.state,
 				updated_at: Date.now(),
 			});
+			setCurrentThreadUidState(threadUid);
+			setCurrentThreadState(AIEngine.readThreadFromMemory(threadUid) ?? null);
 
 			if (shouldSubmitViaDirectTransport) {
 				submitPromptToThread(threadUid, normalizedPrompt);
@@ -266,42 +280,64 @@ export function useAIChatThread() {
 					],
 				});
 			}
-			await waitForThreadRun(resolveActiveThreadUid(threadUid) ?? threadUid);
 
-			const thread = await AIEngine.syncCurrentThreadFromBackground(threadUid);
-			setCurrentThreadUidState(threadUid);
-			setCurrentThreadState(thread ?? null);
-			return thread;
+			return AIEngine.readThreadFromMemory(resolveActiveThreadUid(threadUid) ?? threadUid) ?? null;
 		} finally {
-			setPendingPrompt(null);
 			setIsSubmittingPrompt(false);
 		}
 	};
 
 	const interruptThread = async () => {
+		const activeThreadUid = resolveActiveThreadUid(current_thread_uid);
+		if (activeThreadUid) {
+			await AIEngine.stopThreadPrompt(activeThreadUid);
+			await AIEngine.syncCurrentThreadFromBackground(activeThreadUid);
+		}
 		await stream.stop();
 	};
 
 	const messages = useMemo(() => {
 		const baseMessages =
 			persisted_messages.length > stream.messages.length ? persisted_messages : stream.messages;
-
-		if (!pending_prompt) {
-			return baseMessages;
-		}
-
-		const lastMessage = baseMessages.at(-1);
-		if (
-			lastMessage &&
-			HumanMessage.isInstance(lastMessage) &&
-			(lastMessage.text || resolvePromptFromInput({ messages: [lastMessage] })) === pending_prompt
-		) {
-			return baseMessages;
-		}
-
-		return [...baseMessages, new HumanMessage(pending_prompt)];
-	}, [pending_prompt, persisted_messages, stream.messages]);
+		return baseMessages;
+	}, [persisted_messages, stream.messages]);
 	const is_streaming = stream.isLoading || is_submitting_prompt;
+	const ai_status = useMemo<AIThreadStatus>(() => {
+		const runningToolNames = running_tool_streams.map((item) => item.toolName);
+
+		if (runningToolNames.includes('planning_execution_batch')) {
+			return {
+				label: 'delegating',
+				detail: 'planning execution batch',
+			};
+		}
+
+		if (runningToolNames.includes('update_execution_batch')) {
+			return {
+				label: 'executing',
+				detail: 'updating execution batch',
+			};
+		}
+
+		if (runningToolNames.length > 0) {
+			return {
+				label: 'executing',
+				detail: `running ${runningToolNames[0]}`,
+			};
+		}
+
+		if (is_streaming) {
+			return {
+				label: 'orchestrating',
+				detail: 'planning next step',
+			};
+		}
+
+		return {
+			label: 'idle',
+			detail: current_thread_uid ? 'ready on selected thread' : 'ready with no thread selected',
+		};
+	}, [current_thread_uid, is_streaming, running_tool_streams]);
 
 	return {
 		list_threads,
@@ -309,6 +345,7 @@ export function useAIChatThread() {
 		current_thread,
 		messages,
 		running_tool_streams,
+		ai_status,
 		pending_prompt,
 		is_streaming,
 		stream,

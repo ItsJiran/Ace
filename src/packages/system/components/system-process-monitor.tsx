@@ -1,6 +1,7 @@
 import { Cpu } from 'lucide-react';
 
 import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { defineComponent } from '#/lib/define-registry';
 
 import { useRuntimeMonitorSnapshots } from './system-runtime-monitor-data';
@@ -11,12 +12,13 @@ import {
 
 function SystemProcessMonitor() {
 	const { processCount, processRecords, recentProcesses } = useRuntimeMonitorSnapshots();
+	const { targets } = useAceTheme();
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-4 p-4 text-zinc-100">
 			<RenderCounterBadge componentName="system-process-monitor" />
 
-			<section className="system-shell-primary rounded-2xl p-5 flex flex-col items-start justify-between gap-4">
+			<section className={[targets.shell.first, 'rounded-2xl p-5 flex flex-col items-start justify-between gap-4'].join(' ')}>
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Process Monitor</div>
 					<div className="mt-2 text-2xl font-semibold">Active Kernel Process View</div>
@@ -62,10 +64,10 @@ function SystemProcessMonitor() {
 						<div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-500">No processes recorded yet.</div>
 					) : null}
 					{recentProcesses.map((processRecord) => (
-						<div key={processRecord.process_uid} className="rounded-2xl system-container-tertiary px-4 py-3">
+						<div key={processRecord.process_uid} className={[targets.container.third, 'rounded-2xl px-4 py-3'].join(' ')}>
 							<div className="flex items-center justify-between gap-3">
 								<div className="font-mono text-[11px] text-zinc-200">{processRecord.process_uid}</div>
-								<div className="rounded-full system-container-primary px-2 py-1 text-[10px] uppercase tracking-wide">{processRecord.lifecycle_state ?? processRecord.status}</div>
+								<div className={[targets.container.first, 'rounded-full px-2 py-1 text-[10px] uppercase tracking-wide'].join(' ')}>{processRecord.lifecycle_state ?? processRecord.status}</div>
 							</div>
 							<div className="mt-2 text-sm font-medium text-zinc-100">{processRecord.type}</div>
 							<div className="mt-1 text-xs text-zinc-500">owner_engine: {processRecord.owner_engine ?? '-'}</div>

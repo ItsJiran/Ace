@@ -25,23 +25,31 @@ const resizeHandleDefinitions = [
     },
     {
         direction: 'ne',
-        className: 'absolute right-0 top-0 h-4 w-4 translate-x-1/2 -translate-y-1/2 cursor-ne-resize',
+        className:
+            'absolute right-0 top-0 h-4 w-4 translate-x-1/2 -translate-y-1/2 cursor-ne-resize',
     },
     {
         direction: 'nw',
-        className: 'absolute left-0 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 cursor-nw-resize',
+        className:
+            'absolute left-0 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 cursor-nw-resize',
     },
     {
         direction: 'se',
-        className: 'absolute bottom-0 right-0 h-4 w-4 translate-x-1/2 translate-y-1/2 cursor-se-resize',
+        className:
+            'absolute bottom-0 right-0 h-4 w-4 translate-x-1/2 translate-y-1/2 cursor-se-resize',
     },
     {
         direction: 'sw',
-        className: 'absolute bottom-0 left-0 h-4 w-4 -translate-x-1/2 translate-y-1/2 cursor-sw-resize',
+        className:
+            'absolute bottom-0 left-0 h-4 w-4 -translate-x-1/2 translate-y-1/2 cursor-sw-resize',
     },
 ] as const;
 
-function renderResizeHandles(getResizeHandleProps: AceWindowRenderProps['getResizeHandleProps'], isResizeAble: boolean, showCornerGrip: boolean) {
+function renderResizeHandles(
+    getResizeHandleProps: AceWindowRenderProps['getResizeHandleProps'],
+    isResizeAble: boolean,
+    showCornerGrip: boolean,
+) {
     if (!isResizeAble) {
         return null;
     }
@@ -49,7 +57,12 @@ function renderResizeHandles(getResizeHandleProps: AceWindowRenderProps['getResi
     return (
         <>
             {resizeHandleDefinitions.map((handle) => (
-                <div key={handle.direction} {...getResizeHandleProps(handle.direction)} className={handle.className} data-window-resize-handle={handle.direction} />
+                <div
+                    key={handle.direction}
+                    {...getResizeHandleProps(handle.direction)}
+                    className={handle.className}
+                    data-window-resize-handle={handle.direction}
+                />
             ))}
             {showCornerGrip ? (
                 <div className="pointer-events-none absolute bottom-0 right-0 h-5 w-5">
@@ -75,7 +88,34 @@ function AceWindowComponent({ windowUid, headless, className, style, children }:
 
     if (!resolvedConfig) return null;
 
-    const { beginDrag, beginResize, animationState, close, minimize, focus, isFocused, isActive, isDragging, isResizing, isResizeAble, isLocked, canCapturePointer, resolveWindowStateClass, position, size, handleDragStart, handleDragEnd, handlePointerEnter, handlePointerLeave, ref, rootStyle, windowConfig, windowUid: resolvedWindowUid } = aceWindow;
+    const {
+        beginDrag,
+        beginResize,
+        animationState,
+        close,
+        minimize,
+        focus,
+        isFocused,
+        isActive,
+        isDragging,
+        isResizing,
+        isResizeAble,
+        isLocked,
+        canCapturePointer,
+        resolveWindowStateClass,
+        position,
+        size,
+        handleDragStart,
+        handleDragEnd,
+        handlePointerEnter,
+        handlePointerLeave,
+        ref,
+        rootStyle,
+        windowConfig,
+        windowUid: resolvedWindowUid,
+        currentTheme,
+        themeTargets,
+    } = aceWindow;
     const windowStateClass = resolveWindowStateClass();
     const isWindowStateActive = windowStateClass === 'active';
 
@@ -106,23 +146,62 @@ function AceWindowComponent({ windowUid, headless, className, style, children }:
         resolveWindowStateClass,
         windowUid: resolvedWindowUid,
         windowConfig,
+        currentTheme,
+        themeTargets,
     };
 
     const renderedChildren = typeof children === 'function' ? children(renderProps) : children;
     const contentNode = headless ? (
         renderedChildren
     ) : (
-        <div className={['system-shell system-shell-primary flex h-full w-full flex-col overflow-hidden rounded-xl pointer-events-auto', windowStateClass].filter(Boolean).join(' ')}>
-            <AceWindowHead title={windowConfig?.title} dragHandleProps={dragHandleProps} isFocused={isWindowStateActive} onMinimize={minimize} onClose={close} />
-            <div className={['relative flex-1 overflow-hidden rounded-b-xl border-x border-b', isWindowStateActive ? 'border-white/10' : 'border-white/5'].join(' ')}>{renderedChildren}</div>
+        <div
+            className={[
+                'ace-shell',
+                themeTargets.shell.first,
+                'flex h-full w-full flex-col overflow-hidden rounded-xl pointer-events-auto',
+                windowStateClass,
+            ]
+                .filter(Boolean)
+                .join(' ')}
+            data-ace-theme={currentTheme}
+        >
+            <AceWindowHead
+                title={windowConfig?.title}
+                dragHandleProps={dragHandleProps}
+                isFocused={isWindowStateActive}
+                onMinimize={minimize}
+                onClose={close}
+            />
+            <div
+                className={[
+                    'relative flex-1 overflow-hidden rounded-b-xl border-x border-b',
+                    isWindowStateActive ? 'border-white/10' : 'border-white/5',
+                ].join(' ')}
+            >
+                {renderedChildren}
+            </div>
         </div>
     );
     const animateProps = {
-        x: !isDragging && !isResizing && animationState?.values.x !== undefined ? animationState.values.x : position.x,
-        y: !isDragging && !isResizing && animationState?.values.y !== undefined ? animationState.values.y : position.y,
-        width: !isResizing && animationState?.values.width !== undefined ? animationState.values.width : size.width,
-        height: !isResizing && animationState?.values.height !== undefined ? animationState.values.height : size.height,
-        opacity: resolvedConfig.is_minimized ? 0 : (animationState?.values.opacity ?? resolvedConfig.opacity ?? 1),
+        x:
+            !isDragging && !isResizing && animationState?.values.x !== undefined
+                ? animationState.values.x
+                : position.x,
+        y:
+            !isDragging && !isResizing && animationState?.values.y !== undefined
+                ? animationState.values.y
+                : position.y,
+        width:
+            !isResizing && animationState?.values.width !== undefined
+                ? animationState.values.width
+                : size.width,
+        height:
+            !isResizing && animationState?.values.height !== undefined
+                ? animationState.values.height
+                : size.height,
+        opacity: resolvedConfig.is_minimized
+            ? 0
+            : (animationState?.values.opacity ?? resolvedConfig.opacity ?? 1),
         scale: isDragging ? 1.01 : (animationState?.values.scale ?? 1),
     };
     const transitionDuration = (animationState?.transitionMs ?? 140) / 1000;
@@ -137,12 +216,72 @@ function AceWindowComponent({ windowUid, headless, className, style, children }:
                   scale: { type: 'spring' as const, stiffness: 280, damping: 24, mass: 0.8 },
               }
             : {
-                  x: { duration: transitionDuration, ease: animationState?.easing === 'linear' ? 'linear' : animationState?.easing === 'ease_in' ? 'easeIn' : animationState?.easing === 'ease_out' ? 'easeOut' : 'easeInOut' },
-                  y: { duration: transitionDuration, ease: animationState?.easing === 'linear' ? 'linear' : animationState?.easing === 'ease_in' ? 'easeIn' : animationState?.easing === 'ease_out' ? 'easeOut' : 'easeInOut' },
-                  width: { duration: transitionDuration, ease: animationState?.easing === 'linear' ? 'linear' : animationState?.easing === 'ease_in' ? 'easeIn' : animationState?.easing === 'ease_out' ? 'easeOut' : 'easeInOut' },
-                  height: { duration: transitionDuration, ease: animationState?.easing === 'linear' ? 'linear' : animationState?.easing === 'ease_in' ? 'easeIn' : animationState?.easing === 'ease_out' ? 'easeOut' : 'easeInOut' },
-                  opacity: { duration: transitionDuration, ease: animationState?.easing === 'linear' ? 'linear' : animationState?.easing === 'ease_in' ? 'easeIn' : animationState?.easing === 'ease_out' ? 'easeOut' : 'easeInOut' },
-                  scale: { duration: transitionDuration, ease: animationState?.easing === 'linear' ? 'linear' : animationState?.easing === 'ease_in' ? 'easeIn' : animationState?.easing === 'ease_out' ? 'easeOut' : 'easeInOut' },
+                  x: {
+                      duration: transitionDuration,
+                      ease:
+                          animationState?.easing === 'linear'
+                              ? 'linear'
+                              : animationState?.easing === 'ease_in'
+                                ? 'easeIn'
+                                : animationState?.easing === 'ease_out'
+                                  ? 'easeOut'
+                                  : 'easeInOut',
+                  },
+                  y: {
+                      duration: transitionDuration,
+                      ease:
+                          animationState?.easing === 'linear'
+                              ? 'linear'
+                              : animationState?.easing === 'ease_in'
+                                ? 'easeIn'
+                                : animationState?.easing === 'ease_out'
+                                  ? 'easeOut'
+                                  : 'easeInOut',
+                  },
+                  width: {
+                      duration: transitionDuration,
+                      ease:
+                          animationState?.easing === 'linear'
+                              ? 'linear'
+                              : animationState?.easing === 'ease_in'
+                                ? 'easeIn'
+                                : animationState?.easing === 'ease_out'
+                                  ? 'easeOut'
+                                  : 'easeInOut',
+                  },
+                  height: {
+                      duration: transitionDuration,
+                      ease:
+                          animationState?.easing === 'linear'
+                              ? 'linear'
+                              : animationState?.easing === 'ease_in'
+                                ? 'easeIn'
+                                : animationState?.easing === 'ease_out'
+                                  ? 'easeOut'
+                                  : 'easeInOut',
+                  },
+                  opacity: {
+                      duration: transitionDuration,
+                      ease:
+                          animationState?.easing === 'linear'
+                              ? 'linear'
+                              : animationState?.easing === 'ease_in'
+                                ? 'easeIn'
+                                : animationState?.easing === 'ease_out'
+                                  ? 'easeOut'
+                                  : 'easeInOut',
+                  },
+                  scale: {
+                      duration: transitionDuration,
+                      ease:
+                          animationState?.easing === 'linear'
+                              ? 'linear'
+                              : animationState?.easing === 'ease_in'
+                                ? 'easeIn'
+                                : animationState?.easing === 'ease_out'
+                                  ? 'easeOut'
+                                  : 'easeInOut',
+                  },
               };
     const initialProps = {
         x: animateProps.x,
@@ -169,7 +308,14 @@ function AceWindowComponent({ windowUid, headless, className, style, children }:
             initial={initialProps}
             animate={animateProps}
             transition={transitionProps}
-            className={['absolute top-0 left-0', headless ? '' : 'rounded-xl', className || '', 'select-none'].filter(Boolean).join(' ')}
+            className={[
+                'absolute top-0 left-0',
+                headless ? '' : 'rounded-xl',
+                className || '',
+                'select-none',
+            ]
+                .filter(Boolean)
+                .join(' ')}
             style={{
                 ...rootStyle,
                 touchAction: 'none',
@@ -191,7 +337,8 @@ function AceWindowComponent({ windowUid, headless, className, style, children }:
 // Shallow equality helper for objects
 const shallowEqual = (objA: object | undefined, objB: object | undefined) => {
     if (Object.is(objA, objB)) return true;
-    if (typeof objA !== 'object' || objA === null || typeof objB !== 'object' || objB === null) return false;
+    if (typeof objA !== 'object' || objA === null || typeof objB !== 'object' || objB === null)
+        return false;
 
     const recordA = objA as Record<string, unknown>;
     const recordB = objB as Record<string, unknown>;
@@ -201,7 +348,10 @@ const shallowEqual = (objA: object | undefined, objB: object | undefined) => {
 
     if (keysA.length !== keysB.length) return false;
     for (let i = 0; i < keysA.length; i++) {
-        if (!Object.prototype.hasOwnProperty.call(recordB, keysA[i]) || !Object.is(recordA[keysA[i]], recordB[keysA[i]])) {
+        if (
+            !Object.prototype.hasOwnProperty.call(recordB, keysA[i]) ||
+            !Object.is(recordA[keysA[i]], recordB[keysA[i]])
+        ) {
             return false;
         }
     }
@@ -211,5 +361,10 @@ const shallowEqual = (objA: object | undefined, objB: object | undefined) => {
 export const AceWindow = React.memo(AceWindowComponent, (prev, next) => {
     if (prev.children !== next.children) return false;
 
-    return prev.windowUid === next.windowUid && prev.headless === next.headless && prev.className === next.className && shallowEqual(prev.style, next.style);
+    return (
+        prev.windowUid === next.windowUid &&
+        prev.headless === next.headless &&
+        prev.className === next.className &&
+        shallowEqual(prev.style, next.style)
+    );
 });

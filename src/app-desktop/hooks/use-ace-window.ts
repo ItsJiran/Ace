@@ -6,6 +6,7 @@ import type { WindowConfig } from '#/shared/schemas/window';
 import { WindowEngine } from '#/app-desktop/engines/window-engine';
 import { StateEngine } from '#/app-desktop/engines/state-engine.ts';
 import { useAceMemory, useAceMemorySelector } from '#/app-desktop/hooks/use-ace-memory';
+import { useAceTheme, type AceThemePreference, type AceThemeTargets } from '#/app-desktop/hooks/use-ace-theme';
 import type { WindowAnimationSnapshot } from '#/app-desktop/engines/window/window-animation-engine';
 
 type DragStartEvent = ReactMouseEvent<HTMLElement> | React.PointerEvent<HTMLElement>;
@@ -38,6 +39,8 @@ export interface AceWindowRenderProps {
     resolveWindowStateClass: () => string;
     windowUid: string;
     windowConfig?: WindowConfig;
+    currentTheme: AceThemePreference;
+    themeTargets: AceThemeTargets;
 }
 
 export interface AceWindowHookResult extends AceWindowRenderProps {
@@ -111,6 +114,7 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
     // Previously, every AceWindow re-rendered whenever ANY window animated.
     // We now fetch animation state on-demand during interactions, or rely on specific visual keys if needed.
     const mouseFocusEnabled = useAceMemory<boolean>('system:global_state:mouse_focus_enabled') ?? true;
+    const { currentTheme, targets: themeTargets } = useAceTheme();
     const windowDisplayMode = useAceMemorySelector<DesktopState | undefined, DesktopState['window_display_mode']>(
         'system:global_state:desktop',
         (state) => state?.window_display_mode ?? 'all_visible',
@@ -532,6 +536,8 @@ export function useAceWindow(window_uid : string): AceWindowHookResult {
         isLocked,
         canCapturePointer,
         resolveWindowStateClass,
+        currentTheme,
+        themeTargets,
 
         focus,
         close,

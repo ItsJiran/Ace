@@ -2,17 +2,15 @@ import { Engine } from '#/shared/engines/engine';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { DefaultConfigAI } from '#/shared/constants/config';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
-import { StateEngine } from '#/app-desktop/engines/state-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
-import readProcessEnv from '#/shared/lib/read-process-env';
 import type {
-    AgentConfigurableType,
-    AgentInvokeContextType,
     AgentThread,
     AgentThreadSnapshotType,
     AgentThreadSyncPayloadType,
+    AgentConfigurableType,
     AIProviderType,
 } from '#/shared/schemas/ai';
+import resolveAgentInvokeContext from './ai/resolve-agent-context';
 
 type BackgroundThreadListEntryType = {
     thread_uid: string;
@@ -25,47 +23,14 @@ type BackgroundThreadListPayloadType = {
     threads: BackgroundThreadListEntryType[];
 };
 
-async function resolveAgentInvokeContext(): Promise<AgentInvokeContextType> {
-    const desktopState = StateEngine.readDesktopState();
-    const username = await readProcessEnv('USER');
-    const homeDir = username ? `/home/${username}/` : null;
-    return {
-        user: {
-            username,
-            home_dir: homeDir,
-        },
-        desktop: {
-            mode: desktopState.mode,
-            window_display_mode: desktopState.window_display_mode,
-            screen_width: desktopState.screen_width,
-            screen_height: desktopState.screen_height,
-            available_screen_width: desktopState.available_screen_width,
-            available_screen_height: desktopState.available_screen_height,
-            viewport_width: desktopState.viewport_width,
-            viewport_height: desktopState.viewport_height,
-            viewport_center_x: Math.round(desktopState.viewport_width / 2),
-            viewport_center_y: Math.round(desktopState.viewport_height / 2),
-            device_pixel_ratio: desktopState.device_pixel_ratio,
-            cursor_x: desktopState.mouse_x,
-            cursor_y: desktopState.mouse_y,
-            focused_window_uid:
-                (KernelEngine.readMemory('system:global_state:focused_window') as
-                    | string
-                    | null
-                    | undefined) ?? null,
-            active_window_uid:
-                (KernelEngine.readMemory('system:global_state:active_window') as
-                    | string
-                    | null
-                    | undefined) ?? null,
-        },
-    };
-}
-
 class DesktopAIEngineSingleton extends Engine {
     public readonly memory_uid = DefaultConfigAI.memory_uid;
     public readonly thread_uids_memory_uid = 'system:ai_engine:thread:uids';
     public readonly current_thread_uid_memory_uid = 'system:ai_engine:thread:active_uid';
+    public readonly current_thread_uid_memory_uid_for_scope = (scope_uid?: string | null) =>
+        scope_uid && scope_uid.trim().length > 0
+            ? `system:ai_engine:thread:active_uid:${scope_uid}`
+            : this.current_thread_uid_memory_uid;
     public readonly thread_memory_uid = (thread_uid: string) =>
         `system:ai_engine:thread:${thread_uid}`;
 
@@ -98,8 +63,17 @@ class DesktopAIEngineSingleton extends Engine {
         return models;
     }
 
-    setCurrentThread(threadUid: string | null) {
-        KernelEngine.writeMemory(this.current_thread_uid_memory_uid, threadUid);
+    private ensureCurrentThreadMemory(scope_uid?: string | null) {
+        const memoryUid = this.current_thread_uid_memory_uid_for_scope(scope_uid);
+        if (KernelEngine.readMemory(memoryUid) === undefined) {
+            KernelEngine.registerSystemMemory(memoryUid, null as string | null);
+        }
+
+        return memoryUid;
+    }
+
+    setCurrentThread(threadUid: string | null, scope_uid?: string | null) {
+        KernelEngine.writeMemory(this.ensureCurrentThreadMemory(scope_uid), threadUid);
         return threadUid;
     }
 
@@ -144,20 +118,26 @@ class DesktopAIEngineSingleton extends Engine {
         prompt: string,
         overrides: Partial<AgentConfigurableType> = {},
     ) {
-        const thread = ((await RPCEngine.invoke('ai.streamThreadPrompt', {
+        const thread = ((await RPCEngine.invoke('ai.startThreadPrompt', {
             thread_uid: threadUid,
             prompt,
             overrides,
             context: await resolveAgentInvokeContext(),
+        }, {
+            timeoutMs: 0,
         })) ?? null) as AgentThread | null;
 
         if (thread) {
-            this.syncThreadMemory(thread);
-            this.setCurrentThread(thread.thread_uid);
-            return thread;
+            return await this.syncCurrentThreadFromBackground(threadUid);
         }
 
         return await this.syncCurrentThreadFromBackground(threadUid);
+    }
+
+    async stopThreadPrompt(threadUid: string) {
+        return ((await RPCEngine.invoke('ai.stopThreadPrompt', {
+            thread_uid: threadUid,
+        })) ?? false) as boolean;
     }
 
     async deleteThread(threadUid: string) {
@@ -180,10 +160,6 @@ class DesktopAIEngineSingleton extends Engine {
         return true;
     }
 
-    async invoke(method: string, payload: Record<string, unknown> = {}) {
-        return await RPCEngine.invoke(method, payload);
-    }
-
     // + ----------- THREADS MEMORIES METHODS -------------- +
 
     readThreadFromMemory(threadUid: string) {
@@ -200,9 +176,9 @@ class DesktopAIEngineSingleton extends Engine {
         );
     }
 
-    readCurrentThreadUidFromMemory() {
+    readCurrentThreadUidFromMemory(scope_uid?: string | null) {
         return (
-            (KernelEngine.readMemory(this.current_thread_uid_memory_uid) as
+            (KernelEngine.readMemory(this.current_thread_uid_memory_uid_for_scope(scope_uid)) as
                 | string
                 | null
                 | undefined) ?? null
@@ -233,7 +209,7 @@ class DesktopAIEngineSingleton extends Engine {
     async syncAIMemory() {
         await this.syncConfigFromBackground();
 
-        const payload = ((await this.invoke('ai.listThreads')) ?? {
+        const payload = ((await RPCEngine.invoke('ai.listThreads',{})) ?? {
             index: {},
             threads: [],
         }) as BackgroundThreadListPayloadType;

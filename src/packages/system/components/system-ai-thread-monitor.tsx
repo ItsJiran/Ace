@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { Bot, Database } from 'lucide-react';
+import { Bot, Database, ExternalLink } from 'lucide-react';
 
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import type { AgentThread } from '#/shared/schemas/ai';
 import { defineComponent } from '#/lib/define-registry';
@@ -74,8 +75,25 @@ function formatRelativeTime(timestamp: number) {
 	return `${Math.round(diffMs / 3_600_000)}h ago`;
 }
 
+function openThreadDetailWindow(entry: AIThreadMonitorEntry) {
+	window.ACE.window.spawnWindow({
+		package: 'itsjiran/ace-system',
+		window: 'system-ai-thread-detail-window',
+		title: `AI Thread ${entry.thread_uid.slice(0, 8)}`,
+		width: 1220,
+		height: 820,
+		x: 440,
+		y: 140,
+		metadata: {
+			memory_uid: entry.memory_uid,
+			thread_uid: entry.thread_uid,
+		},
+	});
+}
+
 function SystemAIThreadMonitor() {
 	useRuntimeMonitorSnapshots();
+	const { targets } = useAceTheme();
 
 	const activeThreadUid = (KernelEngine.readMemory('system:ai_engine:thread:active_uid') as string | null) ?? null;
 	const threadIndex =
@@ -92,7 +110,7 @@ function SystemAIThreadMonitor() {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-4 p-4">
-			<section className="system-shell-primary flex flex-col items-start justify-between gap-4 rounded-2xl p-5">
+			<section className={[targets.shell.first, 'flex flex-col items-start justify-between gap-4 rounded-2xl p-5'].join(' ')}>
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em]">AI Thread Monitor</div>
 					<div className="mt-2 text-2xl font-semibold">Kernel-Side AI Thread Footprint</div>
@@ -161,6 +179,19 @@ function SystemAIThreadMonitor() {
 						{
 							header: 'Approx',
 							render: (entry) => formatBytes(entry.approx_bytes),
+						},
+						{
+							header: 'Detail',
+							render: (entry) => (
+								<button
+									type="button"
+									onClick={() => openThreadDetailWindow(entry)}
+										className={[targets.btn.secondary, 'inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-[11px]'].join(' ')}
+								>
+									<ExternalLink size={13} />
+									Open
+								</button>
+							),
 						},
 					]}
 					resolveExpandedTitle={(entry) => `thread: ${entry.thread_uid} | memory: ${entry.memory_uid}`}

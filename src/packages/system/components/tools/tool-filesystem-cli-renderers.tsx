@@ -1,5 +1,6 @@
 import { CheckCircle2, FileCode2, FolderTree, Search, TerminalSquare, TextSearch } from 'lucide-react';
 
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { MetaGrid, StructuredValueBlock, ToolSection } from './tool-renderer-shared';
 import { asRecord, normalizeToolName, parseStructuredValue } from './tool-renderer.utils';
 import type { ToolRendererProps } from './tool-renderer.utils';
@@ -55,6 +56,7 @@ function renderStatusMessage(
 }
 
 function ToolLsRenderer(props: ToolRendererProps) {
+    const { targets } = useAceTheme();
     const textContent = resolveToolTextContent(props.content) ?? '';
     const lines = textContent
         .split('\n')
@@ -93,18 +95,18 @@ function ToolLsRenderer(props: ToolRendererProps) {
                         {entries.map((entry) => (
                             <div
                                 key={`${entry.path}-${entry.kind}`}
-                                className="rounded-2xl system-container-primary px-3 py-2"
+                                className={[targets.container.first, 'rounded-2xl px-3 py-2'].join(' ')}
                             >
                                 {entry.kind === 'directory' ? (
                                     <div className="flex items-center gap-2">
-                                        <div className="system-btn-secondary">
+                                        <div className={targets.btn.secondary}>
                                             <FolderTree size={13} />
                                         </div>
                                         <span>{entry.path}</span>
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-2">
-                                        <div className="system-btn-primary">
+                                        <div className={targets.btn.first}>
                                             <FileCode2 size={13} />
                                         </div>
                                         <span>{entry.path}</span>

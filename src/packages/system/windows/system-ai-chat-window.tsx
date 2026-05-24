@@ -5,6 +5,7 @@ import { BaseMessage } from '@langchain/core/messages';
 import { Sparkles } from 'lucide-react';
 
 import { AceWindowHead } from '#/app-desktop/components/layout/ace-window-head';
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import type { AceWindowRenderProps } from '#/app-desktop/hooks/use-ace-window';
 import { useAceWindow } from '#/app-desktop/hooks/use-ace-window';
 import { useAIGateway } from '#/app-desktop/hooks/use-ai-gateway';
@@ -44,6 +45,7 @@ function renderResizeHandles(
 }
 
 function SystemAIChatWindowBody({
+	windowUid,
 	title,
 	dragHandleProps,
 	isFocused,
@@ -51,6 +53,7 @@ function SystemAIChatWindowBody({
 	onClose,
 	onMinimize,
 }: {
+	windowUid: string;
 	title?: string;
 	dragHandleProps: AceWindowRenderProps['dragHandleProps'];
 	isFocused: boolean;
@@ -58,6 +61,7 @@ function SystemAIChatWindowBody({
 	onClose: () => void;
 	onMinimize: () => void;
 }) {
+	const { targets } = useAceTheme();
 	const [prompt, setPrompt] = useState('');
 	const bottomRef = useRef<HTMLDivElement | null>(null);
 	const {
@@ -71,16 +75,17 @@ function SystemAIChatWindowBody({
 	} = useAIGateway();
 	const {
 		current_thread_uid,
+		ai_status,
 		is_streaming,
 		running_tool_streams,
 		pending_prompt,
-		stream,
 		createThread,
 		setCurrentThread,
 		sendPrompt,
+		interruptThread,
 		messages,
 		list_threads,
-	} = useAIChatThread();
+	} = useAIChatThread({ scopeKey: windowUid });
 	const renderedMessages = messages as BaseMessage[];
 
 	const resolvedModel = selectedModel || ensureSelectedModel();
@@ -112,10 +117,11 @@ function SystemAIChatWindowBody({
 	};
 
 	return (
-		<div className="system-ai-chatbar flex h-full flex-col gap-3 p-3 text-zinc-100">
+		<div className="ace-ai-chatbar flex h-full flex-col gap-3 p-3 text-zinc-100">
 			<section
 				className={[
-					'system-shell-primary flex h-full w-full flex-col overflow-hidden rounded-[24px]',
+					targets.shell.first,
+					'flex h-full w-full flex-col overflow-hidden rounded-[24px]',
 					isDragging ? 'dragging focused' : '',
 					!isDragging && isFocused ? 'focused' : '',
 				].filter(Boolean).join(' ')}
@@ -133,6 +139,7 @@ function SystemAIChatWindowBody({
 					selectedProvider={selectedProvider}
 					resolvedModel={resolvedModel}
 					isStreaming={is_streaming}
+					aiStatus={ai_status}
 					currentThreadUid={current_thread_uid}
 					threadOptions={threadOptions}
 					onSelectThread={(threadUid) => {
@@ -175,7 +182,7 @@ function SystemAIChatWindowBody({
 				isStreaming={is_streaming}
 				handleSubmit={handleSubmit}
 				handleInterrupt={async () => {
-					await stream.stop();
+					await interruptThread();
 				}}
 			/>
 		</div>
@@ -203,6 +210,7 @@ function SystemAIChatWindow({ windowUid }: { windowUid: string }) {
 		isResizeAble,
 		position,
 		size,
+		currentTheme,
 		handleDragStart,
 		handleDragEnd,
 		handlePointerEnter,
@@ -267,19 +275,21 @@ function SystemAIChatWindow({ windowUid }: { windowUid: string }) {
 			transition={transitionProps}
 			className="absolute left-0 top-0 select-none"
 			style={{ ...rootStyle, touchAction: 'none' }}
+			data-ace-theme={currentTheme}
 			data-window-shell="system-ai-chat"
 			data-window-uid={resolvedConfig.window_uid}
 			data-window-active={isWindowStateActive ? 'true' : 'false'}
 		>
 			<div
 				className={[
-					'system-shell flex h-full w-full flex-col overflow-hidden rounded-[24px] pointer-events-auto',
+					'ace-shell flex h-full w-full flex-col overflow-hidden rounded-[24px] pointer-events-auto',
 					windowStateClass,
 					isDragging ? 'dragging active' : '',
 				].join(' ')}
 			>
 				<div className="flex-1 overflow-hidden">
 					<SystemAIChatWindowBody
+								windowUid={windowUid}
 						title={windowConfig?.title}
 						dragHandleProps={dragHandleProps}
 						isFocused={isWindowStateActive || isFocused}

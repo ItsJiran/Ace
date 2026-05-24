@@ -4,6 +4,7 @@ import { Settings2, SlidersHorizontal, Keyboard, Bot } from 'lucide-react';
 
 import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
+import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import {
 	ConfigAI_V0_0_0_Type,
 	ConfigGeneral_V0_0_0_Type,
@@ -70,12 +71,13 @@ function ConfigField({
 	schema: z.ZodTypeAny;
 	value: unknown;
 }) {
+	const { targets } = useAceTheme();
 	const schemaDescription = schema.description;
 	const enumOptions = schema instanceof z.ZodEnum ? schema.options : null;
 
 	if (typeof value === 'boolean') {
 		return (
-			<label className="flex items-start justify-between gap-4 rounded-2xl system-container-tertiary px-4 py-3">
+			<label className={[targets.container.third, 'flex items-start justify-between gap-4 rounded-2xl px-4 py-3'].join(' ')}>
 				<div>
 					<div className="text-sm font-medium text-zinc-100">{configKey}</div>
 					{schemaDescription ? (
@@ -96,7 +98,7 @@ function ConfigField({
 
 	if (enumOptions) {
 		return (
-			<label className="flex flex-col gap-2 rounded-2xl system-container-tertiary px-4 py-3">
+			<label className={[targets.container.third, 'flex flex-col gap-2 rounded-2xl px-4 py-3'].join(' ')}>
 				<div className="text-sm font-medium text-zinc-100">{configKey}</div>
 				{schemaDescription ? (
 					<div className="text-xs leading-5">{schemaDescription}</div>
@@ -106,7 +108,7 @@ function ConfigField({
 					onChange={(event) => {
 						void window.ACE.config.updateConfigItem(storageKey, configKey, event.target.value);
 					}}
-					className="system-input-primary rounded-xl px-3 py-2 text-sm text-zinc-100"
+					className={[targets.input.first, 'rounded-xl px-3 py-2 text-sm text-zinc-100'].join(' ')}
 				>
 					{enumOptions.map((option) => (
 						<option key={option} value={option}>
@@ -121,7 +123,7 @@ function ConfigField({
 	const isLongText = Array.isArray(value) || (value && typeof value === 'object');
 
 	return (
-		<label className="flex flex-col gap-2 rounded-2xl system-container-tertiary px-4 py-3">
+		<label className={[targets.container.third, 'flex flex-col gap-2 rounded-2xl px-4 py-3'].join(' ')}>
 			<div className="text-sm font-medium text-zinc-100">{configKey}</div>
 			{schemaDescription ? (
 				<div className="text-xs leading-5">{schemaDescription}</div>
@@ -137,7 +139,7 @@ function ConfigField({
 							parseInputValue(event.target.value, value),
 						);
 					}}
-					className="system-input-primary min-h-[72px] resize-y rounded-2xl px-3 py-2 text-sm text-zinc-100"
+					className={[targets.input.first, 'min-h-[72px] resize-y rounded-2xl px-3 py-2 text-sm text-zinc-100'].join(' ')}
 				/>
 			) : (
 				<input
@@ -150,7 +152,7 @@ function ConfigField({
 							parseInputValue(event.target.value, value),
 						);
 					}}
-					className="system-input-primary rounded-xl px-3 py-2 text-sm text-zinc-100"
+					className={[targets.input.first, 'rounded-xl px-3 py-2 text-sm text-zinc-100'].join(' ')}
 				/>
 			)}
 		</label>
@@ -158,13 +160,14 @@ function ConfigField({
 }
 
 function ConfigSection({ section }: { section: SectionDefinitionType }) {
+	const { targets } = useAceTheme();
 	const Icon = section.icon;
 	const entries = useMemo(() => Object.entries(section.schema), [section.schema]);
 
 	return (
-		<section className="system-shell-primary rounded-2xl p-4 flex flex-col gap-4">
+		<section className={[targets.shell.first, 'rounded-2xl p-4 flex flex-col gap-4'].join(' ')}>
 			<div className="flex items-start gap-3">
-				<div className="rounded-2xl system-btn-secondary p-3">
+				<div className={[targets.btn.secondary, 'rounded-2xl p-3'].join(' ')}>
 					<Icon size={18} />
 				</div>
 				<div>
@@ -189,6 +192,7 @@ function ConfigSection({ section }: { section: SectionDefinitionType }) {
 }
 
 function SystemSettings() {
+	const { targets } = useAceTheme();
 	const generalConfig = useAceMemory<ConfigGeneral_V0_0_0_Type>(DefaultConfigGeneral.memory_uid);
 	const keybindConfig = useAceMemory<ConfigKeybind_V0_0_0_Type>(DefaultConfigKeybinds.memory_uid);
 	const aiConfig = useAceMemory<ConfigAI_V0_0_0_Type>(DefaultConfigAI.memory_uid);
@@ -227,7 +231,7 @@ function SystemSettings() {
 		<div className="flex h-full min-h-0 flex-col gap-4 p-4 text-zinc-100">
 			<RenderCounterBadge componentName="system-settings" />
 
-			<section className="system-shell-primary rounded-2xl p-5 flex items-start justify-between gap-4">
+			<section className={[targets.shell.first, 'rounded-2xl p-5 flex items-start justify-between gap-4'].join(' ')}>
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em] text-zinc-500">System Settings</div>
 					<div className="mt-2 text-2xl font-semibold">Configuration Workspace</div>
@@ -235,7 +239,7 @@ function SystemSettings() {
 						Edit the live schema-backed configuration stored by ConfigEngine. The RAM state now mirrors the schema shape directly, so this panel edits the real config object instead of a derived item list.
 					</div>
 				</div>
-				<div className="rounded-2xl system-btn-secondary bg-white/10 p-3 text-zinc-100">
+				<div className={[targets.btn.secondary, 'rounded-2xl bg-white/10 p-3 text-zinc-100'].join(' ')}>
 					<Settings2 size={22} />
 				</div>
 			</section>
