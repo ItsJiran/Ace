@@ -6,7 +6,7 @@ import { KeybindEngine } from './app-desktop/engines/keybind-engine';
 import { StateEngine } from './app-desktop/engines/state-engine';
 import { LoggerEngine } from './app-desktop/engines/logger-engine';
 import { KernelEngine } from './shared/engines/kernel-engine';
-import { AIEngine } from './app-desktop/engines/ai-engine';
+import { AgentClientEngine } from './app-desktop/engines/agent-client-engine';
 import { RPCEngine } from './shared/engines/rpc-engine';
 
 let bootPromise: Promise<void> | null = null;
@@ -190,7 +190,7 @@ export async function bootACE() {
 		await EventBus.setupRuntimeBridge();
 		StateEngine.setupKernelSpace();
 		ConfigEngine.setupKernelSpace();
-		AIEngine.setupKernelSpace();
+		AgentClientEngine.setupKernelSpace();
 		WindowEngine.setupKernelSpace();
 		KeybindEngine.setupKernelSpace();
 
@@ -206,8 +206,8 @@ export async function bootACE() {
 				rpc: RPCEngine,
 				storage: KernelEngine,
 				config: ConfigEngine,
-				ai: AIEngine,
-				ai_gateway: AIEngine,
+				ai: AgentClientEngine,
+				ai_gateway: AgentClientEngine,
 				keybind: KeybindEngine,
 				state: StateEngine,
 				global: StateEngine,

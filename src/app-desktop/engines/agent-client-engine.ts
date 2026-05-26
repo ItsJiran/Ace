@@ -23,14 +23,10 @@ type BackgroundThreadListPayloadType = {
     threads: BackgroundThreadListEntryType[];
 };
 
-class DesktopAIEngineSingleton extends Engine {
+class AgentClientEngineSingleton extends Engine {
     public readonly memory_uid = DefaultConfigAI.memory_uid;
     public readonly thread_uids_memory_uid = 'system:ai_engine:thread:uids';
-    public readonly current_thread_uid_memory_uid = 'system:ai_engine:thread:active_uid';
-    public readonly current_thread_uid_memory_uid_for_scope = (scope_uid?: string | null) =>
-        scope_uid && scope_uid.trim().length > 0
-            ? `system:ai_engine:thread:active_uid:${scope_uid}`
-            : this.current_thread_uid_memory_uid;
+
     public readonly thread_memory_uid = (thread_uid: string) =>
         `system:ai_engine:thread:${thread_uid}`;
 
@@ -46,10 +42,6 @@ class DesktopAIEngineSingleton extends Engine {
             this.thread_uids_memory_uid,
             {} as Record<string, string>,
         );
-        KernelEngine.registerSystemMemory(
-            this.current_thread_uid_memory_uid,
-            null as string | null,
-        );
     }
     async setupKernelTerminationHook() {}
 
@@ -63,19 +55,7 @@ class DesktopAIEngineSingleton extends Engine {
         return models;
     }
 
-    private ensureCurrentThreadMemory(scope_uid?: string | null) {
-        const memoryUid = this.current_thread_uid_memory_uid_for_scope(scope_uid);
-        if (KernelEngine.readMemory(memoryUid) === undefined) {
-            KernelEngine.registerSystemMemory(memoryUid, null as string | null);
-        }
-
-        return memoryUid;
-    }
-
-    setCurrentThread(threadUid: string | null, scope_uid?: string | null) {
-        KernelEngine.writeMemory(this.ensureCurrentThreadMemory(scope_uid), threadUid);
-        return threadUid;
-    }
+    // + --------------- THREADS API METHODS --------------- +
 
     syncThreadIndex(index: Record<string, string>) {
         KernelEngine.writeMemory(this.thread_uids_memory_uid, index);
@@ -93,8 +73,6 @@ class DesktopAIEngineSingleton extends Engine {
         })) ?? {
             thread_id: initialState.thread_uid ?? crypto.randomUUID(),
         }) as AgentConfigurableType;
-
-        this.setCurrentThread(thread.thread_id);
         await this.syncCurrentThreadFromBackground(thread.thread_id);
         return thread;
     }
@@ -113,7 +91,7 @@ class DesktopAIEngineSingleton extends Engine {
         return memoryUid;
     }
 
-    async streamThreadPrompt(
+    async startThreadPrompt(
         threadUid: string,
         prompt: string,
         overrides: Partial<AgentConfigurableType> = {},
@@ -153,10 +131,6 @@ class DesktopAIEngineSingleton extends Engine {
         delete nextIndex[threadUid];
         this.syncThreadIndex(nextIndex);
 
-        if (this.readCurrentThreadUidFromMemory() === threadUid) {
-            this.setCurrentThread(Object.keys(nextIndex)[0] ?? null);
-        }
-
         return true;
     }
 
@@ -173,15 +147,6 @@ class DesktopAIEngineSingleton extends Engine {
             (KernelEngine.readMemory(this.thread_uids_memory_uid) as
                 | Record<string, string>
                 | undefined) ?? {}
-        );
-    }
-
-    readCurrentThreadUidFromMemory(scope_uid?: string | null) {
-        return (
-            (KernelEngine.readMemory(this.current_thread_uid_memory_uid_for_scope(scope_uid)) as
-                | string
-                | null
-                | undefined) ?? null
         );
     }
 
@@ -218,14 +183,6 @@ class DesktopAIEngineSingleton extends Engine {
         for (const entry of payload.threads ?? []) {
             this.syncThreadMemory(entry.thread);
         }
-
-        const nextActiveThreadUid = this.readCurrentThreadUidFromMemory();
-        if (nextActiveThreadUid && payload.index?.[nextActiveThreadUid]) {
-            return payload;
-        }
-
-        const fallbackThreadUid = payload.threads?.[0]?.thread_uid ?? null;
-        this.setCurrentThread(fallbackThreadUid);
         return payload;
     }
 
@@ -260,4 +217,4 @@ class DesktopAIEngineSingleton extends Engine {
     }
 }
 
-export const AIEngine = new DesktopAIEngineSingleton();
+export const AgentClientEngine = new AgentClientEngineSingleton();

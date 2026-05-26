@@ -3,7 +3,7 @@ import { ConfigEngine } from './shared/engines/config-engine';
 import { KernelEngine } from './shared/engines/kernel-engine';
 import { RegistryEngine } from './shared/engines/registry-engine';
 import { RPCEngine } from './shared/engines/rpc-engine';
-import { AIEngine } from './app-background/engines/ai-engine';
+import { AgentThreadEngine } from './app-background/engines/agent-thread-engine';
 
 let backgroundBootPromise: Promise<void> | null = null;
 
@@ -47,14 +47,14 @@ export async function bootBackgroundRuntime() {
 		RPCEngine.setupRuntimeBridge();
 		await EventBus.setupRuntimeBridge();
 		ConfigEngine.setupKernelSpace();
-		AIEngine.setupKernelSpace();
+		AgentThreadEngine.setupKernelSpace();
 
 		try {
 			await RegistryEngine.boot();
 			await ConfigEngine.boot();
-			await AIEngine.boot();
-			await AIEngine._setupRpcRoutes();
-			await AIEngine._setupEventRoutes();
+			await AgentThreadEngine.boot();
+			await AgentThreadEngine._setupRpcRoutes();
+			await AgentThreadEngine._setupEventRoutes();
 
 			console.log('ACE Background Runtime Ready.');
 		} catch (error) {

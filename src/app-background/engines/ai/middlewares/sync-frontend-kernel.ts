@@ -1,10 +1,10 @@
 import { createMiddleware } from 'langchain';
-import { AIEngine } from '#/app-background/engines/ai-engine';
+import { AgentThreadEngine } from '#/app-background/engines/agent-thread-engine';
 import { AgentConfigType } from '#/shared/schemas/ai.ts';
 
 /**
  * SyncFrontendKernelMiddleware. This middleware is designed to synchronize the agent's state with the frontend kernel.
- * It listens to the agent's state changes after each step and sends the updated state to the frontend via the AIEngine's syncThread method.
+ * It listens to the agent's state changes after each step and sends the updated state to the frontend via the AgentThreadEngine syncThread method.
  * This allows the frontend to have real-time visibility into the agent's execution, including the messages, tool calls, and any other relevant state information.
  * The middleware expects the agent's runtime to include a configurable.thread_id which is used as the identifier for syncing with the frontend.
  * The payload sent to the frontend includes the thread_uid, checkpoint_id, model, provider, messages, and the entire state of the agent.
@@ -21,7 +21,7 @@ export default createMiddleware({
             return;
         }
 
-        AIEngine.syncThread(thread_id, {
+        AgentThreadEngine.syncThread(thread_id, {
             thread_uid: thread_id,
             checkpoint_id: agentRuntime.configurable?.checkpoint_id,
             model: agentRuntime.configurable?.model,

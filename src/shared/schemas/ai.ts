@@ -190,6 +190,190 @@ export const AIThreadStreamMethods = {
 export type AIThreadStreamMethodType =
     (typeof AIThreadStreamMethods)[keyof typeof AIThreadStreamMethods];
 
+export type AIThreadLifecycleEventType = 'started' | 'completed' | 'failed';
+
+export type AIThreadMessageEventType =
+    | 'message-start'
+    | 'content-block-start'
+    | 'token'
+    | 'content-block-delta'
+    | 'content-block-finish'
+    | 'message-finish';
+
+export type AIThreadToolEventType =
+    | 'tool-start'
+    | 'tool-stream'
+    | 'tool-finish'
+    | 'tool-error';
+
+export type AIThreadStepEventType = 'start' | 'finish';
+
+export interface AIThreadStreamMessageParamsBase<TData> {
+    namespace: unknown[];
+    timestamp: number;
+    node?: string;
+    data: TData;
+}
+
+export interface AIThreadLifecycleEventData {
+    event: AIThreadLifecycleEventType;
+    error?: string;
+}
+
+export interface AIThreadMessageStartEventData {
+    event: 'message-start';
+    role: 'ai';
+    id: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface AIThreadContentBlockStartEventData {
+    event: 'content-block-start';
+    index: number;
+    content: {
+        type: 'text';
+        text: string;
+    };
+    metadata?: Record<string, unknown>;
+}
+
+export interface AIThreadTokenEventData {
+    event: 'token';
+    role: 'ai';
+    id: string;
+    text: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface AIThreadContentBlockDeltaEventData {
+    event: 'content-block-delta';
+    index: number;
+    delta: {
+        type: 'text-delta';
+        text: string;
+    };
+    metadata?: Record<string, unknown>;
+}
+
+export interface AIThreadContentBlockFinishEventData {
+    event: 'content-block-finish';
+    index: number;
+    content: {
+        type: 'text';
+        text: string;
+    };
+    metadata?: Record<string, unknown>;
+}
+
+export interface AIThreadMessageFinishEventData {
+    event: 'message-finish';
+    reason: string;
+    id: string;
+    metadata?: Record<string, unknown>;
+}
+
+export type AIThreadMessageEventData =
+    | AIThreadMessageStartEventData
+    | AIThreadContentBlockStartEventData
+    | AIThreadTokenEventData
+    | AIThreadContentBlockDeltaEventData
+    | AIThreadContentBlockFinishEventData
+    | AIThreadMessageFinishEventData;
+
+export interface AIThreadToolEventData {
+    event: AIThreadToolEventType;
+    tool_event_stream_uid: string;
+    tool_name: string;
+    input: unknown;
+    stream: unknown;
+    output: unknown;
+    error: unknown;
+    metadata?: Record<string, unknown>;
+}
+
+export interface AIThreadStepEventData {
+    event: AIThreadStepEventType;
+    step_uid: string;
+    node: string;
+    title: string;
+}
+
+export interface AIThreadLifecycleMessage {
+    type: 'event';
+    event_id: string;
+    seq: number;
+    method: typeof AIThreadStreamMethods.LIFECYCLE;
+    params: AIThreadStreamMessageParamsBase<AIThreadLifecycleEventData>;
+}
+
+export interface AIThreadMessagesMessage {
+    type: 'event';
+    event_id: string;
+    seq: number;
+    method: typeof AIThreadStreamMethods.MESSAGES;
+    params: AIThreadStreamMessageParamsBase<AIThreadMessageEventData>;
+}
+
+export interface AIThreadToolMessage {
+    type: 'event';
+    event_id: string;
+    seq: number;
+    method: typeof AIThreadStreamMethods.TOOL;
+    params: AIThreadStreamMessageParamsBase<AIThreadToolEventData>;
+}
+
+export interface AIThreadStepMessage {
+    type: 'event';
+    event_id: string;
+    seq: number;
+    method: typeof AIThreadStreamMethods.STEP;
+    params: AIThreadStreamMessageParamsBase<AIThreadStepEventData>;
+}
+
+export type AIThreadStreamProtocolMessage =
+    | AIThreadLifecycleMessage
+    | AIThreadMessagesMessage
+    | AIThreadToolMessage
+    | AIThreadStepMessage;
+
+export function resolveAIThreadStreamProtocolMessage(
+    message: unknown,
+): AIThreadStreamProtocolMessage | null {
+    if (!message || typeof message !== 'object') {
+        return null;
+    }
+
+    const record = message as Record<string, unknown>;
+    const method =
+        typeof record.method === 'string'
+            ? (record.method as AIThreadStreamMethodType)
+            : null;
+
+    if (
+        method !== AIThreadStreamMethods.LIFECYCLE &&
+        method !== AIThreadStreamMethods.MESSAGES &&
+        method !== AIThreadStreamMethods.TOOL &&
+        method !== AIThreadStreamMethods.STEP
+    ) {
+        return null;
+    }
+
+    const params =
+        record.params && typeof record.params === 'object'
+            ? (record.params as Record<string, unknown>)
+            : null;
+    const data =
+        params?.data && typeof params.data === 'object'
+            ? (params.data as Record<string, unknown>)
+            : null;
+
+    if (!params || !data || typeof data.event !== 'string') {
+        return null;
+    }
+
+    return record as unknown as AIThreadStreamProtocolMessage;
+}
+
 export interface BackgroundAIStreamEventPayloadType {
     thread_uid: string;
     message: ProtocolMessage;

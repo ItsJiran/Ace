@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { ExternalLink, Sparkles } from 'lucide-react';
 
-import { AIEngine } from '#/app-desktop/engines/ai-engine';
+import { AgentClientEngine } from '#/app-desktop/engines/agent-client-engine';
 import type { RunningToolStreamItem } from '#/app-desktop/hooks/use-ai-chat-thread';
 import type {
 	RunningStepStreamItem,
@@ -33,7 +33,7 @@ function openThreadDetailWindow(threadUid: string) {
 		x: 440,
 		y: 140,
 		metadata: {
-			memory_uid: AIEngine.thread_memory_uid(threadUid),
+			memory_uid: AgentClientEngine.thread_memory_uid(threadUid),
 			thread_uid: threadUid,
 		},
 	});

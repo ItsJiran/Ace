@@ -14,7 +14,7 @@ export function createToolEventController(input: {
 
 	return {
 		emit(
-			event: 'tool-start' | 'tool-finish' | 'tool-error',
+			event: 'tool-start' | 'tool-stream' | 'tool-finish' | 'tool-error',
 			eventData: Record<string, unknown>,
 			node?: string,
 			metadata?: Record<string, unknown>,
@@ -27,11 +27,13 @@ export function createToolEventController(input: {
 
 			if (event === 'tool-start') {
 				activeToolStreamIds.set(toolIdentity, toolStreamUid);
-			} else {
+			} else if (event === 'tool-finish' || event === 'tool-error') {
 				activeToolStreamIds.delete(toolIdentity);
 			}
 
 			const seq = nextSeq();
+			// TOOL events travel through `system:ai:thread:stream`, then are queued by the desktop
+			// transport in `use-ai-chat-thread.stream.ts` and consumed by the LangGraph client-facing UI.
 			emit({
 				type: 'event',
 				event_id: `${threadUid}:${runId}:${seq}`,
@@ -46,6 +48,7 @@ export function createToolEventController(input: {
 						tool_event_stream_uid: toolStreamUid,
 						tool_name: resolveToolDisplayName(eventData, node),
 						input: eventData.input ?? null,
+						stream: eventData.stream ?? eventData.chunk ?? null,
 						output: eventData.output ?? null,
 						error: eventData.error ?? null,
 						...(metadata ? { metadata } : {}),

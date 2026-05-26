@@ -4,7 +4,7 @@
 	<img src="./public/android-chrome-192x192.png" alt="ACE icon" width="96" height="96" />
 </p>
 
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-blue)
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Stage](https://img.shields.io/badge/stage-experimental-orange)
@@ -25,7 +25,7 @@ In practical terms, ACE is an experimental developer assistant platform where th
 ## ✨ Key Features
 
 - **🌐 Always-on Overlay:** A seamless UI layer that stays on top of your workflow without interrupting it.
-- **🧠 Local-First Intelligence:** Privacy-centric AI orchestration with an Electron-hosted background DeepAgents runtime and live renderer streaming.
+- **🧠 Local-First Intelligence:** Privacy-centric AI orchestration with an Electron-hosted background LangGraph runtime and live renderer streaming.
 - **🛠️ Extensible Toolchain:** Registry-loaded tools, package-defined windows/widgets, and runtime-safe bridges for desktop and background capabilities.
 - **📡 Event-Driven Architecture:** Robust communication via a central `EventBus` for decoupled UI and logic.
 - **📦 Package Ecosystem:** Modular architecture allowing custom widgets, tools, and workflows.
@@ -40,7 +40,7 @@ In practical terms, ACE is an experimental developer assistant platform where th
       <img src="assets/1.gif" width="100%" alt="ACE Windowing System" />
     </td>
     <td width="50%" align="center">
-      <!-- GIF 2: Proses Deepagents / Langchain -->
+	<!-- GIF 2: Proses LangGraph / LangChain -->
       <img src="assets/2.gif" width="100%" alt="ACE Agentic Workflow" />
     </td>
   </tr>
@@ -102,7 +102,7 @@ This starts:
 - the Electron main process
 
 ### Temporary Filesystem Security Note
-MVP Security Notice: ACE intentionally runs DeepAgents with permissive read/write filesystem access and broad command execution capabilities across the mounted home directory. This is a deliberate, temporary tradeoff to maximize MVP velocity—allowing the agent to inspect, edit, and rewrite project artifacts via batch scripts and shell helpers without friction while the core runtime contracts are still settling. This current posture is not a hardened least-privilege policy; it should be treated as an accepted security issue for rapid iteration that requires strict route-scoped and tool-scoped permission layers before any production release.
+MVP Security Notice: ACE intentionally runs its LangGraph-driven background agent runtime with permissive read/write filesystem access and broad command execution capabilities across the mounted home directory. This is a deliberate, temporary tradeoff to maximize MVP velocity—allowing the agent to inspect, edit, and rewrite project artifacts via batch scripts and shell helpers without friction while the core runtime contracts are still settling. This current posture is not a hardened least-privilege policy; it should be treated as an accepted security issue for rapid iteration that requires strict route-scoped and tool-scoped permission layers before any production release.
 
 ### Deep Dive & Developer Logs
 For a more detailed technical breakdown, architectural logs, and the journey of building ACE, check out my blog:
@@ -156,10 +156,10 @@ flowchart LR
 
 	subgraph BACKGROUND[src/app-background]
 		BM[main.ts]
-		BAI[engines/ai-engine.ts]
+		BAI[engines/agent-thread-engine.ts]
 		BA[engines/ai/agent-instance.ts]
-		BMW[engines/ai/agent-middlewares.ts]
-		BAB[engines/ai/agent-backend.ts]
+		BSE[engines/ai/ai-stream-events.ts]
+		BST[engines/ai/stream/*]
 	end
 
 	subgraph PROVIDERS[Provider Layer]
@@ -202,9 +202,9 @@ flowchart LR
 	BT --> BM
 	BM --> BAI
 	BAI --> BA
-	BA --> BMW
-	BA --> BAB
-	BAB --> HOST
+	BAI --> BSE
+	BSE --> BST
+	BA --> HOST
 	BA --> OA
 	BA --> GG
 	BA --> AN
@@ -221,12 +221,12 @@ flowchart LR
 
 ### How The Layers Work Together
 
-- `src/desktop.ts` boots the renderer-side runtime by composing desktop-facing engines such as `WindowEngine`, `StateEngine`, `KeybindEngine`, `LoggerEngine`, and desktop `AIEngine` on top of shared contracts.
+- `src/desktop.ts` boots the renderer-side runtime by composing desktop-facing engines such as `WindowEngine`, `StateEngine`, `KeybindEngine`, `LoggerEngine`, and desktop `AgentClientEngine` on top of shared contracts.
 - `src/app-desktop/` owns renderer UI, hooks, window shells, and interaction logic, while package windows and widgets from `src/packages/system/` and `src/packages/system-dev/` provide much of the actual mounted UI surface.
 - `src/shared/engines/` contains the common control-plane layer, especially `KernelEngine`, `RegistryEngine`, `ConfigEngine`, `EventBus`, and filesystem-facing shared runtime contracts.
 - Electron `main.cjs`, `preload.cjs`, and the background bridge connect the desktop runtime to host capabilities such as environment access, filesystem access, global input, and background IPC.
-- `src/background.ts` and `src/app-background/main.ts` boot the dedicated background runtime, where background `AIEngine` invokes the DeepAgents instance and emits stream updates back toward the renderer.
-- DeepAgents-specific composition currently lives under `src/app-background/engines/ai/`, including the agent instance, middleware stack, backend wiring, and tool-facing integration points.
+- `src/background.ts` and `src/app-background/main.ts` boot the dedicated background runtime, where background `AgentThreadEngine` invokes the LangGraph agent instance and emits protocol stream updates back toward the renderer.
+- LangGraph-specific composition currently lives under `src/app-background/engines/ai/`, including the compiled agent instance, stream-event bridge, typed stream controllers, and tool-facing integration points.
 - AI streaming and persisted thread synchronization flow through shared kernel state so windows like chat and monitors can reflect both live and durable runtime state.
 - The architecture already reflects a practical split between desktop, background, shared, electron, and package layers; the main ongoing task is reducing leakage between those real surfaces rather than inventing a new separation model.
 
@@ -246,5 +246,8 @@ Put differently: the present repository is the start of a local-first agent runt
 
 ## 📄 License
 
-MIT License
-Copyright (c) 2026 [Jibril Gilang Ramadhan]
+GNU General Public License v3.0
+
+See the [LICENSE](./LICENSE) file for the full text.
+
+Copyright (c) 2026 Jibril Gilang Ramadhan

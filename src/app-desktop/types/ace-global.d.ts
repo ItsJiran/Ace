@@ -15,7 +15,7 @@ type AIGatewayBridge = {
     readThread?: (threadUid: string) => Promise<unknown> | unknown;
     syncCurrentThreadFromBackground?: (threadUid: string) => Promise<unknown> | unknown;
     syncThread?: (threadUid: string, payload?: Record<string, unknown>) => Promise<unknown> | unknown;
-    streamThreadPrompt?: (threadUid: string, prompt: string, overrides?: Record<string, unknown>) => Promise<unknown> | unknown;
+    startThreadPrompt?: (threadUid: string, prompt: string, overrides?: Record<string, unknown>) => Promise<unknown> | unknown;
     deleteThread?: (threadUid: string) => Promise<unknown> | unknown;
     invoke?: (method: string, payload?: Record<string, unknown>) => Promise<unknown> | unknown;
 };

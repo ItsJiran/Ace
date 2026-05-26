@@ -26,7 +26,7 @@ export default class SingletonAgentInstance {
         state: Parameters<ReturnType<typeof compileAceAgentWorkflow>['invoke']>[0],
         config: Record<string, unknown> & { version: 'v3' },
     ) {
-        return this.value.streamEvents(state as never, config as never);
+        return this.value.streamEvents(state, config);
     }
 
     public static getInstance(): SingletonAgentInstance {

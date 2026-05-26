@@ -1,7 +1,7 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 
-import { AIEngine } from '#/app-background/engines/ai-engine';
+import { AgentThreadEngine } from '#/app-background/engines/agent-thread-engine';
 import type { AgentConfigType } from '#/shared/schemas/ai';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 
@@ -27,7 +27,7 @@ function isThreadStillExist(threadUid: string | null) {
 		return true;
 	}
 
-	return KernelEngine.readMemory(AIEngine.ai_threads_memory_uid(threadUid)) !== undefined;
+	return KernelEngine.readMemory(AgentThreadEngine.ai_threads_memory_uid(threadUid)) !== undefined;
 }
 
 function assertThreadStillExist(threadUid: string | null) {

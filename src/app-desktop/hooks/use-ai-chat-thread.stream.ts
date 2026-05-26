@@ -3,7 +3,7 @@ import type { AgentServerAdapter } from '@langchain/langgraph-sdk';
 import { Client as LangGraphClient } from '@langchain/langgraph-sdk/client';
 import type { Command, Message } from '@langchain/protocol';
 
-import { AIEngine } from '#/app-desktop/engines/ai-engine';
+import { AgentClientEngine } from '#/app-desktop/engines/agent-client-engine';
 import { EventBus } from '#/shared/engines/event-engine';
 import {
 	AI_THREAD_STREAM_EVENT_SLUG,
@@ -107,7 +107,7 @@ function ensureBackgroundAIStreamListener() {
 
 function startBackgroundThreadRun(threadUid: string, prompt: string) {
 	const session = getThreadTransportSession(threadUid);
-	const runPromise = AIEngine.streamThreadPrompt(threadUid, prompt).finally(() => {
+	const runPromise = AgentClientEngine.startThreadPrompt(threadUid, prompt).finally(() => {
 		if (session.activeRun === runPromise) {
 			session.activeRun = null;
 		}
@@ -175,7 +175,7 @@ export function createThreadTransport(threadUid: string | null) {
 					};
 				}
 
-				await AIEngine.syncCurrentThreadFromBackground(activeThreadUid);
+				await AgentClientEngine.syncCurrentThreadFromBackground(activeThreadUid);
 			}
 
 			return {
@@ -198,7 +198,7 @@ export function createThreadTransport(threadUid: string | null) {
 				return null;
 			}
 
-			const resolvedThread = AIEngine.readThreadFromMemory(activeThreadUid);
+			const resolvedThread = AgentClientEngine.readThreadFromMemory(activeThreadUid);
 			if (!resolvedThread) {
 				return null;
 			}
@@ -227,7 +227,7 @@ export function createLocalStreamClient(threadUid: string | null) {
 			return null as never;
 		}
 
-		const resolvedThread = AIEngine.readThreadFromMemory(activeThreadUid);
+		const resolvedThread = AgentClientEngine.readThreadFromMemory(activeThreadUid);
 		return resolveThreadStateSnapshot(resolvedThread ?? undefined) as never;
 	};
 

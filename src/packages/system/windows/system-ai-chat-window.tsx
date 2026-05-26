@@ -45,7 +45,6 @@ function renderResizeHandles(
 }
 
 function SystemAIChatWindowBody({
-	windowUid,
 	title,
 	dragHandleProps,
 	isFocused,
@@ -53,7 +52,6 @@ function SystemAIChatWindowBody({
 	onClose,
 	onMinimize,
 }: {
-	windowUid: string;
 	title?: string;
 	dragHandleProps: AceWindowRenderProps['dragHandleProps'];
 	isFocused: boolean;
@@ -77,9 +75,6 @@ function SystemAIChatWindowBody({
 		current_thread_uid,
 		ai_status,
 		is_streaming,
-		running_tool_streams,
-		running_step_streams,
-		workflow_event_feed,
 		pending_prompt,
 		createThread,
 		setCurrentThread,
@@ -87,7 +82,7 @@ function SystemAIChatWindowBody({
 		interruptThread,
 		messages,
 		list_threads,
-	} = useAIChatThread({ scopeKey: windowUid });
+	} = useAIChatThread();
 	const renderedMessages = messages as BaseMessage[];
 
 	const resolvedModel = selectedModel || ensureSelectedModel();
@@ -166,9 +161,9 @@ function SystemAIChatWindowBody({
 					messages={renderedMessages}
 					isStreaming={is_streaming}
 					pendingPrompt={pending_prompt}
-					runningToolStreams={running_tool_streams}
-					runningStepStreams={running_step_streams}
-					workflowEventFeed={workflow_event_feed}
+					runningToolStreams={[]}
+					runningStepStreams={[]}
+					workflowEventFeed={[]}
 					currentThreadUid={current_thread_uid}
 					bottomRef={bottomRef}
 				/>
@@ -294,7 +289,6 @@ function SystemAIChatWindow({ windowUid }: { windowUid: string }) {
 			>
 				<div className="flex-1 overflow-hidden">
 					<SystemAIChatWindowBody
-								windowUid={windowUid}
 						title={windowConfig?.title}
 						dragHandleProps={dragHandleProps}
 						isFocused={isWindowStateActive || isFocused}
