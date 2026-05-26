@@ -9,28 +9,28 @@ import {
 
 import { createBaseAgentMiddlewares } from '../../agent-middlewares';
 import SingletonAgentBackend from '../../agent-backend';
-import buildReasoningNodePrompt from './prompt';
+import buildObserveNodePrompt from './prompt';
 
-export function createReasoningNode() {
+export function createObserveNode() {
 	const agent = createDeepAgent({
 		model: 'openai:gpt-4o-mini',
-		systemPrompt: buildReasoningNodePrompt(),
+		systemPrompt: buildObserveNodePrompt(),
 		middleware: createBaseAgentMiddlewares(AgentModelModes.SELECTED),
 		contextSchema: AgentInvokeContextSchema,
 		backend: SingletonAgentBackend.getInstance().value,
 	});
 
-	return async function reasoningNode(state: AceAgentWorkflowState) {
-		console.info('[AINode] start reasoning', {
+	return async function observeNode(state: AceAgentWorkflowState) {
+		console.info('[AINode] start observe', {
 			messageCount: Array.isArray(state.messages) ? state.messages.length : 0,
 		});
 
 		const config = getConfig();
 		const result = await agent.invoke(state, config as never);
 
-		console.info('[AINode] done reasoning', { messageCount: result.messages?.length ?? 0 });
+		console.info('[AINode] done observe', { messageCount: result.messages?.length ?? 0 });
 		return { messages: result.messages };
 	};
 }
 
-export default createReasoningNode;
+export default createObserveNode;

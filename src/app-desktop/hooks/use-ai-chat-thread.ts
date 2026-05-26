@@ -6,12 +6,13 @@ import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import {
     type AgentClientThread,
     type AgentConfigurableType,
+    type AgentThreadRuntimeState,
     type AIProviderType,
 } from '#/shared/schemas/ai';
 import {
-    createStreamOptions,
-    resolveActiveThreadUid,
-    submitPromptToThread,
+	createStreamOptions,
+	resolveActiveThreadUid,
+	submitPromptToThread,
 } from '#/app-desktop/hooks/use-ai-chat-thread.stream';
 import { resolveThreadValues } from '#/app-desktop/hooks/use-ai-chat-thread.utils';
 
@@ -36,10 +37,17 @@ export function useAIChatThread() {
     const [current_thread, setCurrentThreadState] = useState<AgentClientThread | null>(
         current_thread_from_memory ?? null,
     );
-    const ephemeral_messages = current_thread?.ephemeral_messages ?? [];
+    const thread_runtime_map =
+        useAceMemory<Record<string, AgentThreadRuntimeState>>(AgentClientEngine.thread_runtime_memory_uid) ?? {};
+    const current_thread_runtime =
+        current_thread_uid && thread_runtime_map[current_thread_uid]
+            ? thread_runtime_map[current_thread_uid]
+            : undefined;
+    const ephemeral_streams = current_thread?.ephemeral_messages ?? [];
 
 	const pending_prompt = null;
     const [is_submitting_prompt, setIsSubmittingPrompt] = useState(false);
+    const [last_submitted_prompt, setLastSubmittedPrompt] = useState<string | null>(null);
 
     /**
      * + ------------------ LIFECYCLE - HOOKS -------------------------------------------------------------------------------- +
@@ -132,6 +140,7 @@ export function useAIChatThread() {
             return null;
         }
 
+        setLastSubmittedPrompt(normalizedPrompt);
         setIsSubmittingPrompt(true);
 
         try {
@@ -179,6 +188,25 @@ export function useAIChatThread() {
         }
     };
 
+    const retryLastPrompt = async (
+        selectedProvider: AIProviderType,
+        selectedModel: string,
+    ) => {
+        const latestHumanMessage = [...messages]
+            .reverse()
+            .find((message) => message.getType() === 'human');
+        const latestHumanText =
+            typeof latestHumanMessage?.text === 'string' && latestHumanMessage.text.trim()
+                ? latestHumanMessage.text
+                : '';
+        const retryPrompt = (latestHumanText || last_submitted_prompt || '').trim();
+        if (!retryPrompt) {
+            return null;
+        }
+
+        return await sendPrompt(retryPrompt, selectedProvider, selectedModel);
+    };
+
     const interruptThread = async () => {
         const activeThreadUid = resolveActiveThreadUid(current_thread_uid);
         if (activeThreadUid) {
@@ -198,14 +226,14 @@ export function useAIChatThread() {
 
     const is_waiting_for_backend_run = useMemo(
         () =>
-            ephemeral_messages.some(
+            ephemeral_streams.some(
                 (entry) =>
                     entry.type === 'lifecycle' ||
                     entry.type === 'messages' ||
                     entry.type === 'tool' ||
                     entry.type === 'step',
             ),
-        [ephemeral_messages],
+        [ephemeral_streams],
     );
 
     const is_streaming = is_waiting_for_backend_run || is_submitting_prompt;
@@ -230,7 +258,8 @@ export function useAIChatThread() {
         list_threads,
         current_thread_uid,
         current_thread,
-        ephemeral_messages,
+        current_thread_runtime,
+        ephemeral_streams,
         messages,
         ai_status,
         pending_prompt,
@@ -240,6 +269,7 @@ export function useAIChatThread() {
         setCurrentThread,
         createThread,
         sendPrompt,
+        retryLastPrompt,
         interruptThread,
     };
 }

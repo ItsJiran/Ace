@@ -12,6 +12,12 @@ export function createToolEventController(input: {
 	const { threadUid, runId, nextSeq, emit } = input;
 	const activeToolStreamIds = new Map<string, string>();
 
+	const withRunMetadata = (metadata?: Record<string, unknown>): Record<string, unknown> => ({
+		...(metadata ?? {}),
+		run_id:
+			typeof metadata?.run_id === 'string' && metadata.run_id.trim() ? metadata.run_id : runId,
+	});
+
 	return {
 		emit(
 			event: 'tool-start' | 'tool-stream' | 'tool-finish' | 'tool-error',
@@ -42,16 +48,16 @@ export function createToolEventController(input: {
 				params: {
 					namespace: [],
 					timestamp: Date.now(),
-					...(node ? { node } : {}),
 					data: {
 						event,
+						raw_payload: eventData,
+						metadata: withRunMetadata(metadata),
 						tool_event_stream_uid: toolStreamUid,
 						tool_name: resolveToolDisplayName(eventData, node),
 						input: eventData.input ?? null,
 						stream: eventData.stream ?? eventData.chunk ?? null,
 						output: eventData.output ?? null,
 						error: eventData.error ?? null,
-						...(metadata ? { metadata } : {}),
 					},
 				},
 			});

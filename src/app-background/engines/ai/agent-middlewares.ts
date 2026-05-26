@@ -6,6 +6,7 @@ import contextEditingMiddleware from './middlewares/context-editing';
 import syncDesktopKernelSpaceMiddleware from './middlewares/sync-frontend-kernel';
 import injectApiKeyMiddleware from './middlewares/inject-api-key';
 import injectDesktopContextMiddleware from './middlewares/inject-desktop-context';
+import normalizeSubagentTypeMiddleware from './middlewares/normalize-subagent-type';
 import threadLivenessGuardMiddleware from './middlewares/thread-liveness-guard';
 import { AgentModelModes, type AgentModelModeType } from '#/shared/schemas/ai';
 
@@ -14,6 +15,7 @@ export function createBaseAgentMiddlewares(mode: AgentModelModeType = AgentModel
         injectApiKeyMiddleware,
         injectDesktopContextMiddleware,
         configurableModelMiddleware(mode),
+        normalizeSubagentTypeMiddleware,
         threadLivenessGuardMiddleware,
         syncDesktopKernelSpaceMiddleware,
         summarizationMiddleware,

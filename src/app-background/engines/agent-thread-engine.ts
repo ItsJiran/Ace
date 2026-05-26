@@ -1,5 +1,5 @@
 import { HumanMessage } from '@langchain/core/messages';
-import { AIProviders } from '#/shared/constants/ai.ts';
+import { AIProviderEnvKeys, AIProviders } from '#/shared/constants/ai.ts';
 
 import type {
     AgentConfigurableType,
@@ -13,6 +13,7 @@ import type {
 import SingletonAgentInstance from './ai/agent-instance';
 import { createAIStreamEventBridge } from './ai/ai-stream-events';
 import resolveApiKey from '../lib/utils/ai/resolve-api-key';
+import { cacheApiKey } from '../lib/utils/ai/api-key-session-cache';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
 import { EventBus } from '#/shared/engines/event-engine';
@@ -35,6 +36,12 @@ class AgentThreadEngineSingleton extends Engine {
             started_at: number;
         }
     >();
+
+    private resolveMissingCredentialsMessage(provider: AIProviderType) {
+        const envKeys = AIProviderEnvKeys[provider] ?? [];
+        const envHint = envKeys.length > 0 ? ` (${envKeys.join(' or ')})` : '';
+        return `Missing credentials for provider "${provider}"${envHint}. Please set an API key in config or environment.`;
+    }
 
     // + ----- Abstract Methods ---------------------------------------------------------------+
 
@@ -338,16 +345,21 @@ class AgentThreadEngineSingleton extends Engine {
         signal?: AbortSignal;
     }) {
         const { thread_uid, model, provider, apiKey, overrides, context, signal } = input;
+        const sanitizedOverrides = Object.fromEntries(
+            Object.entries(overrides).filter(([, value]) => value !== undefined),
+        );
+        const normalizedApiKey =
+            typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : undefined;
 
         return {
             version: 'v3' as const,
             ...(context ? { context: context as unknown as AgentInvokeContextType } : {}),
             configurable: {
+                ...sanitizedOverrides,
                 thread_id: thread_uid,
                 model,
                 provider,
-                apiKey,
-                ...overrides,
+                ...(normalizedApiKey ? { apiKey: normalizedApiKey } : {}),
             },
             ...(signal ? { signal } : {}),
         };
@@ -419,7 +431,44 @@ class AgentThreadEngineSingleton extends Engine {
         }
 
         // Resolve runtime credentials after the prompt has been normalized so empty runs bail early.
-        const apiKey = overrides.apiKey ?? (await resolveApiKey(provider)) ?? undefined;
+        const resolvedOverrideApiKey =
+            typeof overrides.apiKey === 'string' && overrides.apiKey.trim()
+                ? overrides.apiKey.trim()
+                : undefined;
+        const apiKey = resolvedOverrideApiKey ?? (await resolveApiKey(provider)) ?? undefined;
+
+        // Write the resolved key into process.env so that sub-agent tool calls (deepagents'
+        // `task` tool creates a fresh agent invocation that doesn't inherit the parent's
+        // LangGraph configurable). `readProcessEnv` in the background process always reads
+        // directly from `process.env`, making this the most reliable cross-module fallback.
+        if (apiKey && provider) {
+            cacheApiKey(provider, apiKey);
+            const providerEnvKeys = AIProviderEnvKeys[provider] ?? [];
+            for (const envKey of providerEnvKeys) {
+                if (!process.env[envKey]) {
+                    process.env[envKey] = apiKey;
+                }
+            }
+        }
+
+        const run_id = crypto.randomUUID();
+        const streamEvents = createAIStreamEventBridge({
+            threadUid: thread_uid,
+            runId: run_id,
+            emitProtocolThreadEvent: (nextThreadUid, message) =>
+                this.emitProtocolThreadEvent(nextThreadUid, message),
+        });
+
+        // Mark the protocol lifecycle as started before any stream setup so all failure modes
+        // (including credential guards) always resolve waiting state on the frontend.
+        streamEvents.start();
+
+        if (!apiKey) {
+            const missingCredentialsError = new Error(this.resolveMissingCredentialsMessage(provider));
+            streamEvents.fail(missingCredentialsError);
+            this.log(`[AgentThreadEngine] ${missingCredentialsError.message}`);
+            return this.readThread(thread_uid);
+        }
 
         // Persist the latest execution identity before the stream begins so frontend sync reads a fresh snapshot.
         this.syncThread(thread_uid, {
@@ -440,35 +489,22 @@ class AgentThreadEngineSingleton extends Engine {
             signal,
         });
 
-        // AgentInstance is the single source of streamed LangGraph events for this thread run.
-        const stream = await SingletonAgentInstance.getInstance().stream(
-            {
-                messages: [new HumanMessage(normalizedPrompt)],
-            },
-            streamRuntimeConfig,
-        );
-
-        const run_id = crypto.randomUUID();
-        const streamEvents = createAIStreamEventBridge({
-            threadUid: thread_uid,
-            runId: run_id,
-            emitProtocolThreadEvent: (nextThreadUid, message) =>
-                this.emitProtocolThreadEvent(nextThreadUid, message),
-        });
-
-        // Mark the protocol lifecycle as started before the first streamed event is processed.
-        streamEvents.start();
-
         try {
-            for await (const event of stream) {
-                // Each raw LangGraph event is translated by the bridge into the desktop stream protocol.
-                streamEvents.process(event);
-            }
+            // AgentInstance is the single source of streamed LangGraph events for this thread run.
+            const stream = await SingletonAgentInstance.getInstance().stream(
+                {
+                    messages: [new HumanMessage(normalizedPrompt)],
+                },
+                streamRuntimeConfig,
+            );
+
+            await streamEvents.process(stream);
 
             streamEvents.complete();
         } catch (error) {
             streamEvents.fail(error);
-            throw error;
+            this.log(`[AgentThreadEngine] stream failed for ${thread_uid}:`, error);
+            return this.readThread(thread_uid);
         }
 
         return this.readThread(thread_uid);

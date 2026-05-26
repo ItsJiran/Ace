@@ -7,8 +7,8 @@ export default async function resolveApiKey(providerName: AIProviderType) {
 
     for (const envKey of envKeys) {
         const value = await readProcessEnv(envKey);
-        if (value) {
-            return value;
+        if (typeof value === 'string' && value.trim()) {
+            return value.trim();
         }
     }
 

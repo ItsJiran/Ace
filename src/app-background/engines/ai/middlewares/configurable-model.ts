@@ -1,6 +1,8 @@
 
 import resolveConfiguredModelName from "#/app-background/lib/utils/ai/resolve-configured-model-name.ts";
 import resolveConfiguredProviderName from "#/app-background/lib/utils/ai/resolve-configured-provider-name.ts";
+import resolveApiKey from "#/app-background/lib/utils/ai/resolve-api-key.ts";
+import { getCachedApiKey } from "#/app-background/lib/utils/ai/api-key-session-cache.ts";
 import { AgentConfigType, AgentModelModes, type AgentModelModeType } from "#/shared/schemas/ai.ts";
 import { createMiddleware, initChatModel } from "langchain";
 
@@ -19,7 +21,11 @@ export default function createConfigurableModelMiddleware(
             const providerName = resolveConfiguredProviderName(runtime);
             const resolvedMode = runtime.configurable?.model_mode ?? mode;
             const modelName = resolveConfiguredModelName(runtime, providerName, resolvedMode);
-            const apiKey = runtime.configurable?.apiKey;
+            const runtimeApiKey =
+                typeof runtime.configurable?.apiKey === 'string' && runtime.configurable.apiKey.trim()
+                    ? runtime.configurable.apiKey.trim()
+                    : undefined;
+            const apiKey = runtimeApiKey ?? (await resolveApiKey(providerName)) ?? getCachedApiKey(providerName) ?? undefined;
             const model = await initChatModel(
                 `${providerName}:${modelName}`,
                 apiKey ? { apiKey } : undefined,

@@ -393,10 +393,23 @@ class RPCEngineSingleton {
         }
 
         const timeoutMs = options?.timeoutMs ?? 10000;
+        const startedAt = Date.now();
         let registryEntry: RPCRouteRegistryEntry | null = this.readRouteRegistry()[route] ?? null;
-        if (!registryEntry) {
+        while (!registryEntry) {
             await this.requestRouteRegistrySync();
-            registryEntry = await this.waitForRouteOwnership(route, Math.min(timeoutMs, 1000));
+
+            if (timeoutMs <= 0) {
+                registryEntry = this.readRouteRegistry()[route] ?? null;
+                break;
+            }
+
+            const elapsedMs = Date.now() - startedAt;
+            const remainingMs = timeoutMs - elapsedMs;
+            if (remainingMs <= 0) {
+                break;
+            }
+
+            registryEntry = await this.waitForRouteOwnership(route, Math.min(remainingMs, 1000));
         }
 
         if (!registryEntry) {

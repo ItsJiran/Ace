@@ -14,7 +14,6 @@ import { defineWindow } from '#/lib/define-registry';
 import { SystemAIChatComposer } from '#/packages/system/components/system-ai-chat-composer';
 import { SystemAIChatHeader } from '#/packages/system/components/system-ai-chat-header';
 import { SystemAIChatMessages } from '#/packages/system/components/system-ai-chat-messages';
-import type { AgentThreadEphemeralStep, AgentThreadEphemeralTool } from '#/shared/schemas/ai';
 
 const resizeHandleDefinitions = [
 	{ direction: 'n', className: 'absolute left-3 right-3 top-0 h-2 -translate-y-1/2 cursor-n-resize' },
@@ -74,13 +73,15 @@ function SystemAIChatWindowBody({
 	} = useAIGateway();
 	const {
 		current_thread_uid,
+		current_thread_runtime,
 		ai_status,
 		is_streaming,
 		pending_prompt,
-		ephemeral_messages,
+		ephemeral_streams,
 		createThread,
 		setCurrentThread,
 		sendPrompt,
+		retryLastPrompt,
 		interruptThread,
 		messages,
 		list_threads,
@@ -90,14 +91,6 @@ function SystemAIChatWindowBody({
 	const resolvedModel = selectedModel || ensureSelectedModel();
 	const threadOptions = useMemo(() => Object.keys(list_threads), [list_threads]);
 	const threadCount = useMemo(() => Object.keys(list_threads).length, [list_threads]);
-	const runningToolStreams = useMemo(
-		() => ephemeral_messages.filter((entry): entry is AgentThreadEphemeralTool => entry.type === 'tool'),
-		[ephemeral_messages],
-	);
-	const runningStepStreams = useMemo(
-		() => ephemeral_messages.filter((entry): entry is AgentThreadEphemeralStep => entry.type === 'step'),
-		[ephemeral_messages],
-	);
 
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -171,9 +164,12 @@ function SystemAIChatWindowBody({
 					messages={renderedMessages}
 					isStreaming={is_streaming}
 					pendingPrompt={pending_prompt}
-					runningToolStreams={runningToolStreams}
-					runningStepStreams={runningStepStreams}
+					ephemeralStreams={ephemeral_streams}
+					currentThreadRuntime={current_thread_runtime}
 					currentThreadUid={current_thread_uid}
+					onRetryFailedRun={async () => {
+						await retryLastPrompt(selectedProvider, resolvedModel);
+					}}
 					bottomRef={bottomRef}
 				/>
 			</section>

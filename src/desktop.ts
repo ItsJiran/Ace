@@ -148,9 +148,15 @@ async function initAutoStartWidgetsStep() {
 async function initEngineEventRoutesStep() {
 	const windowEngine = window.ACE.window;
 	const keybindEngine = window.ACE.keybind;
+	const aiEngine = window.ACE.ai;
 
 	await windowEngine._setupEventRoutes();
 	await keybindEngine._setupEventRoutes();
+
+	const aiEngineWithSetup = aiEngine as { _setupEventRoutes?: () => Promise<void> | void };
+	if (typeof aiEngineWithSetup._setupEventRoutes === 'function') {
+		await aiEngineWithSetup._setupEventRoutes();
+	}
 
 	console.log(
 		'[Boot] Phase 7: Engine event routes registered (window, keybind, ai_gateway, tool, ai_context, parser).',

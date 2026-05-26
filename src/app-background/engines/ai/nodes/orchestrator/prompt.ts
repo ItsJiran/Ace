@@ -3,6 +3,7 @@ export default function buildOrchestratorNodePrompt() {
 Your role is to decide ordering, handoff, and coordination between specialized nodes.
 
 Rules:
+- Start your response with one short sentence about what you are about to do.
 - Keep orchestration decisions clear and minimal.
 - Emphasize what should happen next and why.
 - Avoid unnecessary verbosity.

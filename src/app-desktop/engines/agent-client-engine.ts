@@ -7,6 +7,7 @@ import { EventBus } from '#/shared/engines/event-engine';
 import type {
     AgentClientThread,
     AgentThread,
+    AgentThreadRuntimeState,
     AgentThreadSyncPayloadType,
     AgentConfigurableType,
     AIProviderType,
@@ -101,7 +102,7 @@ class AgentClientEngineSingleton extends Engine {
 
         KernelEngine.registerSystemMemory(
             this.thread_runtime_memory_uid,
-            {} as Record<string, { is_waiting_for_backend_run: boolean; last_event?: string }>,
+            {} as Record<string, AgentThreadRuntimeState>,
         );
     }
 
@@ -248,7 +249,7 @@ class AgentClientEngineSingleton extends Engine {
     readThreadRuntimeMapFromMemory() {
         return (
             (KernelEngine.readMemory(this.thread_runtime_memory_uid) as
-                | Record<string, { is_waiting_for_backend_run: boolean; last_event?: string }>
+                | Record<string, AgentThreadRuntimeState>
                 | undefined) ?? {}
         );
     }

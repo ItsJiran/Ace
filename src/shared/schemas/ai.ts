@@ -16,6 +16,11 @@ export const AgentModelModes = {
 export type AgentModelModeType = (typeof AgentModelModes)[keyof typeof AgentModelModes];
 export const WorkflowNodeNames = {
     AGENT: 'agent',
+    REASONING: 'reasoning',
+    ROUTER: 'router',
+    ORCHESTRATOR: 'orchestrator',
+    EXECUTOR: 'executor',
+    OBSERVE: 'observe',
 } as const;
 export type WorkflowNodeType = (typeof WorkflowNodeNames)[keyof typeof WorkflowNodeNames];
 
@@ -75,6 +80,8 @@ export type WorkflowReviewType = z.infer<typeof WorkflowReviewSchema>;
 
 export interface AceAgentWorkflowState {
     messages: BaseMessage[];
+    goal_task?: string;
+    executioner_task?: string;
 }
 
 /**
@@ -138,6 +145,8 @@ export interface AgentConfigType extends RunnableConfig {
 
 export interface AgentWorkflowStateType {
     messages: unknown[];
+    goal_task?: string;
+    executioner_task?: string;
     [key: string]: unknown;
 }
 
@@ -208,6 +217,14 @@ export interface AgentClientThread extends AgentThread {
     ephemeral_messages: AgentThreadEphemeralItem[];
 }
 
+export type AgentThreadRuntimeState = {
+    is_waiting_for_backend_run: boolean;
+    last_event?: string;
+    last_error?: string;
+    active_node?: string;
+    stream_phase?: 'started' | 'streaming' | 'completed' | 'failed';
+};
+
 
 /** 
  * + ------------------ BACKGROUND - CLIENT -------------------------------------------------------------------------------- + 
@@ -259,11 +276,14 @@ export interface AIThreadStreamMessageParamsBase<TData> {
 
 export interface AIThreadLifecycleEventData {
     event: AIThreadLifecycleEventType;
+    raw_payload?: unknown;
+    metadata?: Record<string, unknown>;
     error?: string;
 }
 
 export interface AIThreadMessageStartEventData {
     event: 'message-start';
+    raw_payload?: unknown;
     role: 'ai';
     id: string;
     metadata?: Record<string, unknown>;
@@ -271,6 +291,7 @@ export interface AIThreadMessageStartEventData {
 
 export interface AIThreadContentBlockStartEventData {
     event: 'content-block-start';
+    raw_payload?: unknown;
     index: number;
     content: {
         type: 'text';
@@ -281,6 +302,7 @@ export interface AIThreadContentBlockStartEventData {
 
 export interface AIThreadTokenEventData {
     event: 'token';
+    raw_payload?: unknown;
     role: 'ai';
     id: string;
     text: string;
@@ -289,6 +311,7 @@ export interface AIThreadTokenEventData {
 
 export interface AIThreadContentBlockDeltaEventData {
     event: 'content-block-delta';
+    raw_payload?: unknown;
     index: number;
     delta: {
         type: 'text-delta';
@@ -299,6 +322,7 @@ export interface AIThreadContentBlockDeltaEventData {
 
 export interface AIThreadContentBlockFinishEventData {
     event: 'content-block-finish';
+    raw_payload?: unknown;
     index: number;
     content: {
         type: 'text';
@@ -309,6 +333,7 @@ export interface AIThreadContentBlockFinishEventData {
 
 export interface AIThreadMessageFinishEventData {
     event: 'message-finish';
+    raw_payload?: unknown;
     reason: string;
     id: string;
     metadata?: Record<string, unknown>;
@@ -324,6 +349,7 @@ export type AIThreadMessageEventData =
 
 export interface AIThreadToolEventData {
     event: AIThreadToolEventType;
+    raw_payload?: unknown;
     tool_event_stream_uid: string;
     tool_name: string;
     input: unknown;
@@ -335,6 +361,8 @@ export interface AIThreadToolEventData {
 
 export interface AIThreadStepEventData {
     event: AIThreadStepEventType;
+    raw_payload?: unknown;
+    metadata?: Record<string, unknown>;
     step_uid: string;
     node: string;
     title: string;
