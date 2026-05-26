@@ -1,11 +1,18 @@
 import { KernelEngine } from '#/shared/engines/kernel-engine';
+import { EventBus } from '#/shared/engines/event-engine';
+import {
+    BACKGROUND_CONSOLE_LOG_EVENT_SLUG,
+    type BackgroundConsoleLogPayloadType,
+} from '#/shared/schemas/log';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
+export type LogSource = 'desktop' | 'background';
 export interface LogEntry {
     timestamp: number;
     level: LogLevel;
     message: string;
     id: string;
+    source: LogSource;
 }
 
 const MAX_LOGS = 100;
@@ -23,6 +30,7 @@ class LoggerEngineSingleton {
 
     private isInitialized = false;
     private globalHandlersBound = false;
+    private removeBackgroundLogListener: (() => void) | null = null;
 
     setupKernelSpace() {
         KernelEngine.registerSystemMemory(this.logsMemoryUid, [] as LogEntry[]);
@@ -54,6 +62,7 @@ class LoggerEngineSingleton {
         };
 
         this.bindGlobalHandlers();
+        this.bindBackgroundLogBridge();
 
         this.isInitialized = true;
         
@@ -105,6 +114,26 @@ class LoggerEngineSingleton {
         this.writeToDebugLog(level, message);
     }
 
+    private bindBackgroundLogBridge() {
+        if (this.removeBackgroundLogListener) {
+            return;
+        }
+
+        this.removeBackgroundLogListener = EventBus.listen<BackgroundConsoleLogPayloadType>(
+            BACKGROUND_CONSOLE_LOG_EVENT_SLUG,
+            (event) => {
+                const payload = event?.payload;
+                if (!payload) {
+                    return;
+                }
+
+                const prefixedMessage = `[background] ${payload.message}`;
+                this.addLog(payload.level, prefixedMessage, 'background');
+                this.writeToDebugLog(payload.level, prefixedMessage);
+            },
+        );
+    }
+
     private getPageUrl(): string {
         if (typeof window === 'undefined') return 'unknown://runtime';
         return window.location.href;
@@ -131,12 +160,13 @@ class LoggerEngineSingleton {
         void `[${timestamp}] [${level.toUpperCase()}] ${message}`;
     }
 
-    private addLog(level: LogLevel, message: string) {
+    private addLog(level: LogLevel, message: string, source: LogSource = 'desktop') {
         const entry: LogEntry = {
             timestamp: Date.now(),
             level,
             message,
-            id: Math.random().toString(36).substring(2, 9)
+            id: Math.random().toString(36).substring(2, 9),
+            source,
         };
 
         const raw = KernelEngine.readMemory(this.logsMemoryUid);

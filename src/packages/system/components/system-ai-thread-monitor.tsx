@@ -41,12 +41,15 @@ function resolveThreadEntries() {
 				return null;
 			}
 
+			const persistedMessages =
+				thread.state && Array.isArray(thread.state.messages) ? thread.state.messages : [];
+
 			return {
 				...entry,
 				thread_uid: thread.thread_uid || entry.memory_uid.replace('system:ai_engine:thread:', ''),
 				provider: thread.provider || '-',
 				model: thread.model || '-',
-				message_count: Array.isArray(thread.messages) ? thread.messages.length : 0,
+				message_count: persistedMessages.length,
 				state_key_count:
 					thread.state && typeof thread.state === 'object'
 						? Object.keys(thread.state).length

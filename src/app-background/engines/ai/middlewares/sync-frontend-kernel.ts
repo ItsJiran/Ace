@@ -1,6 +1,7 @@
 import { createMiddleware } from 'langchain';
 import { AgentThreadEngine } from '#/app-background/engines/agent-thread-engine';
 import { AgentConfigType } from '#/shared/schemas/ai.ts';
+import { resolvePersistedAgentState, type AceAgentNodeStateType } from '#/app-background/engines/ai/nodes/agent-state';
 
 /**
  * SyncFrontendKernelMiddleware. This middleware is designed to synchronize the agent's state with the frontend kernel.
@@ -26,10 +27,7 @@ export default createMiddleware({
             checkpoint_id: agentRuntime.configurable?.checkpoint_id,
             model: agentRuntime.configurable?.model,
             provider: agentRuntime.configurable?.provider,
-            messages: Array.isArray((state as { messages?: unknown[] }).messages)
-                ? ((state as { messages?: unknown[] }).messages ?? [])
-                : [],
-            state: state as Record<string, unknown>,
+            state: resolvePersistedAgentState(state as AceAgentNodeStateType),
         });
     },
 });

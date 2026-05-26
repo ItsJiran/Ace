@@ -4,8 +4,8 @@ import { useStream } from '@langchain/react';
 import { AgentClientEngine } from '#/app-desktop/engines/agent-client-engine';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import {
+    type AgentClientThread,
     type AgentConfigurableType,
-    type AgentThread,
     type AIProviderType,
 } from '#/shared/schemas/ai';
 import {
@@ -14,30 +14,6 @@ import {
     submitPromptToThread,
 } from '#/app-desktop/hooks/use-ai-chat-thread.stream';
 import { resolveThreadValues } from '#/app-desktop/hooks/use-ai-chat-thread.utils';
-import { useAIChatThreadEvents } from '#/app-desktop/hooks/use-ai-chat-thread.events';
-
-export type RunningToolStreamItem = {
-    uid: string;
-    toolName: string;
-    input: unknown;
-    startedAt: number;
-};
-
-export type RunningStepStreamItem = {
-    uid: string;
-    node: string;
-    title: string;
-    startedAt: number;
-};
-
-export type WorkflowEventFeedItem = {
-    uid: string;
-    kind: 'step';
-    node: string;
-    title: string;
-    event: 'start' | 'finish';
-    createdAt: number;
-};
 
 export type AIThreadStatus = {
     label: 'idle' | 'orchestrating' | 'delegating' | 'executing';
@@ -55,24 +31,15 @@ export function useAIChatThread() {
         ? AgentClientEngine.thread_memory_uid(current_thread_uid)
         : '__ace_background_thread_empty__';
 
-    const current_thread_from_memory = useAceMemory<AgentThread>(current_thread_memory_uid);
+    const current_thread_from_memory = useAceMemory<AgentClientThread>(current_thread_memory_uid);
 
-    const [current_thread, setCurrentThreadState] = useState<AgentThread | null>(
+    const [current_thread, setCurrentThreadState] = useState<AgentClientThread | null>(
         current_thread_from_memory ?? null,
     );
+    const ephemeral_messages = current_thread?.ephemeral_messages ?? [];
 
 	const pending_prompt = null;
     const [is_submitting_prompt, setIsSubmittingPrompt] = useState(false);
-    const {
-        is_waiting_for_backend_run,
-        markRunRequested,
-        clearStreamState,
-    } = useAIChatThreadEvents({
-        threadUid: current_thread_uid,
-        onThreadSynced: (thread) => {
-            setCurrentThreadState(thread ?? null);
-        },
-    });
 
     /**
      * + ------------------ LIFECYCLE - HOOKS -------------------------------------------------------------------------------- +
@@ -98,7 +65,6 @@ export function useAIChatThread() {
     useEffect(() => {
         if (!current_thread_uid) {
             setCurrentThreadState(null);
-            clearStreamState();
             return;
         }
 
@@ -167,7 +133,6 @@ export function useAIChatThread() {
         }
 
         setIsSubmittingPrompt(true);
-        markRunRequested();
 
         try {
             let threadUid = current_thread_uid;
@@ -184,7 +149,7 @@ export function useAIChatThread() {
             }
 
             const nextPersistedMessages = [
-                ...(Array.isArray(current_thread?.messages) ? current_thread.messages : []),
+                ...(Array.isArray(current_thread?.state?.messages) ? current_thread.state.messages : []),
                 {
                     type: 'human',
                     content: normalizedPrompt,
@@ -194,8 +159,10 @@ export function useAIChatThread() {
             await AgentClientEngine.syncThread(threadUid, {
                 provider: selectedProvider,
                 model: selectedModel,
-                messages: nextPersistedMessages,
-                state: current_thread?.state,
+                state: {
+                    ...(current_thread?.state ?? {}),
+                    messages: nextPersistedMessages,
+                },
                 updated_at: Date.now(),
             });
             setCurrentThreadUidState(threadUid);
@@ -229,6 +196,18 @@ export function useAIChatThread() {
         return baseMessages;
     }, [persisted_messages, stream.messages]);
 
+    const is_waiting_for_backend_run = useMemo(
+        () =>
+            ephemeral_messages.some(
+                (entry) =>
+                    entry.type === 'lifecycle' ||
+                    entry.type === 'messages' ||
+                    entry.type === 'tool' ||
+                    entry.type === 'step',
+            ),
+        [ephemeral_messages],
+    );
+
     const is_streaming = is_waiting_for_backend_run || is_submitting_prompt;
 
     const ai_status = useMemo<AIThreadStatus>(() => {
@@ -251,6 +230,7 @@ export function useAIChatThread() {
         list_threads,
         current_thread_uid,
         current_thread,
+        ephemeral_messages,
         messages,
         ai_status,
         pending_prompt,

@@ -3,132 +3,26 @@ import { Bot, Braces, Database, MessageSquareText, Workflow } from 'lucide-react
 
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
+import {
+	resolveAdditionalKwargs,
+	resolveContentText,
+	resolveMessageKind,
+	resolveResponseMetadata,
+	resolveThreadEnvelope,
+	resolveTokenSummary,
+	resolveToolCalls,
+	resolveUsage,
+	type SerializedAgentMessage,
+} from '#/app-desktop/lib/utils/ai-thread-detail';
 import type { AgentThread } from '#/shared/schemas/ai';
 
 import { MetaGrid, StructuredValueBlock } from './tools/tool-renderer-shared';
 import { SectionShell, SummaryCard } from './system-runtime-monitor-shared';
 
-type SerializedAgentMessage = {
-	lc?: number;
-	type?: string;
-	id?: unknown[];
-	kwargs?: Record<string, unknown>;
-};
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		return null;
-	}
-
-	return value as Record<string, unknown>;
-}
-
-function asArray(value: unknown): unknown[] {
-	return Array.isArray(value) ? value : [];
-}
-
-function resolveThreadEnvelope(memoryUid: string, payload: AgentThread | undefined) {
-	return {
-		key: memoryUid,
-		value: payload,
-	};
-}
-
-function resolveMessageKind(message: SerializedAgentMessage) {
-	const idPath = asArray(message.id);
-	const lastSegment = idPath.at(-1);
-
-	if (typeof lastSegment === 'string' && lastSegment.endsWith('Message')) {
-		return lastSegment.replace(/Message$/, '');
-	}
-
-	return typeof lastSegment === 'string' ? lastSegment : 'Message';
-}
-
-function stringifyUnknown(value: unknown) {
-	if (typeof value === 'string') {
-		return value;
-	}
-
-	if (value == null) {
-		return '';
-	}
-
-	try {
-		return JSON.stringify(value, null, 2);
-	} catch {
-		return String(value);
-	}
-}
-
-function resolveContentText(content: unknown) {
-	if (typeof content === 'string') {
-		return content;
-	}
-
-	if (!Array.isArray(content)) {
-		return stringifyUnknown(content);
-	}
-
-	return content
-		.map((item) => {
-			const record = asRecord(item);
-			if (!record) {
-				return stringifyUnknown(item);
-			}
-
-			if (record.type === 'text' && typeof record.text === 'string') {
-				return record.text;
-			}
-
-			if (record.type === 'tool_call') {
-				return `tool_call: ${String(record.name ?? '-')}`;
-			}
-
-			return stringifyUnknown(item);
-		})
-		.filter(Boolean)
-		.join('\n\n');
-}
-
-function resolveToolCalls(message: SerializedAgentMessage) {
-	return asArray(message.kwargs?.tool_calls);
-}
-
-function resolveUsage(message: SerializedAgentMessage) {
-	return asRecord(message.kwargs?.usage_metadata);
-}
-
-function resolveAdditionalKwargs(message: SerializedAgentMessage) {
-	return asRecord(message.kwargs?.additional_kwargs);
-}
-
-function resolveResponseMetadata(message: SerializedAgentMessage) {
-	return asRecord(message.kwargs?.response_metadata);
-}
-
-function resolveTokenSummary(messages: SerializedAgentMessage[]) {
-	return messages.reduce(
-		(summary, message) => {
-			const usage = resolveUsage(message);
-			return {
-				input_tokens: summary.input_tokens + Number(usage?.input_tokens ?? 0),
-				output_tokens: summary.output_tokens + Number(usage?.output_tokens ?? 0),
-				total_tokens: summary.total_tokens + Number(usage?.total_tokens ?? 0),
-			};
-		},
-		{
-			input_tokens: 0,
-			output_tokens: 0,
-			total_tokens: 0,
-		},
-	);
-}
-
 function MessageCard({ message, index }: { message: SerializedAgentMessage; index: number }) {
 	const { targets } = useAceTheme();
 	const messageKind = resolveMessageKind(message);
-	const kwargs = asRecord(message.kwargs) ?? {};
+	const kwargs = (message.kwargs ?? {}) as Record<string, unknown>;
 	const usage = resolveUsage(message);
 	const toolCalls = resolveToolCalls(message);
 	const contentText = resolveContentText(kwargs.content);
@@ -195,16 +89,10 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 	const { targets } = useAceTheme();
 	const payload = useAceMemory<AgentThread>(memoryUid);
 	const envelope = useMemo(() => resolveThreadEnvelope(memoryUid, payload), [memoryUid, payload]);
-	const threadMessages = Array.isArray(payload?.messages) ? (payload.messages as SerializedAgentMessage[]) : [];
 	const stateMessages = Array.isArray(payload?.state?.messages)
 		? (payload.state.messages as SerializedAgentMessage[])
 		: [];
-	const snapshotMessages = Array.isArray(payload?.snapshot?.messages)
-		? (payload.snapshot.messages as SerializedAgentMessage[])
-		: [];
-	const persistedTokenSummary = useMemo(() => resolveTokenSummary(threadMessages), [threadMessages]);
 	const stateTokenSummary = useMemo(() => resolveTokenSummary(stateMessages), [stateMessages]);
-	const snapshotTokenSummary = useMemo(() => resolveTokenSummary(snapshotMessages), [snapshotMessages]);
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-4 p-4 overflow-auto">
@@ -231,8 +119,8 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 					/>
 					<SummaryCard
 						title="Messages"
-						value={String(threadMessages.length)}
-						description="Top-level persisted message count."
+						value={String(stateMessages.length)}
+						description="Persisted message count from state.messages."
 						icon={MessageSquareText}
 					/>
 					<SummaryCard
@@ -257,25 +145,11 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 						{ label: 'Model', value: payload?.model || '-' },
 						{ label: 'Created At', value: payload?.created_at ? String(payload.created_at) : '-' },
 						{ label: 'Updated At', value: payload?.updated_at ? String(payload.updated_at) : '-' },
-						{ label: 'Persisted Input Tokens', value: persistedTokenSummary.input_tokens ? String(persistedTokenSummary.input_tokens) : '-' },
-						{ label: 'Persisted Output Tokens', value: persistedTokenSummary.output_tokens ? String(persistedTokenSummary.output_tokens) : '-' },
-						{ label: 'Persisted Total Tokens', value: persistedTokenSummary.total_tokens ? String(persistedTokenSummary.total_tokens) : '-' },
+						{ label: 'State Input Tokens', value: stateTokenSummary.input_tokens ? String(stateTokenSummary.input_tokens) : '-' },
+						{ label: 'State Output Tokens', value: stateTokenSummary.output_tokens ? String(stateTokenSummary.output_tokens) : '-' },
 						{ label: 'State Total Tokens', value: stateTokenSummary.total_tokens ? String(stateTokenSummary.total_tokens) : '-' },
-						{ label: 'Snapshot Total Tokens', value: snapshotTokenSummary.total_tokens ? String(snapshotTokenSummary.total_tokens) : '-' },
 					]}
 				/>
-			</SectionShell>
-
-			<SectionShell
-				title="Persisted Messages"
-				description="Messages stored directly on the thread payload."
-				icon={MessageSquareText}
-			>
-				<div className="flex min-h-0 flex-col gap-3 overflow-auto pr-1">
-					{threadMessages.length ? threadMessages.map((message, index) => (
-						<MessageCard key={`${threadUid}-message-${index}`} message={message} index={index} />
-					)) : <div className={[targets.btn.first, 'rounded-2xl px-4 py-3 text-sm text-zinc-500'].join(' ')}>No persisted messages.</div>}
-				</div>
 			</SectionShell>
 
 			<SectionShell
@@ -298,29 +172,6 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 				<StructuredValueBlock value={payload?.state ?? {}} />
 			</SectionShell>
 
-			{snapshotMessages.length ? (
-				<SectionShell
-					title="Snapshot Messages"
-					description="Readonly snapshot copy currently nested under thread.snapshot.messages."
-					icon={Bot}
-				>
-					<div className="flex min-h-0 flex-col gap-3 overflow-auto pr-1">
-						{snapshotMessages.map((message, index) => (
-							<MessageCard key={`${threadUid}-snapshot-${index}`} message={message} index={index} />
-						))}
-					</div>
-				</SectionShell>
-			) : null}
-
-			{payload?.snapshot ? (
-				<SectionShell
-					title="Snapshot Payload"
-					description="Readonly persisted snapshot copy currently attached to the thread object."
-					icon={Bot}
-				>
-					<StructuredValueBlock value={payload.snapshot} />
-				</SectionShell>
-			) : null}
 
 			<SectionShell
 				title="Raw Envelope"

@@ -1,11 +1,12 @@
 import { DeferredWindowContent } from '#/app-desktop/components/layout/deferred-window-content';
 import { SpatialVirtualizer } from '#/app-desktop/components/layout/spatial-virtualizer';
-import { Share2, Power, MessageSquare, Settings2 } from 'lucide-react';
+import { Share2, Power, MessageSquare, Settings2, TerminalSquare } from 'lucide-react';
 import type { DesktopState } from '#/shared/schemas/state.ts';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { RenderCounterBadge } from '#/app-desktop/components/dev/render-counter-badge';
 import { defineComponent } from '#/lib/define-registry';
+import { LoggerEngine } from '#/app-desktop/engines/logger-engine';
 
 function DevMenu({ close }: { close: () => void }) {
     const overlayState = useAceMemory<DesktopState>('system:global_state:desktop');
@@ -84,6 +85,19 @@ function DevMenu({ close }: { close: () => void }) {
         });
     };
 
+    const spawnDevLogConsole = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'dev-log-console-window',
+            title: 'Dev Logs',
+            width: 940,
+            height: 620,
+            x: 440,
+            y: 120,
+            initial_memory_uids: [LoggerEngine.logsMemoryUid],
+        });
+    };
+
     const buttonClass = [
         targets.btn.first,
         'flex items-center justify-start gap-2 w-full px-3 py-2 mb-2 rounded-sm',
@@ -119,6 +133,11 @@ function DevMenu({ close }: { close: () => void }) {
             label: 'Event Bus Monitor',
             icon: <Settings2 size={14} className="text-teal-300" />,
             onClick: spawnSystemEventBusMonitor,
+        },
+        {
+            label: 'Dev Logs',
+            icon: <TerminalSquare size={14} className="text-emerald-300" />,
+            onClick: spawnDevLogConsole,
         },
         {
             label: isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode',

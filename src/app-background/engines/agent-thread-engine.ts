@@ -4,9 +4,9 @@ import { AIProviders } from '#/shared/constants/ai.ts';
 import type {
     AgentConfigurableType,
     AgentInvokeContextType,
-    AgentThreadSnapshotType,
     AgentThread,
     AgentThreadSyncPayloadType,
+    AgentWorkflowStateType,
     AIProviderType,
 } from '#/shared/schemas/ai.ts';
 
@@ -554,7 +554,7 @@ class AgentThreadEngineSingleton extends Engine {
      * Purpose: separate thread creation from prompt execution so consumers can prepare a thread first.
      */
     public createThread(
-        initialState: Partial<AgentThreadSnapshotType> = {
+        initialState: Partial<AgentThread> = {
             model: ConfigEngine.getConfigItem<string>('ai', 'ai.default_model'),
             provider: ConfigEngine.getConfigItem<AIProviderType>('ai', 'ai.default_provider'),
         },
@@ -582,26 +582,25 @@ class AgentThreadEngineSingleton extends Engine {
         const existingThread = KernelEngine.readMemory(memory_uid) as AgentThread | undefined;
         const now = Date.now();
 
-        // Keep the longest known messages array so partial payloads do not accidentally truncate history.
-        const nextSnapshot: AgentThreadSnapshotType = {
+        const existingState = existingThread?.state ?? ({ messages: [] } as AgentWorkflowStateType);
+        const nextState: AgentWorkflowStateType = {
+            ...existingState,
+            ...(payload.state ?? {}),
+            messages: Array.isArray(payload.state?.messages)
+                ? payload.state.messages
+                : Array.isArray(existingState.messages)
+                  ? existingState.messages
+                  : [],
+        };
+
+        const nextThread: AgentThread = {
             thread_uid,
             checkpoint_id: payload.checkpoint_id ?? existingThread?.checkpoint_id,
             model: payload.model ?? existingThread?.model,
             provider: payload.provider ?? existingThread?.provider,
-            messages:
-                Array.isArray(payload.messages) && Array.isArray(existingThread?.messages)
-                    ? payload.messages.length >= existingThread.messages.length
-                        ? payload.messages
-                        : existingThread.messages
-                    : (payload.messages ?? existingThread?.messages ?? []),
-            state: payload.state ?? existingThread?.state ?? {},
+            state: nextState,
             created_at: existingThread?.created_at ?? payload.created_at ?? now,
             updated_at: payload.updated_at ?? now,
-        };
-
-        const nextThread: AgentThread = {
-            ...nextSnapshot,
-            snapshot: payload.snapshot ?? nextSnapshot,
         };
 
         if (existingThread) {

@@ -22,6 +22,12 @@ type MessageStreamEventName =
 
 type StreamEventHandler = (event: AgentStreamEvent) => void;
 
+// Keep protocol sequence monotonic per thread across runs.
+// The desktop stream subscription can stay open for multiple prompts on the same thread,
+// so resetting `seq` on each run can cause later events to be ignored by consumers that
+// expect increasing sequence numbers.
+const threadProtocolSeqByThreadUid = new Map<string, number>();
+
 /**
  * Bridges raw LangGraph stream events into the desktop thread protocol.
  *
@@ -34,7 +40,18 @@ export function createAIStreamEventBridge(input: {
 	emitProtocolThreadEvent: EmitProtocolThreadEvent;
 }) {
 	const { threadUid, runId, emitProtocolThreadEvent } = input;
-	let protocolSeq = 0;
+	let protocolSeq = threadProtocolSeqByThreadUid.get(threadUid) ?? 0;
+	const nextSeq = () => {
+		// `seq` is the ordering cursor for one thread's protocol stream.
+		// Goal:
+		// 1) Preserve strict event order for UI consumers.
+		// 2) Keep ordering stable across multiple runs in the same thread session.
+		// 3) Help clients detect stale/out-of-order packets when retries or buffering happen.
+		protocolSeq += 1;
+		threadProtocolSeqByThreadUid.set(threadUid, protocolSeq);
+		return protocolSeq;
+	};
+
 	let activeAssistantMessageId: string | null = null;
 	let activeAssistantText = '';
 	let hasStartedAssistantBlock = false;
@@ -43,20 +60,21 @@ export function createAIStreamEventBridge(input: {
 		// All emitted protocol events leave background through `emitProtocolThreadEvent`, then land in
 		// the desktop `EventBus.listen(AI_THREAD_STREAM_EVENT_SLUG, ...)` listeners.
 		// From there:
-		// - `LIFECYCLE` is consumed by `use-ai-chat-thread.events.ts` for run-state syncing.
+		// - `LIFECYCLE`, `MESSAGES`, `TOOL`, and `STEP` are handled centrally by `AgentClientEngine`
+		//   to update thread kernel memory and dedupe protocol packets.
 		// - `MESSAGES`, `TOOL`, and `STEP` are queued by `use-ai-chat-thread.stream.ts` for the
 		//   LangGraph client transport used by the chat UI.
 		emitProtocolThreadEvent(threadUid, message);
 	};
 
-	const nextSeq = () => ++protocolSeq;
+	
 	const toolEvents = createToolEventController({ threadUid, runId, nextSeq, emit });
 	const workflowSteps = createWorkflowStepController({ threadUid, runId, nextSeq, emit });
 
 	const emitLifecycle = (event: LifecycleEvent, error?: string) => {
 		const seq = nextSeq();
 		// Lifecycle events are the lightweight control channel. On the client they are handled by
-		// `use-ai-chat-thread.events.ts` to toggle waiting state and trigger thread resync on finish/fail.
+		// `AgentClientEngine` to toggle waiting state in kernel memory and trigger thread resync on finish/fail.
 		emit({
 			type: 'event',
 			event_id: `${threadUid}:${runId}:${seq}`,
@@ -290,13 +308,21 @@ export function createAIStreamEventBridge(input: {
 	};
 
 	const streamEventHandlers: Partial<Record<KnownAgentStreamEventName, StreamEventHandler>> = {
+		// Chat model events are the core of the assistant message stream, so we handle them directly 
+		// in this bridge to keep the message flow stable and responsive.
 		[AgentStreamEventNames.CHAT_MODEL_START]: handleChatModelStart,
 		[AgentStreamEventNames.CHAT_MODEL_STREAM]: handleChatModelStream,
 		[AgentStreamEventNames.CHAT_MODEL_END]: handleChatModelEnd,
+
+		// Tool events are emitted for all nodes with tool calls, but the payload is currently only 
+		// shaped for protocol-level tools.
 		[AgentStreamEventNames.TOOL_START]: handleToolStart,
 		[AgentStreamEventNames.TOOL_STREAM]: handleToolStream,
 		[AgentStreamEventNames.TOOL_END]: handleToolEnd,
 		[AgentStreamEventNames.TOOL_ERROR]: handleToolError,
+
+		// We currently emit chain events for all nodes, but only treat nodes with known workflow step names as steps in the frontend protocol. 
+		// This allows flexibility in how we model agent execution while keeping the client-side step surface stable.
 		[AgentStreamEventNames.CHAIN_START]: handleChainStart,
 		[AgentStreamEventNames.CHAIN_END]: handleChainEnd,
 		[AgentStreamEventNames.CHAIN_ERROR]: handleChainError,
@@ -309,12 +335,12 @@ export function createAIStreamEventBridge(input: {
 		},
 		complete() {
 			finishAssistantMessage();
-			workflowSteps.finishAll();
+			// workflowSteps.finishAll();
 			emitLifecycle('completed');
 		},
 		fail(error: unknown) {
 			finishAssistantMessage();
-			workflowSteps.finishAll();
+			// workflowSteps.finishAll();
 			emitLifecycle('failed', error instanceof Error ? error.message : String(error));
 		},
 		process(event: unknown) {

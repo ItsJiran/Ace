@@ -136,6 +136,11 @@ export interface AgentConfigType extends RunnableConfig {
     context?: AgentInvokeContextType;
 }
 
+export interface AgentWorkflowStateType {
+    messages: unknown[];
+    [key: string]: unknown;
+}
+
 
 /**
  * This is what we will stored in our kernel space in the frontend side for each agent thread. It contains all the necessary 
@@ -145,26 +150,63 @@ export interface AgentConfigType extends RunnableConfig {
  * messages, and state.
  */
 
-export interface AgentThreadSnapshotType {
+export interface AgentThread {
     thread_uid: string;
     checkpoint_id?: string;
     model?: string;
     provider?: AIProviderType;
-    messages: unknown[];
-    state: Record<string, unknown>;
+    state: AgentWorkflowStateType;
     created_at: number;
     updated_at: number;
 }
 
-export interface AgentThread extends AgentThreadSnapshotType {
-    /** Snapshot of the latest persisted thread state for consumers that only need a readonly copy. */
-    snapshot?: AgentThreadSnapshotType;
+export type AgentThreadSyncPayloadType = {
+    thread_uid?: string;
+    checkpoint_id?: string;
+    model?: string;
+    provider?: AIProviderType;
+    state?: Partial<AgentWorkflowStateType>;
+    created_at?: number;
+    updated_at?: number;
+};
+
+export type AgentThreadEphemeralKind = 'messages' | 'tool' | 'step' | 'lifecycle';
+
+export interface AgentThreadEphemeralBase {
+    uid: string;
+    type: AgentThreadEphemeralKind;
+    event: string;
+    node?: string;
+    content: Record<string, unknown>;
+    created_at: number;
+    updated_at: number;
 }
 
+export interface AgentThreadEphemeralMessage extends AgentThreadEphemeralBase {
+    type: 'messages';
+}
 
-export type AgentThreadSyncPayloadType = Partial<AgentThreadSnapshotType> & {
-    snapshot?: AgentThreadSnapshotType;
-};
+export interface AgentThreadEphemeralTool extends AgentThreadEphemeralBase {
+    type: 'tool';
+}
+
+export interface AgentThreadEphemeralStep extends AgentThreadEphemeralBase {
+    type: 'step';
+}
+
+export interface AgentThreadEphemeralLifecycle extends AgentThreadEphemeralBase {
+    type: 'lifecycle';
+}
+
+export type AgentThreadEphemeralItem =
+    | AgentThreadEphemeralMessage
+    | AgentThreadEphemeralTool
+    | AgentThreadEphemeralStep
+    | AgentThreadEphemeralLifecycle;
+
+export interface AgentClientThread extends AgentThread {
+    ephemeral_messages: AgentThreadEphemeralItem[];
+}
 
 
 /** 

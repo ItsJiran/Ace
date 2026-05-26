@@ -4,6 +4,7 @@ import { KernelEngine } from './shared/engines/kernel-engine';
 import { RegistryEngine } from './shared/engines/registry-engine';
 import { RPCEngine } from './shared/engines/rpc-engine';
 import { AgentThreadEngine } from './app-background/engines/agent-thread-engine';
+import { BackgroundLogRelayEngine } from './app-background/engines/background-log-relay-engine';
 
 let backgroundBootPromise: Promise<void> | null = null;
 
@@ -46,6 +47,7 @@ export async function bootBackgroundRuntime() {
 		RPCEngine.setupKernelSpace();
 		RPCEngine.setupRuntimeBridge();
 		await EventBus.setupRuntimeBridge();
+		BackgroundLogRelayEngine.init();
 		ConfigEngine.setupKernelSpace();
 		AgentThreadEngine.setupKernelSpace();
 

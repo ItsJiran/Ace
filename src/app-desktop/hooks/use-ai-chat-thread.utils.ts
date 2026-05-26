@@ -1,6 +1,6 @@
 import { BaseMessage, HumanMessage, coerceMessageLikeToMessage } from '@langchain/core/messages';
 import type { BaseMessageLike } from '@langchain/core/messages';
-import type { AgentThread } from '#/shared/schemas/ai';
+import type { AgentClientThread, AgentThread } from '#/shared/schemas/ai';
 
 export function resolveStoredMessageType(input: Record<string, unknown>): string | null {
 	const directType = typeof input.type === 'string' ? input.type : null;
@@ -78,13 +78,16 @@ export function rehydrateThreadMessages(messages: unknown[]): BaseMessage[] {
 	return messages.map((message) => coerceStoredMessage(message));
 }
 
-export function resolveThreadValues(thread: AgentThread | undefined) {
+export function resolveThreadValues(thread: AgentThread | AgentClientThread | undefined) {
 	if (!thread) {
 		return { messages: [] as BaseMessage[] };
 	}
 
-	const hydratedMessages = Array.isArray(thread.messages)
-		? rehydrateThreadMessages(thread.messages)
+	const persistedMessages =
+		thread.state && Array.isArray(thread.state.messages) ? thread.state.messages : [];
+
+	const hydratedMessages = Array.isArray(persistedMessages)
+		? rehydrateThreadMessages(persistedMessages)
 		: [];
 
 	return {
@@ -93,7 +96,7 @@ export function resolveThreadValues(thread: AgentThread | undefined) {
 	};
 }
 
-export function resolveThreadStateSnapshot(thread: AgentThread | undefined) {
+export function resolveThreadStateSnapshot(thread: AgentThread | AgentClientThread | undefined) {
 	if (!thread) {
 		return null;
 	}

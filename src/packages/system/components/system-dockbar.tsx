@@ -6,9 +6,11 @@ import {
     Cpu,
     MemoryStick,
     MessageSquareText,
+    Moon,
     Power,
     RadioTower,
     Settings2,
+    Sun,
 } from 'lucide-react';
 
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
@@ -144,7 +146,7 @@ function SystemDockbar({
 }: {
     dragHandleProps: AceWindowRenderProps['dragHandleProps'];
 }) {
-    const { targets } = useAceTheme();
+    const { targets, currentTheme } = useAceTheme();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const windowSystem = useAceMemory<Map<string, WindowSystemEntry>>('system:window_system');
     const focusedWindowUid = useAceMemory<string | null>('system:global_state:focused_window');
@@ -170,10 +172,20 @@ function SystemDockbar({
         });
     };
 
+    const toggleTheme = () => {
+        const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        void window.ACE.config.updateConfigItem('general', 'core.theme', nextTheme);
+    };
+
     return (
         <>
             {isMenuOpen ? (
-                <div className={[targets.shell.first, 'absolute bottom-[calc(100%+12px)] left-0 z-20 min-w-[240px] overflow-hidden rounded-[22px] px-3 py-3 overflow-hidden'].join(' ')}>
+                <div
+                    className={[
+                        targets.shell.first,
+                        'absolute bottom-[calc(100%+12px)] left-0 z-20 min-w-[240px] overflow-hidden rounded-[22px] px-3 py-3 overflow-hidden',
+                    ].join(' ')}
+                >
                     <div className="flex flex-col gap-3">
                         {menuItems.map((item) => {
                             const Icon = item.icon;
@@ -186,7 +198,10 @@ function SystemDockbar({
                                         setIsMenuOpen(false);
                                     }}
                                     onPointerDown={(event) => event.stopPropagation()}
-                                    className={[targets.btn.first, 'flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm transition hover:bg-white/[0.08] hover:text-white'].join(' ')}
+                                    className={[
+                                        targets.btn.first,
+                                        'flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm transition hover:bg-white/[0.08] hover:text-white',
+                                    ].join(' ')}
                                 >
                                     <Icon size={16} className="text-zinc-500" />
                                     <span className="text-zinc-500">{item.label}</span>
@@ -198,7 +213,10 @@ function SystemDockbar({
             ) : null}
             <div
                 {...dragHandleProps}
-                className={[targets.shell.first, 'relative flex h-fit min-w-[150px] w-fit items-center gap-3 overflow-hidden rounded-[24px] px-4 py-4'].join(' ')}
+                className={[
+                    targets.shell.first,
+                    'relative flex h-fit min-w-[150px] w-fit items-center gap-3 overflow-hidden rounded-[24px] px-4 py-4',
+                ].join(' ')}
             >
                 <div className="flex shrink-0 items-center gap-2 ">
                     <button
@@ -236,7 +254,12 @@ function SystemDockbar({
                 <div className="min-w-0 flex-1 ">
                     <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         {windows.length === 0 ? (
-                            <div className={[targets.btn.first, 'rounded-2xl px-4 py-2 text-sm text-zinc-500'].join(' ')}>
+                            <div
+                                className={[
+                                    targets.btn.first,
+                                    'rounded-2xl px-4 py-2 text-sm text-zinc-500',
+                                ].join(' ')}
+                            >
                                 No active windows yet
                             </div>
                         ) : null}
@@ -256,9 +279,7 @@ function SystemDockbar({
                                 onPointerDown={(event) => event.stopPropagation()}
                                 className={[
                                     'group min-w-0 shrink-0 rounded-2xl border px-4 py-2 text-left transition',
-                                    entry.isFocused
-                                        ? targets.btn.first
-                                        : targets.btn.secondary,
+                                    entry.isFocused ? targets.btn.first : targets.btn.secondary,
                                 ].join(' ')}
                                 title={entry.component}
                             >
@@ -269,16 +290,40 @@ function SystemDockbar({
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <div className={[targets.btn.sixth, 'hidden px-2 text-zinc-400 md:flex md:items-center md:gap-2'].join(' ')}>
+                    <div
+                        className={[
+                            targets.btn.sixth,
+                            'hidden px-2 text-zinc-400 md:flex md:items-center md:gap-2',
+                        ].join(' ')}
+                    >
                         <Activity size={14} className="text-emerald-300" />
-                        <span>{windows.length} windows</span>
+                        <span>
+                            {windows.length} windows
+                        </span>
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={toggleTheme}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        className={[
+                            targets.btn.secondary,
+                            'inline-flex h-10 w-10 items-center justify-center rounded-2xl',
+                        ].join(' ')}
+                        aria-label="Toggle theme"
+                        title={`Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} mode`}
+                    >
+                        {currentTheme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                    </button>
 
                     <button
                         type="button"
                         onClick={() => void window.electronAPI?.quitApp()}
                         onPointerDown={(event) => event.stopPropagation()}
-                        className={[targets.btn.fourth, 'inline-flex h-11 w-11 items-center justify-center'].join(' ')}
+                        className={[
+                            targets.btn.fourth,
+                            'inline-flex h-11 w-11 items-center justify-center',
+                        ].join(' ')}
                         aria-label="Shutdown ACE"
                         title="Shutdown ACE"
                     >

@@ -1,7 +1,12 @@
 import type { BaseMessage } from '@langchain/core/messages';
 import { Annotation } from '@langchain/langgraph';
+import type { AgentWorkflowStateType } from '#/shared/schemas/ai';
 
 const MAX_SHORT_TERM_MESSAGES = 8;
+
+export type AceAgentNodeStateType = {
+	messages: BaseMessage[];
+};
 
 export const AceAgentState = Annotation.Root({
 	messages: Annotation<BaseMessage[]>({
@@ -31,4 +36,11 @@ export function resolveWorkflowMessagesUpdate(
 	}
 
 	return trimWorkflowMessages(nextMessages);
+}
+
+export function resolvePersistedAgentState(state: AceAgentNodeStateType): AgentWorkflowStateType {
+	return {
+		...state,
+		messages: Array.isArray(state.messages) ? state.messages : [],
+	};
 }

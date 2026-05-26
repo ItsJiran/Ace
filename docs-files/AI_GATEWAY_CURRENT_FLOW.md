@@ -1,115 +1,105 @@
 # AI Runtime Flow (Current)
 
-This document describes the current local AI runtime flow after simplifying the workflow and stream architecture.
+This document reflects the current desktop and background integration after moving stream handling to a centralized desktop engine path.
 
 ## Goal
 
-The current design prioritizes readability and clear ownership:
+The runtime now prioritizes centralized ownership and deterministic state updates:
 
-- One background workflow node only (`agent`).
-- Workflow state is messages-first (`messages` as primary state payload).
-- Stream events are focused on:
-  - `lifecycle`
-  - `messages`
-- Step/tool timeline tracking is intentionally removed from chat state handling.
+- Background emits canonical stream protocol events.
+- Desktop consumes stream events exactly once in AgentClientEngine.
+- AgentClientEngine updates Kernel memory as the single client-side state source.
+- React hooks read memory only and avoid stream side effects.
 
 ## Runtime Ownership
 
-### Background (`src/app-background`)
+### Background (src/app-background)
 
 Primary owner for:
 
-- Thread execution lifecycle (`start`, `complete`, `fail`)
-- Agent invocation
-- Streaming protocol emission
-- Thread snapshot persistence (`messages`, `state`, metadata)
+- Agent run lifecycle and execution.
+- Stream protocol emission (lifecycle, messages, tool, step).
+- Persisted thread state and checkpoint snapshots.
 
 Key files:
 
-- `src/app-background/engines/agent-thread-engine.ts`
-- `src/app-background/engines/ai/agent-instance.ts`
-- `src/app-background/engines/ai/ai-stream-events.ts`
-- `src/app-background/engines/ai/nodes/workflow.ts`
-- `src/app-background/engines/ai/nodes/simple-agent/index.ts`
+- src/app-background/engines/agent-thread-engine.ts
+- src/app-background/engines/ai/agent-instance.ts
+- src/app-background/engines/ai/ai-stream-events.ts
 
-### Desktop (`src/app-desktop`)
+### Desktop (src/app-desktop)
 
 Primary owner for:
 
-- Thread selection and thread CRUD orchestration
-- Prompt dispatch
-- Local stream consumption for UI
-- Mirroring thread snapshots from background memory
+- Thread CRUD and prompt orchestration.
+- Background stream ingestion and dedupe.
+- Client-only ephemeral state updates in thread memory.
+- Mirroring persisted thread snapshots from background.
 
 Key files:
 
-- `src/app-desktop/engines/agent-client-engine.ts`
-- `src/app-desktop/hooks/use-ai-chat-thread.ts`
-- `src/app-desktop/hooks/use-ai-chat-thread.events.ts`
-- `src/app-desktop/hooks/use-ai-chat-thread.stream.ts`
+- src/app-desktop/engines/agent-client-engine.ts
+- src/app-desktop/hooks/use-ai-chat-thread.ts
+- src/app-desktop/hooks/use-ai-chat-thread.stream.ts
 
-## Hook Responsibilities
+## Centralized Stream Handling
 
-### `use-ai-chat-thread.ts`
+AgentClientEngine now owns the stream processing pipeline:
 
-Focuses on:
+1. setupEventRoutes installs one EventBus listener for system:ai:thread:stream.
+2. handleBackgroundThreadStreamPayload parses protocol packets.
+3. Dedupe gate validates event_id + seq per thread_uid.
+4. Method-specific handlers mutate Kernel memory:
+   - handleLifecycleEvent
+   - handleMessageEvent
+   - handleToolEvent
+   - handleStepEvent
 
-- Active thread selection
-- Thread create/select/sync
-- Prompt submission
-- Merging persisted messages with streamed messages
-
-It delegates stream event handling to the dedicated events hook.
-
-### `use-ai-chat-thread.events.ts`
-
-Focuses on stream event state by `thread_uid`:
-
-- Tracks `is_waiting_for_backend_run` from lifecycle events
-- Triggers thread resync after completion/failure
-
-This keeps event parsing logic separate from thread selection logic.
-
-## Background Stream Event Flow
-
-`createAIStreamEventBridge(...)` now emits:
-
-1. Lifecycle events
-   - started
-   - completed
-   - failed
-2. Message stream events
-   - message/content block start
-   - text delta chunks
-   - message/content block finish
-
-Step/tool timeline emissions are not used in the current chat state flow.
+This ensures two UI surfaces listening to the same thread do not duplicate state transitions.
 
 ## Request Flow
 
-1. UI calls `sendPrompt(...)` from `use-ai-chat-thread.ts`.
-2. Desktop ensures active thread exists and persists user prompt to thread memory.
-3. Desktop invokes background `ai.startThreadPrompt`.
-4. Background starts managed run and invokes the single-node graph.
-5. Background stream bridge emits `lifecycle + messages` events.
-6. Desktop stream adapter forwards messages to `useStream`.
-7. `use-ai-chat-thread.events.ts` handles lifecycle updates and resyncs thread snapshot when done.
+1. UI calls sendPrompt from use-ai-chat-thread.
+2. AgentClientEngine syncs prompt payload to background and starts run.
+3. Background emits stream protocol events.
+4. AgentClientEngine receives and dedupes events.
+5. AgentClientEngine writes:
+   - thread_runtime memory (waiting status)
+   - thread ephemeral_messages (client-only live buckets)
+   - persisted thread snapshot resync on terminal lifecycle events
+6. React hooks re-render from Kernel memory only.
 
-## State Shape
+## Memory Model
 
-Thread snapshot remains:
+### Persisted thread memory
 
-- `thread_uid`
-- `provider`
-- `model`
-- `messages`
-- `state`
+Each thread snapshot includes:
+
+- thread_uid
+- provider
+- model
+- state.messages
 - timestamps
 
-Active workflow state is intentionally minimal and message-driven.
+### Client-only ephemeral memory
+
+Within AgentClientThread:
+
+- ephemeral_messages: live message/tool/step/lifecycle buckets
+
+Ephemeral buckets are owned by desktop runtime logic and are not persisted back to background thread storage.
+
+### Runtime status memory
+
+AgentClientEngine also maintains thread runtime flags in:
+
+- system:ai_engine:thread:runtime
+
+Used for waiting/last-event state without coupling UI to stream packet internals.
 
 ## Why This Shape
 
-- Easier to read and iterate
-- Lower coupling between thread control and stream event parsing
-- Cleaner runtime contract with a minimal event surface
+- Prevents duplicate stream side effects from multiple hooks.
+- Keeps state transitions centralized and easier to reason about.
+- Makes React layer simpler: read memory, render UI.
+- Preserves deterministic ordering through seq-based dedupe.
