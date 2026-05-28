@@ -1,10 +1,10 @@
 import type {
-	AgentThreadEphemeralItem,
-	AgentThreadEphemeralLifecycle,
-	AgentThreadEphemeralMessage,
-	AgentThreadEphemeralStep,
-	AgentThreadEphemeralTool,
-	AgentThreadRuntimeState,
+	AgentClientThreadEphemeralItem,
+	AgentClientThreadEphemeralLifecycle,
+	AgentClientThreadEphemeralMessage,
+	AgentClientThreadEphemeralStep,
+	AgentClientThreadEphemeralTool,
+	AgentClientThreadRuntimeState,
 } from '#/shared/schemas/ai';
 import {
 	resolveLifecycleLabel,
@@ -17,21 +17,21 @@ import {
 } from './system-ai-chat-messages.utils';
 
 type SystemAIChatMessagesEphemeralProps = {
-	ephemeralStreams: AgentThreadEphemeralItem[];
-	currentThreadRuntime?: AgentThreadRuntimeState;
+	ephemeralStreams: AgentClientThreadEphemeralItem[];
+	currentThreadRuntime?: AgentClientThreadRuntimeState;
 	currentThreadUid: string | null;
 	onRetryFailedRun?: () => void | Promise<void>;
 	targets: Record<string, Record<string, string>>;
 };
 
 function renderEphemeralStream(
-	item: AgentThreadEphemeralItem,
+	item: AgentClientThreadEphemeralItem,
 	targets: Record<string, Record<string, string>>,
 ) {
 	if (item.type === 'lifecycle') {
 		return (
 			<div key={`${item.type}:${item.uid}:${item.updated_at}`} className={[targets.container.first, 'rounded-2xl px-3 py-2 text-xs text-zinc-400'].join(' ')}>
-				<span className="font-medium text-zinc-300">{resolveLifecycleLabel(item as AgentThreadEphemeralLifecycle)}</span>
+				<span className="font-medium text-zinc-300">{resolveLifecycleLabel(item as AgentClientThreadEphemeralLifecycle)}</span>
 			</div>
 		);
 	}
@@ -39,13 +39,13 @@ function renderEphemeralStream(
 	if (item.type === 'messages') {
 		return (
 			<div key={`${item.type}:${item.uid}:${item.updated_at}`} className={[targets.container.first, 'rounded-2xl px-3 py-3'].join(' ')}>
-				<div className="text-xs text-zinc-400">{resolveMessageLiveText(item as AgentThreadEphemeralMessage)}</div>
+				<div className="text-xs text-zinc-400">{resolveMessageLiveText(item as AgentClientThreadEphemeralMessage)}</div>
 			</div>
 		);
 	}
 
 	if (item.type === 'step') {
-		const stepItem = item as AgentThreadEphemeralStep;
+		const stepItem = item as AgentClientThreadEphemeralStep;
 		return (
 			<div key={`${item.type}:${item.uid}:${item.updated_at}`} className={[targets.container.first, 'rounded-2xl animate-pulse px-3 py-3'].join(' ')}>
 				<div className="flex items-center gap-2 text-xs">
@@ -57,7 +57,7 @@ function renderEphemeralStream(
 		);
 	}
 
-	const toolItem = item as AgentThreadEphemeralTool;
+	const toolItem = item as AgentClientThreadEphemeralTool;
 	return (
 		<div key={`${item.type}:${item.uid}:${item.updated_at}`} className={[targets.container.first, 'rounded-2xl animate-pulse px-3 py-3'].join(' ')}>
 			<div className="flex items-center gap-2 text-xs">
@@ -91,7 +91,7 @@ export function SystemAIChatMessagesEphemeral({
 				item.type === 'lifecycle' &&
 				(((item.content as Record<string, unknown>).event as string | undefined) === 'failed' ||
 					item.event === 'failed'),
-		) as AgentThreadEphemeralLifecycle | undefined;
+		) as AgentClientThreadEphemeralLifecycle | undefined;
 	const failedErrorText =
 		typeof failedLifecycle?.content.error === 'string'
 			? failedLifecycle.content.error

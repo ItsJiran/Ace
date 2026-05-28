@@ -76,7 +76,6 @@ function SystemAIChatWindowBody({
 		current_thread_runtime,
 		ai_status,
 		is_streaming,
-		pending_prompt,
 		ephemeral_streams,
 		createThread,
 		setCurrentThread,
@@ -163,7 +162,6 @@ function SystemAIChatWindowBody({
 				<SystemAIChatMessages
 					messages={renderedMessages}
 					isStreaming={is_streaming}
-					pendingPrompt={pending_prompt}
 					ephemeralStreams={ephemeral_streams}
 					currentThreadRuntime={current_thread_runtime}
 					currentThreadUid={current_thread_uid}

@@ -1,4 +1,3 @@
-import { AIThreadStreamMethods } from '#/shared/schemas/ai';
 import { extractAgentStreamEvent, type EmitProtocolThreadEvent } from './stream';
 
 // For tracking incoming buffer to send to the frontend in correct order, since LangGraph stream events can arrive out of
@@ -51,59 +50,3 @@ export function createAIStreamEventBridge(input: {
     };
 }
 
-
-
-
-    // const emitLifecycle = (event: LifecycleEvent, error?: string, rawPayload?: unknown) => {
-    //     const seq = nextSeq();
-    //     // Lifecycle events are the lightweight control channel. On the client they are handled by
-    //     // `AgentClientEngine` to toggle waiting state in kernel memory and trigger thread resync on finish/fail.
-    //     emit({
-    //         type: 'event',
-    //         event_id: `${threadUid}:${seq}`,
-    //         seq,
-    //         method: AIThreadStreamMethods.LIFECYCLE,
-    //         params: {
-    //             namespace: [],
-    //             timestamp: Date.now(),
-    //             data: {
-    //                 event,
-    //                 raw_payload: rawPayload,
-    //                 ...(error ? { error } : {}),
-    //             },
-    //         },
-    //     });
-    // };
-
-    // return {
-    // start() {
-    //     console.info('[AIStreamBridge] lifecycle start', {
-    //         threadUid,
-    //     });
-    //     // Thread lifecycle starts before the first agent event so UI can switch into streaming mode immediately.
-    //     emitLifecycle('started', undefined, { type: 'lifecycle', event: 'started' });
-    // },
-
-    // complete() {
-    //     console.info('[AIStreamBridge] lifecycle complete', {
-    //         threadUid,
-    //     });
-    //     emitLifecycle('completed', undefined, { type: 'lifecycle', event: 'completed' });
-    // },
-
-    // fail(error: unknown) {
-    //     console.error('[AIStreamBridge] lifecycle fail', {
-    //         threadUid,
-    //         error: error instanceof Error ? error.message : String(error),
-    //     });
-    //     emitLifecycle('failed', error instanceof Error ? error.message : String(error), {
-    //         type: 'lifecycle',
-    //         event: 'failed',
-    //         error: error instanceof Error ? error.message : String(error),
-    //     });
-    // },
-
-    // Temporary any due to i not find the right type for stream, but the implementation is straightforward
-    // once we have the correct type.
-    // process: async (stream: any) => {},
-    // };

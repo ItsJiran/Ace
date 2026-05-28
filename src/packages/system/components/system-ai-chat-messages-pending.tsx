@@ -1,13 +1,11 @@
 type SystemAIChatMessagesPendingProps = {
 	isStreaming: boolean;
-	pendingPrompt: string | null;
 	ephemeralStreamCount: number;
 	targets: Record<string, Record<string, string>>;
 };
 
 export function SystemAIChatMessagesPending({
 	isStreaming,
-	pendingPrompt,
 	ephemeralStreamCount,
 	targets,
 }: SystemAIChatMessagesPendingProps) {
@@ -27,7 +25,7 @@ export function SystemAIChatMessagesPending({
 						</div>
 						<div className={[targets.container.first, 'flex items-center gap-2 rounded-2xl animate-pulse px-3 py-2 text-xs'].join(' ')}>
 							<span className={[targets.container.second, 'inline-flex h-2.5 w-2.5'].join(' ')} />
-							<span>{pendingPrompt ? `Sending: ${pendingPrompt}` : 'Sending prompt...'}</span>
+							<span>Sending prompt...</span>
 						</div>
 					</div>
 				</div>

@@ -5,14 +5,15 @@ import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { EventBus } from '#/shared/engines/event-engine';
 import type {
-    AgentClientThread,
     AgentThread,
-    AgentThreadRuntimeState,
-    AgentThreadSyncPayloadType,
+    AgentInterProcessSyncPayloadType,
     AgentConfigurableType,
     AIProviderType,
     BackgroundAIStreamEventPayloadType,
 } from '#/shared/schemas/ai';
+
+import { AgentClientThread, AgentClientThreadRuntimeState } from '#/shared/schemas/ai-client';
+
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai';
 import { AgentThreadStreamHandlers } from './agent/agent-thread-stream-handlers';
 import resolveAgentInvokeContext from './ai/resolve-agent-context';
@@ -33,7 +34,7 @@ type BackgroundThreadListPayloadType = {
 // Responsibilities:
 // 1) Mirror persisted threads from background RPC into Kernel memory.
 // 2) Consume background stream protocol events once (centralized listener).
-// 3) Maintain client-only ephemeral_messages in thread memory for live UI status.
+// 3) Maintain client-only ephemeral_items in thread memory for live UI status.
 // 4) Enforce dedupe/order for stream packets (event_id + seq) to prevent duplicate UI updates.
 //
 // Agentic flow in this engine:
@@ -51,6 +52,7 @@ class AgentClientEngineSingleton extends Engine {
         `system:ai_engine:thread:${thread_uid}`;
 
     private removeBackgroundAIThreadListener: (() => void) | null = null;
+
     private streamHandlers = new AgentThreadStreamHandlers({
         readThread: (threadUid) => this.readThreadFromMemory(threadUid),
         writeThread: (threadUid, thread) => {
@@ -84,6 +86,7 @@ class AgentClientEngineSingleton extends Engine {
             AI_THREAD_STREAM_EVENT_SLUG,
             (event) => {
                 const payload = event?.payload;
+
                 if (!payload) {
                     return;
                 }
@@ -102,7 +105,7 @@ class AgentClientEngineSingleton extends Engine {
 
         KernelEngine.registerSystemMemory(
             this.thread_runtime_memory_uid,
-            {} as Record<string, AgentThreadRuntimeState>,
+            {} as Record<string, AgentClientThreadRuntimeState>,
         );
     }
 
@@ -112,8 +115,6 @@ class AgentClientEngineSingleton extends Engine {
             this.removeBackgroundAIThreadListener();
             this.removeBackgroundAIThreadListener = null;
         }
-
-        this.streamHandlers.clearAllCaches();
     }
 
     // + --------------- THREADS API METHODS --------------- +
@@ -165,7 +166,7 @@ class AgentClientEngineSingleton extends Engine {
     }
 
     // Persists thread updates to background then rehydrates local memory.
-    async syncThread(threadUid: string, payload: AgentThreadSyncPayloadType = {}) {
+    async syncThread(threadUid: string, payload: AgentInterProcessSyncPayloadType = {}) {
         const memoryUid = ((await RPCEngine.invoke('ai.syncThread', {
             thread_uid: threadUid,
             thread: payload as Record<string, unknown>,
@@ -182,14 +183,18 @@ class AgentClientEngineSingleton extends Engine {
         prompt: string,
         overrides: Partial<AgentConfigurableType> = {},
     ) {
-        const thread = ((await RPCEngine.invoke('ai.startThreadPrompt', {
-            thread_uid: threadUid,
-            prompt,
-            overrides,
-            context: await resolveAgentInvokeContext(),
-        }, {
-            timeoutMs: 0,
-        })) ?? null) as AgentClientThread | null;
+        const thread = ((await RPCEngine.invoke(
+            'ai.startThreadPrompt',
+            {
+                thread_uid: threadUid,
+                prompt,
+                overrides,
+                context: await resolveAgentInvokeContext(),
+            },
+            {
+                timeoutMs: 0,
+            },
+        )) ?? null) as AgentClientThread | null;
 
         if (thread) {
             return await this.syncCurrentThreadFromBackground(threadUid);
@@ -218,7 +223,6 @@ class AgentClientEngineSingleton extends Engine {
         const nextIndex = { ...this.readThreadIndexFromMemory() };
         delete nextIndex[threadUid];
         this.syncThreadIndex(nextIndex);
-        this.streamHandlers.clearThreadCache(threadUid);
 
         const nextRuntime = { ...this.readThreadRuntimeMapFromMemory() };
         delete nextRuntime[threadUid];
@@ -249,21 +253,21 @@ class AgentClientEngineSingleton extends Engine {
     readThreadRuntimeMapFromMemory() {
         return (
             (KernelEngine.readMemory(this.thread_runtime_memory_uid) as
-                | Record<string, AgentThreadRuntimeState>
+                | Record<string, AgentClientThreadRuntimeState>
                 | undefined) ?? {}
         );
     }
 
     // + --------------- MEMORY SYNC METHODS -------------- +
 
-    // Ensures persisted thread keeps client-owned ephemeral_messages across background syncs.
+    // Ensures persisted thread keeps client-owned ephemeral_items across background syncs.
     private resolveClientThread(
         thread: AgentThread,
         existingThread?: AgentClientThread,
     ): AgentClientThread {
         return {
             ...thread,
-            ephemeral_messages: existingThread?.ephemeral_messages ?? [],
+            ephemeral_items: existingThread?.ephemeral_items ?? [],
         };
     }
 
@@ -294,7 +298,7 @@ class AgentClientEngineSingleton extends Engine {
     async syncAIMemory() {
         await this.syncConfigFromBackground();
 
-        const payload = ((await RPCEngine.invoke('ai.listThreads',{})) ?? {
+        const payload = ((await RPCEngine.invoke('ai.listThreads', {})) ?? {
             index: {},
             threads: [],
         }) as BackgroundThreadListPayloadType;

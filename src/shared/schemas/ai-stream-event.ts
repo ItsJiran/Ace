@@ -24,6 +24,10 @@ export type AgentStreamEvent = {
     data : Record<string, unknown>;
     node : typeof WorkflowNodeNames[keyof typeof WorkflowNodeNames] | null;
 }
+export type AgentStreamAnyEvent =
+    | AgentStreamToolEvent
+    | AgentStreamLifecycleEvent
+    | AgentStreamMessageEvent;
 
 export type AgentStreamLifecycleEvent =
     | AgentStreamLifecycleStartedEvent
@@ -41,11 +45,6 @@ export type AgentStreamMessageEvent =
     | AgentStreamMessageFinishEvent
     | AgentStreamMessageUsageEvent
     | AgentStreamMessageContentBlockEvent;
-
-export type AgentStreamAnyEvent =
-    | AgentStreamToolEvent
-    | AgentStreamLifecycleEvent
-    | AgentStreamMessageEvent;
 
 /** + -------------- STREAM TOOL ---------------- */
 

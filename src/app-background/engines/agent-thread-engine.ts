@@ -5,7 +5,7 @@ import type {
     AgentConfigurableType,
     AgentInvokeContextType,
     AgentThread,
-    AgentThreadSyncPayloadType,
+    AgentInterProcessSyncPayloadType,
     AgentThreadStateType,
     AIProviderType,
 } from '#/shared/schemas/ai.ts';
@@ -20,6 +20,7 @@ import { EventBus } from '#/shared/engines/event-engine';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai.ts';
+import { AgentStreamAnyEvent } from '#/shared/schemas/ai-stream-event';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
@@ -34,12 +35,6 @@ class AgentThreadEngineSingleton extends Engine {
             started_at: number;
         }
     >();
-
-    private resolveMissingCredentialsMessage(provider: AIProviderType) {
-        const envKeys = AIProviderEnvKeys[provider] ?? [];
-        const envHint = envKeys.length > 0 ? ` (${envKeys.join(' or ')})` : '';
-        return `Missing credentials for provider "${provider}"${envHint}. Please set an API key in config or environment.`;
-    }
 
     // + ----- Abstract Methods ---------------------------------------------------------------+
 
@@ -248,13 +243,13 @@ class AgentThreadEngineSingleton extends Engine {
      *
      * Flow: background stream handler -> EventBus -> desktop stream consumer.
      */
-    private emitProtocolThreadEvent(thread_uid: string, message: Record<string, unknown>) {
+    private emitProtocolThreadEvent(thread_uid: string, event: AgentStreamAnyEvent) {
         void EventBus.emit(
             AI_THREAD_STREAM_EVENT_SLUG,
             {
                 payload: {
                     thread_uid,
-                    message: message as unknown as Record<string, unknown>,
+                    event: event as AgentStreamAnyEvent,
                 },
             },
             {
@@ -429,8 +424,8 @@ class AgentThreadEngineSingleton extends Engine {
 
         const streamEvents = createAIStreamEventBridge({
             threadUid: thread_uid,
-            emitProtocolThreadEvent: (nextThreadUid, message) =>
-                this.emitProtocolThreadEvent(nextThreadUid, message),
+            emitProtocolThreadEvent: (nextThreadUid, event : AgentStreamAnyEvent) =>
+                this.emitProtocolThreadEvent(nextThreadUid, event),
         });
 
         // Persist the latest execution identity before the stream begins so frontend sync reads a fresh snapshot.
@@ -570,7 +565,7 @@ class AgentThreadEngineSingleton extends Engine {
      *
      * Flow: resolve memory slot -> merge payload with existing snapshot -> write/register memory.
      */
-    public syncThread(thread_uid: string, payload: AgentThreadSyncPayloadType = {}): string {
+    public syncThread(thread_uid: string, payload: AgentInterProcessSyncPayloadType = {}): string {
         const memory_uid = this.ensureThreadIndex(thread_uid);
         const existingThread = KernelEngine.readMemory(memory_uid) as AgentThread | undefined;
         const now = Date.now();

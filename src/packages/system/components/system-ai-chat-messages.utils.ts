@@ -2,10 +2,10 @@ import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/co
 
 import { AgentClientEngine } from '#/app-desktop/engines/agent-client-engine';
 import type {
-	AgentThreadEphemeralLifecycle,
-	AgentThreadEphemeralMessage,
-	AgentThreadEphemeralStep,
-	AgentThreadEphemeralTool,
+	AgentClientThreadEphemeralLifecycle,
+	AgentClientThreadEphemeralMessage,
+	AgentClientThreadEphemeralStep,
+	AgentClientThreadEphemeralTool,
 } from '#/shared/schemas/ai';
 import { resolveMessageText } from './system-ai-chat-shared';
 
@@ -61,12 +61,12 @@ export function resolveChatTurns(messages: BaseMessage[]): ChatTurn[] {
 	return turns;
 }
 
-export function resolveToolDisplayName(item: AgentThreadEphemeralTool) {
+export function resolveToolDisplayName(item: AgentClientThreadEphemeralTool) {
 	const name = item.content.tool_name;
 	return typeof name === 'string' && name.trim() ? name : 'tool';
 }
 
-export function resolveToolInput(item: AgentThreadEphemeralTool) {
+export function resolveToolInput(item: AgentClientThreadEphemeralTool) {
 	return item.content.input;
 }
 
@@ -91,12 +91,12 @@ export function resolveToolInputLabel(input: unknown) {
 	return null;
 }
 
-export function resolveStepTitle(item: AgentThreadEphemeralStep) {
+export function resolveStepTitle(item: AgentClientThreadEphemeralStep) {
 	const title = item.content.title;
 	return typeof title === 'string' && title.trim() ? title : item.event;
 }
 
-export function resolveStepNode(item: AgentThreadEphemeralStep) {
+export function resolveStepNode(item: AgentClientThreadEphemeralStep) {
 	const node = item.content.node;
 	if (typeof node === 'string' && node.trim()) {
 		return node;
@@ -105,7 +105,7 @@ export function resolveStepNode(item: AgentThreadEphemeralStep) {
 	return item.node ?? 'agent';
 }
 
-export function resolveMessageLiveText(item: AgentThreadEphemeralMessage) {
+export function resolveMessageLiveText(item: AgentClientThreadEphemeralMessage) {
 	const streamText = item.content.stream_text;
 	if (typeof streamText === 'string' && streamText.trim()) {
 		return streamText;
@@ -140,7 +140,7 @@ export function resolveMessageLiveText(item: AgentThreadEphemeralMessage) {
 	return 'Streaming response...';
 }
 
-export function resolveLifecycleLabel(item: AgentThreadEphemeralLifecycle) {
+export function resolveLifecycleLabel(item: AgentClientThreadEphemeralLifecycle) {
 	const raw = item.content.event;
 	if (raw === 'started') {
 		return 'Run started';

@@ -65,7 +65,7 @@ This ensures two UI surfaces listening to the same thread do not duplicate state
 4. AgentClientEngine receives and dedupes events.
 5. AgentClientEngine writes:
    - thread_runtime memory (waiting status)
-   - thread ephemeral_messages (client-only live buckets)
+   - thread ephemeral_items (client-only live buckets)
    - persisted thread snapshot resync on terminal lifecycle events
 6. React hooks re-render from Kernel memory only.
 
@@ -85,7 +85,7 @@ Each thread snapshot includes:
 
 Within AgentClientThread:
 
-- ephemeral_messages: live message/tool/step/lifecycle buckets
+- ephemeral_items: live message/tool/step/lifecycle buckets
 
 Ephemeral buckets are owned by desktop runtime logic and are not persisted back to background thread storage.
 

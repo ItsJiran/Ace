@@ -3,17 +3,19 @@ import { useStream } from '@langchain/react';
 
 import { AgentClientEngine } from '#/app-desktop/engines/agent-client-engine';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
+import { type AgentConfigurableType, type AIProviderType } from '#/shared/schemas/ai';
+
 import {
     type AgentClientThread,
-    type AgentConfigurableType,
-    type AgentThreadRuntimeState,
-    type AIProviderType,
-} from '#/shared/schemas/ai';
+    type AgentClientThreadRuntimeState,
+} from '#/shared/schemas/ai-client';
+
 import {
-	createStreamOptions,
-	resolveActiveThreadUid,
-	submitPromptToThread,
+    createStreamOptions,
+    resolveActiveThreadUid,
+    submitPromptToThread,
 } from '#/app-desktop/hooks/use-ai-chat-thread.stream';
+
 import { resolveThreadValues } from '#/app-desktop/hooks/use-ai-chat-thread.utils';
 
 export type AIThreadStatus = {
@@ -22,9 +24,10 @@ export type AIThreadStatus = {
 };
 
 export function useAIChatThread() {
-
-	const list_threads =
+    const list_threads =
         useAceMemory<Record<string, string>>(AgentClientEngine.thread_uids_memory_uid) ?? {};
+
+    // ugly as hell future improement needed here, we should have a better state management strategy for the current thread,
 
     const [current_thread_uid, setCurrentThreadUidState] = useState<string | null>(null);
 
@@ -38,14 +41,17 @@ export function useAIChatThread() {
         current_thread_from_memory ?? null,
     );
     const thread_runtime_map =
-        useAceMemory<Record<string, AgentThreadRuntimeState>>(AgentClientEngine.thread_runtime_memory_uid) ?? {};
+        useAceMemory<Record<string, AgentClientThreadRuntimeState>>(
+            AgentClientEngine.thread_runtime_memory_uid,
+        ) ?? {};
+
     const current_thread_runtime =
         current_thread_uid && thread_runtime_map[current_thread_uid]
             ? thread_runtime_map[current_thread_uid]
             : undefined;
-    const ephemeral_streams = current_thread?.ephemeral_messages ?? [];
 
-	const pending_prompt = null;
+    const ephemeral_streams = current_thread?.ephemeral_items ?? [];
+
     const [is_submitting_prompt, setIsSubmittingPrompt] = useState(false);
     const [last_submitted_prompt, setLastSubmittedPrompt] = useState<string | null>(null);
 
@@ -76,9 +82,11 @@ export function useAIChatThread() {
             return;
         }
 
-        void AgentClientEngine.syncCurrentThreadFromBackground(current_thread_uid).then((thread) => {
-            setCurrentThreadState(thread ?? null);
-        });
+        void AgentClientEngine.syncCurrentThreadFromBackground(current_thread_uid).then(
+            (thread) => {
+                setCurrentThreadState(thread ?? null);
+            },
+        );
     }, [current_thread_uid]);
 
     // Flow:
@@ -158,7 +166,9 @@ export function useAIChatThread() {
             }
 
             const nextPersistedMessages = [
-                ...(Array.isArray(current_thread?.state?.messages) ? current_thread.state.messages : []),
+                ...(Array.isArray(current_thread?.state?.messages)
+                    ? current_thread.state.messages
+                    : []),
                 {
                     type: 'human',
                     content: normalizedPrompt,
@@ -180,18 +190,16 @@ export function useAIChatThread() {
             submitPromptToThread(threadUid, normalizedPrompt);
 
             return (
-                AgentClientEngine.readThreadFromMemory(resolveActiveThreadUid(threadUid) ?? threadUid) ??
-                null
+                AgentClientEngine.readThreadFromMemory(
+                    resolveActiveThreadUid(threadUid) ?? threadUid,
+                ) ?? null
             );
         } finally {
             setIsSubmittingPrompt(false);
         }
     };
 
-    const retryLastPrompt = async (
-        selectedProvider: AIProviderType,
-        selectedModel: string,
-    ) => {
+    const retryLastPrompt = async (selectedProvider: AIProviderType, selectedModel: string) => {
         const latestHumanMessage = [...messages]
             .reverse()
             .find((message) => message.getType() === 'human');
@@ -211,7 +219,8 @@ export function useAIChatThread() {
         const activeThreadUid = resolveActiveThreadUid(current_thread_uid);
         if (activeThreadUid) {
             await AgentClientEngine.stopThreadPrompt(activeThreadUid);
-            const syncedThread = await AgentClientEngine.syncCurrentThreadFromBackground(activeThreadUid);
+            const syncedThread =
+                await AgentClientEngine.syncCurrentThreadFromBackground(activeThreadUid);
             setCurrentThreadState(syncedThread ?? null);
         }
     };
@@ -242,7 +251,7 @@ export function useAIChatThread() {
         if (is_streaming) {
             return {
                 label: 'orchestrating',
-				detail: 'waiting for agent output',
+                detail: 'waiting for agent output',
             };
         }
 
@@ -252,7 +261,7 @@ export function useAIChatThread() {
                 ? 'ready on selected thread'
                 : 'ready with no thread selected',
         };
-        	}, [current_thread_uid, is_streaming]);
+    }, [current_thread_uid, is_streaming]);
 
     return {
         list_threads,
@@ -262,7 +271,6 @@ export function useAIChatThread() {
         ephemeral_streams,
         messages,
         ai_status,
-        pending_prompt,
         is_streaming,
         stream,
         refreshThreads,
