@@ -197,8 +197,8 @@ export function createAIStreamEventBridge(input: {
 		},
 		process(event: unknown) {
 
-
 			
+
 			// // Every raw agent event is normalized once, then dispatched to a dedicated handler.
 			// const { eventName, eventMethod, eventData, protocolData, node, metadata, rawPayload } =
 			// 	extractAgentStreamEvent(event);
