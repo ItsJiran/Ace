@@ -1,191 +1,265 @@
-import { WorkflowNodeNames } from '#/shared/schemas/ai';
-
-/**
- * Represents a single event emitted by the LangGraph agent during streaming.
- * Field names mirror the LangGraph `streamEvents` protocol surface.
- */
-export const AgentStreamEventNames = {
-	CHAT_MODEL_START: 'on_chat_model_start',
-	CHAT_MODEL_STREAM: 'on_chat_model_stream',
-	CHAT_MODEL_END: 'on_chat_model_end',
-	TOOL_START: 'on_tool_start',
-	TOOL_STREAM: 'on_tool_stream',
-	TOOL_END: 'on_tool_end',
-	TOOL_ERROR: 'on_tool_error',
-	CHAIN_START: 'on_chain_start',
-	CHAIN_END: 'on_chain_end',
-	CHAIN_ERROR: 'on_chain_error',
-} as const;
-
-export type KnownAgentStreamEventName =
-	(typeof AgentStreamEventNames)[keyof typeof AgentStreamEventNames];
-
-export type AgentStreamEvent = {
-	/** LangGraph event name, e.g. `on_chat_model_start`, `on_chat_model_stream`, `on_tool_start`. */
-	eventName: KnownAgentStreamEventName | string;
-
-	/** Protocol method from custom protocol events forwarded through the stream (e.g. `tools`). */
-	eventMethod: string;
-
-	/** Data payload carried by the event. */
-	eventData: Record<string, unknown>;
-
-	/**
-	 * Optional protocol-level params block, present on events forwarded through the custom
-	 * event protocol (i.e. when `method` is set on the raw event record).
-	 */
-	eventParams: Record<string, unknown> | undefined;
-
-	/**
-	 * Inner `data` field of `eventParams`. Useful for custom protocol events where the
-	 * actual payload is nested under `params.data`.
-	 */
-	protocolData: Record<string, unknown> | undefined;
-
-	/** LangGraph node name (from the `name` field on the raw event record). */
-	node: string | undefined;
-
-	/** LangGraph metadata block attached to the event. */
-	metadata: Record<string, unknown> | undefined;
-
-	/** Raw stream payload before normalization. */
-	rawPayload: unknown;
-};
-
-function resolveString(value: unknown): string | undefined {
-	if (typeof value !== 'string') {
-		return undefined;
-	}
-
-	const normalized = value.trim();
-	return normalized ? normalized : undefined;
-}
-
-function resolveRecord(value: unknown): Record<string, unknown> | undefined {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		return undefined;
-	}
-
-	return value as Record<string, unknown>;
-}
-
-function resolveEventData(rec: Record<string, unknown>, eventParams?: Record<string, unknown>) {
-	const candidates = [
-		resolveRecord(rec.data),
-		resolveRecord(rec.payload),
-		resolveRecord(rec.value),
-		resolveRecord(rec.output),
-		resolveRecord(rec.chunk),
-		resolveRecord(rec.input),
-		resolveRecord(eventParams?.data),
-	];
-
-	for (const candidate of candidates) {
-		if (!candidate) {
-			continue;
-		}
-
-		if (Object.keys(candidate).length > 0) {
-			return candidate;
-		}
-	}
-
-	return candidates.find(Boolean) ?? {};
-}
-
-function resolveFirstNodeKey(eventData: Record<string, unknown>): string | undefined {
-	const [firstKey] = Object.keys(eventData);
-	if (!firstKey || firstKey === '__end__' || firstKey === '__interrupt__') {
-		return undefined;
-	}
-
-	return firstKey;
-}
-
-function normalizeWorkflowNode(value: unknown): string | undefined {
-	const raw = resolveString(value);
-	if (!raw) {
-		return undefined;
-	}
-
-	const firstSegment = raw.split(/[.:/]/)[0]?.trim();
-	if (!firstSegment) {
-		return undefined;
-	}
-
-	return firstSegment === WorkflowNodeNames.AGENT ||
-		firstSegment === WorkflowNodeNames.REASONING ||
-		firstSegment === WorkflowNodeNames.ROUTER ||
-		firstSegment === WorkflowNodeNames.ORCHESTRATOR ||
-		firstSegment === WorkflowNodeNames.EXECUTOR ||
-		firstSegment === WorkflowNodeNames.OBSERVE
-		? firstSegment
-		: undefined;
-}
-
-function resolveUpdatesWorkflowNode(eventData: Record<string, unknown>): string | undefined {
-	for (const key of Object.keys(eventData)) {
-		if (key === '__end__' || key === '__interrupt__') {
-			continue;
-		}
-
-		const normalized = normalizeWorkflowNode(key);
-		if (normalized) {
-			return normalized;
-		}
-	}
-
-	return normalizeWorkflowNode(resolveFirstNodeKey(eventData));
-}
+import { WorkflowNodeNames, WorkflowNodes } from '#/shared/schemas/ai';
+import {
+    AgentStreamEvent,
+    AgentStreamMessageContentBlockEvent,
+    AgentStreamMessageFinishEvent,
+    AgentStreamMessageStartEvent,
+    AgentStreamMessageUsageEvent,
+    AgentStreamToolDeltaEvent,
+    AgentStreamToolErrorEvent,
+    AgentStreamToolFinishedEvent,
+    AgentStreamToolStartedEvent,
+} from '#/shared/schemas/ai-stream-event';
 
 /**
  * Extracts and normalises all relevant fields from a raw LangGraph stream event into a
  * typed `AgentStreamEvent`, so callers never have to repeat the same defensive casts.
  */
-export function extractAgentStreamEvent(event: unknown): AgentStreamEvent {
-	const rec = event as Record<string, unknown>;
-	const eventNameFromRecord = resolveString(rec.event);
-	const eventMethod = resolveString(rec.method) ?? '';
+export function extractAgentStreamEvent(event: any): any | null | undefined {
+    if (event == null || typeof event !== 'object') return null;
 
-	const eventParams =
-		rec.params && typeof rec.params === 'object'
-			? (rec.params as Record<string, unknown>)
-			: undefined;
+    switch (event.method) {
+        case 'tools':
+            return resolveStreamToolEvent(event);
 
-	const eventData = resolveEventData(rec, eventParams);
+        case 'checkpoints':
+            console.log('---checkpoints event---');
+            console.dir(event, { depth: null });
+            break;
 
-	const protocolData =
-		eventParams?.data && typeof eventParams.data === 'object'
-			? (eventParams.data as Record<string, unknown>)
-			: undefined;
+        case 'messages':
+            return resolveStreamMessageEvent(event);
 
-	const metadata =
-		rec.metadata && typeof rec.metadata === 'object'
-			? (rec.metadata as Record<string, unknown>)
-			: undefined;
+        case 'tasks':
+            console.log('---tasks event---');
+            console.dir(event, { depth: null });
+            break;
 
-	const eventName = eventNameFromRecord ?? (eventMethod ? `on_${eventMethod}` : 'unknown');
-	const nodeFromCandidates =
-		normalizeWorkflowNode(rec.name) ??
-		normalizeWorkflowNode(rec.node) ??
-		normalizeWorkflowNode(eventParams?.node) ??
-		normalizeWorkflowNode(eventData.node) ??
-		normalizeWorkflowNode(eventData.langgraph_node) ??
-		normalizeWorkflowNode(metadata?.langgraph_node) ??
-		normalizeWorkflowNode(metadata?.node);
+        case 'updates':
+            console.log('---updates event---');
+            console.dir(event, { depth: null });
+            break;
 
-	const node =
-		nodeFromCandidates ??
-		(eventMethod === 'updates' ? resolveUpdatesWorkflowNode(eventData) : undefined);
+        case 'lifecycle':
+            console.log('---lifecycle event---');
+            console.dir(event, { depth: null });
+            break;
 
-	return {
-		eventName,
-		eventMethod,
-		eventData,
-		eventParams,
-		protocolData,
-		node,
-		metadata,
-		rawPayload: event,
-	};
+        default:
+            return null;
+    }
+}
+
+// + ------- Resolve Message Event -----------------
+
+export function resolveStreamToolEvent(
+    event: any,
+):
+    | AgentStreamToolStartedEvent
+    | AgentStreamToolDeltaEvent
+    | AgentStreamToolErrorEvent
+    | AgentStreamToolFinishedEvent
+    | null
+    | undefined {
+    if (event?.method != 'tools') return null;
+    const node = resolveNodeFromNamespace(event?.namespace);
+
+    switch (event?.params?.data?.event) {
+        case 'tool-start':
+            return {
+                node,
+                channel: 'tool',
+                type: 'tool-started',
+                seq: event?.seq,
+                data: {
+                    tool_call_id: event?.params?.data?.tool_call_id,
+                    tool_name: event?.params?.data?.tool_name,
+                    input: event?.params?.data?.input,
+                },
+            };
+        case 'tool-delta':
+            return {
+                node,
+                channel: 'tool',
+                type: 'tool-delta',
+                seq: event?.seq,
+                data: {
+                    tool_name: event?.params?.data?.tool_name,
+                    run_id: event?.params?.data?.run_id,
+                },
+            };
+        case 'tool-error':
+            return {
+                node,
+                channel: 'tool',
+                type: 'tool-error',
+                seq: event?.seq,
+                data: {
+                    tool_name: event?.params?.data?.tool_name,
+                    run_id: event?.params?.data?.run_id,
+                },
+            };
+        case 'tool-finished':
+            return {
+                node,
+                channel: 'tool',
+                type: 'tool-finished',
+                seq: event?.seq,
+                data: {
+                    tool_call_id: event?.params?.data?.tool_call_id,
+                    output: event?.params?.data?.output,
+                },
+            };
+        default:
+            return null;
+    }
+}
+
+// + --------- Resolve Lifecycle Event -----------------
+
+export function resolveStreamLifecycleEvent(event: any): any | null | undefined {
+    const node = resolveNodeFromNamespace(event?.namespace);
+    if (event?.method != 'lifecycle') return null;
+
+    switch (event?.params?.data?.event) {
+        case 'started':
+            return {
+                node,
+                channel: 'lifecycle',
+                type: 'started',
+                seq: event?.seq,
+                data: {
+                    graph_name: event?.params?.data?.graph_name,
+                },
+            };
+        case 'completed':
+            return {
+                node,
+                channel: 'lifecycle',
+                type: 'completed',
+                seq: event?.seq,
+                data: {
+                    graph_name: event?.params?.data?.graph_name,
+                },
+            };
+        case 'failed':
+            return {
+                node,
+                channel: 'lifecycle',
+                type: 'failed',
+                seq: event?.seq,
+                data: {
+                    graph_name: event?.params?.data?.graph_name,
+                },
+            };
+        default:
+            return null;
+    }
+}
+
+// + --------- Resolve Message Event -----------------
+
+export function resolveStreamMessageEvent(
+    event: any,
+):
+    | AgentStreamMessageStartEvent
+    | AgentStreamMessageFinishEvent
+    | AgentStreamMessageUsageEvent
+    | AgentStreamMessageContentBlockEvent
+    | null
+    | undefined {
+    const node = resolveNodeFromNamespace(event?.namespace);
+    if (event?.method != 'messages') return null;
+
+    switch (event?.params?.data?.event) {
+        case 'message-start':
+            return {
+                node,
+                channel: 'messages',
+                type: 'message-start',
+                seq: event?.seq,
+                data: {
+                    id: event?.params?.data?.id,
+                    run_id: event?.params?.data?.run_id,
+                },
+            };
+        case 'message-finish':
+            return {
+                node,
+                channel: 'messages',
+                type: 'message-finish',
+                seq: event?.seq,
+                data: {
+                    id: event?.params?.data?.id,
+                    reason: event?.params?.data?.reason,
+                    run_id: event?.params?.data?.run_id,
+                    usage: event?.params?.data?.usage,
+                },
+            };
+        case 'usage':
+            return {
+                node,
+                channel: 'messages',
+                type: 'usage',
+                seq: event?.seq,
+                data: {
+                    usage: event?.params?.data?.usage,
+                    run_id: event?.params?.data?.run_id,
+                },
+            };
+        case 'content-block-delta':
+            return {
+                node,
+                channel: 'messages',
+                type: 'content-block-delta',
+                seq: event?.seq,
+                data: {
+                    delta: event?.params?.data?.delta,
+                    run_id: event?.params?.data?.run_id,
+                },
+            };
+        case 'content-block-start':
+            return {
+                node,
+                channel: 'messages',
+                type: 'content-block-start',
+                seq: event?.seq,
+                data: {
+                    delta: event?.params?.data?.delta,
+                    run_id: event?.params?.data?.run_id,
+                },
+            };
+        case 'content-block-finish':
+            return {
+                node,
+                channel: 'messages',
+                type: 'content-block-finish',
+                seq: event?.seq,
+                data: {
+                    delta: event?.params?.data?.delta,
+                    run_id: event?.params?.data?.run_id,
+                },
+            };
+        default:
+            return null;
+    }
+}
+
+// + ------- Esa Hidayah -----------------
+
+export function resolveNodeFromNamespace(namespace: string[]): AgentStreamEvent['node'] | null {
+    if (!namespace || namespace?.length === 0) return null;
+
+    for (const part of namespace) {
+        const parts = part.split(':');
+        if (
+            WorkflowNodes.includes(
+                parts[0] as (typeof WorkflowNodeNames)[keyof typeof WorkflowNodeNames],
+            )
+        ) {
+            return parts[0] as AgentStreamEvent['node'];
+        }
+    }
+
+    return null;
 }

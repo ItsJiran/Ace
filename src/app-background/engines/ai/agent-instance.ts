@@ -22,11 +22,12 @@ export default class SingletonAgentInstance {
         return SingletonAgentInstance.ensureValue() as ReturnType<typeof compileAceAgentWorkflow>;
     }
 
-    public stream(
+    public async stream(
         state: Parameters<ReturnType<typeof compileAceAgentWorkflow>['invoke']>[0],
         config: Record<string, unknown> & { version: 'v3' },
-    ) {
-        return this.value.streamEvents(state, config);
+    ){
+        console.log('[AIStreamBridge] config', config);
+        return await this.value.streamEvents(state, config);
     }
 
     public static getInstance(): SingletonAgentInstance {

@@ -6,7 +6,7 @@ import type {
     AgentInvokeContextType,
     AgentThread,
     AgentThreadSyncPayloadType,
-    AgentWorkflowStateType,
+    AgentThreadStateType,
     AIProviderType,
 } from '#/shared/schemas/ai.ts';
 
@@ -19,9 +19,7 @@ import { Engine } from '#/shared/engines/engine';
 import { EventBus } from '#/shared/engines/event-engine';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
-import {
-    AI_THREAD_STREAM_EVENT_SLUG,
-} from '#/shared/schemas/ai.ts';
+import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai.ts';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
@@ -419,56 +417,21 @@ class AgentThreadEngineSingleton extends Engine {
         context?: Record<string, unknown>,
         signal?: AbortSignal,
     ) {
-        const {
-            normalizedPrompt,
-            provider,
-            model,
-            checkpoint_id,
-        } = this.resolveThreadRunBootstrap(thread_uid, prompt, overrides);
+        const { normalizedPrompt, provider, model, checkpoint_id } = this.resolveThreadRunBootstrap(
+            thread_uid,
+            prompt,
+            overrides,
+        );
 
         if (!normalizedPrompt) {
             return this.readThread(thread_uid);
         }
 
-        // Resolve runtime credentials after the prompt has been normalized so empty runs bail early.
-        const resolvedOverrideApiKey =
-            typeof overrides.apiKey === 'string' && overrides.apiKey.trim()
-                ? overrides.apiKey.trim()
-                : undefined;
-        const apiKey = resolvedOverrideApiKey ?? (await resolveApiKey(provider)) ?? undefined;
-
-        // Write the resolved key into process.env so that sub-agent tool calls (deepagents'
-        // `task` tool creates a fresh agent invocation that doesn't inherit the parent's
-        // LangGraph configurable). `readProcessEnv` in the background process always reads
-        // directly from `process.env`, making this the most reliable cross-module fallback.
-        if (apiKey && provider) {
-            cacheApiKey(provider, apiKey);
-            const providerEnvKeys = AIProviderEnvKeys[provider] ?? [];
-            for (const envKey of providerEnvKeys) {
-                if (!process.env[envKey]) {
-                    process.env[envKey] = apiKey;
-                }
-            }
-        }
-
-        const run_id = crypto.randomUUID();
         const streamEvents = createAIStreamEventBridge({
             threadUid: thread_uid,
-            runId: run_id,
             emitProtocolThreadEvent: (nextThreadUid, message) =>
                 this.emitProtocolThreadEvent(nextThreadUid, message),
         });
-
-        // Mark the protocol lifecycle as started before any stream setup so all failure modes
-        // (including credential guards) always resolve waiting state on the frontend.
-        streamEvents.start();
-
-        if (!apiKey) {
-            const missingCredentialsError = new Error(this.resolveMissingCredentialsMessage(provider));
-            streamEvents.fail(missingCredentialsError);
-            this.log(`[AgentThreadEngine] ${missingCredentialsError.message}`);
-            return this.readThread(thread_uid);
-        }
 
         // Persist the latest execution identity before the stream begins so frontend sync reads a fresh snapshot.
         this.syncThread(thread_uid, {
@@ -483,26 +446,20 @@ class AgentThreadEngineSingleton extends Engine {
             thread_uid,
             model,
             provider,
-            apiKey,
+            // apiKey, apikey in future if we want to support per-run override via RPC, but for now rely on the cache to inject into the compiled workflow.
             overrides,
             context,
             signal,
         });
 
         try {
-            // AgentInstance is the single source of streamed LangGraph events for this thread run.
-            const stream = await SingletonAgentInstance.getInstance().stream(
-                {
-                    messages: [new HumanMessage(normalizedPrompt)],
-                },
-                streamRuntimeConfig,
+            await streamEvents(
+                await SingletonAgentInstance.getInstance().stream(
+                    { messages: [new HumanMessage(normalizedPrompt)] },
+                    streamRuntimeConfig,
+                ),
             );
-
-            await streamEvents.process(stream);
-
-            streamEvents.complete();
         } catch (error) {
-            streamEvents.fail(error);
             this.log(`[AgentThreadEngine] stream failed for ${thread_uid}:`, error);
             return this.readThread(thread_uid);
         }
@@ -618,8 +575,8 @@ class AgentThreadEngineSingleton extends Engine {
         const existingThread = KernelEngine.readMemory(memory_uid) as AgentThread | undefined;
         const now = Date.now();
 
-        const existingState = existingThread?.state ?? ({ messages: [] } as AgentWorkflowStateType);
-        const nextState: AgentWorkflowStateType = {
+        const existingState = existingThread?.state ?? ({ messages: [] } as AgentThreadStateType);
+        const nextState: AgentThreadStateType = {
             ...existingState,
             ...(payload.state ?? {}),
             messages: Array.isArray(payload.state?.messages)

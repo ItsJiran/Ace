@@ -14,6 +14,7 @@ export const AgentModelModes = {
     SELECTED: 'selected',
 } as const;
 export type AgentModelModeType = (typeof AgentModelModes)[keyof typeof AgentModelModes];
+
 export const WorkflowNodeNames = {
     AGENT: 'agent',
     REASONING: 'reasoning',
@@ -23,6 +24,7 @@ export const WorkflowNodeNames = {
     OBSERVE: 'observe',
 } as const;
 export type WorkflowNodeType = (typeof WorkflowNodeNames)[keyof typeof WorkflowNodeNames];
+export const WorkflowNodes = Object.values(WorkflowNodeNames);
 
 export const WorkflowTaskStatuses = {
     PENDING: 'pending',
@@ -52,31 +54,7 @@ export const WorkflowStatuses = {
 } as const;
 export type WorkflowStatusType = (typeof WorkflowStatuses)[keyof typeof WorkflowStatuses];
 
-export const WorkflowTaskSchema = z.object({
-    id: z.string(),
-    description: z.string(),
-    instructions: z.string().optional(),
-    status: z.enum(['pending', 'in-progress', 'complete', 'blocked']).default('pending'),
-    notes: z.array(z.string()).default([]),
-    updatedAt: z.number().int(),
-});
-export type WorkflowTaskType = z.infer<typeof WorkflowTaskSchema>;
 
-export const WorkflowJournalSchema = z.object({
-    round: z.number().int(),
-    node: z.enum(['orchestrator', 'executioner', 'evaluator']),
-    summary: z.string(),
-    createdAt: z.number().int(),
-});
-export type WorkflowJournalType = z.infer<typeof WorkflowJournalSchema>;
-
-export const WorkflowReviewSchema = z.object({
-    approved: z.boolean(),
-    status: z.enum(['complete', 'needs-more-work', 'needs-replan', 'failed']),
-    summary: z.string(),
-    notes: z.array(z.string()).default([]),
-});
-export type WorkflowReviewType = z.infer<typeof WorkflowReviewSchema>;
 
 export interface AceAgentWorkflowState {
     messages: BaseMessage[];
@@ -143,7 +121,7 @@ export interface AgentConfigType extends RunnableConfig {
     context?: AgentInvokeContextType;
 }
 
-export interface AgentWorkflowStateType {
+export interface AgentThreadStateType {
     messages: unknown[];
     goal_task?: string;
     executioner_task?: string;
@@ -164,7 +142,7 @@ export interface AgentThread {
     checkpoint_id?: string;
     model?: string;
     provider?: AIProviderType;
-    state: AgentWorkflowStateType;
+    state: AgentThreadStateType;
     created_at: number;
     updated_at: number;
 }
@@ -174,7 +152,7 @@ export type AgentThreadSyncPayloadType = {
     checkpoint_id?: string;
     model?: string;
     provider?: AIProviderType;
-    state?: Partial<AgentWorkflowStateType>;
+    state?: Partial<AgentThreadStateType>;
     created_at?: number;
     updated_at?: number;
 };
