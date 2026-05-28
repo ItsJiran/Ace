@@ -2,11 +2,11 @@ import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/co
 
 import { AgentClientEngine } from '#/app-desktop/engines/agent-client-engine';
 import type {
-	AgentClientThreadEphemeralLifecycle,
 	AgentClientThreadEphemeralMessage,
 	AgentClientThreadEphemeralStep,
 	AgentClientThreadEphemeralTool,
-} from '#/shared/schemas/ai';
+} from '#/shared/schemas/agent-client-ephemeral';
+
 import { resolveMessageText } from './system-ai-chat-shared';
 
 export type ChatTurn =
@@ -39,13 +39,13 @@ export function resolveChatTurns(messages: BaseMessage[]): ChatTurn[] {
 			const previousTurn = turns[turns.length - 1];
 			if (previousTurn?.kind === 'assistant') {
 				previousTurn.messages.push(message);
-				previousTurn.key = `${previousTurn.key}:${String(message.id ?? `${message.getType()}-${index}`)}`;
+				previousTurn.key = `${previousTurn.key}:${String(message.id ?? `${message.type}-${index}`)}`;
 				return;
 			}
 
 			turns.push({
 				kind: 'assistant',
-				key: String(message.id ?? `${message.getType()}-${index}`),
+				key: String(message.id ?? `${message.type}-${index}`),
 				messages: [message],
 			});
 			return;
@@ -53,7 +53,7 @@ export function resolveChatTurns(messages: BaseMessage[]): ChatTurn[] {
 
 		turns.push({
 			kind: 'other',
-			key: String(message.id ?? `${message.getType()}-${index}`),
+			key: String(message.id ?? `${message.type}-${index}`),
 			message,
 		});
 	});
@@ -106,56 +106,12 @@ export function resolveStepNode(item: AgentClientThreadEphemeralStep) {
 }
 
 export function resolveMessageLiveText(item: AgentClientThreadEphemeralMessage) {
-	const streamText = item.content.stream_text;
-	if (typeof streamText === 'string' && streamText.trim()) {
-		return streamText;
-	}
-
-	const tokenText = item.content.text;
-	if (typeof tokenText === 'string' && tokenText.trim()) {
-		return tokenText;
-	}
-
-	const deltaText = item.content.delta;
-	if (typeof deltaText === 'string' && deltaText.trim()) {
-		return deltaText;
-	}
-
-	if (deltaText && typeof deltaText === 'object' && !Array.isArray(deltaText)) {
-		const record = deltaText as Record<string, unknown>;
-		if (typeof record.text === 'string' && record.text.trim()) {
-			return record.text;
-		}
-	}
-
-	const event = item.event;
-	if (event === 'message-start') {
-		return 'Assistant sedang menyiapkan jawaban...';
-	}
-
-	if (event === 'token' || event === 'content-block-delta') {
-		return 'Streaming token...';
-	}
-
-	return 'Streaming response...';
+	return item.content.reduce((acc, curr) => {
+		const text = typeof curr === 'string' ? curr : resolveMessageText(curr);
+		return acc + (text || '');
+	}, '');
 }
 
-export function resolveLifecycleLabel(item: AgentClientThreadEphemeralLifecycle) {
-	const raw = item.content.event;
-	if (raw === 'started') {
-		return 'Run started';
-	}
-
-	if (raw === 'completed') {
-		return 'Run completed';
-	}
-
-	if (raw === 'failed') {
-		return 'Run failed';
-	}
-
-	return item.event;
-}
 
 export function openThreadDetailWindow(threadUid: string) {
 	window.ACE.window.spawnWindow({

@@ -158,7 +158,7 @@ flowchart LR
 		BM[main.ts]
 		BAI[engines/agent-thread-engine.ts]
 		BA[engines/ai/agent-instance.ts]
-		BSE[engines/ai/ai-stream-events.ts]
+		BSE[engines/ai/agent-stream-events.ts]
 		BST[engines/ai/stream/*]
 	end
 

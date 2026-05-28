@@ -9,7 +9,7 @@ import {
     AgentStreamToolErrorEvent,
     AgentStreamToolFinishedEvent,
     AgentStreamToolStartedEvent,
-} from '#/shared/schemas/ai-stream-event';
+} from '#/shared/schemas/agent-stream-events';
 
 /**
  * Extracts and normalises all relevant fields from a raw LangGraph stream event into a
@@ -41,9 +41,7 @@ export function extractAgentStreamEvent(event: any): any | null | undefined {
             break;
 
         case 'lifecycle':
-            console.log('---lifecycle event---');
-            console.dir(event, { depth: null });
-            break;
+            return resolveStreamLifecycleEvent(event);
 
         default:
             return null;

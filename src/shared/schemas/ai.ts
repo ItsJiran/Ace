@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import type { BaseMessage } from '@langchain/core/messages';
-import type { Message as ProtocolMessage } from '@langchain/protocol';
 
 import { AIProviders, AIProviderEnvKeys } from '#/shared/constants/ai';
 import { WindowDisplayModeSchema } from '#/shared/schemas/state';
-import { AgentStreamAnyEvent } from './ai-stream-event';
+import { AgentStreamAnyEvent } from './agent-stream-events';
+import { AgentChatTurn } from './agent-thread-state';
 
 // + ----------------- Agent Thread & Stream Types -----------------
 
@@ -14,7 +14,9 @@ export type AIProviderEnvKeyType = (typeof AIProviderEnvKeys)[AIProviderType][nu
 
 // + ----------------- Workflow Node Types -----------------
 /**
- * This is the schema for the nodes in the Agent workflows
+ * This is the schema for the nodes in the Agent workflows, this is that the real lives in the
+ * agent during the langggraph execution, and also the schema that we stored in the
+ * database for the agent thread state.
  */
 
 export interface AceAgentWorkflowState {
@@ -44,12 +46,12 @@ export const WorkflowNodes = Object.values(WorkflowNodeNames);
 // + ----------------- Agent Stream Event Types -----------------
 
 /**
- * Schema that get injected into the agent context when invoking an agent. This is what the agent will 
+ * Schema that get injected into the agent context when invoking an agent. This is what the agent will
  * receive as the context when it gets invoked. We can extend this schema in the future if we want to
  * add more information to the agent context.
- * 
- * This is the dynamic context that get generated at runtime when invoking an agent, and it can 
- * contain information about the user, desktop, and other relevant information that the agent 
+ *
+ * This is the dynamic context that get generated at runtime when invoking an agent, and it can
+ * contain information about the user, desktop, and other relevant information that the agent
  * might need to know when it gets invoked.
  */
 
@@ -79,7 +81,7 @@ export const AgentInvokeContextSchema = z.object({
 export type AgentInvokeContextType = z.infer<typeof AgentInvokeContextSchema>;
 
 /**
- * This is our main configuration for the state of our app. What we can configure is the AgentConfigurableType, for example like the model, 
+ * This is our main configuration for the state of our app. What we can configure is the AgentConfigurableType, for example like the model,
  * checkpoint, thread_id, provider, and apiKey. These are the parameters that can be set when initializing or running an agent.
  */
 export interface AgentConfigurableType {
@@ -103,23 +105,21 @@ export interface AgentConfigType extends RunnableConfig {
 }
 
 /**
- * This is the type for the state of our agent thread. It contains all the necessary information about the agent thread, 
+ * This is the type for the state of our agent thread. It contains all the necessary information about the agent thread,
  * such as the thread_uid, checkpoint_id, model, provider, and state.
  */
 
 export interface AgentThreadStateType {
-    messages: unknown[];
+    messages: AgentChatTurn[];
     goal_task?: string;
     executioner_task?: string;
     [key: string]: unknown;
 }
 
 /**
- * This is what we will stored in our kernel space in the frontend side for each agent thread. It contains all the necessary 
- * information about the agent thread, such as the thread_uid, checkpoint_id, model, provider,
- * This is purely just a snapshot readonly type that we can use to sync the state of the agent thread in the kernel space. 
- * It contains all the necessary information about the agent thread, such as the thread_uid, checkpoint_id, model, provider, 
- * messages, and state.
+ * This is what we stored in both runtime and also in the database for the agent thread, it contains all the
+ * necessary information about the agent thread, including infos that didn't mainly exist default in the agent
+ * thread state..
  */
 
 export interface AgentThread {
@@ -144,7 +144,7 @@ export type AgentInterProcessSyncPayloadType = {
 
 /**
  * Stream-related protocol types were moved to:
- * src/shared/schemas/ai-stream-event.ts
+ * src/shared/schemas/agent-stream-event.ts
  *
  * The older AI thread stream/event definitions were removed from this file
  * to avoid duplication. Use the new schema file for stream typings.

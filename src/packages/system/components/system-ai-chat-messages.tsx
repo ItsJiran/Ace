@@ -4,18 +4,19 @@ import { BaseMessage } from '@langchain/core/messages';
 import type {
     AgentClientThreadEphemeralItem,
     AgentClientThreadRuntimeState,
-} from '#/shared/schemas/ai-client';
+} from '#/shared/schemas/agent-client-ephemeral';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { SystemAIChatMessagesEmptyState } from './system-ai-chat-messages-empty-state';
 import { SystemAIChatMessagesEphemeral } from './system-ai-chat-messages-ephemeral';
 import { SystemAIChatMessagesHistory } from './system-ai-chat-messages-history';
 import { SystemAIChatMessagesPending } from './system-ai-chat-messages-pending';
 import { resolveChatTurns } from './system-ai-chat-messages.utils';
+import { AgentChatTurn } from '#/shared/schemas/agent-thread-state';
 
 type SystemAIChatMessagesProps = {
-    messages: BaseMessage[];
+    messages: AgentChatTurn[];
     isStreaming: boolean;
-    ephemeralStreams: AgentClientThreadEphemeralItem[];
+    ephemeralMessages: AgentClientThreadEphemeralItem[];
     currentThreadRuntime?: AgentClientThreadRuntimeState;
     currentThreadUid: string | null;
     onRetryFailedRun?: () => void | Promise<void>;
@@ -25,14 +26,14 @@ type SystemAIChatMessagesProps = {
 export function SystemAIChatMessages({
     messages,
     isStreaming,
-    ephemeralStreams,
+    ephemeralMessages,
     currentThreadRuntime,
     currentThreadUid,
     onRetryFailedRun,
     bottomRef,
 }: SystemAIChatMessagesProps) {
     const { targets } = useAceTheme();
-    const turns = resolveChatTurns(messages);
+    const turns = messages;
 
     return (
         <div className="h-full overflow-auto px-5 pb-5 pt-4 [scrollbar-color:rgb(82_82_91_/_0.85)_transparent] [scrollbar-width:thin]">
@@ -41,21 +42,28 @@ export function SystemAIChatMessages({
                     <SystemAIChatMessagesEmptyState targets={targets} />
                 ) : null}
 
-                <SystemAIChatMessagesHistory turns={turns} targets={targets} />
+                <SystemAIChatMessagesHistory
+                    turns={turns}
+                    targets={targets}
+                    ephemeralMessages={ephemeralMessages}
+                    currentThreadRuntime={currentThreadRuntime}
+                    currentThreadUid={currentThreadUid}
+                    onRetryFailedRun={onRetryFailedRun}
+                />
 
-                <SystemAIChatMessagesEphemeral
-                    ephemeralStreams={ephemeralStreams}
+                {/* <SystemAIChatMessagesEphemeral
+                    ephemeralMessages={ephemeralMessages}
                     currentThreadRuntime={currentThreadRuntime}
                     currentThreadUid={currentThreadUid}
                     onRetryFailedRun={onRetryFailedRun}
                     targets={targets}
-                />
+                /> */}
 
-                <SystemAIChatMessagesPending
+                {/* <SystemAIChatMessagesPending
                     isStreaming={isStreaming}
-                    ephemeralStreamCount={ephemeralStreams.length}
+                    ephemeralMessageCount={ephemeralMessages.length}
                     targets={targets}
-                />
+                /> */}
 
                 <div aria-hidden className="pointer-events-none h-[34vh] min-h-24 max-h-72" />
                 <div ref={bottomRef} aria-hidden style={{ width: 1, height: 1 }} />

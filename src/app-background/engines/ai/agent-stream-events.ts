@@ -36,7 +36,7 @@ export function createAIStreamEventBridge(input: {
                     channel: normalized_event.channel,
                     type: normalized_event.type,
                 });
-                emitProtocolThreadEvent(
+                await emitProtocolThreadEvent(
                     threadUid, 
                     normalized_event
                 );

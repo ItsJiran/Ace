@@ -12,10 +12,10 @@ import type {
     BackgroundAIStreamEventPayloadType,
 } from '#/shared/schemas/ai';
 
-import { AgentClientThread, AgentClientThreadRuntimeState } from '#/shared/schemas/ai-client';
+import { AgentClientThreadRuntimeState } from '#/shared/schemas/agent-client-ephemeral';
 
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai';
-import { AgentThreadStreamHandlers } from './agent/agent-thread-stream-handlers';
+import AgentThreadStreamHandlers from './agent/agent-thread-stream-handlers';
 import resolveAgentInvokeContext from './ai/resolve-agent-context';
 
 type BackgroundThreadListEntryType = {
@@ -46,26 +46,14 @@ type BackgroundThreadListPayloadType = {
 class AgentClientEngineSingleton extends Engine {
     public readonly memory_uid = DefaultConfigAI.memory_uid;
     public readonly thread_uids_memory_uid = 'system:ai_engine:thread:uids';
-    public readonly thread_runtime_memory_uid = 'system:ai_engine:thread:runtime';
 
+    // Helper to generate consistent memory UIDs for threads and their subcategories (runtime, ephemeral).
     public readonly thread_memory_uid = (thread_uid: string) =>
         `system:ai_engine:thread:${thread_uid}`;
-
-    private removeBackgroundAIThreadListener: (() => void) | null = null;
-
-    private streamHandlers = new AgentThreadStreamHandlers({
-        readThread: (threadUid) => this.readThreadFromMemory(threadUid),
-        writeThread: (threadUid, thread) => {
-            KernelEngine.writeMemory(this.thread_memory_uid(threadUid), thread);
-        },
-        readRuntimeMap: () => this.readThreadRuntimeMapFromMemory(),
-        writeRuntimeMap: (runtimeMap) => {
-            KernelEngine.writeMemory(this.thread_runtime_memory_uid, runtimeMap);
-        },
-        syncThreadFromBackground: async (threadUid) => {
-            await this.syncCurrentThreadFromBackground(threadUid);
-        },
-    });
+    public readonly thread_runtime_memory_uid = (thread_uid: string) =>
+        `system:ai_engine:thread-runtime:${thread_uid}`;
+    public readonly thread_ephemeral_memory_uid = (thread_uid: string) =>
+        `system:ai_engine:thread-ephemeral:${thread_uid}`;
 
     // + --------------- ABSTRACT METHODS ----------------- +
 
@@ -75,25 +63,20 @@ class AgentClientEngineSingleton extends Engine {
         await this.syncAIMemory();
     }
 
-    // One global EventBus subscription for AI thread stream events.
-    // Centralization here avoids duplicate listeners when multiple hooks/components are active.
     async setupEventRoutes() {
-        if (this.removeBackgroundAIThreadListener) {
-            return;
-        }
-
-        this.removeBackgroundAIThreadListener = EventBus.listen<BackgroundAIStreamEventPayloadType>(
-            AI_THREAD_STREAM_EVENT_SLUG,
-            (event) => {
-                const payload = event?.payload;
-
-                if (!payload) {
-                    return;
-                }
-
-                void this.streamHandlers.handlePayload(payload);
-            },
-        );
+        // Ditching EventBus listener in favor of RPC route for stream events to ensure we can await event
+        // handling and reduce janky UI states from out-of-order packets. We can revisit this decision if we f
+        // ind the RPC approach introduces too much latency, but it provides a more reliable ordering guarantee which is crucial for a good UX with agent threads.
+        // EventBus.listen<BackgroundAIStreamEventPayloadType>(
+        //     AI_THREAD_STREAM_EVENT_SLUG,
+        //     (event) => {
+        //         const payload = event?.payload;
+        //         if (!payload) {
+        //             return;
+        //         }
+        //         void AgentThreadStreamHandlers.handlePayload(payload);
+        //     },
+        // );
     }
 
     // Registers stable Kernel memory buckets used by the desktop runtime.
@@ -102,24 +85,25 @@ class AgentClientEngineSingleton extends Engine {
             this.thread_uids_memory_uid,
             {} as Record<string, string>,
         );
-
-        KernelEngine.registerSystemMemory(
-            this.thread_runtime_memory_uid,
-            {} as Record<string, AgentClientThreadRuntimeState>,
-        );
     }
 
-    // Cleanup runtime listeners/caches when kernel shuts down.
-    async setupKernelTerminationHook() {
-        if (this.removeBackgroundAIThreadListener) {
-            this.removeBackgroundAIThreadListener();
-            this.removeBackgroundAIThreadListener = null;
-        }
+    async setupKernelTerminationHook() {}
+
+    async setupRpcRoutes() {
+        RPCEngine.handle(
+            AI_THREAD_STREAM_EVENT_SLUG,
+            async ({ payload }: { payload: BackgroundAIStreamEventPayloadType }) => {
+                console.log(
+                    '[AgentClientEngine] Received stream event payload from background using rpc:',
+                    payload,
+                );
+                await AgentThreadStreamHandlers.handlePayload(payload);
+            },
+        );
     }
 
     // + --------------- THREADS API METHODS --------------- +
 
-    // Resolve provider models from background and refresh AI config snapshot in RAM.
     async fetchModels(provider: AIProviderType | string) {
         const models = ((await RPCEngine.invoke('ai.syncAvailableModels', {
             provider: String(provider),
@@ -194,7 +178,7 @@ class AgentClientEngineSingleton extends Engine {
             {
                 timeoutMs: 0,
             },
-        )) ?? null) as AgentClientThread | null;
+        )) ?? null) as AgentThread | null;
 
         if (thread) {
             return await this.syncCurrentThreadFromBackground(threadUid);
@@ -219,28 +203,27 @@ class AgentClientEngineSingleton extends Engine {
             return false;
         }
 
+        // Cleaning main thread memory and index entry.
         KernelEngine.deleteMemory(this.thread_memory_uid(threadUid));
         const nextIndex = { ...this.readThreadIndexFromMemory() };
         delete nextIndex[threadUid];
         this.syncThreadIndex(nextIndex);
 
-        const nextRuntime = { ...this.readThreadRuntimeMapFromMemory() };
-        delete nextRuntime[threadUid];
-        KernelEngine.writeMemory(this.thread_runtime_memory_uid, nextRuntime);
+        // cleaning runtime & ephemeral
+        KernelEngine.deleteMemory(this.thread_runtime_memory_uid(threadUid));
+        KernelEngine.deleteMemory(this.thread_ephemeral_memory_uid(threadUid));
 
         return true;
     }
 
     // + ----------- THREADS MEMORIES METHODS -------------- +
 
-    // Reads one client thread from Kernel memory.
     readThreadFromMemory(threadUid: string) {
         return KernelEngine.readMemory(this.thread_memory_uid(threadUid)) as
-            | AgentClientThread
+            | AgentThread
             | undefined;
     }
 
-    // Reads thread index map from Kernel memory.
     readThreadIndexFromMemory() {
         return (
             (KernelEngine.readMemory(this.thread_uids_memory_uid) as
@@ -249,32 +232,18 @@ class AgentClientEngineSingleton extends Engine {
         );
     }
 
-    // Reads per-thread runtime status map from Kernel memory.
-    readThreadRuntimeMapFromMemory() {
-        return (
-            (KernelEngine.readMemory(this.thread_runtime_memory_uid) as
-                | Record<string, AgentClientThreadRuntimeState>
-                | undefined) ?? {}
-        );
-    }
-
     // + --------------- MEMORY SYNC METHODS -------------- +
 
-    // Ensures persisted thread keeps client-owned ephemeral_items across background syncs.
-    private resolveClientThread(
-        thread: AgentThread,
-        existingThread?: AgentClientThread,
-    ): AgentClientThread {
+    private resolveClientThread(thread: AgentThread, existingThread?: AgentThread): AgentThread {
         return {
+            ...existingThread,
             ...thread,
-            ephemeral_items: existingThread?.ephemeral_items ?? [],
         };
     }
 
-    // Writes a single thread snapshot into Kernel memory and updates thread index.
     syncThreadMemory(thread: AgentThread) {
         const memoryUid = this.thread_memory_uid(thread.thread_uid);
-        const existingThread = KernelEngine.readMemory(memoryUid) as AgentClientThread | undefined;
+        const existingThread = KernelEngine.readMemory(memoryUid) as AgentThread | undefined;
         const nextThread = this.resolveClientThread(thread, existingThread);
 
         if (existingThread === undefined) {

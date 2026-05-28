@@ -74,26 +74,23 @@ function SystemAIChatWindowBody({
 	const {
 		current_thread_uid,
 		current_thread_runtime,
-		ai_status,
-		is_streaming,
-		ephemeral_streams,
 		createThread,
-		setCurrentThread,
-		sendPrompt,
-		retryLastPrompt,
-		interruptThread,
+		is_streaming,
 		messages,
+		ephemeral_messages,
+		setCurrentThreadUid,
+		sendPrompt,
+		interruptThread,
 		list_threads,
 	} = useAIChatThread();
-	const renderedMessages = messages as BaseMessage[];
 
 	const resolvedModel = selectedModel || ensureSelectedModel();
 	const threadOptions = useMemo(() => Object.keys(list_threads), [list_threads]);
 	const threadCount = useMemo(() => Object.keys(list_threads).length, [list_threads]);
 
-	useEffect(() => {
-		bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-	}, [is_streaming, messages.length]);
+	// useEffect(() => {
+	// 	bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+	// }, [is_streaming, messages.length]);
 
 	const handleSubmit = async (promptOverride?: string) => {
 		const nextPrompt = (promptOverride ?? prompt).trim();
@@ -138,11 +135,10 @@ function SystemAIChatWindowBody({
 					selectedProvider={selectedProvider}
 					resolvedModel={resolvedModel}
 					isStreaming={is_streaming}
-					aiStatus={ai_status}
 					currentThreadUid={current_thread_uid}
 					threadOptions={threadOptions}
 					onSelectThread={(threadUid) => {
-						void setCurrentThread(threadUid);
+						void setCurrentThreadUid(threadUid);
 					}}
 					onOpenThreadMonitor={() => {
 						window.ACE.window.spawnWindow({
@@ -155,18 +151,19 @@ function SystemAIChatWindowBody({
 							y: 120,
 						});
 					}}
-					messageCount={renderedMessages.length}
+					messageCount={messages.length}
 					threadCount={threadCount}
 				/>
 
 				<SystemAIChatMessages
-					messages={renderedMessages}
+					messages={messages}
 					isStreaming={is_streaming}
-					ephemeralStreams={ephemeral_streams}
+					ephemeralMessages={ephemeral_messages}
 					currentThreadRuntime={current_thread_runtime}
 					currentThreadUid={current_thread_uid}
 					onRetryFailedRun={async () => {
-						await retryLastPrompt(selectedProvider, resolvedModel);
+						console.log('Retrying last prompt for thread', current_thread_uid);
+						// await retryLastPrompt(selectedProvider, resolvedModel);
 					}}
 					bottomRef={bottomRef}
 				/>

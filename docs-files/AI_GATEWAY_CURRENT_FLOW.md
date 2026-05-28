@@ -25,7 +25,7 @@ Key files:
 
 - src/app-background/engines/agent-thread-engine.ts
 - src/app-background/engines/ai/agent-instance.ts
-- src/app-background/engines/ai/ai-stream-events.ts
+- src/app-background/engines/ai/agent-stream-events.ts
 
 ### Desktop (src/app-desktop)
 

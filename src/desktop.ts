@@ -165,10 +165,14 @@ async function initEngineEventRoutesStep() {
 
 async function initEngineRpcRoutesStep() {
 	const windowEngine = window.ACE.window;
+	const aiEngine = window.ACE.ai as { _setupRpcRoutes?: () => Promise<void> | void };
 
 	await windowEngine._setupRpcRoutes();
+	if (typeof aiEngine._setupRpcRoutes === 'function') {
+		await aiEngine._setupRpcRoutes();
+	}
 
-	console.log('[Boot] Phase 6: Engine RPC routes registered (window).');
+	console.log('[Boot] Phase 6: Engine RPC routes registered (window, ai_gateway).');
 }
 
 export async function bootACE() {

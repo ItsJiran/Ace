@@ -2,65 +2,28 @@ import type { BaseMessage } from '@langchain/core/messages';
 import { Annotation } from '@langchain/langgraph';
 import type { AgentThreadStateType } from '#/shared/schemas/ai';
 
-const MAX_SHORT_TERM_MESSAGES = 8;
-
-export type AceAgentNodeStateType = {
-	messages: BaseMessage[];
-	goal_task?: string;
-	executioner_task?: string;
-};
-
 export const AceAgentState = Annotation.Root({
 	messages: Annotation<BaseMessage[]>({
-		reducer: (_current, update) => update,
-		default: () => [],
-	}),
+        reducer: (current, update) => {
+            const merged = current.concat(update);
+            return merged;
+        },
+        default: () => [],
+    }),
+
+	// Future enhancement: we can consider adding more structured fields for the goal and executioner 
+	// tasks, such as separate fields for task description, status, etc.
 	goal_task: Annotation<string | undefined>({
 		reducer: (current, update) =>
 			typeof update === 'string' && update.trim() ? update.trim() : current,
 		default: () => undefined,
 	}),
+
+	// Future enhancement: we can consider adding more structured fields for the goal and executioner 
+	// tasks, such as separate fields for task description, status, etc.
 	executioner_task: Annotation<string | undefined>({
 		reducer: (current, update) =>
 			typeof update === 'string' && update.trim() ? update.trim() : current,
 		default: () => undefined,
 	}),
 });
-
-export function trimWorkflowMessages(messages: BaseMessage[], maxMessages = MAX_SHORT_TERM_MESSAGES) {
-	if (messages.length <= maxMessages) {
-		return messages;
-	}
-
-	return messages.slice(-maxMessages);
-}
-
-export function resolveMessagesForNodeRun(messages: BaseMessage[]) {
-	return trimWorkflowMessages(messages);
-}
-
-export function resolveWorkflowMessagesUpdate(
-	currentMessages: BaseMessage[],
-	nextMessages: BaseMessage[] | undefined,
-) {
-	if (!Array.isArray(nextMessages) || nextMessages.length === 0) {
-		return trimWorkflowMessages(currentMessages);
-	}
-
-	return trimWorkflowMessages(nextMessages);
-}
-
-export function resolvePersistedAgentState(state: AceAgentNodeStateType): AgentThreadStateType {
-	return {
-		...state,
-		messages: Array.isArray(state.messages) ? state.messages : [],
-		goal_task:
-			typeof state.goal_task === 'string' && state.goal_task.trim()
-				? state.goal_task.trim()
-				: undefined,
-		executioner_task:
-			typeof state.executioner_task === 'string' && state.executioner_task.trim()
-				? state.executioner_task.trim()
-				: undefined,
-	};
-}

@@ -1,15 +1,15 @@
 type SystemAIChatMessagesPendingProps = {
 	isStreaming: boolean;
-	ephemeralStreamCount: number;
+	ephemeralMessageCount: number;
 	targets: Record<string, Record<string, string>>;
 };
 
 export function SystemAIChatMessagesPending({
 	isStreaming,
-	ephemeralStreamCount,
+	ephemeralMessageCount,
 	targets,
 }: SystemAIChatMessagesPendingProps) {
-	if (!isStreaming || ephemeralStreamCount > 0) {
+	if (!isStreaming || ephemeralMessageCount > 0) {
 		return null;
 	}
 

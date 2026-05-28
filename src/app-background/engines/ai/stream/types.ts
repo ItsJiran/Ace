@@ -1,5 +1,5 @@
 import type { WorkflowNodeType } from '#/shared/schemas/ai';
-import { AgentStreamAnyEvent } from '#/shared/schemas/ai-stream-event';
+import { AgentStreamAnyEvent } from '#/shared/schemas/agent-stream-events';
 
 export type WorkflowNodeName = WorkflowNodeType;
 

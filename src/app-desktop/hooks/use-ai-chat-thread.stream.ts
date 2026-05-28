@@ -99,7 +99,7 @@ function ensureBackgroundAIStreamListener() {
 			}
 
 			for (const sessionKey of resolveSessionKeysForPayload(payload.thread_uid)) {
-				threadTransportSessions.get(sessionKey)?.queue.push(payload.message);
+				// threadTransportSessions.get(sessionKey)?.queue.push(payload.message);
 			}
 		},
 	);

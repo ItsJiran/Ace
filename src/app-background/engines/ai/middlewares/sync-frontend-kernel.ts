@@ -1,7 +1,7 @@
 import { createMiddleware } from 'langchain';
 import { AgentThreadEngine } from '#/app-background/engines/agent-thread-engine';
 import { AgentConfigType } from '#/shared/schemas/ai.ts';
-import { resolvePersistedAgentState, type AceAgentNodeStateType } from '#/app-background/engines/ai/nodes/agent-state';
+import normalizeMessages from '../utils/normalize-messages';
 
 /**
  * SyncFrontendKernelMiddleware. This middleware is designed to synchronize the agent's state with the frontend kernel.
@@ -12,8 +12,31 @@ import { resolvePersistedAgentState, type AceAgentNodeStateType } from '#/app-ba
  * This enables the frontend to reconstruct the agent's state and provide a seamless user experience.
  */
 
+// Future ditching this middleware sync to a more like using events based synchronization, as
+// this middleware approach is a bit too coupled and also has some performance concern as it will
+// sync after every step of the agent execution, which might be too frequent in some cases. But for now, this is a
+// simple and straightforward way to achieve the synchronization between the agent and the frontend kernel.
+
 export default createMiddleware({
     name: 'SyncFrontendKernel',
+    beforeAgent: async (state, runtime) => {
+        const agentRuntime = runtime as AgentConfigType;
+        const thread_id = agentRuntime.configurable?.thread_id;
+
+        if (!thread_id) {
+            return;
+        }
+
+        AgentThreadEngine.syncThread(thread_id, {
+            thread_uid: thread_id,
+            checkpoint_id: agentRuntime.configurable?.checkpoint_id,
+            model: agentRuntime.configurable?.model,
+            provider: agentRuntime.configurable?.provider,
+            state: {
+                messages: normalizeMessages(state.messages),
+            },
+        });
+    },
     afterAgent: async (state, runtime) => {
         const agentRuntime = runtime as AgentConfigType;
         const thread_id = agentRuntime.configurable?.thread_id;
@@ -27,7 +50,9 @@ export default createMiddleware({
             checkpoint_id: agentRuntime.configurable?.checkpoint_id,
             model: agentRuntime.configurable?.model,
             provider: agentRuntime.configurable?.provider,
-            state: resolvePersistedAgentState(state as AceAgentNodeStateType),
+            state: {
+                messages: normalizeMessages(state.messages),
+            },
         });
     },
 });

@@ -6,10 +6,10 @@ type SystemAIChatHeaderProps = {
 	selectedProvider: string;
 	resolvedModel: string;
 	isStreaming: boolean;
-	aiStatus: {
-		label: string;
-		detail: string;
-	};
+	// aiStatus: {
+	// 	label: string;
+	// 	detail: string;
+	// };
 	currentThreadUid: string | null;
 	threadOptions: string[];
 	onSelectThread: (threadUid: string | null) => void;
@@ -22,7 +22,7 @@ export function SystemAIChatHeader({
 	// selectedProvider,
 	// resolvedModel,
 	isStreaming,
-	aiStatus,
+	// aiStatus,
 	currentThreadUid,
 	threadOptions,
 	onSelectThread,
@@ -35,9 +35,9 @@ export function SystemAIChatHeader({
 			<div className={[targets.btn.secondary, 'flex px-3'].join(' ')}>
 				<div className="flex flex-wrap items-center gap-2">
 					<span className={['ace-chat-status-pill', isStreaming ? 'is-streaming' : ''].join(' ')}>
-						{aiStatus.label}
+						{/* {aiStatus.label} */}
 					</span>
-					<span className="text-xs text-zinc-400">{aiStatus.detail}</span>
+					{/* <span className="text-xs text-zinc-400">{aiStatus.detail}</span> */}
 				</div>
 			</div>
 

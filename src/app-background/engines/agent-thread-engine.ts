@@ -11,22 +11,21 @@ import type {
 } from '#/shared/schemas/ai.ts';
 
 import SingletonAgentInstance from './ai/agent-instance';
-import { createAIStreamEventBridge } from './ai/ai-stream-events';
-import resolveApiKey from '../lib/utils/ai/resolve-api-key';
-import { cacheApiKey } from '../lib/utils/ai/api-key-session-cache';
+import { createAIStreamEventBridge } from './ai/agent-stream-events';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
-import { EventBus } from '#/shared/engines/event-engine';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai.ts';
-import { AgentStreamAnyEvent } from '#/shared/schemas/ai-stream-event';
+import { AgentStreamAnyEvent } from '#/shared/schemas/agent-stream-events';
+import normalizeMessages from './ai/utils/normalize-messages';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
 class AgentThreadEngineSingleton extends Engine {
     public ai_threads_uids_memory_uid = 'system:ai_engine:thread:uids';
     public ai_threads_memory_uid = (thread_uid: string) => `system:ai_engine:thread:${thread_uid}`;
+
     private activeThreadRuns = new Map<
         string,
         {
@@ -243,19 +242,30 @@ class AgentThreadEngineSingleton extends Engine {
      *
      * Flow: background stream handler -> EventBus -> desktop stream consumer.
      */
-    private emitProtocolThreadEvent(thread_uid: string, event: AgentStreamAnyEvent) {
-        void EventBus.emit(
-            AI_THREAD_STREAM_EVENT_SLUG,
-            {
-                payload: {
-                    thread_uid,
-                    event: event as AgentStreamAnyEvent,
-                },
+    private async emitProtocolThreadEvent(thread_uid: string, event: AgentStreamAnyEvent) {
+        // change this to RPCEngine call if we want to guarantee delivery and ordering,
+        // since RPCEngine will have guarantees on the message queuqe and also we can have retry mechanism in
+        // case of failure..
+
+        await RPCEngine.invoke(AI_THREAD_STREAM_EVENT_SLUG, {
+            payload: {
+                thread_uid,
+                event: event as AgentStreamAnyEvent,
             },
-            {
-                target: 'desktop',
-            },
-        );
+        });
+
+        // void EventBus.emit(
+        //     AI_THREAD_STREAM_EVENT_SLUG,
+        //     {
+        //         payload: {
+        //             thread_uid,
+        //             event: event as AgentStreamAnyEvent,
+        //         },
+        //     },
+        //     {
+        //         target: 'desktop',
+        //     },
+        // );
     }
 
     /**
@@ -424,8 +434,8 @@ class AgentThreadEngineSingleton extends Engine {
 
         const streamEvents = createAIStreamEventBridge({
             threadUid: thread_uid,
-            emitProtocolThreadEvent: (nextThreadUid, event : AgentStreamAnyEvent) =>
-                this.emitProtocolThreadEvent(nextThreadUid, event),
+            emitProtocolThreadEvent: async (nextThreadUid, event: AgentStreamAnyEvent) =>
+                await this.emitProtocolThreadEvent(nextThreadUid, event),
         });
 
         // Persist the latest execution identity before the stream begins so frontend sync reads a fresh snapshot.
@@ -562,7 +572,6 @@ class AgentThreadEngineSingleton extends Engine {
 
     /**
      * Upserts the persisted thread snapshot in kernel memory.
-     *
      * Flow: resolve memory slot -> merge payload with existing snapshot -> write/register memory.
      */
     public syncThread(thread_uid: string, payload: AgentInterProcessSyncPayloadType = {}): string {
@@ -571,6 +580,8 @@ class AgentThreadEngineSingleton extends Engine {
         const now = Date.now();
 
         const existingState = existingThread?.state ?? ({ messages: [] } as AgentThreadStateType);
+
+
         const nextState: AgentThreadStateType = {
             ...existingState,
             ...(payload.state ?? {}),
