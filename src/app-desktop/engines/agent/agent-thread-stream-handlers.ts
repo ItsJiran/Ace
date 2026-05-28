@@ -130,11 +130,12 @@ export class AgentThreadStreamHandlers {
         switch (event.type) {
             case 'started':
             case 'completed':
-                await AgentClientEngine.syncCurrentThreadFromBackground(thread_uid);
                 await this.updateRuntime(thread_uid, {
                     is_streaming: event.type === 'started',
                     last_error: undefined,
                 });
+
+                await AgentClientEngine.syncCurrentThreadFromBackground(thread_uid);
                 break;
 
             case 'failed':
@@ -204,8 +205,8 @@ export class AgentThreadStreamHandlers {
                 break;
 
             case 'message-finish':
-                await this.removeEphemeralItem(thread_uid, run_id, 'messages');
                 await AgentClientEngine.syncCurrentThreadFromBackground(thread_uid);
+                await this.removeEphemeralItem(thread_uid, run_id, 'messages');
                 break;
 
             case 'content-block-finish':

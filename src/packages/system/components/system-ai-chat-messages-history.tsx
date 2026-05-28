@@ -114,7 +114,7 @@ export function SystemAIChatMessagesHistory({
                                         ) : null}
 
                                         {/* if ephemeral counts 0 show streaming */}
-                                        {turn_index === turns.length - 1 &&
+                                        {/* {turn_index === turns.length - 1 &&
                                         currentThreadRuntime?.is_streaming &&
                                         ephemeralMessages.length === 0 ? (
                                             <div
@@ -131,7 +131,7 @@ export function SystemAIChatMessagesHistory({
                                                 />
                                                 <span>Sending prompt...</span>
                                             </div>
-                                        ) : null}
+                                        ) : null} */}
                                     </div>
                                 </div>
                             </div>
