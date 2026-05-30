@@ -45,7 +45,7 @@ export function SystemAIChatMessagesHistory({
                     key={`turn-${turn_index}`}
                     ref={isLastTurn ? lastTurnRef : undefined}
                     className={isLastTurn ? 'w-full' : 'h-fit w-full'}
-                    style={isLastTurn && parentHeight != null ? { height: parentHeight } : undefined}
+                    style={isLastTurn && parentHeight != null ? { "min-height": parentHeight } : undefined}
                 >
                     {/* --- HUMAN MESSAGE --- */}
                     {turn.human ? (

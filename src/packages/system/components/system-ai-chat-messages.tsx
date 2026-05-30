@@ -42,7 +42,10 @@ export function SystemAIChatMessages({
     }, []);
 
     return (
-        <div ref={containerRef} className="h-full overflow-auto px-5 pb-5 pt-[10px] [scrollbar-color:rgb(82_82_91_/_0.85)_transparent] [scrollbar-width:thin]">
+        <div
+            ref={containerRef}
+            className="h-full overflow-auto px-5 pb-5 pt-[10px] [scrollbar-color:rgb(82_82_91_/_0.85)_transparent] [scrollbar-width:thin]"
+        >
             <div className="ace-chat-message-list">
                 {messages.length === 0 && !isStreaming ? (
                     <SystemAIChatMessagesEmptyState targets={targets} />
