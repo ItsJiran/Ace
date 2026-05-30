@@ -1,6 +1,4 @@
-import type { RefObject } from 'react';
-import { BaseMessage } from '@langchain/core/messages';
-
+import { useEffect, useRef, useState } from 'react';
 import type {
     AgentClientThreadEphemeralItem,
     AgentClientThreadRuntimeState,
@@ -17,7 +15,6 @@ type SystemAIChatMessagesProps = {
     currentThreadRuntime?: AgentClientThreadRuntimeState;
     currentThreadUid: string | null;
     onRetryFailedRun?: () => void | Promise<void>;
-    bottomRef: RefObject<HTMLDivElement | null>;
 };
 
 export function SystemAIChatMessages({
@@ -27,44 +24,39 @@ export function SystemAIChatMessages({
     currentThreadRuntime,
     currentThreadUid,
     onRetryFailedRun,
-    bottomRef,
 }: SystemAIChatMessagesProps) {
     const { targets } = useAceTheme();
-    const turns = messages;
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const [parentHeight, setParentHeight] = useState<number | null>(null);
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+
+        const update = () => setParentHeight(el.clientHeight - 20);
+        update();
+
+        const ro = new ResizeObserver(update);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
 
     return (
-        <div className="h-full overflow-auto px-5 pb-5 pt-4 [scrollbar-color:rgb(82_82_91_/_0.85)_transparent] [scrollbar-width:thin]">
+        <div ref={containerRef} className="h-full overflow-auto px-5 pb-5 pt-[10px] [scrollbar-color:rgb(82_82_91_/_0.85)_transparent] [scrollbar-width:thin]">
             <div className="ace-chat-message-list">
                 {messages.length === 0 && !isStreaming ? (
                     <SystemAIChatMessagesEmptyState targets={targets} />
                 ) : null}
 
                 <SystemAIChatMessagesHistory
-                    turns={turns}
+                    turns={messages}
                     targets={targets}
                     ephemeralMessages={ephemeralMessages}
                     currentThreadRuntime={currentThreadRuntime}
                     currentThreadUid={currentThreadUid}
                     onRetryFailedRun={onRetryFailedRun}
-                    bottomRef={bottomRef}
+                    parentHeight={parentHeight}
                 />
-
-                {/* <SystemAIChatMessagesEphemeral
-                    ephemeralMessages={ephemeralMessages}
-                    currentThreadRuntime={currentThreadRuntime}
-                    currentThreadUid={currentThreadUid}
-                    onRetryFailedRun={onRetryFailedRun}
-                    targets={targets}
-                /> */}
-
-                {/* <SystemAIChatMessagesPending
-                    isStreaming={isStreaming}
-                    ephemeralMessageCount={ephemeralMessages.length}
-                    targets={targets}
-                /> */}
-
-                <div aria-hidden className="pointer-events-none min-h-24 max-h-72" />
-                {/* <div ref={bottomRef} aria-hidden style={{ width: 1, height: 1 }} /> */}
             </div>
         </div>
     );

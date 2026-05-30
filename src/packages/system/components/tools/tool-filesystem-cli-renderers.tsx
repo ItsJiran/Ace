@@ -1,4 +1,5 @@
 import { CheckCircle2, FileCode2, FolderTree, Search, TerminalSquare, TextSearch } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { MetaGrid, StructuredValueBlock, ToolSection } from './tool-renderer-shared';
@@ -379,33 +380,34 @@ function ToolExecuteRenderer(props: ToolRendererProps) {
 export function ToolFilesystemCliRenderer(props: ToolRendererProps) {
     const normalizedname = normalizename(props.name);
 
+    let content: React.ReactNode = null;
+
     if (normalizedname === 'ls') {
-        return <ToolLsRenderer {...props} />;
+        content = <ToolLsRenderer {...props} />;
+    } else if (normalizedname === 'glob') {
+        content = <ToolGlobRenderer {...props} />;
+    } else if (normalizedname === 'grep') {
+        content = <ToolGrepRenderer {...props} />;
+    } else if (normalizedname === 'read_file') {
+        content = <ToolReadFileRenderer {...props} />;
+    } else if (normalizedname === 'write_file') {
+        content = <ToolWriteFileRenderer {...props} />;
+    } else if (normalizedname === 'edit_file') {
+        content = <ToolEditFileRenderer {...props} />;
+    } else if (normalizedname === 'execute' || normalizedname === 'move') {
+        content = <ToolExecuteRenderer {...props} />;
     }
 
-    if (normalizedname === 'glob') {
-        return <ToolGlobRenderer {...props} />;
-    }
+    if (!content) return null;
 
-    if (normalizedname === 'grep') {
-        return <ToolGrepRenderer {...props} />;
-    }
-
-    if (normalizedname === 'read_file') {
-        return <ToolReadFileRenderer {...props} />;
-    }
-
-    if (normalizedname === 'write_file') {
-        return <ToolWriteFileRenderer {...props} />;
-    }
-
-    if (normalizedname === 'edit_file') {
-        return <ToolEditFileRenderer {...props} />;
-    }
-
-    if (normalizedname === 'execute' || normalizedname === 'move') {
-        return <ToolExecuteRenderer {...props} />;
-    }
-
-    return null;
+    return (
+        <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+        >
+            {content}
+        </motion.div>
+    );
 }

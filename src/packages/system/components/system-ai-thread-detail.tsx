@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Bot, Braces, Database, MessageSquareText, Workflow } from 'lucide-react';
+import { useMemo, useCallback, useState } from 'react';
+import { Bot, Braces, Database, MessageSquareText, Workflow, RefreshCw } from 'lucide-react';
 
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
@@ -16,6 +16,7 @@ import {
 } from '#/app-desktop/lib/utils/ai-thread-detail';
 import type { AgentThread } from '#/shared/schemas/ai';
 
+import { AgentClientEngine } from '#/app-desktop/engines/agent-client-engine';
 import { MetaGrid, StructuredValueBlock } from './tools/tool-renderer-shared';
 import { SectionShell, SummaryCard } from './system-runtime-monitor-shared';
 
@@ -30,7 +31,7 @@ function MessageCard({ message, index }: { message: SerializedAgentMessage; inde
 	const responseMetadata = resolveResponseMetadata(message);
 
 	return (
-		<div className="rounded-2xl border border-white/10 bg-black/15 p-4">
+		<div className="rounded-2xl border border-white/10 bg-black/15 overflow-auto p-4">
 			<div className="flex flex-wrap items-center gap-2">
 				<span className={[targets.btn.secondary, 'rounded-2xl px-3 py-1 text-[11px] uppercase tracking-[0.22em]'].join(' ')}>
 					#{index + 1}
@@ -88,6 +89,16 @@ function MessageCard({ message, index }: { message: SerializedAgentMessage; inde
 export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: string; threadUid: string }) {
 	const { targets } = useAceTheme();
 	const payload = useAceMemory<AgentThread>(memoryUid);
+	const [syncing, setSyncing] = useState(false);
+
+	const handleSyncFromWorkflow = useCallback(async () => {
+		setSyncing(true);
+		try {
+			await AgentClientEngine.syncCurrentThreadFromBackground(threadUid);
+		} finally {
+			setSyncing(false);
+		}
+	}, [threadUid]);
 	const envelope = useMemo(() => resolveThreadEnvelope(memoryUid, payload), [memoryUid, payload]);
 	const stateMessages = Array.isArray(payload?.state?.messages)
 		? (payload.state.messages as SerializedAgentMessage[])
@@ -95,8 +106,8 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 	const stateTokenSummary = useMemo(() => resolveTokenSummary(stateMessages), [stateMessages]);
 
 	return (
-		<div className="flex h-full min-h-0 flex-col gap-4 p-4 overflow-auto">
-			<section className={[targets.shell.first, 'flex flex-col items-start justify-between gap-4 rounded-2xl p-5 overflow-auto'].join(' ')}>
+		<div className="flex flex-col gap-4 p-4 overflow-auto">
+			<section className={[targets.shell.first, 'flex flex-col items-start justify-between gap-4 rounded-2xl p-5 h-fit overflow-auto'].join(' ')}>
 				<div>
 					<div className="text-xs uppercase tracking-[0.24em]">AI Thread Detail</div>
 					<div className="mt-2 text-2xl font-semibold">Formatted Persisted Thread Snapshot</div>
@@ -104,6 +115,21 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 						Inspect the persisted thread payload as structured UI instead of raw JSON, including message flow, token usage, state messages, and the raw envelope.
 					</div>
 				</div>
+				<div className="flex items-center gap-3 flex-wrap">
+					<button
+						onClick={handleSyncFromWorkflow}
+						disabled={syncing}
+						className={[
+							targets.btn.first,
+							'rounded-2xl px-3 py-1.5 text-xs flex items-center gap-2',
+							syncing ? 'opacity-60' : '',
+						].join(' ')}
+					>
+						<RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+						{syncing ? 'Syncing...' : 'Sync from Workflow'}
+					</button>
+				</div>
+
 				<div className="grid min-w-[420px] grid-cols-4 gap-3">
 					<SummaryCard
 						title="Thread UID"

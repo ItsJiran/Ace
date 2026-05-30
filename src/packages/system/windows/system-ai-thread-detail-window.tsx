@@ -20,7 +20,7 @@ function SystemAIThreadDetailWindow({ windowUid }: { windowUid: string }) {
 					return <div className="p-4 text-sm text-zinc-500">Missing AI thread detail metadata.</div>;
 				}
 
-				return <SystemAIThreadDetail memoryUid={memoryUid} threadUid={threadUid} />;
+				return <div className="h-full overflow-auto"><SystemAIThreadDetail memoryUid={memoryUid} threadUid={threadUid} /></div>;
 			}}
 		</AceWindow>
 	);

@@ -225,24 +225,30 @@ export class AgentThreadStreamHandlers {
             }
 
             case 'tool-finished': {
-                const output = (event as any)?.data?.output;
-                converter.handleToolFinished(tool_call_id, output);
+                const content = (event as any)?.data?.content ?? '';
+                const settled = converter.handleToolFinished(tool_call_id, content);
 
                 await this.removeEphemeralItem(thread_uid, tool_call_id, 'tool');
 
-                // ToolMessage is built from the messages events that follow.
-                // We no longer create a ToolMessage here — the dedup by uid
-                // in appendSettledResponse handles any overlap.
-                this.emitDebug(thread_uid, event, {
-                    result: `tool finished: ${tool_name} (ephemeral removed, waiting for message events)`,
-                });
+                if (settled) {
+                    await this.appendSettledResponse(thread_uid, settled);
+                    this.emitDebug(thread_uid, event, {
+                        result: `appended ToolMessage: ${tool_name} (${String(settled.content ?? '').slice(0, 80)}...)`,
+                    });
+                } else {
+                    this.emitDebug(thread_uid, event, { error: 'handleToolFinished returned null' });
+                }
                 break;
             }
 
             case 'tool-error': {
-                converter.handleToolFinished(tool_call_id, (event as any)?.data);
+                const errorContent = (event as any)?.data?.content ?? (event as any)?.data?.error ?? 'tool error';
+                const settled = converter.handleToolFinished(tool_call_id, errorContent);
                 await this.removeEphemeralItem(thread_uid, tool_call_id, 'tool');
-                this.emitDebug(thread_uid, event, { error: 'tool-error' });
+                if (settled) {
+                    await this.appendSettledResponse(thread_uid, settled);
+                }
+                this.emitDebug(thread_uid, event, { error: 'tool-error → ToolMessage created' });
                 break;
             }
 
@@ -367,47 +373,28 @@ export class AgentThreadStreamHandlers {
 
             case 'message-finish': {
                 const usage = (event as any)?.data?.usage;
-
-                // Detect whether this message-finish is for a tool node
-                const isToolMessage = (event as any)?.raw_graph_event?.params?.node === 'tools'
-                    || (event as any)?.raw_graph_event?.params?.namespace?.some?.((ns: string) => ns.startsWith('tools:'));
-
-                if (isToolMessage) {
-                    // Flush as ToolMessage using the converter's accumulated content
-                    const toolContent = converter.getLiveMessageText(run_id);
-                    converter.handleMessageFinish(run_id); // clear buffer
-
-                    await this.removeEphemeralItem(thread_uid, run_id, 'messages');
-
-                    if (toolContent) {
-                        const toolMsg: AgentThreadToolMessage = {
-                            type: 'ToolMessage',
-                            uid: run_id,
-                            tool_name: 'tool',
-                            tool_call_id: run_id,
-                            content: toolContent.trim(),
-                            timestamp: Date.now(),
-                        };
-                        await this.appendSettledResponse(thread_uid, toolMsg);
-                        this.emitDebug(thread_uid, event, {
-                            result: `appended ToolMessage (${String(toolContent).slice(0, 60)}...)`,
-                        });
-                    } else {
-                        this.emitDebug(thread_uid, event, { result: 'tool message-finish (empty content, skipped)' });
-                    }
-                    break;
-                }
-
-                // Normal AI message flow
                 const settled = converter.handleMessageFinish(run_id, usage);
 
                 await this.removeEphemeralItem(thread_uid, run_id, 'messages');
 
                 if (settled && settled.content) {
-                    await this.appendSettledResponse(thread_uid, settled);
-                    this.emitDebug(thread_uid, event, {
-                        result: `appended AIMessage (${String(settled.content ?? '').slice(0, 60)}...)`,
-                    });
+                    // Skip if content overlaps an existing ToolMessage in the current turn
+                    // (LangGraph emits redundant message-finish for tool outputs)
+                    const thread = AgentClientEngine.readThreadFromMemory(thread_uid);
+                    const lastTurn = thread?.state?.messages?.[thread.state.messages.length - 1];
+                    const first20 = settled.content.trim().slice(0, 20);
+                    const overlapsTool = first20 && lastTurn?.responses?.some(
+                        (r) => r.type === 'ToolMessage' && String((r as any).content ?? '').trim().startsWith(first20)
+                    );
+
+                    if (overlapsTool) {
+                        this.emitDebug(thread_uid, event, { result: 'AIMessage skipped (overlaps existing ToolMessage)' });
+                    } else {
+                        await this.appendSettledResponse(thread_uid, settled);
+                        this.emitDebug(thread_uid, event, {
+                            result: `appended AIMessage (${String(settled.content ?? '').slice(0, 60)}...)`,
+                        });
+                    }
                 } else {
                     this.emitDebug(thread_uid, event, {
                         result: settled
@@ -418,25 +405,10 @@ export class AgentThreadStreamHandlers {
                 break;
             }
 
-            case 'content-block-finish': {
+            case 'content-block-finish':
                 await this.removeEphemeralItem(thread_uid, run_id, 'messages');
-
-                // If this content block belongs to a tool node, capture its
-                // content for ToolMessage creation on message-finish.
-                const isToolMessage = (event as any)?.raw_graph_event?.params?.node === 'tools'
-                    || (event as any)?.raw_graph_event?.params?.namespace?.some?.((ns: string) => ns.startsWith('tools:'));
-                if (isToolMessage) {
-                    const blockContent = (event as any)?.raw_graph_event?.params?.data?.content;
-                    if (blockContent?.text) {
-                        converter.handleContentBlockDelta(run_id, blockContent.text);
-                    }
-                }
-
-                this.emitDebug(thread_uid, event, {
-                    result: `content-block-finish (${isToolMessage ? 'tool' : 'ai'}) (run_id: ${run_id})`,
-                });
+                this.emitDebug(thread_uid, event, { result: `content-block-finish (run_id: ${run_id})` });
                 break;
-            }
 
             case 'usage': {
                 const usageData = (event as any)?.data?.usage;

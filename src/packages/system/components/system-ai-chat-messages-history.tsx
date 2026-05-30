@@ -1,4 +1,4 @@
-import React, { RefObject } from 'react';
+import React, { RefObject, useEffect, useRef } from 'react';
 import { Wrench } from 'lucide-react';
 import { SystemAIChatToolMessage } from './system-ai-chat-tool-message';
 import { AgentChatTurn } from '#/shared/schemas/agent-thread-state';
@@ -14,7 +14,7 @@ type SystemAIChatMessagesHistoryProps = {
     currentThreadRuntime?: AgentClientThreadRuntimeState;
     currentThreadUid: string | null;
     onRetryFailedRun?: () => void | Promise<void>;
-    bottomRef: RefObject<HTMLDivElement | null>;
+    parentHeight: number | null;
 };
 
 export function SystemAIChatMessagesHistory({
@@ -24,12 +24,29 @@ export function SystemAIChatMessagesHistory({
     currentThreadRuntime,
     currentThreadUid,
     onRetryFailedRun,
-    bottomRef,
+    parentHeight,
 }: SystemAIChatMessagesHistoryProps) {
+    const lastTurnRef = useRef<HTMLDivElement | null>(null);
+
+    // Auto-scroll to the last turn whenever turns change
+    useEffect(() => {
+        if (lastTurnRef.current) {
+            lastTurnRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+    }, [turns.length, turns[turns.length - 1]?.responses?.length]);
+
     return (
         <>
-            {turns.map((turn, turn_index) => (
-                <React.Fragment key={`turn-${turn_index}`}>
+            {turns.map((turn, turn_index) => {
+                const isLastTurn = turn_index === turns.length - 1;
+
+                return (
+                <div
+                    key={`turn-${turn_index}`}
+                    ref={isLastTurn ? lastTurnRef : undefined}
+                    className={isLastTurn ? 'w-full' : 'h-fit w-full'}
+                    style={isLastTurn && parentHeight != null ? { height: parentHeight } : undefined}
+                >
                     {/* --- HUMAN MESSAGE --- */}
                     {turn.human ? (
                         <div className="flex justify-end">
@@ -61,12 +78,9 @@ export function SystemAIChatMessagesHistory({
                                     <div className="flex flex-col gap-4">
                                         {/* Settled AI Messages */}
                                         {turn.responses.map((response, index) => {
-                                            const sectionClassName =
-                                                index === 0 ? '' : 'border-t border-white/10 pt-4';
-
                                             if (response.type === 'AIMessage') {
                                                 return (
-                                                    <div key={`resp-${index}`} className={sectionClassName}>
+                                                    <div key={`resp-${index}`}>
                                                         <div className="whitespace-pre-wrap">
                                                             {response.content}
                                                         </div>
@@ -76,7 +90,7 @@ export function SystemAIChatMessagesHistory({
 
                                             if (response.type === 'ToolMessage') {
                                                 return (
-                                                    <div key={`resp-${index}`} className={sectionClassName}>
+                                                    <div key={`resp-${index}`}>
                                                         <SystemAIChatToolMessage
                                                             message={response}
                                                         />
@@ -88,7 +102,7 @@ export function SystemAIChatMessagesHistory({
                                         })}
 
                                         {/* Ephemeral Streaming (Only on last turn) */}
-                                        {turn_index === turns.length - 1 &&
+                                        {isLastTurn &&
                                         currentThreadRuntime?.is_streaming &&
                                         ephemeralMessages.length > 0 ? (
                                             <>
@@ -126,11 +140,9 @@ export function SystemAIChatMessagesHistory({
                             </div>
                         </div>
                     ) : null}
-                </React.Fragment>
-            ))}
-
-            {/* 🔥 TARUH BOTTOM REF DI SINI (ABSOLUTE BOTTOM) 🔥 */}
-            <div ref={bottomRef} aria-hidden="true" className="h-px w-full shrink-0" />
+                </div>
+                );
+            })}
         </>
     );
 }
