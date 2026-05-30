@@ -1,20 +1,12 @@
 import { AgentThreadToolMessage } from "#/shared/schemas/agent-thread-state";
 
-export type ToolRendererKind =
-    | 'planning'
-    | 'window'
-    | 'filesystem'
-    | 'duckduckgo'
-    | 'error'
-    | 'generic';
-
 export type ToolRendererProps = {
     name: string;
     content: unknown;
     record: AgentThreadToolMessage;
 };
 
-export function normalizeToolName(value: string) {
+export function normalizename(value: string) {
     return value
         .trim()
         .toLowerCase()
@@ -76,150 +68,4 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
 
 export function asArray(value: unknown): unknown[] {
     return Array.isArray(value) ? value : [];
-}
-
-function looksLikePlanningPayload(value: unknown): boolean {
-    const record = asRecord(parseStructuredValue(value));
-    if (!record) {
-        return false;
-    }
-
-    return ['plan', 'steps', 'tasks', 'todo', 'todos', 'checklist', 'next_steps'].some(
-        (key) => key in record,
-    );
-}
-
-function looksLikeWindowPayload(value: unknown): boolean {
-    const normalizedValue = parseStructuredValue(value);
-    if (Array.isArray(normalizedValue)) {
-        return normalizedValue.some((item) => looksLikeWindowPayload(item));
-    }
-
-    const record = asRecord(normalizedValue);
-    if (!record) {
-        return false;
-    }
-
-    return ['window_uid', 'windows', 'bounds', 'x', 'y', 'width', 'height', 'title'].some(
-        (key) => key in record,
-    );
-}
-
-function looksLikeFilesystemPayload(value: unknown): boolean {
-    const normalizedValue = parseStructuredValue(value);
-    if (Array.isArray(normalizedValue)) {
-        if (
-            normalizedValue.every((item) => {
-                const record = asRecord(item);
-                if (!record) {
-                    return false;
-                }
-
-                return [
-                    'path',
-                    'is_dir',
-                    'size',
-                    'modified_at',
-                    'line_number',
-                    'line',
-                    'match',
-                ].some((key) => key in record);
-            })
-        ) {
-            return true;
-        }
-
-        return normalizedValue.some((item) => looksLikeFilesystemPayload(item));
-    }
-
-    const record = asRecord(normalizedValue);
-    if (!record) {
-        return false;
-    }
-
-    return ['path', 'paths', 'content', 'entries', 'exists', 'directory', 'cwd', 'filename'].some(
-        (key) => key in record,
-    );
-}
-
-function looksLikeDuckDuckGoPayload(value: unknown): boolean {
-    const normalizedValue = parseStructuredValue(value);
-    if (!Array.isArray(normalizedValue) || normalizedValue.length === 0) {
-        return false;
-    }
-
-    return normalizedValue.every((item) => {
-        const record = asRecord(item);
-        if (!record) {
-            return false;
-        }
-
-        return ['title', 'link', 'snippet'].some((key) => key in record);
-    });
-}
-
-function looksLikeErrorPayload(value: unknown): boolean {
-    const normalizedValue = parseStructuredValue(value);
-    const record = asRecord(normalizedValue);
-    if (!record) {
-        return false;
-    }
-
-    return ['error', 'message', 'stderr', 'stack', 'exception'].some((key) => key in record);
-}
-
-export function resolveToolRendererKind({
-    name,
-    content,
-    record,
-}: ToolRendererProps): ToolRendererKind {
-    const normalizedToolName = normalizeToolName(name);
-
-    if (/(plan|planning|todo|task)/.test(normalizedToolName)) {
-        return 'planning';
-    }
-
-    if (/(window|ace_window)/.test(normalizedToolName)) {
-        return 'window';
-    }
-
-    if (
-        /(filesystem|file_system|\bfs\b|file|directory|path|\bls\b|\bglob\b|\bgrep\b|read_file|write_file|edit_file|mkdir|delete_file|move_file|copy_file|\bmove\b|shell|command|script)/.test(
-            normalizedToolName,
-        )
-    ) {
-        return 'filesystem';
-    }
-
-    if (
-        /(duckduckgo|duck_duck_go|duckduckgo_search|duckduckgo_search|duckduckgo_search|search)/.test(
-            normalizedToolName,
-        )
-    ) {
-        if (looksLikeDuckDuckGoPayload(content) || looksLikeDuckDuckGoPayload(record)) {
-            return 'duckduckgo';
-        }
-    }
-
-    if (looksLikePlanningPayload(content)) {
-        return 'planning';
-    }
-
-    if (looksLikeWindowPayload(content) || looksLikeWindowPayload(record)) {
-        return 'window';
-    }
-
-    if (looksLikeFilesystemPayload(content) || looksLikeFilesystemPayload(record)) {
-        return 'filesystem';
-    }
-
-    if (looksLikeDuckDuckGoPayload(content) || looksLikeDuckDuckGoPayload(record)) {
-        return 'duckduckgo';
-    }
-
-    if (looksLikeErrorPayload(content) || looksLikeErrorPayload(record)) {
-        return 'error';
-    }
-
-    return 'generic';
 }

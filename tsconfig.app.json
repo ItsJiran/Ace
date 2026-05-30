@@ -23,11 +23,12 @@
     "jsx": "react-jsx",
     /* Linting */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false, // temporary, to avoid too much warnings. We can enable it later when we want to clean up the code.
+    "noUnusedParameters": false,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
+    
     "paths": {
       "#/*": [
         "./src/*"

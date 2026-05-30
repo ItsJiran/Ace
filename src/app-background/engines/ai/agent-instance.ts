@@ -30,6 +30,17 @@ export default class SingletonAgentInstance {
         return await this.value.streamEvents(state, config);
     }
 
+    /**
+     * Inject values directly into the root state channel while a run is active.
+     * Used by stopThreadPrompt to signal is_interrupted to running nodes.
+     */
+    public async updateState(
+        config: Record<string, unknown>,
+        values: Record<string, unknown>,
+    ) {
+        return await this.value.updateState(config, values, '__root__');
+    }
+
     public static getInstance(): SingletonAgentInstance {
         if (!SingletonAgentInstance._instance) {
             SingletonAgentInstance._instance = new SingletonAgentInstance();

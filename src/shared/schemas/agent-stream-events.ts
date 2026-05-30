@@ -1,4 +1,3 @@
-import { ToolMessage } from "langchain";
 import { WorkflowNodeNames } from "../../shared/schemas/ai";
 
 /**
@@ -23,11 +22,14 @@ export type AgentStreamEvent = {
     seq : number | null;
     data : Record<string, unknown>;
     node : typeof WorkflowNodeNames[keyof typeof WorkflowNodeNames] | null;
+    /** Raw LangGraph event — preserved for debugging. */
+    raw_graph_event?: unknown;
 }
 export type AgentStreamAnyEvent =
     | AgentStreamToolEvent
     | AgentStreamLifecycleEvent
-    | AgentStreamMessageEvent;
+    | AgentStreamMessageEvent
+    | AgentStreamInvokeEvent;
 
 export type AgentStreamLifecycleEvent =
     | AgentStreamLifecycleStartedEvent
@@ -45,6 +47,10 @@ export type AgentStreamMessageEvent =
     | AgentStreamMessageFinishEvent
     | AgentStreamMessageUsageEvent
     | AgentStreamMessageContentBlockEvent;
+
+export type AgentStreamInvokeEvent =
+    | AgentStreamInvokeCompletedEvent
+    | AgentStreamInvokeFailedEvent;
 
 /** + -------------- STREAM TOOL ---------------- */
 
@@ -74,10 +80,12 @@ export type AgentStreamToolFinishedEvent = AgentStreamEvent & {
     channel: 'tool';
     type: 'tool-finished';
     data: {
-        tool_call_id : string;
-        // tool_name : string; // this is the tool name, 
-        output : ToolMessage;
-    }
+        tool_call_id: string;
+        tool_name?: string;
+        /** Unwrapped from LangChain serialized output.kwargs.content */
+        content?: string;
+        status?: string;
+    };
 };
 
 /** + -------------- STREAM LIFECYCLE ---------------- */
@@ -167,5 +175,29 @@ export type AgentStreamMessageContentBlockEvent = AgentStreamEvent & {
     }
 };
 
+
+/** + -------------- INVOKE LIFECYCLE (per-prompt, not per-node) ---------------- */
+
+/**
+ * Fires exactly once when the background runThreadPrompt completes successfully.
+ * Unlike lifecycle:started/completed which fire per-node, this signals the
+ * true end of a user prompt invocation.
+ */
+export type AgentStreamInvokeCompletedEvent = AgentStreamEvent & {
+    channel: 'invoke';
+    type: 'invoke-completed';
+    data: {
+        thread_uid: string;
+    };
+};
+
+export type AgentStreamInvokeFailedEvent = AgentStreamEvent & {
+    channel: 'invoke';
+    type: 'invoke-failed';
+    data: {
+        thread_uid: string;
+        error?: string;
+    };
+};
 
 /** ESA */

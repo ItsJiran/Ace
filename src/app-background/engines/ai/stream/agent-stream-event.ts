@@ -60,19 +60,20 @@ export function resolveStreamToolEvent(
     | null
     | undefined {
     if (event?.method != 'tools') return null;
-    const node = resolveNodeFromNamespace(event?.namespace);
+    const node = resolveNodeFromNamespace(event?.params?.namespace);
+    const rawData = event?.params?.data;
 
-    switch (event?.params?.data?.event) {
-        case 'tool-start':
+    switch (rawData?.event) {
+        case 'tool-started':
             return {
                 node,
                 channel: 'tool',
                 type: 'tool-started',
                 seq: event?.seq,
                 data: {
-                    tool_call_id: event?.params?.data?.tool_call_id,
-                    tool_name: event?.params?.data?.tool_name,
-                    input: event?.params?.data?.input,
+                    tool_call_id: rawData?.tool_call_id,
+                    tool_name: rawData?.tool_name,
+                    input: rawData?.input,
                 },
             };
         case 'tool-delta':
@@ -82,8 +83,8 @@ export function resolveStreamToolEvent(
                 type: 'tool-delta',
                 seq: event?.seq,
                 data: {
-                    tool_name: event?.params?.data?.tool_name,
-                    run_id: event?.params?.data?.run_id,
+                    tool_name: rawData?.tool_name,
+                    run_id: rawData?.run_id,
                 },
             };
         case 'tool-error':
@@ -93,21 +94,27 @@ export function resolveStreamToolEvent(
                 type: 'tool-error',
                 seq: event?.seq,
                 data: {
-                    tool_name: event?.params?.data?.tool_name,
-                    run_id: event?.params?.data?.run_id,
+                    tool_name: rawData?.tool_name,
+                    run_id: rawData?.run_id,
                 },
             };
-        case 'tool-finished':
+        case 'tool-finished': {
+            // LangGraph serializes ToolMessage as { lc, type:'constructor', id, kwargs: {...} }
+            const rawOutput = rawData?.output;
+            const kwargs = rawOutput?.kwargs ?? rawOutput;
             return {
                 node,
                 channel: 'tool',
                 type: 'tool-finished',
                 seq: event?.seq,
                 data: {
-                    tool_call_id: event?.params?.data?.tool_call_id,
-                    output: event?.params?.data?.output,
+                    tool_call_id: rawData?.tool_call_id ?? kwargs?.tool_call_id,
+                    tool_name: kwargs?.name ?? rawData?.tool_name,
+                    content: kwargs?.content,
+                    status: kwargs?.status,
                 },
             };
+        }
         default:
             return null;
     }
@@ -116,7 +123,7 @@ export function resolveStreamToolEvent(
 // + --------- Resolve Lifecycle Event -----------------
 
 export function resolveStreamLifecycleEvent(event: any): any | null | undefined {
-    const node = resolveNodeFromNamespace(event?.namespace);
+    const node = resolveNodeFromNamespace(event?.params?.namespace);
     if (event?.method != 'lifecycle') return null;
 
     switch (event?.params?.data?.event) {
@@ -166,7 +173,7 @@ export function resolveStreamMessageEvent(
     | AgentStreamMessageContentBlockEvent
     | null
     | undefined {
-    const node = resolveNodeFromNamespace(event?.namespace);
+    const node = resolveNodeFromNamespace(event?.params?.namespace);
     if (event?.method != 'messages') return null;
 
     switch (event?.params?.data?.event) {

@@ -7,7 +7,7 @@ import { AgentThreadToolMessage } from '#/shared/schemas/agent-thread-state';
 export function SystemAIChatToolMessage({ message }: { message: AgentThreadToolMessage }) {
     const { targets } = useAceTheme();
     const toolRecord = message as AgentThreadToolMessage;
-    const toolName = toolRecord.tool_name ?? 'tool';
+    const name = toolRecord.tool_name ?? 'tool';
 
     const toolCallId = typeof toolRecord.tool_call_id === 'string' ? toolRecord.tool_call_id : null;
     const content = toolRecord.content;
@@ -22,7 +22,7 @@ export function SystemAIChatToolMessage({ message }: { message: AgentThreadToolM
                     ].join(' ')}
                 >
                     <Wrench size={13} />
-                    {toolName}
+                    {name}
                 </span>
                 {toolCallId ? (
                     <span
@@ -77,7 +77,7 @@ export function SystemAIChatToolMessage({ message }: { message: AgentThreadToolM
                 ) : null}
             </div>
 
-            <ToolPayloadRenderer name={toolName} content={content} record={toolRecord} />
+            <ToolPayloadRenderer name={name} content={content} record={toolRecord} />
         </div>
     );
 }

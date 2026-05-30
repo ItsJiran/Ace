@@ -5,7 +5,7 @@ import { extractAgentStreamEvent, type EmitProtocolThreadEvent } from './stream'
 // frontend as much as possible to avoid janky UI states.
 
 // Key : threadUid, number : seq, value : event payload
-const threadEventBuffer = new Map<string, Map<number, Record<string, unknown>>>();
+// const threadEventBuffer = new Map<string, Map<number, Record<string, unknown>>>();
 
 /**
  * Bridges raw LangGraph stream events into the desktop thread protocol.
@@ -28,23 +28,32 @@ export function createAIStreamEventBridge(input: {
         for await (const event of stream) {
             const normalized_event = extractAgentStreamEvent(event);
 
-            // For now only treat normalized events, since its the things 
-            // that i already map out.
             if (normalized_event) {
                 console.log('[AIStreamBridge] emitting event', {
                     threadUid,
                     channel: normalized_event.channel,
                     type: normalized_event.type,
                 });
-                await emitProtocolThreadEvent(
-                    threadUid, 
-                    normalized_event
-                );
+                // Attach the raw graph event for debug visibility
+                normalized_event.raw_graph_event = event;
+                await emitProtocolThreadEvent(threadUid, normalized_event);
             } else {
                 console.dir('[AIStreamBridge] unrecognized event', {
                     threadUid,
                     raw_event: event,
                 });
+
+                // Emit as debug/raw event so the AgentStreamDebug window can see it
+                await emitProtocolThreadEvent(threadUid, {
+                    channel: 'debug',
+                    type: 'raw-event',
+                    seq: null,
+                    node: null,
+                    data: {
+                        reason: 'unrecognized by extractAgentStreamEvent',
+                    },
+                    raw_graph_event: event,
+                } as any);
             }
         }
     };

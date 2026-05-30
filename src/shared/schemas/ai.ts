@@ -23,6 +23,8 @@ export interface AceAgentWorkflowState {
     messages: BaseMessage[];
     goal_task?: string;
     executioner_task?: string;
+    /** Set by stopThreadPrompt via graph.updateState — nodes check this to abort early. */
+    is_interrupted?: boolean;
 }
 
 export const AgentModelModes = {

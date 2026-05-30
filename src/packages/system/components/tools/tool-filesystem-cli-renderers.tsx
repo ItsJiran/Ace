@@ -2,7 +2,7 @@ import { CheckCircle2, FileCode2, FolderTree, Search, TerminalSquare, TextSearch
 
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { MetaGrid, StructuredValueBlock, ToolSection } from './tool-renderer-shared';
-import { asRecord, normalizeToolName, parseStructuredValue } from './tool-renderer.utils';
+import { asRecord, normalizename, parseStructuredValue } from './tool-renderer.utils';
 import type { ToolRendererProps } from './tool-renderer.utils';
 
 function resolveToolTextContent(value: unknown) {
@@ -150,7 +150,7 @@ function ToolGlobRenderer(props: ToolRendererProps) {
         <div className="flex flex-col gap-3">
             <MetaGrid
                 items={[
-                    { label: 'Tool', value: props.toolName },
+                    { label: 'Tool', value: props.name },
                     { label: 'Match Count', value: paths.length ? String(paths.length) : null },
                 ]}
             />
@@ -215,7 +215,7 @@ function ToolGrepRenderer(props: ToolRendererProps) {
         <div className="flex flex-col gap-3">
             <MetaGrid
                 items={[
-                    { label: 'Tool', value: props.toolName },
+                    { label: 'Tool', value: props.name },
                     { label: 'Files', value: sections.size ? String(sections.size) : null },
                     { label: 'Matches', value: matchCount ? String(matchCount) : null },
                 ]}
@@ -315,7 +315,7 @@ function ToolWriteFileRenderer(props: ToolRendererProps) {
     const textContent = resolveToolTextContent(props.content) ?? '';
     const match = textContent.match(/Successfully wrote to '(.+)'/);
     return renderStatusMessage('Write File Result', textContent, [
-        { label: 'Tool', value: props.toolName },
+        { label: 'Tool', value: props.name },
         { label: 'Path', value: match?.[1] ?? null },
     ]);
 }
@@ -324,7 +324,7 @@ function ToolEditFileRenderer(props: ToolRendererProps) {
     const textContent = resolveToolTextContent(props.content) ?? '';
     const match = textContent.match(/Successfully replaced (\d+) occurrence\(s\) in '(.+)'/);
     return renderStatusMessage('Edit File Result', textContent, [
-        { label: 'Tool', value: props.toolName },
+        { label: 'Tool', value: props.name },
         { label: 'Occurrences', value: match?.[1] ?? null },
         { label: 'Path', value: match?.[2] ?? null },
     ]);
@@ -377,33 +377,33 @@ function ToolExecuteRenderer(props: ToolRendererProps) {
 }
 
 export function ToolFilesystemCliRenderer(props: ToolRendererProps) {
-    const normalizedToolName = normalizeToolName(props.toolName);
+    const normalizedname = normalizename(props.name);
 
-    if (normalizedToolName === 'ls') {
+    if (normalizedname === 'ls') {
         return <ToolLsRenderer {...props} />;
     }
 
-    if (normalizedToolName === 'glob') {
+    if (normalizedname === 'glob') {
         return <ToolGlobRenderer {...props} />;
     }
 
-    if (normalizedToolName === 'grep') {
+    if (normalizedname === 'grep') {
         return <ToolGrepRenderer {...props} />;
     }
 
-    if (normalizedToolName === 'read_file') {
+    if (normalizedname === 'read_file') {
         return <ToolReadFileRenderer {...props} />;
     }
 
-    if (normalizedToolName === 'write_file') {
+    if (normalizedname === 'write_file') {
         return <ToolWriteFileRenderer {...props} />;
     }
 
-    if (normalizedToolName === 'edit_file') {
+    if (normalizedname === 'edit_file') {
         return <ToolEditFileRenderer {...props} />;
     }
 
-    if (normalizedToolName === 'execute' || normalizedToolName === 'move') {
+    if (normalizedname === 'execute' || normalizedname === 'move') {
         return <ToolExecuteRenderer {...props} />;
     }
 

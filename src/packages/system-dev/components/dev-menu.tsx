@@ -1,6 +1,6 @@
 import { DeferredWindowContent } from '#/app-desktop/components/layout/deferred-window-content';
 import { SpatialVirtualizer } from '#/app-desktop/components/layout/spatial-virtualizer';
-import { Share2, Power, MessageSquare, Settings2, TerminalSquare } from 'lucide-react';
+import { Share2, Power, MessageSquare, Settings2, TerminalSquare, Activity } from 'lucide-react';
 import type { DesktopState } from '#/shared/schemas/state.ts';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
@@ -98,6 +98,18 @@ function DevMenu({ close }: { close: () => void }) {
         });
     };
 
+    const spawnAgentStreamDebug = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'agent-stream-debug-window',
+            title: 'Agent Stream Debug',
+            width: 520,
+            height: 680,
+            x: 500,
+            y: 80,
+        });
+    };
+
     const buttonClass = [
         targets.btn.first,
         'flex items-center justify-start gap-2 w-full px-3 py-2 mb-2 rounded-sm',
@@ -138,6 +150,11 @@ function DevMenu({ close }: { close: () => void }) {
             label: 'Dev Logs',
             icon: <TerminalSquare size={14} className="text-emerald-300" />,
             onClick: spawnDevLogConsole,
+        },
+        {
+            label: 'Agent Stream Debug',
+            icon: <Activity size={14} className="text-purple-300" />,
+            onClick: spawnAgentStreamDebug,
         },
         {
             label: isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode',

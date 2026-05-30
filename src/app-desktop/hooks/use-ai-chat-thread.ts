@@ -55,7 +55,7 @@ export function useAIChatThread() {
      */
 
     useEffect(() => {
-        void AgentClientEngine.syncAIMemory();
+        void AgentClientEngine.syncConfigFromBackground();
     }, []);
 
     useEffect(() => {
@@ -128,11 +128,25 @@ export function useAIChatThread() {
                 return null;
             }
 
+            // Create a new turn with the human message so stream handlers
+            // can append AI responses into it incrementally.
+            const existingMessages = current_thread?.state?.messages ?? [];
+            const newTurn: AgentChatTurn = {
+                turn_id: `turn-${Date.now()}`,
+                human: {
+                    uid: `human-${Date.now()}`,
+                    content: normalizedPrompt,
+                    timestamp: Date.now(),
+                },
+                responses: [],
+            };
+
             await AgentClientEngine.syncThread(threadUid, {
                 provider: selectedProvider,
                 model: selectedModel,
                 state: {
                     ...(current_thread?.state ?? {}),
+                    messages: [...existingMessages, newTurn],
                 },
                 updated_at: Date.now(),
             });

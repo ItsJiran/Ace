@@ -25,6 +25,7 @@ interface ElectronAPI {
     onGlobalKeyboard: (callback: (payload: { type: 'keydown' | 'keyup'; keycode: number; rawcode: number; code: string | null; altKey: boolean; ctrlKey: boolean; shiftKey: boolean; metaKey: boolean }) => void) => () => void;
     getPlatform: () => Promise<string>;
     quitApp: () => Promise<boolean>;
+    backgroundStatus: () => Promise<{ active: boolean; runtime_mode: string; pid: number | null }>;
 }
 
 interface EnvVariablesAPI {

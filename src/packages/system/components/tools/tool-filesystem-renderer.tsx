@@ -30,10 +30,10 @@ export function ToolFilesystemRenderer(props: ToolRendererProps) {
 		return cliRenderer;
 	}
 
-	const filesystemRecord = resolveFilesystemRecord(props.artifact) ?? resolveFilesystemRecord(props.content);
+	const filesystemRecord = resolveFilesystemRecord(props.content) ?? resolveFilesystemRecord(props.content);
 	const entries =
-		resolveFilesystemEntries(props.artifact).length > 0
-			? resolveFilesystemEntries(props.artifact)
+		resolveFilesystemEntries(props.content).length > 0
+			? resolveFilesystemEntries(props.content)
 			: resolveFilesystemEntries(props.content);
 	if (!filesystemRecord && entries.length === 0) {
 		return <ToolGenericRenderer {...props} />;
@@ -45,7 +45,7 @@ export function ToolFilesystemRenderer(props: ToolRendererProps) {
 		<div className="flex flex-col gap-3">
 			<MetaGrid
 				items={[
-					{ label: 'Tool', value: props.toolName },
+					{ label: 'Tool', value: props.name },
 					{ label: 'Path', value: typeof filesystemRecord?.path === 'string' ? filesystemRecord.path : null },
 					{ label: 'Directory', value: typeof filesystemRecord?.directory === 'string' ? filesystemRecord.directory : null },
 					{ label: 'Exists', value: typeof filesystemRecord?.exists === 'boolean' ? String(filesystemRecord.exists) : null },
@@ -71,7 +71,7 @@ export function ToolFilesystemRenderer(props: ToolRendererProps) {
 
 			<ToolSection title="Content Preview" icon={FileCode2} value={contentPreview} />
 			<ToolSection title="Filesystem Output" icon={Braces} value={props.content} />
-			<ToolSection title="Filesystem Artifact" icon={Braces} value={props.artifact} />
+			<ToolSection title="Filesystem Artifact" icon={Braces} value={props.content} />
 		</div>
 	);
 }

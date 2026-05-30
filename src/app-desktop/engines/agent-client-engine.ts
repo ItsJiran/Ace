@@ -3,51 +3,40 @@ import { ConfigEngine } from '#/shared/engines/config-engine';
 import { DefaultConfigAI } from '#/shared/constants/config';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
-import { EventBus } from '#/shared/engines/event-engine';
 import type {
+    AceAgentWorkflowState,
     AgentThread,
-    AgentInterProcessSyncPayloadType,
     AgentConfigurableType,
     AIProviderType,
     BackgroundAIStreamEventPayloadType,
 } from '#/shared/schemas/ai';
 
 import { AgentClientThreadRuntimeState } from '#/shared/schemas/agent-client-ephemeral';
+import type { AgentChatTurn } from '#/shared/schemas/agent-thread-state';
 
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai';
 import AgentThreadStreamHandlers from './agent/agent-thread-stream-handlers';
 import resolveAgentInvokeContext from './ai/resolve-agent-context';
-
-type BackgroundThreadListEntryType = {
-    thread_uid: string;
-    memory_uid: string;
-    thread: AgentThread;
-};
-
-type BackgroundThreadListPayloadType = {
-    index: Record<string, string>;
-    threads: BackgroundThreadListEntryType[];
-};
+import normalizeMessages from './ai/utils/normalize-messages';
 
 // AgentClientEngine is the desktop-side control plane for AI threads.
 //
-// Responsibilities:
-// 1) Mirror persisted threads from background RPC into Kernel memory.
-// 2) Consume background stream protocol events once (centralized listener).
-// 3) Maintain client-only ephemeral_items in thread memory for live UI status.
-// 4) Enforce dedupe/order for stream packets (event_id + seq) to prevent duplicate UI updates.
+// Architecture (post-refactor):
+// - AgentThread lives purely on the client (KernelEngine memory).
+// - Background only runs the LangGraph workflow and streams events.
+// - Raw AceAgentWorkflowState (BaseMessage[]) is fetched from LangGraph
+//   checkpointer when needed and formatted into AgentChatTurn[] locally.
+// - Thread CRUD (create, read, list, delete) is entirely local.
 //
-// Agentic flow in this engine:
-// - UI sends prompt -> startThreadPrompt()
-// - background emits stream events -> setupEventRoutes() listener
-// - listener forwards packets to AgentThreadStreamHandlers
-// - handler module updates Kernel memory (runtime + ephemeral + final thread sync)
-// - React hooks only read memory; they do not own stream side-effects.
+// Agentic flow:
+// - UI sends prompt -> startThreadPrompt() -> background RPC
+// - background emits stream events -> RPC route -> AgentThreadStreamHandlers
+// - handlers convert deltas to settled messages and write to local Kernel memory
+// - React hooks read memory; they do not own stream side-effects.
 class AgentClientEngineSingleton extends Engine {
     public readonly memory_uid = DefaultConfigAI.memory_uid;
     public readonly thread_uids_memory_uid = 'system:ai_engine:thread:uids';
 
-    // Helper to generate consistent memory UIDs for threads and their subcategories (runtime, ephemeral).
     public readonly thread_memory_uid = (thread_uid: string) =>
         `system:ai_engine:thread:${thread_uid}`;
     public readonly thread_runtime_memory_uid = (thread_uid: string) =>
@@ -57,29 +46,13 @@ class AgentClientEngineSingleton extends Engine {
 
     // + --------------- ABSTRACT METHODS ----------------- +
 
-    // Initial hydration when the engine boots.
-    // This keeps desktop thread memory ready before chat UI mounts.
     async boot() {
-        await this.syncAIMemory();
+        // No bulk sync needed — threads live locally. Just warm config.
+        await this.syncConfigFromBackground();
     }
 
-    async setupEventRoutes() {
-        // Ditching EventBus listener in favor of RPC route for stream events to ensure we can await event
-        // handling and reduce janky UI states from out-of-order packets. We can revisit this decision if we f
-        // ind the RPC approach introduces too much latency, but it provides a more reliable ordering guarantee which is crucial for a good UX with agent threads.
-        // EventBus.listen<BackgroundAIStreamEventPayloadType>(
-        //     AI_THREAD_STREAM_EVENT_SLUG,
-        //     (event) => {
-        //         const payload = event?.payload;
-        //         if (!payload) {
-        //             return;
-        //         }
-        //         void AgentThreadStreamHandlers.handlePayload(payload);
-        //     },
-        // );
-    }
+    async setupEventRoutes() {}
 
-    // Registers stable Kernel memory buckets used by the desktop runtime.
     async setupKernelSpace() {
         KernelEngine.registerSystemMemory(
             this.thread_uids_memory_uid,
@@ -93,16 +66,12 @@ class AgentClientEngineSingleton extends Engine {
         RPCEngine.handle(
             AI_THREAD_STREAM_EVENT_SLUG,
             async ({ payload }: { payload: BackgroundAIStreamEventPayloadType }) => {
-                console.log(
-                    '[AgentClientEngine] Received stream event payload from background using rpc:',
-                    payload,
-                );
                 await AgentThreadStreamHandlers.handlePayload(payload);
             },
         );
     }
 
-    // + --------------- THREADS API METHODS --------------- +
+    // + --------------- MODEL API ----------------------- +
 
     async fetchModels(provider: AIProviderType | string) {
         const models = ((await RPCEngine.invoke('ai.syncAvailableModels', {
@@ -112,62 +81,144 @@ class AgentClientEngineSingleton extends Engine {
         return models;
     }
 
-    // + --------------- THREADS API METHODS --------------- +
+    // + --------------- THREAD CRUD (Local) ------------- +
 
-    // Writes thread_uid -> memory_uid index used by desktop selectors.
     syncThreadIndex(index: Record<string, string>) {
         KernelEngine.writeMemory(this.thread_uids_memory_uid, index);
         return index;
     }
 
-    // Returns latest thread list after forcing a background sync.
     async listThreads() {
-        const payload = await this.syncAIMemory();
-        return payload.threads ?? [];
+        // Pull known thread IDs + raw states from background checkpointer.
+        const bgPayload = (await RPCEngine.invoke('ai.listThreads', {})) as {
+            threads: Array<{ thread_uid: string; state: AceAgentWorkflowState | null }>;
+        } | null;
+
+        const bgThreads = bgPayload?.threads ?? [];
+
+        // Hydrate local AgentThread entries from raw workflow states.
+        for (const { thread_uid, state: rawState } of bgThreads) {
+            if (!rawState || !Array.isArray(rawState.messages)) continue;
+
+            const messages: AgentChatTurn[] = normalizeMessages(rawState.messages);
+            const existing = this.readThreadFromMemory(thread_uid);
+
+            const thread: AgentThread = {
+                thread_uid,
+                checkpoint_id: existing?.checkpoint_id,
+                model: existing?.model,
+                provider: existing?.provider,
+                state: {
+                    messages,
+                    goal_task: rawState.goal_task ?? existing?.state?.goal_task,
+                    executioner_task: rawState.executioner_task ?? existing?.state?.executioner_task,
+                },
+                created_at: existing?.created_at ?? Date.now(),
+                updated_at: Date.now(),
+            };
+
+            this.syncThreadMemory(thread);
+        }
+
+        // Return local threads (now hydrated).
+        const index = this.readThreadIndexFromMemory();
+        return Object.entries(index)
+            .map(([thread_uid]) => this.readThreadFromMemory(thread_uid))
+            .filter((t): t is AgentThread => t !== undefined);
     }
 
-    // Creates a background thread, then mirrors it into desktop memory.
-    async createThread(initialState: Partial<AgentThread> = {}) {
-        const threadState =
-            initialState.state && typeof initialState.state === 'object'
-                ? initialState.state
-                : { messages: [] };
-        const thread = ((await RPCEngine.invoke('ai.createThread', {
-            initialState: {
-                ...initialState,
-                state: threadState,
-            } as Record<string, unknown>,
-        })) ?? {
-            thread_id: initialState.thread_uid ?? crypto.randomUUID(),
-        }) as AgentConfigurableType;
-        await this.syncCurrentThreadFromBackground(thread.thread_id);
-        return thread;
+    async createThread(initialState: Partial<AgentThread> = {}): Promise<AgentConfigurableType> {
+        const thread_uid = initialState.thread_uid ?? crypto.randomUUID();
+        const now = Date.now();
+
+        const thread: AgentThread = {
+            thread_uid,
+            checkpoint_id: initialState.checkpoint_id,
+            model:
+                initialState.model ??
+                (ConfigEngine.getConfigItem<string>('ai', 'ai.default_model') as string),
+            provider:
+                initialState.provider ??
+                (ConfigEngine.getConfigItem<AIProviderType>(
+                    'ai',
+                    'ai.default_provider',
+                ) as AIProviderType),
+            state: {
+                messages: [],
+                ...(initialState.state ?? {}),
+            },
+            created_at: initialState.created_at ?? now,
+            updated_at: initialState.updated_at ?? now,
+        };
+
+        this.syncThreadMemory(thread);
+
+        // Register in background so listThreads can find it.
+        RPCEngine.invoke('ai.syncThread', { thread_uid }).catch(() => {});
+
+        return {
+            thread_id: thread_uid,
+            checkpoint_id: thread.checkpoint_id,
+            model: thread.model,
+            provider: thread.provider,
+        };
     }
 
-    // Reads one thread from background and syncs local memory.
-    async readThread(threadUid: string) {
-        return await this.syncCurrentThreadFromBackground(threadUid);
+    async readThread(threadUid: string): Promise<AgentThread | null> {
+        return this.readThreadFromMemory(threadUid) ?? null;
     }
 
-    // Persists thread updates to background then rehydrates local memory.
-    async syncThread(threadUid: string, payload: AgentInterProcessSyncPayloadType = {}) {
-        const memoryUid = ((await RPCEngine.invoke('ai.syncThread', {
+    async syncThread(threadUid: string, payload: Partial<AgentThread> = {}) {
+        const existing = this.readThreadFromMemory(threadUid);
+        const now = Date.now();
+
+        const next: AgentThread = {
             thread_uid: threadUid,
-            thread: payload as Record<string, unknown>,
-        })) ?? '') as string;
+            checkpoint_id: payload.checkpoint_id ?? existing?.checkpoint_id,
+            model: payload.model ?? existing?.model,
+            provider: payload.provider ?? existing?.provider,
+            state: {
+                messages: payload.state?.messages ?? existing?.state?.messages ?? [],
+                goal_task: payload.state?.goal_task ?? existing?.state?.goal_task,
+                executioner_task:
+                    payload.state?.executioner_task ?? existing?.state?.executioner_task,
+            },
+            created_at: existing?.created_at ?? payload.created_at ?? now,
+            updated_at: payload.updated_at ?? now,
+        };
 
-        await this.syncCurrentThreadFromBackground(threadUid);
-        return memoryUid;
+        this.syncThreadMemory(next);
+        return this.thread_memory_uid(threadUid);
     }
 
-    // Starts an agent run in background with runtime desktop context.
-    // Final thread state is always fetched from background for consistency.
+    async deleteThread(threadUid: string) {
+        const existing = this.readThreadFromMemory(threadUid);
+        if (!existing) return false;
+
+        KernelEngine.deleteMemory(this.thread_memory_uid(threadUid));
+        const nextIndex = { ...this.readThreadIndexFromMemory() };
+        delete nextIndex[threadUid];
+        this.syncThreadIndex(nextIndex);
+
+        KernelEngine.deleteMemory(this.thread_runtime_memory_uid(threadUid));
+        KernelEngine.deleteMemory(this.thread_ephemeral_memory_uid(threadUid));
+        return true;
+    }
+
+    // + --------------- THREAD PROMPT ------------------- +
+
     async startThreadPrompt(
         threadUid: string,
         prompt: string,
         overrides: Partial<AgentConfigurableType> = {},
     ) {
-        const thread = ((await RPCEngine.invoke(
+        // Optimistic: mark streaming before the RPC round-trip so UI reacts instantly.
+        await KernelEngine.updateMemory(this.thread_runtime_memory_uid(threadUid), {
+            is_streaming: true,
+        } as AgentClientThreadRuntimeState);
+
+        // Send to background — stream events will handle the rest
+        const result = (await RPCEngine.invoke(
             'ai.startThreadPrompt',
             {
                 thread_uid: threadUid,
@@ -175,56 +226,63 @@ class AgentClientEngineSingleton extends Engine {
                 overrides,
                 context: await resolveAgentInvokeContext(),
             },
-            {
-                timeoutMs: 0,
-            },
-        )) ?? null) as AgentThread | null;
+            { timeoutMs: 0 },
+        )) as { ok: boolean; started: boolean; thread_uid: string };
 
-        if (thread) {
-            return await this.syncCurrentThreadFromBackground(threadUid);
-        }
-
-        return await this.syncCurrentThreadFromBackground(threadUid);
+        return result;
     }
 
-    // Sends interruption signal to background for an active thread run.
     async stopThreadPrompt(threadUid: string) {
         return ((await RPCEngine.invoke('ai.stopThreadPrompt', {
             thread_uid: threadUid,
         })) ?? false) as boolean;
     }
 
-    // Deletes thread in background and cleans all local memory/dedupe caches.
-    async deleteThread(threadUid: string) {
-        const deleted = ((await RPCEngine.invoke('ai.deleteThread', {
+    // + --------------- RAW STATE HYDRATION ------------- +
+
+    /**
+     * Fetches raw AceAgentWorkflowState from LangGraph checkpointer
+     * and formats it into AgentChatTurn[], then stores locally.
+     */
+    async syncCurrentThreadFromBackground(threadUid: string): Promise<AgentThread | null> {
+        const rawState = (await RPCEngine.invoke('ai.readThread', {
             thread_uid: threadUid,
-        })) ?? false) as boolean;
-        if (!deleted) {
-            return false;
+        })) as AceAgentWorkflowState | null;
+
+        if (!rawState || !Array.isArray(rawState.messages)) {
+            return this.readThreadFromMemory(threadUid) ?? null;
         }
 
-        // Cleaning main thread memory and index entry.
-        KernelEngine.deleteMemory(this.thread_memory_uid(threadUid));
-        const nextIndex = { ...this.readThreadIndexFromMemory() };
-        delete nextIndex[threadUid];
-        this.syncThreadIndex(nextIndex);
+        const messages: AgentChatTurn[] = normalizeMessages(rawState.messages);
+        const existing = this.readThreadFromMemory(threadUid);
 
-        // cleaning runtime & ephemeral
-        KernelEngine.deleteMemory(this.thread_runtime_memory_uid(threadUid));
-        KernelEngine.deleteMemory(this.thread_ephemeral_memory_uid(threadUid));
+        const thread: AgentThread = {
+            thread_uid: threadUid,
+            checkpoint_id: existing?.checkpoint_id,
+            model: existing?.model,
+            provider: existing?.provider,
+            state: {
+                messages,
+                goal_task: rawState.goal_task ?? existing?.state?.goal_task,
+                executioner_task: rawState.executioner_task ?? existing?.state?.executioner_task,
+            },
+            created_at: existing?.created_at ?? Date.now(),
+            updated_at: Date.now(),
+        };
 
-        return true;
+        this.syncThreadMemory(thread);
+        return thread;
     }
 
-    // + ----------- THREADS MEMORIES METHODS -------------- +
+    // + --------------- MEMORY HELPERS ------------------ +
 
-    readThreadFromMemory(threadUid: string) {
+    readThreadFromMemory(threadUid: string): AgentThread | undefined {
         return KernelEngine.readMemory(this.thread_memory_uid(threadUid)) as
             | AgentThread
             | undefined;
     }
 
-    readThreadIndexFromMemory() {
+    readThreadIndexFromMemory(): Record<string, string> {
         return (
             (KernelEngine.readMemory(this.thread_uids_memory_uid) as
                 | Record<string, string>
@@ -232,19 +290,14 @@ class AgentClientEngineSingleton extends Engine {
         );
     }
 
-    // + --------------- MEMORY SYNC METHODS -------------- +
-
-    private resolveClientThread(thread: AgentThread, existingThread?: AgentThread): AgentThread {
-        return {
-            ...existingThread,
-            ...thread,
-        };
-    }
-
     syncThreadMemory(thread: AgentThread) {
         const memoryUid = this.thread_memory_uid(thread.thread_uid);
         const existingThread = KernelEngine.readMemory(memoryUid) as AgentThread | undefined;
-        const nextThread = this.resolveClientThread(thread, existingThread);
+
+        const nextThread: AgentThread = {
+            ...existingThread,
+            ...thread,
+        };
 
         if (existingThread === undefined) {
             KernelEngine.registerSystemMemory(memoryUid, nextThread);
@@ -263,39 +316,8 @@ class AgentClientEngineSingleton extends Engine {
         return memoryUid;
     }
 
-    // Bulk sync entry point: loads all threads from background into local memory.
-    async syncAIMemory() {
-        await this.syncConfigFromBackground();
+    // + --------------- CONFIG SYNC --------------------- +
 
-        const payload = ((await RPCEngine.invoke('ai.listThreads', {})) ?? {
-            index: {},
-            threads: [],
-        }) as BackgroundThreadListPayloadType;
-
-        this.syncThreadIndex(payload.index ?? {});
-        for (const entry of payload.threads ?? []) {
-            this.syncThreadMemory(entry.thread);
-        }
-        return payload;
-    }
-
-    // + ------------- BACKGROUND API METHODS -------------- +
-
-    // Syncs one thread snapshot from background and returns the memory-backed client thread.
-    async syncCurrentThreadFromBackground(threadUid: string) {
-        const thread = ((await RPCEngine.invoke('ai.readThread', {
-            thread_uid: threadUid,
-        })) ?? null) as AgentThread | null;
-
-        if (!thread) {
-            return null;
-        }
-
-        this.syncThreadMemory(thread);
-        return this.readThreadFromMemory(threadUid) ?? null;
-    }
-
-    // Small RPC helper for diagnostics and runtime health checks.
     async getBackgroundStatus() {
         return (
             (await window.electronAPI?.backgroundStatus()) ?? {
@@ -306,7 +328,6 @@ class AgentClientEngineSingleton extends Engine {
         );
     }
 
-    // Syncs AI config namespace into RAM before model/provider dependent operations.
     async syncConfigFromBackground() {
         await ConfigEngine.syncConfigFileToRam('ai');
         return ConfigEngine.getConfigItems<Record<string, unknown>>('ai');

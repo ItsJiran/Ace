@@ -11,7 +11,6 @@ import {
 
 import { createBaseAgentMiddlewares } from '../../agent-middlewares';
 import SingletonAgentBackend from '../../agent-backend';
-import { resolveWorkflowMessagesUpdate } from '../agent-state';
 import buildOrchestratorNodePrompt from './prompt';
 
 const OrchestratorNodeOutputSchema = z.object({
@@ -43,14 +42,11 @@ export function createOrchestratorNode() {
 			executioner_task: resultRecord.executioner_task,
 		});
 
-		const nextMessages = resolveWorkflowMessagesUpdate(
-			state.messages,
-			parsed.messages as BaseMessage[] | undefined,
-		);
 		const nextGoalTask =
 			typeof parsed.goal_task === 'string' && parsed.goal_task.trim()
 				? parsed.goal_task.trim()
 				: state.goal_task;
+				
 		const nextExecutionerTask =
 			typeof parsed.executioner_task === 'string' && parsed.executioner_task.trim()
 				? parsed.executioner_task.trim()
@@ -58,7 +54,7 @@ export function createOrchestratorNode() {
 
 		console.info('[AINode] done orchestrator', { messageCount: result.messages?.length ?? 0 });
 		return {
-			messages: nextMessages,
+			// messages: nextMessages,
 			goal_task: nextGoalTask,
 			executioner_task: nextExecutionerTask,
 		};

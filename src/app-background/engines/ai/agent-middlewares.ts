@@ -3,7 +3,6 @@ import { summarizationMiddleware, llmToolSelectorMiddleware } from 'langchain';
 
 import configurableModelMiddleware from './middlewares/configurable-model';
 import contextEditingMiddleware from './middlewares/context-editing';
-import syncDesktopKernelSpaceMiddleware from './middlewares/sync-frontend-kernel';
 import injectApiKeyMiddleware from './middlewares/inject-api-key';
 import injectDesktopContextMiddleware from './middlewares/inject-desktop-context';
 import normalizeSubagentTypeMiddleware from './middlewares/normalize-subagent-type';
@@ -12,12 +11,14 @@ import { AgentModelModes, type AgentModelModeType } from '#/shared/schemas/ai';
 
 export function createBaseAgentMiddlewares(mode: AgentModelModeType = AgentModelModes.SELECTED) {
     return [
+        // + -- ACE INJECTED MIDDLEWARES --
         injectApiKeyMiddleware,
         injectDesktopContextMiddleware,
+
+        // + --- LANGCHAIN MIDDLEWARES ---
         configurableModelMiddleware(mode),
         normalizeSubagentTypeMiddleware,
         threadLivenessGuardMiddleware,
-        syncDesktopKernelSpaceMiddleware,
         summarizationMiddleware,
         llmToolSelectorMiddleware,
         contextEditingMiddleware,

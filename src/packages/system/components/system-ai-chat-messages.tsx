@@ -7,10 +7,7 @@ import type {
 } from '#/shared/schemas/agent-client-ephemeral';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { SystemAIChatMessagesEmptyState } from './system-ai-chat-messages-empty-state';
-import { SystemAIChatMessagesEphemeral } from './system-ai-chat-messages-ephemeral';
 import { SystemAIChatMessagesHistory } from './system-ai-chat-messages-history';
-import { SystemAIChatMessagesPending } from './system-ai-chat-messages-pending';
-import { resolveChatTurns } from './system-ai-chat-messages.utils';
 import { AgentChatTurn } from '#/shared/schemas/agent-thread-state';
 
 type SystemAIChatMessagesProps = {
@@ -49,6 +46,7 @@ export function SystemAIChatMessages({
                     currentThreadRuntime={currentThreadRuntime}
                     currentThreadUid={currentThreadUid}
                     onRetryFailedRun={onRetryFailedRun}
+                    bottomRef={bottomRef}
                 />
 
                 {/* <SystemAIChatMessagesEphemeral
@@ -65,8 +63,8 @@ export function SystemAIChatMessages({
                     targets={targets}
                 /> */}
 
-                <div aria-hidden className="pointer-events-none h-[34vh] min-h-24 max-h-72" />
-                <div ref={bottomRef} aria-hidden style={{ width: 1, height: 1 }} />
+                <div aria-hidden className="pointer-events-none min-h-24 max-h-72" />
+                {/* <div ref={bottomRef} aria-hidden style={{ width: 1, height: 1 }} /> */}
             </div>
         </div>
     );

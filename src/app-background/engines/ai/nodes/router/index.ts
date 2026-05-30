@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { type AceAgentWorkflowState } from '#/shared/schemas/ai';
 
 import {
-	resolveWorkflowMessagesUpdate,
+	// resolveWorkflowMessagesUpdate,
 } from '../agent-state';
 
 export const RouterNodeOutputSchema = z.object({
@@ -21,7 +21,7 @@ export function resolveRouterNodeOutput(input: {
 	route_reason?: string;
 }): RouterNodeOutput {
 	return RouterNodeOutputSchema.parse({
-		messages: resolveWorkflowMessagesUpdate(input.currentMessages, input.nextMessages),
+		// messages: resolveWorkflowMessagesUpdate(input.currentMessages, input.nextMessages),
 		route_to: input.route_to,
 		route_reason: input.route_reason,
 	});

@@ -9,11 +9,41 @@ import {
     AgentStreamLifecycleEvent,
     AgentStreamMessageEvent,
     AgentStreamToolEvent,
+    AgentStreamInvokeEvent,
+    type AgentStreamAnyEvent,
 } from '#/shared/schemas/agent-stream-events';
+import type {
+    AgentThreadAIMessage,
+    AgentThreadToolMessage,
+    AgentTurnResponseElement,
+} from '#/shared/schemas/agent-thread-state';
 import KernelEngine from '#/shared/engines/kernel-engine';
+import { EventBus } from '#/shared/engines/event-engine';
 import { AgentClientEngine } from '../agent-client-engine';
+import { DeltaToMessageConverter } from '../ai/utils/delta-to-message';
 
 export class AgentThreadStreamHandlers {
+    // ==========================================
+    // PER-THREAD STATE
+    // ==========================================
+
+    private converters = new Map<string, DeltaToMessageConverter>();
+
+    private getConverter(thread_uid: string): DeltaToMessageConverter {
+        let converter = this.converters.get(thread_uid);
+        if (!converter) {
+            converter = new DeltaToMessageConverter();
+            this.converters.set(thread_uid, converter);
+        }
+        return converter;
+    }
+
+    private clearConverter(thread_uid: string) {
+        const converter = this.converters.get(thread_uid);
+        if (converter) converter.reset();
+        this.converters.delete(thread_uid);
+    }
+
     // ==========================================
     // PRIVATE HELPERS
     // ==========================================
@@ -63,6 +93,67 @@ export class AgentThreadStreamHandlers {
     }
 
     // ==========================================
+    // DEBUG EVENT EMIT
+    // ==========================================
+
+    /**
+     * Emits a debug event to `ai-stream-debug:{thread_uid}` so the
+     * AgentStreamDebug dev window can trace every event + handler result.
+     */
+    private emitDebug(
+        thread_uid: string,
+        event: AgentStreamAnyEvent,
+        meta?: { result?: string; error?: string; snapshot?: Record<string, unknown> },
+    ) {
+        EventBus.emit(`ai-stream-debug:${thread_uid}`, {
+            payload: {
+                event,
+                ...(meta ?? {}),
+            },
+        });
+    }
+
+    // ==========================================
+    // SETTLED MESSAGE APPENDING
+    // ==========================================
+
+    /**
+     * Appends a settled response element to the last turn of the thread.
+     * Deduplicates by uid — LangGraph may emit both tool-finished AND
+     * message-finish with the same run_id for a tool call, so we skip
+     * duplicates that already exist in the current turn.
+     */
+    private async appendSettledResponse(
+        thread_uid: string,
+        response: AgentTurnResponseElement,
+    ) {
+        const thread = AgentClientEngine.readThreadFromMemory(thread_uid);
+        if (!thread) return;
+
+        const turns = [...thread.state.messages];
+        let lastTurn = turns[turns.length - 1];
+
+        if (!lastTurn) {
+            lastTurn = {
+                turn_id: `auto-${thread_uid}-${Date.now()}`,
+                human: { uid: 'system', content: '', timestamp: Date.now() },
+                responses: [],
+            };
+            turns.push(lastTurn);
+        }
+
+        // Dedup: skip if same uid already exists in this turn's responses
+        const alreadyExists = lastTurn.responses.some((r) => r.uid === response.uid);
+        if (alreadyExists) return;
+
+        lastTurn.responses = [...lastTurn.responses, response];
+
+        await AgentClientEngine.syncThread(thread_uid, {
+            state: { messages: turns },
+        });
+    }
+
+    // ==========================================
     // CORE HANDLERS
     // ==========================================
 
@@ -77,9 +168,6 @@ export class AgentThreadStreamHandlers {
             return;
         }
 
-        console.log('[AgentThreadStreamHandlers] handling event', { thread_uid, event });
-
-        // Ensure memories exist before updating
         await this.ensureMemoryInitialized(thread_uid);
 
         switch (event.channel) {
@@ -92,16 +180,34 @@ export class AgentThreadStreamHandlers {
                 );
             case 'messages':
                 return await this.handleMessageEvent(thread_uid, event as AgentStreamMessageEvent);
+            case 'invoke':
+                return await this.handleInvokeEvent(thread_uid, event as AgentStreamInvokeEvent);
+            case 'debug':
+                // Raw events from background that extractAgentStreamEvent didn't recognize
+                this.emitDebug(thread_uid, event, {
+                    result: `background raw event: ${String(JSON.stringify((event as any)?.raw_graph_event) ?? '').slice(0, 120)}`,
+                });
+                return;
             default:
                 console.warn('[AgentThreadStreamHandlers] unhandled channel, ignoring', { event });
+                this.emitDebug(thread_uid, event, { error: `unhandled channel: ${(event as any)?.channel}` });
         }
     }
 
     async handleToolEvent(thread_uid: string, event: AgentStreamToolEvent) {
         const tool_call_id = event?.data?.tool_call_id as string;
+        const tool_name =
+            (event as any)?.data?.tool_name ?? (event as any)?.data?.name ?? 'unknown_tool';
+        const converter = this.getConverter(thread_uid);
 
         switch (event.type) {
-            case 'tool-started':
+            case 'tool-started': {
+                converter.handleToolStarted(tool_call_id, tool_name);
+
+                this.emitDebug(thread_uid, event, { result: `tracked tool: ${tool_name}` });
+
+                // Push ephemeral item so UI shows "Running tool X..."
+                const activeToolNames = converter.getActiveToolNames();
                 const prev = this.getEphemeral(thread_uid);
                 await this.updateEphemeral(thread_uid, [
                     ...prev,
@@ -109,57 +215,100 @@ export class AgentThreadStreamHandlers {
                         type: 'tool',
                         uid: tool_call_id,
                         node: event.node ?? null,
+                        content: { tool_name },
+                        event: 'tool-started',
+                        created_at: Date.now(),
+                        updated_at: Date.now(),
                     } as AgentClientThreadEphemeralTool,
                 ]);
                 break;
+            }
 
-            case 'tool-error':
-            case 'tool-finished':
+            case 'tool-finished': {
+                const output = (event as any)?.data?.output;
+                converter.handleToolFinished(tool_call_id, output);
+
                 await this.removeEphemeralItem(thread_uid, tool_call_id, 'tool');
+
+                // ToolMessage is built from the messages events that follow.
+                // We no longer create a ToolMessage here — the dedup by uid
+                // in appendSettledResponse handles any overlap.
+                this.emitDebug(thread_uid, event, {
+                    result: `tool finished: ${tool_name} (ephemeral removed, waiting for message events)`,
+                });
                 break;
+            }
+
+            case 'tool-error': {
+                converter.handleToolFinished(tool_call_id, (event as any)?.data);
+                await this.removeEphemeralItem(thread_uid, tool_call_id, 'tool');
+                this.emitDebug(thread_uid, event, { error: 'tool-error' });
+                break;
+            }
 
             case 'tool-delta':
-                // future improvement..
+                this.emitDebug(thread_uid, event, { result: 'tool-delta (ignored)' });
                 break;
+
             default:
                 console.warn('[AgentThreadStreamHandlers] unhandled tool event type', { event });
+                this.emitDebug(thread_uid, event, { error: `unhandled tool type: ${event.type}` });
         }
     }
 
     async handleLifecycleEvent(thread_uid: string, event: AgentStreamLifecycleEvent) {
+        // Per-node lifecycle events are NOT used for streaming state.
+        // Invoke events (invoke-completed / invoke-failed) handle that.
+        // We only log them for debugging.
+        this.emitDebug(thread_uid, event, { result: `node lifecycle: ${event.type}` });
+    }
+
+    async handleInvokeEvent(thread_uid: string, event: AgentStreamInvokeEvent) {
         switch (event.type) {
-            case 'started':
-            case 'completed':
-                await this.updateRuntime(thread_uid, {
-                    is_streaming: event.type === 'started',
-                    last_error: undefined,
-                });
-
-                await AgentClientEngine.syncCurrentThreadFromBackground(thread_uid);
-                break;
-
-            case 'failed':
+            case 'invoke-completed':
                 await this.updateRuntime(thread_uid, {
                     is_streaming: false,
-                    last_error: JSON.stringify(event?.data),
+                    last_error: undefined,
+                });
+                this.clearConverter(thread_uid);
+                this.emitDebug(thread_uid, event, {
+                    result: 'invoke completed — stream truly finished',
+                    snapshot: AgentClientEngine.readThreadFromMemory(thread_uid)?.state as Record<string, unknown> | undefined,
+                });
+                break;
+
+            case 'invoke-failed':
+                await this.updateRuntime(thread_uid, {
+                    is_streaming: false,
+                    last_error: event.data?.error ?? 'unknown invoke error',
+                });
+                // On failure, fall back to checkpointer state.
+                AgentClientEngine.syncCurrentThreadFromBackground(thread_uid).catch(() => {});
+                this.clearConverter(thread_uid);
+                this.emitDebug(thread_uid, event, {
+                    error: 'invoke failed → synced from checkpointer',
                 });
                 break;
 
             default:
-                console.warn('[AgentThreadStreamHandlers] unhandled lifecycle type', { event });
+                console.warn('[AgentThreadStreamHandlers] unhandled invoke type', { event });
+                this.emitDebug(thread_uid, event, { error: `unhandled invoke type: ${event.type}` });
         }
     }
 
     async handleMessageEvent(thread_uid: string, event: AgentStreamMessageEvent) {
         const run_id = event.data.run_id;
         const prevEphemeral = this.getEphemeral(thread_uid);
+        const converter = this.getConverter(thread_uid);
 
         switch (event.type) {
             case 'message-start':
             case 'content-block-start':
-                // Abaikan jika content-block-start datang setelah message-start (deduplikasi)
                 if (prevEphemeral.some((item) => item.type === 'messages' && item.uid === run_id))
                     break;
+
+                converter.handleMessageStart(run_id);
+                this.emitDebug(thread_uid, event, { result: `message buffer started (run_id: ${run_id})` });
 
                 await this.updateEphemeral(thread_uid, [
                     ...prevEphemeral,
@@ -175,14 +324,25 @@ export class AgentThreadStreamHandlers {
                 ]);
                 break;
 
-            case 'content-block-delta':
+            case 'content-block-delta': {
                 const textDelta = event.data.delta?.text ?? '';
+                converter.handleContentBlockDelta(run_id, textDelta);
+
+                // Emit for debug (truncated to avoid spam)
+                if (textDelta) {
+                    this.emitDebug(thread_uid, event, {
+                        result: `delta (${textDelta.length} chars): "${textDelta.slice(0, 40)}${textDelta.length > 40 ? '...' : ''}"`,
+                    });
+                }
+
                 const newEphemeral = [...prevEphemeral];
                 const index = newEphemeral.findIndex(
                     (item) => item.type === 'messages' && item.uid === run_id,
                 );
 
                 if (index === -1) {
+                    // Auto-create if delta arrives before start
+                    converter.handleMessageStart(run_id);
                     newEphemeral.push({
                         uid: run_id,
                         type: 'messages',
@@ -203,20 +363,92 @@ export class AgentThreadStreamHandlers {
 
                 await this.updateEphemeral(thread_uid, newEphemeral);
                 break;
+            }
 
-            case 'message-finish':
-                await AgentClientEngine.syncCurrentThreadFromBackground(thread_uid);
+            case 'message-finish': {
+                const usage = (event as any)?.data?.usage;
+
+                // Detect whether this message-finish is for a tool node
+                const isToolMessage = (event as any)?.raw_graph_event?.params?.node === 'tools'
+                    || (event as any)?.raw_graph_event?.params?.namespace?.some?.((ns: string) => ns.startsWith('tools:'));
+
+                if (isToolMessage) {
+                    // Flush as ToolMessage using the converter's accumulated content
+                    const toolContent = converter.getLiveMessageText(run_id);
+                    converter.handleMessageFinish(run_id); // clear buffer
+
+                    await this.removeEphemeralItem(thread_uid, run_id, 'messages');
+
+                    if (toolContent) {
+                        const toolMsg: AgentThreadToolMessage = {
+                            type: 'ToolMessage',
+                            uid: run_id,
+                            tool_name: 'tool',
+                            tool_call_id: run_id,
+                            content: toolContent.trim(),
+                            timestamp: Date.now(),
+                        };
+                        await this.appendSettledResponse(thread_uid, toolMsg);
+                        this.emitDebug(thread_uid, event, {
+                            result: `appended ToolMessage (${String(toolContent).slice(0, 60)}...)`,
+                        });
+                    } else {
+                        this.emitDebug(thread_uid, event, { result: 'tool message-finish (empty content, skipped)' });
+                    }
+                    break;
+                }
+
+                // Normal AI message flow
+                const settled = converter.handleMessageFinish(run_id, usage);
+
                 await this.removeEphemeralItem(thread_uid, run_id, 'messages');
-                break;
 
-            case 'content-block-finish':
+                if (settled && settled.content) {
+                    await this.appendSettledResponse(thread_uid, settled);
+                    this.emitDebug(thread_uid, event, {
+                        result: `appended AIMessage (${String(settled.content ?? '').slice(0, 60)}...)`,
+                    });
+                } else {
+                    this.emitDebug(thread_uid, event, {
+                        result: settled
+                            ? 'AIMessage skipped (empty content)'
+                            : 'handleMessageFinish returned null',
+                    });
+                }
+                break;
+            }
+
+            case 'content-block-finish': {
                 await this.removeEphemeralItem(thread_uid, run_id, 'messages');
-                break;
 
-            case 'usage':
+                // If this content block belongs to a tool node, capture its
+                // content for ToolMessage creation on message-finish.
+                const isToolMessage = (event as any)?.raw_graph_event?.params?.node === 'tools'
+                    || (event as any)?.raw_graph_event?.params?.namespace?.some?.((ns: string) => ns.startsWith('tools:'));
+                if (isToolMessage) {
+                    const blockContent = (event as any)?.raw_graph_event?.params?.data?.content;
+                    if (blockContent?.text) {
+                        converter.handleContentBlockDelta(run_id, blockContent.text);
+                    }
+                }
+
+                this.emitDebug(thread_uid, event, {
+                    result: `content-block-finish (${isToolMessage ? 'tool' : 'ai'}) (run_id: ${run_id})`,
+                });
                 break;
+            }
+
+            case 'usage': {
+                const usageData = (event as any)?.data?.usage;
+                if (usageData) {
+                    converter.handleMessageUsage(run_id, usageData);
+                }
+                break;
+            }
+
             default:
                 console.warn('[AgentThreadStreamHandlers] unhandled message type', { event });
+                this.emitDebug(thread_uid, event, { error: `unhandled message type: ${event.type}` });
         }
     }
 }
