@@ -14,7 +14,8 @@ import type {
 import { AgentClientThreadRuntimeState } from '#/shared/schemas/agent-client-ephemeral';
 import type { AgentChatTurn } from '#/shared/schemas/agent-thread-state';
 
-import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai';
+import { EventBus } from '#/shared/engines/event-engine';
+import { AI_THREAD_STREAM_EVENT_SLUG, AI_GRAPH_OBSERVE_SLUG } from '#/shared/schemas/ai';
 import AgentThreadStreamHandlers from './agent/agent-thread-stream-handlers';
 import resolveAgentInvokeContext from './ai/resolve-agent-context';
 import normalizeMessages from './ai/utils/normalize-messages';
@@ -67,6 +68,16 @@ class AgentClientEngineSingleton extends Engine {
             AI_THREAD_STREAM_EVENT_SLUG,
             async ({ payload }: { payload: BackgroundAIStreamEventPayloadType }) => {
                 await AgentThreadStreamHandlers.handlePayload(payload);
+            },
+        );
+
+        // Forward graph observe events from middleware to EventBus
+        // so AgentGraphDebug window can listen via `ai-graph-debug:{thread_uid}`
+        RPCEngine.handle(
+            AI_GRAPH_OBSERVE_SLUG,
+            async ({ payload }: { payload: { thread_uid: string; event: Record<string, unknown> } }) => {
+                console.log('[AgentClientEngine] Received graph observe event:', payload);
+                EventBus.emit(`ai-graph-debug:${payload.thread_uid}`, { payload: payload.event });
             },
         );
     }

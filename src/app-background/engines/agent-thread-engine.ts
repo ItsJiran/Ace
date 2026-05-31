@@ -122,6 +122,15 @@ class AgentThreadEngineSingleton extends Engine {
             },
             { owner: this.constructor.name },
         );
+
+        // --- Graph structure (for AgentGraphDebug) ---
+        await RPCEngine.handle(
+            'ai.getGraph',
+            async () => {
+                return SingletonAgentInstance.getInstance().getGraph();
+            },
+            { owner: this.constructor.name },
+        );
     }
 
     async setupKernelSpace() {

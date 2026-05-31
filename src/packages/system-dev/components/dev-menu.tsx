@@ -1,6 +1,6 @@
 import { DeferredWindowContent } from '#/app-desktop/components/layout/deferred-window-content';
 import { SpatialVirtualizer } from '#/app-desktop/components/layout/spatial-virtualizer';
-import { Share2, Power, MessageSquare, Settings2, TerminalSquare, Activity } from 'lucide-react';
+import { Share2, Power, MessageSquare, Settings2, TerminalSquare, Activity, GitBranch } from 'lucide-react';
 import type { DesktopState } from '#/shared/schemas/state.ts';
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
@@ -110,6 +110,18 @@ function DevMenu({ close }: { close: () => void }) {
         });
     };
 
+    const spawnAgentGraphDebug = () => {
+        window.ACE.window.spawnWindow({
+            package: 'itsjiran/ace-system-dev',
+            window: 'agent-graph-debug-window',
+            title: 'Agent Graph Debug',
+            width: 640,
+            height: 720,
+            x: 550,
+            y: 80,
+        });
+    };
+
     const buttonClass = [
         targets.btn.first,
         'flex items-center justify-start gap-2 w-full px-3 py-2 mb-2 rounded-sm',
@@ -155,6 +167,11 @@ function DevMenu({ close }: { close: () => void }) {
             label: 'Agent Stream Debug',
             icon: <Activity size={14} className="text-purple-300" />,
             onClick: spawnAgentStreamDebug,
+        },
+        {
+            label: 'Agent Graph Debug',
+            icon: <GitBranch size={14} className="text-cyan-300" />,
+            onClick: spawnAgentGraphDebug,
         },
         {
             label: isAmbient ? 'Enter Interactive Mode' : 'Exit Interactive Mode',

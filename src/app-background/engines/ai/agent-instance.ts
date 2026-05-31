@@ -41,6 +41,11 @@ export default class SingletonAgentInstance {
         return await this.value.updateState(config, values, '__root__');
     }
 
+    /** Returns the compiled graph structure (nodes, edges, conditional edges). */
+    public getGraph() {
+        return this.value.getGraph();
+    }
+
     public static getInstance(): SingletonAgentInstance {
         if (!SingletonAgentInstance._instance) {
             SingletonAgentInstance._instance = new SingletonAgentInstance();

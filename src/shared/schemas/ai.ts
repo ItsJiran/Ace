@@ -158,3 +158,6 @@ export interface BackgroundAIStreamEventPayloadType {
 }
 
 export const AI_THREAD_STREAM_EVENT_SLUG = 'ai-thread-stream';
+
+/** RPC slug for graph observe events (middleware → desktop debug window). */
+export const AI_GRAPH_OBSERVE_SLUG = 'ai-graph-observe';
