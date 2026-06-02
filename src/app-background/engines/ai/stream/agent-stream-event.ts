@@ -1,4 +1,4 @@
-import { WorkflowNodeNames, WorkflowNodes } from '#/shared/schemas/ai';
+const WorkflowNodes: string[] = ['agent', 'reasoning', 'router', 'orchestrator', 'executor', 'observe'];
 import {
     AgentStreamEvent,
     AgentStreamMessageContentBlockEvent,

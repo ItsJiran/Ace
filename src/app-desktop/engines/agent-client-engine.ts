@@ -121,8 +121,6 @@ class AgentClientEngineSingleton extends Engine {
                 provider: existing?.provider,
                 state: {
                     messages,
-                    goal_task: rawState.goal_task ?? existing?.state?.goal_task,
-                    executioner_task: rawState.executioner_task ?? existing?.state?.executioner_task,
                 },
                 created_at: existing?.created_at ?? Date.now(),
                 updated_at: Date.now(),
@@ -190,9 +188,6 @@ class AgentClientEngineSingleton extends Engine {
             provider: payload.provider ?? existing?.provider,
             state: {
                 messages: payload.state?.messages ?? existing?.state?.messages ?? [],
-                goal_task: payload.state?.goal_task ?? existing?.state?.goal_task,
-                executioner_task:
-                    payload.state?.executioner_task ?? existing?.state?.executioner_task,
             },
             created_at: existing?.created_at ?? payload.created_at ?? now,
             updated_at: payload.updated_at ?? now,
@@ -274,8 +269,7 @@ class AgentClientEngineSingleton extends Engine {
             provider: existing?.provider,
             state: {
                 messages,
-                goal_task: rawState.goal_task ?? existing?.state?.goal_task,
-                executioner_task: rawState.executioner_task ?? existing?.state?.executioner_task,
+                messages,
             },
             created_at: existing?.created_at ?? Date.now(),
             updated_at: Date.now(),

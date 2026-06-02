@@ -19,13 +19,7 @@ export type AIProviderEnvKeyType = (typeof AIProviderEnvKeys)[AIProviderType][nu
  * database for the agent thread state.
  */
 
-export interface AceAgentWorkflowState {
-    messages: BaseMessage[];
-    goal_task?: string;
-    executioner_task?: string;
-    /** Set by stopThreadPrompt via graph.updateState — nodes check this to abort early. */
-    is_interrupted?: boolean;
-}
+// + ----------------- Agent Stream Event Types -----------------
 
 export const AgentModelModes = {
     LOW: 'low',
@@ -33,17 +27,6 @@ export const AgentModelModes = {
     SELECTED: 'selected',
 } as const;
 export type AgentModelModeType = (typeof AgentModelModes)[keyof typeof AgentModelModes];
-
-export const WorkflowNodeNames = {
-    AGENT: 'agent',
-    REASONING: 'reasoning',
-    ROUTER: 'router',
-    ORCHESTRATOR: 'orchestrator',
-    EXECUTOR: 'executor',
-    OBSERVE: 'observe',
-} as const;
-export type WorkflowNodeType = (typeof WorkflowNodeNames)[keyof typeof WorkflowNodeNames];
-export const WorkflowNodes = Object.values(WorkflowNodeNames);
 
 // + ----------------- Agent Stream Event Types -----------------
 
@@ -113,8 +96,6 @@ export interface AgentConfigType extends RunnableConfig {
 
 export interface AgentThreadStateType {
     messages: AgentChatTurn[];
-    goal_task?: string;
-    executioner_task?: string;
     [key: string]: unknown;
 }
 

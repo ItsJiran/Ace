@@ -12,6 +12,9 @@ import SingletonAgentBackend from '../../agent-backend';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 
 export function createSimpleNode() {
+
+	
+
     const agent = createDeepAgent({
         model: 'openai:gpt-4o-mini',
         systemPrompt: `You are an assistant for task management and execution. your job is to help users manage and execute tasks efficiently.`,

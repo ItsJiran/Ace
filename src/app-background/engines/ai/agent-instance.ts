@@ -1,14 +1,14 @@
 import { MemorySaver } from '@langchain/langgraph';
 
-import compileAceAgentWorkflow from './nodes/workflow';
+import { compileAceGraphV1 } from './workflows';
 
 export default class SingletonAgentInstance {
     private static _instance: SingletonAgentInstance;
-    private static _value: ReturnType<typeof compileAceAgentWorkflow> | null = null;
+    private static _value: ReturnType<typeof compileAceGraphV1> | null = null;
 
     private static ensureValue() {
         if (!SingletonAgentInstance._value) {
-            SingletonAgentInstance._value = compileAceAgentWorkflow({
+            SingletonAgentInstance._value = compileAceGraphV1({
                 checkpointer: new MemorySaver(),
             });
         }
@@ -18,12 +18,12 @@ export default class SingletonAgentInstance {
 
     private constructor() {}
 
-    public get value(): ReturnType<typeof compileAceAgentWorkflow> {
-        return SingletonAgentInstance.ensureValue() as ReturnType<typeof compileAceAgentWorkflow>;
+    public get value(): ReturnType<typeof compileAceGraphV1> {
+        return SingletonAgentInstance.ensureValue() as ReturnType<typeof compileAceGraphV1>;
     }
 
     public async stream(
-        state: Parameters<ReturnType<typeof compileAceAgentWorkflow>['invoke']>[0],
+        state: Parameters<ReturnType<typeof compileAceGraphV1>['invoke']>[0],
         config: Record<string, unknown> & { version: 'v3' },
     ){
         console.log('[AIStreamBridge] config', config);
