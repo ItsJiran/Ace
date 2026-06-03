@@ -1,16 +1,10 @@
 import type { BaseMessage } from '@langchain/core/messages';
 import { z } from 'zod';
+import { AceAgentWorkflowState } from '../../types';
 
 /** Executor subgraph state. */
-export interface AceAgentExecutorState {
+export interface AceAgentExecutorState extends AceAgentWorkflowState {
     messages: BaseMessage[];
-    current_contexts: any;
-    tasks: AceAgentExecutorTask[];
-    original_prompt: string;
-    from_node?: string;
-    target_node?: string;
-    target_node_reason?: string;
-    iteration_loop?: number;
 }
 
 export interface AceAgentExecutorTask {
@@ -30,7 +24,7 @@ export const AceAgentExecutorReturnSchema = z.object({
         })).optional(),
         tools: z.array(z.object({
             name: z.string(), description: z.string(), result_summary: z.string().optional(),
-            input_schema: z.record(z.unknown()), result_schema: z.record(z.unknown()),
+            input_schema: z.record(z.string(),z.any()), result_schema: z.record(z.string(),z.any()),
             storage_memory_uid: z.string().optional(), is_active: z.boolean().optional(),
         })).optional(),
     }).describe('Context delta from tool execution.'),

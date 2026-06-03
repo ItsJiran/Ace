@@ -48,7 +48,7 @@ export async function supervisionEdge(
     );
     if (pendingTask) {
         const node = pendingTask.type;
-        if (node !== '__end__') return node;
+        if (node !== 'end') return node;
         return '__end__';
     }
 
@@ -61,7 +61,7 @@ export async function supervisionEdge(
 
     const recentResults = state.context?.recent_node_results ?? [];
     const lastThree = recentResults.slice(-3);
-    const originalPrompt = state.original_prompt ?? '(no original prompt)';
+    const originalPrompt = state.passed_message ?? '(no original prompt)';
 
     const prompt = [
         lastThree.length > 0

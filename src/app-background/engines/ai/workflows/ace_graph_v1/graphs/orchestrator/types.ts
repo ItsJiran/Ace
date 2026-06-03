@@ -4,7 +4,11 @@ import { z } from 'zod';
 /** Orchestrator subgraph state. */
 export interface AceAgentOrchestratorState {
     messages: BaseMessage[];
-    original_prompt: string;
+
+    // passed from executor, used for supervisor's decision making and for 
+    // planner/contextor to generate new tasks.
+    passed_message: string;
+
     tasks: AceAgentOrchestratorTask[];
     context?: any;
     from_node?: string;
@@ -26,7 +30,7 @@ export const AceAgentOrchestratorReturnSchema = z.object({
     tasks: z.array(z.object({
         id: z.string(),
         type: z.enum(['orchestrator', 'executor', 'contextor', 'summarization', '__end__']),
-        summary: z.string(), payload: z.record(z.unknown()),
+        summary: z.string(), payload: z.record(z.string(),z.any()),
         status: z.enum(['pending', 'in_progress', 'completed', 'failed']),
     })),
     result_summary: z.string().describe('Summary for recent_node_results.'),

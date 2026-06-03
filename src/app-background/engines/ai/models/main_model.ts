@@ -2,8 +2,9 @@ import { initChatModel } from 'langchain';
 import type { z } from 'zod';
 import { AgentConfigType, type AIProviderType } from '#/shared/schemas/ai.ts';
 import resolveConfiguredProviderName from '#/app-background/lib/utils/ai/resolve-configured-provider-name';
-import resolveApiKey from '../../lib/utils/ai/resolve-api-key';
-import { getCachedApiKey } from '../../lib/utils/ai/api-key-session-cache';
+import resolveApiKey from '#/app-background/lib/utils/ai/resolve-api-key';
+import { getCachedApiKey } from '#/app-background/lib/utils/ai/api-key-session-cache';
+
 
 interface MainModelOptions {
     /** AI provider (e.g. 'openai', 'anthropic'). Resolved from config if not given. */

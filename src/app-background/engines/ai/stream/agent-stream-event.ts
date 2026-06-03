@@ -257,13 +257,13 @@ export function resolveNodeFromNamespace(namespace: string[]): AgentStreamEvent[
 
     for (const part of namespace) {
         const parts = part.split(':');
-        if (
-            WorkflowNodes.includes(
-                parts[0] as (typeof WorkflowNodeNames)[keyof typeof WorkflowNodeNames],
-            )
-        ) {
+        // if (
+        //     WorkflowNodes.includes(
+        //         parts[0] as (typeof WorkflowNodeNames)[keyof typeof WorkflowNodeNames],
+        //     )
+        // ) {
             return parts[0] as AgentStreamEvent['node'];
-        }
+        // }
     }
 
     return null;
