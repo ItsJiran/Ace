@@ -1,9 +1,11 @@
 import type { BaseMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AceAgentWorkflowBaseState, AceAgentWorkflowContext } from '../../types';
+import { AceAgentWorkflowBaseState, AceAgentWorkflowContext, AceAgentWorkflowTask } from '../../types';
 
 /** Contextor subgraph state. */
 export interface AceAgentContextorState extends AceAgentWorkflowBaseState {
+    /** The parent workflow task that triggered this subgraph invocation. */
+    parent_task?: AceAgentWorkflowTask;
     tasks: AceAgentContextorTask[];
 }
 

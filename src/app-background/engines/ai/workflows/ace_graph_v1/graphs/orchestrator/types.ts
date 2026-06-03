@@ -1,25 +1,17 @@
 import type { BaseMessage } from '@langchain/core/messages';
 import { z } from 'zod';
+import { AceAgentWorkflowBaseSubgraphsState, AceAgentWorkflowTask } from '../../types';
 
 /** Orchestrator subgraph state. */
-export interface AceAgentOrchestratorState {
-    messages: BaseMessage[];
-
-    // passed from executor, used for supervisor's decision making and for 
-    // planner/contextor to generate new tasks.
-    passed_message: string;
-
+export interface AceAgentOrchestratorState extends AceAgentWorkflowBaseSubgraphsState {
+    /** The parent workflow task that triggered this subgraph invocation. */
+    parent_task?: AceAgentWorkflowTask;
     tasks: AceAgentOrchestratorTask[];
-    context?: any;
-    from_node?: string;
-    target_node?: string;
-    target_node_reason?: string;
-    iteration_loop?: number;
 }
 
 export interface AceAgentOrchestratorTask {
     id: string;
-    type: 'planner' | 'contextor' | 'supervisor';
+    type: 'planner' | 'contextor' | 'thought' | 'orchestrator' | '__end__';
     summary: string;
     payload: Record<string, unknown>;
     status: 'pending' | 'in_progress' | 'completed' | 'failed';
@@ -29,7 +21,7 @@ export interface AceAgentOrchestratorTask {
 export const AceAgentOrchestratorReturnSchema = z.object({
     tasks: z.array(z.object({
         id: z.string(),
-        type: z.enum(['orchestrator', 'executor', 'contextor', 'summarization', '__end__']),
+        type: z.enum(['planner', 'contextor', 'thought', 'orchestrator', '__end__']),
         summary: z.string(), payload: z.record(z.string(),z.any()),
         status: z.enum(['pending', 'in_progress', 'completed', 'failed']),
     })),

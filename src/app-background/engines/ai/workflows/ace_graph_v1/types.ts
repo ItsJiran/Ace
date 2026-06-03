@@ -3,13 +3,17 @@ import type { BaseMessage } from '@langchain/core/messages';
 /** Canonical workflow state for ace_graph_v1. */
 export interface AceAgentWorkflowBaseState {
     messages: BaseMessage[];
-    passed_message: string;
+    original_prompt: string;
     context?: AceAgentWorkflowContext;
 
     from_node?: string;
     target_node?: string;
     target_node_reason?: string;
     iteration_loop?: number;
+}
+
+export interface AceAgentWorkflowBaseSubgraphsState extends AceAgentWorkflowBaseState {
+    passed_message: string;
 }
 
 export interface AceAgentWorkflowState extends AceAgentWorkflowBaseState {
@@ -53,3 +57,22 @@ export interface AceAgentWorkflowContext {
         is_active?: boolean;
     }>;
 }
+
+// export interface AceAgentWorkflowContextContent {
+//     type : 'chunks' | 'direct';
+//     storage_memory_uid? : string;
+// }
+
+// export interface AceAgentWorkflowContextContentChunks extends AceAgentWorkflowContextContent {
+//     type : 'chunks';
+//     chunks: Array<{
+//         line_start: number;
+//         line_end: number;
+//         storage_memory_uid?: string;
+//     }>;
+// }
+
+// export interface AceAgentWorkflowContextContentDirect extends AceAgentWorkflowContextContent {
+//     type : 'direct';
+//     content: string;
+// }

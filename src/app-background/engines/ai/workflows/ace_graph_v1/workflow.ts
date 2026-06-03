@@ -4,11 +4,13 @@ import { END, InMemoryStore, MemorySaver, START, StateGraph } from '@langchain/l
 import { AceAgentState } from './nodes/agent-state';
 import { createSummarizationNode } from './nodes/summarization';
 import { supervisionEdge } from './nodes/edges/supervision-edge';
-import { compileOrchestratorGraph } from './graphs/orchestrator/workflow';
-import { compileExecutorGraph } from './graphs/executor/workflow';
+import { initOrchestratorWrapper, callOrchestrator } from './nodes/orchestrator-wrapper';
+import { initExecutorWrapper, callExecutor } from './nodes/executor-wrapper';
 
 /**
  * ACE Graph v1 — Full workflow with supervision-based routing.
+ *
+ * Subgraphs are called via wrapper nodes that transform parent ↔ subgraph state.
  *
  *             START
  *               │
@@ -18,7 +20,7 @@ import { compileExecutorGraph } from './graphs/executor/workflow';
  *    ┌──────────┼──────────┬──────────┐      │
  *    ▼          ▼          ▼          ▼      │
  * orchestrator executor summarization  │      │
- * (subgraph)  (subgraph)      │        │      │
+ * (wrapper)   (wrapper)       │        │      │
  *    │          │              ▼        │      │
  *    └──────────┘             END       │      │
  *               │                       │      │
@@ -33,16 +35,15 @@ export function compileAceGraphV1(options?: {
     const checkpointer = options?.checkpointer ?? new MemorySaver();
     const store = options?.store ?? new InMemoryStore();
 
-    const orchestratorGraph = compileOrchestratorGraph({ checkpointer, store });
-    const executorGraph = compileExecutorGraph({ checkpointer, store });
+    // Initialize subgraph wrappers
+    initOrchestratorWrapper({ checkpointer, store });
+    initExecutorWrapper({ checkpointer, store });
 
     const graph = new StateGraph(AceAgentState)
-        // Subgraph nodes
-        .addNode('orchestrator', orchestratorGraph)
-        .addNode('executor', executorGraph)
-
-        // Direct node
-        .addNode('summarization', createSummarizationNode())
+        // Wrapper nodes (call subgraphs)
+        .addNode('orchestrator', callOrchestrator)
+        .addNode('executor', callExecutor)
+        .addNode('summarization', createSummarizationNode)
 
         // START → supervision edge
         .addConditionalEdges(START, supervisionEdge, [
