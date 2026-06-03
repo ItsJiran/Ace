@@ -1,3 +1,4 @@
+import { AIMessage } from '@langchain/core/messages';
 import { initOrchestratorGraph, getOrchestratorGraph } from '../graphs/orchestrator/workflow';
 import type { AceAgentWorkflowState } from '../types';
 
@@ -21,11 +22,21 @@ export async function callOrchestrator(state: AceAgentWorkflowState) {
         messages: state.messages ?? [],
         original_prompt: state.original_prompt ?? '',
         passed_message: passedMessage,
-        parent_task: state.tasks?.[0],
+        parent: {
+            tasks: state.tasks,
+            target_node: state.target_node,
+            target_node_reason: state.target_node_reason,
+        },
     });
 
     return {
-        messages: output.messages ?? state.messages,
+        messages: [
+            ...(output.messages ?? state.messages ?? []),
+            new AIMessage({
+                content: `Orchestrator subgraph completed.`,
+                name: 'ace-orchestrator',
+            }),
+        ],
         tasks: output.tasks ?? state.tasks,
         context: output.context ?? state.context,
         from_node: undefined,

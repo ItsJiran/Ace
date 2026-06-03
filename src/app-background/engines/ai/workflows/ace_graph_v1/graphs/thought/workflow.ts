@@ -1,19 +1,14 @@
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
-import { Annotation, END, InMemoryStore, MemorySaver, START, StateGraph } from '@langchain/langgraph';
+import { Annotation, InMemoryStore, MemorySaver, START, StateGraph } from '@langchain/langgraph';
 import type { BaseMessage } from '@langchain/core/messages';
 import type { AceAgentWorkflowContext } from '../../types';
-import type { AceAgentOrchestratorParent, AceAgentOrchestratorTask } from './types';
-import { initContextorGraph } from '../contextor/workflow';
-import { initThoughtGraph } from '../thought/workflow';
-import { orchestratorSupervisionEdge } from './nodes/supervision';
-import createPlannerNode from './nodes/planner';
-import createContextorNode from './nodes/contextor';
-import createThoughtNode from './nodes/thought';
-import createOrchestratorNode from './nodes/orchestrator';
+import type { AceAgentThoughtEntry, AceAgentThoughtParent, AceAgentThoughtTask } from './types';
+import { thoughtSupervisionEdge } from './nodes/supervision';
+import createThinkerNode from './nodes/thinker';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
-const OrchestratorStateAnnotation = Annotation.Root({
+const ThoughtStateAnnotation = Annotation.Root({
     messages: Annotation<BaseMessage[]>({
         reducer: (prev, next) => [...(prev ?? []), ...(next ?? [])],
         default: () => [],
@@ -46,7 +41,7 @@ const OrchestratorStateAnnotation = Annotation.Root({
         reducer: (_, next) => next,
         default: () => '',
     }),
-    parent: Annotation<AceAgentOrchestratorParent | undefined>({
+    parent: Annotation<AceAgentThoughtParent | undefined>({
         reducer: (_, next) => next,
         default: () => undefined,
     }),
@@ -54,7 +49,11 @@ const OrchestratorStateAnnotation = Annotation.Root({
         reducer: (_, next) => next,
         default: () => '',
     }),
-    tasks: Annotation<AceAgentOrchestratorTask[]>({
+    thoughts: Annotation<AceAgentThoughtEntry[]>({
+        reducer: (prev, next) => [...(prev ?? []), ...(next ?? [])],
+        default: () => [],
+    }),
+    tasks: Annotation<AceAgentThoughtTask[]>({
         reducer: (_, next) => next,
         default: () => [],
     }),
@@ -62,24 +61,24 @@ const OrchestratorStateAnnotation = Annotation.Root({
 
 // ── Singleton ──────────────────────────────────────────────────────────────
 
-let orchestratorSubgraph: ReturnType<typeof compileOrchestratorGraph> | null = null;
+let thoughtSubgraph: ReturnType<typeof compileThoughtGraph> | null = null;
 
-export function initOrchestratorGraph(options?: {
+export function initThoughtGraph(options?: {
     checkpointer?: BaseCheckpointSaver;
     store?: BaseStore;
 }) {
-    orchestratorSubgraph = compileOrchestratorGraph(options);
+    thoughtSubgraph = compileThoughtGraph(options);
 }
 
-export function getOrchestratorGraph() {
-    if (!orchestratorSubgraph) throw new Error('Orchestrator subgraph not initialized');
-    return orchestratorSubgraph;
+export function getThoughtGraph() {
+    if (!thoughtSubgraph) throw new Error('Thought subgraph not initialized');
+    return thoughtSubgraph;
 }
 
 // ── Compile ────────────────────────────────────────────────────────────────
 
 /**
- * Orchestrator subgraph — same supervision-edge loop pattern as parent.
+ * Thought subgraph — deep reasoning via supervision-edge loop.
  *
  *            START
  *              │
@@ -88,7 +87,7 @@ export function getOrchestratorGraph() {
  *              │                            │
  *   ┌──────────┼──────────┬──────────┐      │
  *   ▼          ▼          ▼          ▼      │
- * planner  contextor  thought  orchestrator  │
+ * analyze  reflect  critique  synthesize    │
  *   │          │          │          │      │
  *   └──────────┘          │          │      │
  *              │          │          │      │
@@ -97,57 +96,52 @@ export function getOrchestratorGraph() {
  *              │
  *              ▼
  *            END
+ *
+ * All four nodes use the same `createThinkerNode` factory with different
+ * `nodeName` values so the thought entries are properly attributed.
  */
-export function compileOrchestratorGraph(options?: {
+export function compileThoughtGraph(options?: {
     checkpointer?: BaseCheckpointSaver;
     store?: BaseStore;
 }) {
-    const checkpointer = options?.checkpointer ?? new MemorySaver();
-    const store = options?.store ?? new InMemoryStore();
-
-    // Initialize sub-subgraphs that the orchestrator delegates to
-    initContextorGraph({ checkpointer, store });
-    initThoughtGraph({ checkpointer, store });
-
-    const graph = new StateGraph(OrchestratorStateAnnotation)
-        // Nodes
-        .addNode('planner', createPlannerNode())
-        .addNode('contextor', createContextorNode())
-        .addNode('thought', createThoughtNode())
-        .addNode('orchestrator', createOrchestratorNode())
+    const graph = new StateGraph(ThoughtStateAnnotation)
+        .addNode('analyze', createThinkerNode('analyze'))
+        .addNode('reflect', createThinkerNode('reflect'))
+        .addNode('critique', createThinkerNode('critique'))
+        .addNode('synthesize', createThinkerNode('synthesize'))
 
         // START → supervision edge
-        .addConditionalEdges(START, orchestratorSupervisionEdge, [
-            'planner',
-            'contextor',
-            'thought',
-            'orchestrator',
+        .addConditionalEdges(START, thoughtSupervisionEdge, [
+            'analyze',
+            'reflect',
+            'critique',
+            'synthesize',
         ])
 
         // After workers → supervision edge (loop)
-        .addConditionalEdges('planner', orchestratorSupervisionEdge, [
-            'planner',
-            'contextor',
-            'thought',
-            'orchestrator',
+        .addConditionalEdges('analyze', thoughtSupervisionEdge, [
+            'analyze',
+            'reflect',
+            'critique',
+            'synthesize',
         ])
-        .addConditionalEdges('contextor', orchestratorSupervisionEdge, [
-            'planner',
-            'contextor',
-            'thought',
-            'orchestrator',
+        .addConditionalEdges('reflect', thoughtSupervisionEdge, [
+            'analyze',
+            'reflect',
+            'critique',
+            'synthesize',
         ])
-        .addConditionalEdges('thought', orchestratorSupervisionEdge, [
-            'planner',
-            'contextor',
-            'thought',
-            'orchestrator',
+        .addConditionalEdges('critique', thoughtSupervisionEdge, [
+            'analyze',
+            'reflect',
+            'critique',
+            'synthesize',
         ])
-        .addConditionalEdges('orchestrator', orchestratorSupervisionEdge, [
-            'planner',
-            'contextor',
-            'thought',
-            'orchestrator',
+        .addConditionalEdges('synthesize', thoughtSupervisionEdge, [
+            'analyze',
+            'reflect',
+            'critique',
+            'synthesize',
         ]);
 
     return graph.compile({
@@ -156,4 +150,4 @@ export function compileOrchestratorGraph(options?: {
     });
 }
 
-export default compileOrchestratorGraph;
+export default compileThoughtGraph;

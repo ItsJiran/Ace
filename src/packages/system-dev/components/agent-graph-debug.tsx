@@ -3,7 +3,6 @@ import {
     ReactFlow,
     Background,
     Controls,
-    MiniMap,
     type Node,
     type Edge,
     MarkerType,
@@ -11,7 +10,8 @@ import {
     useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Play, XCircle, ChevronDown, GitBranch, Circle, Workflow, RefreshCw } from 'lucide-react';
+import { Play, XCircle, ChevronDown, GitBranch, Circle, RefreshCw, Workflow } from 'lucide-react';
+import dagre from '@dagrejs/dagre';
 import { EventBus } from '#/shared/engines/event-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
@@ -25,12 +25,27 @@ interface GraphEvent {
     channel: string;
     type: string;
     node?: string;
+    graph?: string;
     state?: unknown;
 }
 
-interface GraphStructure {
-    nodeNames: string[];
-    rawEdges: Array<{ source: string; target: string }>;
+interface HierarchyNode {
+    id: string;
+    label: string;
+    graph: string;
+    type: string;
+    delegatesTo?: string;
+}
+
+interface HierarchyEdge {
+    source: string;
+    target: string;
+    type: 'forward' | 'delegation';
+}
+
+interface HierarchyData {
+    nodes: HierarchyNode[];
+    edges: HierarchyEdge[];
 }
 
 function AgentGraphDebug() {
@@ -43,7 +58,7 @@ function AgentGraphDebug() {
     const [events, setEvents] = useState<GraphEvent[]>([]);
     const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
     const [isListening, setIsListening] = useState(false);
-    const [graphStructure, setGraphStructure] = useState<GraphStructure>({ nodeNames: [], rawEdges: [] });
+    const [hierarchyData, setHierarchyData] = useState<HierarchyData>({ nodes: [], edges: [] });
     const [fetchingGraph, setFetchingGraph] = useState(false);
 
     const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node>([]);
@@ -52,73 +67,171 @@ function AgentGraphDebug() {
     const seqRef = useRef(0);
     const unlistenRef = useRef<(() => void) | null>(null);
 
+    // ── Resizable split: graph | events ───────────────────────────────────
+    const [splitRatio, setSplitRatio] = useState(0.55); // 55% graph, 45% events
+    const splitRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const onSplitMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        const container = containerRef.current;
+        if (!container) return;
+        const startY = e.clientY;
+        const startRatio = splitRatio;
+        const containerHeight = container.getBoundingClientRect().height;
+
+        const onMove = (ev: MouseEvent) => {
+            const dy = ev.clientY - startY;
+            const newRatio = startRatio + dy / containerHeight;
+            setSplitRatio(Math.max(0.2, Math.min(0.8, newRatio)));
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }, [splitRatio]);
+
     const nodeStatuses = useMemo(() => {
         const map = new Map<string, 'idle' | 'active' | 'completed'>();
-        for (const name of graphStructure.nodeNames) map.set(name, 'idle');
+        for (const n of hierarchyData.nodes) map.set(n.id, 'idle');
         for (const ev of events) {
-            if (ev.node && ev.type === 'node-start') map.set(ev.node, 'active');
-            if (ev.node && ev.type === 'node-end') map.set(ev.node, 'completed');
+            if (ev.node && ev.type === 'node-start') {
+                // Match by node name, try prefixed then plain
+                for (const n of hierarchyData.nodes) {
+                    if (n.id.endsWith(`::${ev.node}`) || n.id === ev.node || n.label === ev.node) {
+                        map.set(n.id, 'active');
+                    }
+                }
+            }
+            if (ev.node && ev.type === 'node-end') {
+                for (const n of hierarchyData.nodes) {
+                    if (n.id.endsWith(`::${ev.node}`) || n.id === ev.node || n.label === ev.node) {
+                        map.set(n.id, 'completed');
+                    }
+                }
+            }
         }
         return map;
-    }, [events, graphStructure.nodeNames]);
+    }, [events, hierarchyData.nodes]);
 
+    // ── Dagre auto-layout ─────────────────────────────────────────────────
     useEffect(() => {
-        const flowNodes: Node[] = [];
-        const spacing = 180;
-        for (let i = 0; i < graphStructure.nodeNames.length; i++) {
-            const name = graphStructure.nodeNames[i];
-            const status = nodeStatuses.get(name) ?? 'idle';
+        if (hierarchyData.nodes.length === 0) {
+            setRfNodes([]);
+            setRfEdges([]);
+            return;
+        }
+
+        const NODE_W = 160;
+        const NODE_H = 36;
+
+        const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+        dagreGraph.setGraph({ rankdir: 'TB', nodesep: 30, ranksep: 60 });
+
+        // Build React Flow nodes with styling
+        const rfNodeList: Node[] = [];
+        for (const n of hierarchyData.nodes) {
+            const status = nodeStatuses.get(n.id) ?? 'idle';
+            const isStart = n.type === 'start';
+            const isEnd = n.type === 'end';
+            const isSupervision = n.type === 'supervision';
+            const isWrapper = n.type === 'wrapper';
+
             const colors: Record<string, { bg: string; border: string; text: string }> = {
                 active: { bg: 'rgba(251,191,36,0.12)', border: '#f59e0b', text: '#fcd34d' },
                 completed: { bg: 'rgba(52,211,153,0.10)', border: '#34d399', text: '#6ee7b7' },
                 idle: { bg: 'rgba(24,24,27,0.85)', border: '#3f3f46', text: '#a1a1aa' },
             };
-            const c = colors[status];
-            flowNodes.push({
-                id: name,
-                position: { x: i * spacing + 20, y: 40 },
-                data: { label: name },
-                style: {
-                    background: c.bg, border: `1px solid ${c.border}`, color: c.text,
-                    borderRadius: 10, padding: '8px 16px', fontSize: 11, fontWeight: 600, fontFamily: 'monospace',
-                    ...(status === 'active' ? { boxShadow: '0 0 10px rgba(251,191,36,0.25)' } : {}),
-                },
-            });
-        }
-        setRfNodes(flowNodes);
 
-        const flowEdges: Edge[] = graphStructure.rawEdges.map((e, i) => ({
-            id: `e-${i}`, source: e.source, target: e.target,
-            animated: nodeStatuses.get(e.source) === 'completed' && nodeStatuses.get(e.target) === 'active',
-            style: { stroke: '#52525b', strokeWidth: 1.5 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#52525b', width: 12, height: 12 },
+            let style: React.CSSProperties;
+            let label = n.label;
+            let w = NODE_W;
+
+            if (isStart) {
+                style = { background: 'rgba(52,211,153,0.12)', border: '1px solid #34d399', color: '#6ee7b7', borderRadius: 20, padding: '4px 12px', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' };
+                label = 'START';
+                w = 55;
+            } else if (isEnd) {
+                style = { background: 'rgba(239,68,68,0.10)', border: '1px solid #ef4444', color: '#fca5a5', borderRadius: 20, padding: '4px 12px', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' };
+                label = 'END';
+                w = 45;
+            } else {
+                const c = colors[status];
+                label = isWrapper ? `${n.label} ⤵` : n.label;
+                style = {
+                    background: c.bg,
+                    border: isSupervision ? `1px dashed ${c.border}` : isWrapper ? '1px solid #a78bfa' : `1px solid ${c.border}`,
+                    color: c.text,
+                    borderRadius: isSupervision ? 6 : 10,
+                    padding: '4px 10px',
+                    fontSize: 9,
+                    fontWeight: 600,
+                    fontFamily: 'monospace',
+                    ...(status === 'active' ? { boxShadow: '0 0 10px rgba(251,191,36,0.25)' } : {}),
+                };
+            }
+
+            rfNodeList.push({ id: n.id, position: { x: 0, y: 0 }, data: { label }, style, type: 'default' });
+
+            dagreGraph.setNode(n.id, { width: w, height: NODE_H });
+        }
+
+        // Add all edges to dagre
+        for (const e of hierarchyData.edges) {
+            dagreGraph.setEdge(e.source, e.target);
+        }
+
+        // Run dagre layout
+        dagre.layout(dagreGraph);
+
+        // Apply dagre positions
+        const positionedNodes = rfNodeList.map((node) => {
+            const pos = dagreGraph.node(node.id);
+            return {
+                ...node,
+                targetPosition: 'top' as const,
+                sourcePosition: 'bottom' as const,
+                position: { x: pos.x - (node.style?.width ? (typeof node.style.width === 'number' ? node.style.width : NODE_W) / 2 : NODE_W / 2), y: pos.y - NODE_H / 2 },
+            };
+        });
+
+        setRfNodes(positionedNodes);
+
+        // Build edges
+        const flowEdges: Edge[] = hierarchyData.edges.map((e, i) => ({
+            id: `e-${i}`,
+            source: e.source,
+            target: e.target,
+            animated: e.type === 'delegation',
+            style: e.type === 'delegation'
+                ? { stroke: '#a78bfa', strokeWidth: 1, strokeDasharray: '5,5' }
+                : { stroke: '#52525b', strokeWidth: 1.5 },
+            markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: e.type === 'delegation' ? '#a78bfa' : '#52525b',
+                width: 10,
+                height: 10,
+            },
         }));
         setRfEdges(flowEdges);
-    }, [graphStructure, nodeStatuses, setRfNodes, setRfEdges]);
+    }, [hierarchyData, nodeStatuses, setRfNodes, setRfEdges]);
 
     const fetchGraph = useCallback(async () => {
         setFetchingGraph(true);
         try {
             const raw = await RPCEngine.invoke('ai.getGraph', {});
             console.log('[AgentGraphDebug] get_graph() result:', raw);
-            const nodeNames: string[] = [];
-            const rawEdges: Array<{ source: string; target: string }> = [];
-            if (raw && typeof raw === 'object') {
-                const g = raw as Record<string, unknown>;
-                if (Array.isArray(g.nodes)) {
-                    for (const n of g.nodes) {
-                        const name = (n as any)?.name ?? (n as any)?.id ?? String(n);
-                        if (name && !String(name).startsWith('__')) nodeNames.push(String(name));
-                    }
-                }
-                const arr = (Array.isArray(g.edges) ? g.edges : []) as Array<{ source?: string; target?: string }>;
-                for (const e of arr) {
-                    const s = String(e.source ?? ''), t = String(e.target ?? '');
-                    if (s && t && !s.startsWith('__') && !t.startsWith('__')) rawEdges.push({ source: s, target: t });
-                }
+
+            // New format: { nodes: HierarchyNode[], edges: HierarchyEdge[] }
+            if (raw && typeof raw === 'object' && Array.isArray((raw as any).nodes)) {
+                setHierarchyData(raw as HierarchyData);
+                console.log('[AgentGraphDebug] loaded hierarchy:', (raw as HierarchyData).nodes.length, 'nodes');
+                return;
             }
-            console.log('[AgentGraphDebug] parsed:', { nodeNames, rawEdges });
-            setGraphStructure({ nodeNames, rawEdges });
+
+            console.warn('[AgentGraphDebug] unexpected format:', raw);
         } catch (err) {
             console.error('[AgentGraphDebug] fetch failed:', err);
         } finally {
@@ -185,31 +298,41 @@ function AgentGraphDebug() {
                 </div>
             )}
 
-            <div className="shrink-0 border-b border-zinc-700/30" style={{ height: 200 }}>
-                <div className="flex items-center justify-between px-2 pt-1.5 pb-0.5">
-                    <div className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1"><Workflow size={10} /> Graph</div>
-                    <button onClick={fetchGraph} disabled={fetchingGraph}
-                        className={[targets.btn.first, 'rounded px-2 py-0.5 text-[10px] flex items-center gap-1', fetchingGraph ? 'opacity-60' : ''].join(' ')}>
-                        <RefreshCw size={10} className={fetchingGraph ? 'animate-spin' : ''} />
-                        {fetchingGraph ? '...' : 'Refresh'}
-                    </button>
+            <div ref={containerRef} className="flex-1 flex flex-col min-h-0">
+                {/* Graph layer — resizable */}
+                <div className="flex flex-col min-h-0 border-b border-zinc-700/30" style={{ height: `${splitRatio * 100}%` }}>
+                    <div className="flex items-center justify-between px-2 pt-1.5 pb-0.5 shrink-0">
+                        <div className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1"><Workflow size={10} /> Graph</div>
+                        <button onClick={fetchGraph} disabled={fetchingGraph}
+                            className={[targets.btn.first, 'rounded px-2 py-0.5 text-[10px] flex items-center gap-1', fetchingGraph ? 'opacity-60' : ''].join(' ')}>
+                            <RefreshCw size={10} className={fetchingGraph ? 'animate-spin' : ''} />
+                            {fetchingGraph ? '...' : 'Refresh'}
+                        </button>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                        {hierarchyData.nodes.length > 0 ? (
+                            <ReactFlow nodes={rfNodes} edges={rfEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+                                fitView fitViewOptions={{ padding: 0.3 }} nodesDraggable={false} nodesConnectable={false}
+                                elementsSelectable={false} proOptions={{ hideAttribution: true }}>
+                                <Background color="#27272a" gap={16} />
+                                <Controls showInteractive={false} className="[&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-zinc-400" />
+                            </ReactFlow>
+                        ) : <div className="text-zinc-600 text-[10px] py-4 text-center">{fetchingGraph ? 'Fetching...' : 'Click Refresh'}</div>}
+                    </div>
                 </div>
-                {graphStructure.nodeNames.length > 0 ? (
-                    <ReactFlow nodes={rfNodes} edges={rfEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-                        fitView fitViewOptions={{ padding: 0.3 }} nodesDraggable={false} nodesConnectable={false}
-                        elementsSelectable={false} proOptions={{ hideAttribution: true }}>
-                        <Background color="#27272a" gap={16} />
-                        <Controls showInteractive={false} className="[&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-zinc-400" />
-                        <MiniMap style={{ background: '#18181b', border: '1px solid #3f3f46' }} maskColor="rgba(0,0,0,0.45)"
-                            nodeColor={(n) => { const s = nodeStatuses.get(n.id); return s === 'active' ? '#f59e0b' : s === 'completed' ? '#34d399' : '#52525b'; }} />
-                    </ReactFlow>
-                ) : <div className="text-zinc-600 text-[10px] py-4 text-center">{fetchingGraph ? 'Fetching...' : 'Click Refresh'}</div>}
-            </div>
 
-            <div className="flex-1 overflow-y-auto p-2">
-                {!activeThreadUid && <div className="text-zinc-600 text-center mt-8">Select a thread, click Listen, then send a prompt.</div>}
-                {events.map((ev) => {
-                    const isExpanded = expandedEvents.has(ev.seq);
+                {/* Resize handle */}
+                <div
+                    ref={splitRef}
+                    onMouseDown={onSplitMouseDown}
+                    className="h-1 bg-zinc-700 hover:bg-amber-500 cursor-row-resize shrink-0 transition-colors"
+                />
+
+                {/* Events layer */}
+                <div className="flex-1 overflow-y-auto p-2 min-h-0">
+                    {!activeThreadUid && <div className="text-zinc-600 text-center mt-4 text-[10px]">Select a thread, click Listen, then send a prompt.</div>}
+                    {events.map((ev) => {
+                        const isExpanded = expandedEvents.has(ev.seq);
                     return (
                         <div key={ev.seq} className="mb-0.5">
                             <button onClick={() => toggleEvent(ev.seq)} className="flex items-center gap-1.5 w-full text-left py-0.5 hover:bg-zinc-800/30 rounded px-1">
@@ -227,6 +350,7 @@ function AgentGraphDebug() {
                     );
                 })}
             </div>
+        </div>
         </div>
     );
 }

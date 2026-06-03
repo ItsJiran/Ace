@@ -28,6 +28,7 @@
     "#/*": "./src/*"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "@langchain/anthropic": "^1.4.0",
     "@langchain/core": "^1.1.46",
     "@langchain/google": "^0.1.12",
@@ -64,6 +65,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.27",
     "concurrently": "^9.2.1",

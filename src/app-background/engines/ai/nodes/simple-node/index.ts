@@ -30,14 +30,14 @@ export function createSimpleNode() {
 
         const config = getConfig();
         const threadUid = (config as any)?.configurable?.thread_id;
-        if (threadUid) emitNodeStart(threadUid, 'simple-node', state).catch(() => {});
+        if (threadUid) emitNodeStart(threadUid, 'simple-node', 'ace', state).catch(() => {});
 
         const result = await agent.invoke(state, config as never);
 
         console.info('[AINode] done simple node', { messageCount: result.messages?.length ?? 0 });
 
         if (threadUid) {
-            emitNodeEnd(threadUid, 'simple-node', { messages: result.messages }).catch(() => {});
+            emitNodeEnd(threadUid, 'simple-node', 'ace', { messages: result.messages }).catch(() => {});
         }
 
         return { messages: result.messages };

@@ -1,11 +1,18 @@
-import type { BaseMessage } from '@langchain/core/messages';
-import { z } from 'zod';
-import { AceAgentWorkflowBaseState, AceAgentWorkflowContext, AceAgentWorkflowTask } from '../../types';
+import { AceAgentWorkflowBaseState } from '../../types';
 
-/** Contextor subgraph state. */
-export interface AceAgentContextorState extends AceAgentWorkflowBaseState {
-    /** The parent workflow task that triggered this subgraph invocation. */
-    parent_task?: AceAgentWorkflowTask;
+/** Context passed from the calling workflow to the contextor subgraph. */
+export interface AceAgentContextorParent<TParentTask = unknown> {
+    tasks?: TParentTask[];
+    target_node?: string;
+    target_node_reason?: string;
+}
+
+/** Contextor subgraph state — `parent.tasks` type varies depending on which workflow calls it. */
+export interface AceAgentContextorState<TParentTask = unknown> extends AceAgentWorkflowBaseState {
+    /** Parent context — tasks + routing intent from the calling workflow (orchestrator, executor, etc.). */
+    parent?: AceAgentContextorParent<TParentTask>;
+    /** Summary of what this subgraph has completed — set by nodes, read by supervision edge for LLM summarization. */
+    result_summary: string;
     tasks: AceAgentContextorTask[];
 }
 
@@ -16,48 +23,3 @@ export interface AceAgentContextorTask {
     payload: Record<string, unknown>;
     status: 'pending' | 'in_progress' | 'completed' | 'failed';
 }
-
-/** Schema for contextor's return to parent workflow. */
-export const AceAgentContextorReturnSchema = z.object({
-    context_update: z
-        .object({
-            files: z
-                .array(
-                    z.object({
-                        path: z.string(),
-                        size: z.number(),
-                        line_count: z.number(),
-                        last_modified: z.string(),
-                        storage_memory_uid: z.string().optional(),
-                        is_active: z.boolean().optional(),
-                    }),
-                )
-                .optional(),
-            informations: z
-                .array(
-                    z.object({
-                        title: z.string(),
-                        content: z.string(),
-                        is_active: z.boolean().optional(),
-                    }),
-                )
-                .optional(),
-            tools: z
-                .array(
-                    z.object({
-                        name: z.string(),
-                        description: z.string(),
-                        result_summary: z.string().optional(),
-                        input_schema: z.record(z.string(), z.unknown()),
-                        result_schema: z.record(z.string(), z.unknown()),
-                        storage_memory_uid: z.string().optional(),
-                        is_active: z.boolean().optional(),
-                    }),
-                )
-                .optional(),
-        })
-        .describe('Context delta to merge into parent workflow.'),
-    result_summary: z.string().describe('Summary for recent_node_results.'),
-});
-
-export type AceAgentContextorReturnType = z.infer<typeof AceAgentContextorReturnSchema>;

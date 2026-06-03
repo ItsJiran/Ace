@@ -15,6 +15,7 @@ import { Engine } from '#/shared/engines/engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai.ts';
 import { AgentStreamAnyEvent } from '#/shared/schemas/agent-stream-events';
+import { getAceGraphStructure } from './ai/workflows/ace_graph_v1/graphs/graph_structure';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
@@ -124,10 +125,12 @@ class AgentThreadEngineSingleton extends Engine {
         );
 
         // --- Graph structure (for AgentGraphDebug) ---
+        // Uses the structured definition from graph_structure.ts instead of
+        // LangGraph's raw getGraph() output which can be messy/incomplete.
         await RPCEngine.handle(
             'ai.getGraph',
             async () => {
-                return SingletonAgentInstance.getInstance().getGraph();
+                return getAceGraphStructure();
             },
             { owner: this.constructor.name },
         );

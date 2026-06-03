@@ -1,8 +1,8 @@
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import { Annotation, InMemoryStore, MemorySaver, StateGraph } from '@langchain/langgraph';
 import type { BaseMessage } from '@langchain/core/messages';
-import type { AceAgentWorkflowContext, AceAgentWorkflowTask } from '../../types';
-import type { AceAgentExecutorTask } from './types';
+import type { AceAgentWorkflowContext } from '../../types';
+import type { AceAgentExecutorParent, AceAgentExecutorTask } from './types';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -39,9 +39,13 @@ const ExecutorStateAnnotation = Annotation.Root({
         reducer: (_, next) => next,
         default: () => '',
     }),
-    parent_task: Annotation<AceAgentWorkflowTask | undefined>({
+    parent: Annotation<AceAgentExecutorParent | undefined>({
         reducer: (_, next) => next,
         default: () => undefined,
+    }),
+    result_summary: Annotation<string>({
+        reducer: (_, next) => next,
+        default: () => '',
     }),
     tasks: Annotation<AceAgentExecutorTask[]>({
         reducer: (_, next) => next,

@@ -1,3 +1,4 @@
+import { AIMessage } from '@langchain/core/messages';
 import { initExecutorGraph, getExecutorGraph } from '../graphs/executor/workflow';
 import type { AceAgentWorkflowState } from '../types';
 
@@ -21,11 +22,21 @@ export async function callExecutor(state: AceAgentWorkflowState) {
         messages: state.messages ?? [],
         original_prompt: state.original_prompt ?? '',
         passed_message: passedMessage,
-        parent_task: state.tasks?.[0],
+        parent: {
+            tasks: state.tasks,
+            target_node: state.target_node,
+            target_node_reason: state.target_node_reason,
+        },
     });
 
     return {
-        messages: output.messages ?? state.messages,
+        messages: [
+            ...(output.messages ?? state.messages ?? []),
+            new AIMessage({
+                content: `Executor subgraph completed.`,
+                name: 'ace-executor',
+            }),
+        ],
         context: output.context ?? state.context,
         tasks: state.tasks,
         from_node: undefined,

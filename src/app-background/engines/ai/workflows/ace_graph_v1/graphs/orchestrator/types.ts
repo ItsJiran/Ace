@@ -1,11 +1,18 @@
-import type { BaseMessage } from '@langchain/core/messages';
-import { z } from 'zod';
 import { AceAgentWorkflowBaseSubgraphsState, AceAgentWorkflowTask } from '../../types';
+
+/** Context passed from the parent workflow to this subgraph. */
+export interface AceAgentOrchestratorParent {
+    tasks?: AceAgentWorkflowTask[];
+    target_node?: string;
+    target_node_reason?: string;
+}
 
 /** Orchestrator subgraph state. */
 export interface AceAgentOrchestratorState extends AceAgentWorkflowBaseSubgraphsState {
-    /** The parent workflow task that triggered this subgraph invocation. */
-    parent_task?: AceAgentWorkflowTask;
+    /** Parent context — tasks + routing intent from the calling workflow. */
+    parent?: AceAgentOrchestratorParent;
+    /** Summary of what this subgraph has completed — set by nodes, read by supervision edge for LLM summarization. */
+    result_summary: string;
     tasks: AceAgentOrchestratorTask[];
 }
 
@@ -16,16 +23,3 @@ export interface AceAgentOrchestratorTask {
     payload: Record<string, unknown>;
     status: 'pending' | 'in_progress' | 'completed' | 'failed';
 }
-
-/** Schema for orchestrator's return to parent workflow. */
-export const AceAgentOrchestratorReturnSchema = z.object({
-    tasks: z.array(z.object({
-        id: z.string(),
-        type: z.enum(['planner', 'contextor', 'thought', 'orchestrator', '__end__']),
-        summary: z.string(), payload: z.record(z.string(),z.any()),
-        status: z.enum(['pending', 'in_progress', 'completed', 'failed']),
-    })),
-    result_summary: z.string().describe('Summary for recent_node_results.'),
-});
-
-export type AceAgentOrchestratorReturnType = z.infer<typeof AceAgentOrchestratorReturnSchema>;
