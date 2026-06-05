@@ -1,7 +1,7 @@
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import type { AceAgentV2State } from '../../types';
 
@@ -45,12 +45,13 @@ export function createThoughtNode() {
 
         if (state.is_stopped) return { result_summary: 'Stopped.', from_node: 'thought' };
 
-        const model = await mainModel({
+        const result = await invokeLLM({
             runtime: getConfig() as never,
             structuredOutput: ThoughtOutput,
+            messages: [new SystemMessage(thoughtPrompt(state))],
+            nodeName: 'thought',
+            graphName: 'ace-v2',
         });
-
-        const result = await model.invoke([ new SystemMessage(thoughtPrompt(state)) ]);
 
         const output: Partial<AceAgentV2State> = {
             messages: [new AIMessage({

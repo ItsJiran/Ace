@@ -1,7 +1,7 @@
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import type { AceAgentV2State, AceAgentStep } from '../../types';
 
@@ -84,11 +84,13 @@ function addStepsPrompt(state: AceAgentV2State): string {
 // ── Functions ──────────────────────────────────────────────────────────────
 
 async function generateNextSteps(state: AceAgentV2State) {
-    const model = await mainModel({
+    const result = await invokeLLM({
         runtime: getConfig() as never,
         structuredOutput: AddStepsOutput,
+        messages: [new SystemMessage(addStepsPrompt(state))],
+        nodeName: 'orchestrator_step',
+        graphName: 'ace-v2',
     });
-    const result = await model.invoke([new SystemMessage(addStepsPrompt(state))]);
 
     const newSteps: AceAgentStep[] = result.steps.map((s: any, i: any) => ({
         id: `step-${Date.now()}-${i}`,

@@ -6,7 +6,7 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import type { AceAgentV2State, AceAgentStep, AceAgentTask } from '../../types';
 
 export const MoreTasksVerdict = z.object({
@@ -22,9 +22,10 @@ export async function evaluateMoreTasks(
     step: AceAgentStep,
     task: AceAgentTask,
 ): Promise<MoreTasksResult> {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: MoreTasksVerdict });
-    return await model.invoke([
-        new SystemMessage([
+    return await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: MoreTasksVerdict,
+        messages: [new SystemMessage([
             'This task was ACHIEVED successfully. Now decide whether the current STEP needs MORE tasks.',
             '',
             'More tasks are needed when: the step goal is not fully accomplished,',
@@ -40,6 +41,8 @@ export async function evaluateMoreTasks(
             '',
             'All tasks in this step:',
             ...step.tasks.map((t) => `  [${t.status}] ${t.type}/${t.summary}${t.output ? ` → ${JSON.stringify(t.output).slice(0, 80)}` : ''}`),
-        ].join('\n')),
-    ]);
+        ].join('\n'))],
+        nodeName: 'review_task',
+        graphName: 'ace-v2',
+    });
 }

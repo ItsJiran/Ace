@@ -1,43 +1,60 @@
 /**
- * Review Step — evaluates whether a step's tasks were sufficient,
- * then decides: create a new step, or give up and move to review_goal.
+ * Review Step — evaluates whether a step achieved its phase,
+ * toggles its status, then decides: create a new step or move to review_goal.
  *
  * Flow (each classification uses its own LLM call):
  * ┌──────────────────────────────────────────────────────────────────┐
  * │  review_task → step_done → review_step                           │
  * │       ↓                                                          │
  * │  ┌── Stage 1: Step achieved its phase? ──────────────────────┐  │
+ * │  │  (mark step completed / failed based on result)            │  │
  * │  │                                                             │  │
- * │  │  STEP_ACHIEVED ────────────────────────────────────────┐   │  │
- * │  │    │                                                    │   │  │
- * │  │    └─ Stage 2a: Goal complete?                          │   │  │
- * │  │          goal_done → review_goal                        │   │  │
- * │  │          need_next_step → orchestrator_step (+ reason)  │   │  │
- * │  │                                                         │   │  │
- * │  │  STEP_NOT_ACHIEVED ─────────────────────────────────────┘   │  │
- * │  │    │                                                        │  │
- * │  │    └─ Stage 2b: Can recover with new step?                  │  │
- * │  │          can_new_step → orchestrator_step (+ reason)        │  │
- * │  │          give_up → review_goal                              │  │
+ * │  │  STEP_ACHIEVED ──┐                                         │  │
+ * │  │  STEP_NOT_ACHIEVED ─┐                                      │  │
+ * │  │                     ↓↓                                     │  │
+ * │  │  Stage 2: Need another step?                                │  │
+ * │  │    need_next_step → orchestrator_step (+ reason)            │  │
+ * │  │    !need_next_step → review_goal                            │  │
  * │  └──────────────────────────────────────────────────────────────┘  │
  * │                                                                    │
  * │  Special case: "Aborting Goal" step → review_goal immediately      │
+ * │                                                                    │
+ * │  Note: goal completion is decided by review_goal, not here.        │
  * └────────────────────────────────────────────────────────────────────┘
  *
  * File layout:
- *   index.ts              — node entry point + routing logic
- *   stage1_evaluate.ts    — Stage 1: did step achieve its phase?
- *   stage2a_goal_check.ts — Stage 2a: is the goal complete?
- *   stage2b_recover.ts    — Stage 2b: can a new step recover?
+ *   index.ts           — node entry point + helpers + routing logic
+ *   stage1_evaluate.ts — Stage 1: did step achieve its phase?
+ *   stage2_next.ts     — Stage 2: does goal need another step?
  */
 
 import { getConfig } from '@langchain/langgraph';
 import { emitNodeStart } from '#/app-background/lib/utils/ai/emit-graph-event';
-import type { AceAgentV2State } from '../../types';
+import type { AceAgentV2State, AceAgentGoal, AceAgentStep } from '../../types';
 
 import { evaluateStepOutcome } from './stage1_evaluate';
-import { evaluateGoalComplete } from './stage2a_goal_check';
-import { evaluateRecover } from './stage2b_recover';
+import { evaluateNextStep } from './stage2_next';
+
+// ── Constants ──────────────────────────────────────────────────────────────
+
+/** Hard limit: max steps per goal before forcing review_goal. */
+const MAX_STEPS_PER_GOAL = 8;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function applyStepStatus(
+    goal: AceAgentGoal | undefined,
+    step: AceAgentStep | undefined,
+    status: AceAgentStep['status'],
+    output?: string,
+): { goal: AceAgentGoal | undefined; step: AceAgentStep | undefined } {
+    if (!goal || !step) return { goal, step };
+    const updatedStep: AceAgentStep = { ...step, status, ...(output ? { output } : {}) };
+    return {
+        goal: { ...goal, steps: goal.steps.map((s) => (s.id === step.id ? updatedStep : s)) },
+        step: updatedStep,
+    };
+}
 
 // ── Node ───────────────────────────────────────────────────────────────────
 
@@ -55,7 +72,10 @@ export function createReviewStepNode() {
 
         // Special case: orchestrator already gave up on this goal
         if (step.phase.toLowerCase().includes('aborting goal')) {
+            const { goal: updatedGoal } = applyStepStatus(goal, step, 'failed');
             return {
+                current_goal: updatedGoal,
+                current_step: undefined,
                 target_node: 'review_goal',
                 from_node: 'review_step',
                 result_summary: 'Goal abandoned by orchestrator.',
@@ -67,47 +87,46 @@ export function createReviewStepNode() {
         // ══════════════════════════════════════════════════════════════
 
         const outcome = await evaluateStepOutcome(state, goal, step);
+        const stepStatus: 'completed' | 'failed' =
+            outcome.outcome === 'step_achieved' ? 'completed' : 'failed';
 
-        // ── Step achieved ────────────────────────────────────────────
+        const { goal: updatedGoal } = applyStepStatus(goal, step, stepStatus, outcome.reasoning);
 
-        if (outcome.outcome === 'step_achieved') {
-            const goalCheck = await evaluateGoalComplete(state, goal);
+        // ══════════════════════════════════════════════════════════════
+        // Stage 2: Does the goal need another step?
+        // ══════════════════════════════════════════════════════════════
 
-            if (goalCheck.verdict === 'goal_done') {
+        const nextCheck = await evaluateNextStep(state, updatedGoal!, stepStatus);
+
+        if (nextCheck.need_next_step) {
+            // Gate: prevent infinite step creation
+            if (updatedGoal!.steps.length >= MAX_STEPS_PER_GOAL) {
                 return {
+                    current_goal: updatedGoal,
+                    current_step: undefined,
                     target_node: 'review_goal',
                     from_node: 'review_step',
-                    result_summary: goalCheck.reasoning,
+                    result_summary: `Max steps per goal (${MAX_STEPS_PER_GOAL}) reached — forcing goal review.`,
                 };
             }
 
-            // need_next_step
             return {
+                current_goal: updatedGoal,
+                current_step: undefined,
                 target_node: 'orchestrator_step',
-                target_node_reason: `Step achieved — create next step: ${goalCheck.next_step_suggestion}`,
+                target_node_reason: `Step ${stepStatus} — create next step: ${nextCheck.step_suggestion}`,
                 from_node: 'review_step',
-                result_summary: goalCheck.reasoning,
+                result_summary: nextCheck.reasoning,
             };
         }
 
-        // ── Step not achieved ────────────────────────────────────────
-
-        const recoverCheck = await evaluateRecover(state, goal, step);
-
-        if (recoverCheck.can_new_step) {
-            return {
-                target_node: 'orchestrator_step',
-                target_node_reason: `Step failed — create new step: ${recoverCheck.step_suggestion}`,
-                from_node: 'review_step',
-                result_summary: recoverCheck.reasoning,
-            };
-        }
-
-        // Give up → review_goal
+        // No more steps needed → review_goal
         return {
+            current_goal: updatedGoal,
+            current_step: undefined,
             target_node: 'review_goal',
             from_node: 'review_step',
-            result_summary: `Cannot recover goal: ${recoverCheck.reasoning}`,
+            result_summary: nextCheck.reasoning,
         };
     };
 }

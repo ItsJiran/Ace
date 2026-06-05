@@ -6,7 +6,7 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import type { AceAgentV2State, AceAgentStep, AceAgentTask } from '../../types';
 
 export const RetryCheckVerdict = z.object({
@@ -23,9 +23,10 @@ export async function evaluateRetry(
     task: AceAgentTask,
     maxRetries: number,
 ): Promise<RetryCheckResult> {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: RetryCheckVerdict });
-    return await model.invoke([
-        new SystemMessage([
+    return await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: RetryCheckVerdict,
+        messages: [new SystemMessage([
             'This task FAILED. Decide whether it can be fixed by retrying with corrected input/payload.',
             '',
             'Retry makes sense when: wrong payload/params, temporary error, small adjustment needed.',
@@ -40,6 +41,8 @@ export async function evaluateRetry(
             `Payload: ${JSON.stringify(task.payload).slice(0, 300)}`,
             `Output: ${task.output ? JSON.stringify(task.output).slice(0, 500) : '(empty)'}`,
             `Retry #${task.retry_count} / ${task.max_retries || maxRetries}`,
-        ].join('\n')),
-    ]);
+        ].join('\n'))],
+        nodeName: 'review_task',
+        graphName: 'ace-v2',
+    });
 }

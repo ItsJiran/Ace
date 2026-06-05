@@ -75,9 +75,9 @@ export function compileAceGraphV2(options?: {
             'orchestrator_step', 'review_goal',
         ])
 
-        // review_goal → orchestrator_step (next goal) or END
+        // review_goal → orchestrator_goal (adjust/new/next goal) or END
         .addConditionalEdges('review_goal', (s) => (s as any).target_node ?? '__end__', [
-            'orchestrator_step', '__end__',
+            'orchestrator_goal', '__end__',
         ]);
 
     return graph.compile({ checkpointer, store });

@@ -54,6 +54,9 @@ import { evaluateMoreTasks } from './stage2a_next';
 
 const MAX_RETRIES = 3;
 
+/** Hard limit: max micro-tasks per step before forcing step_done. */
+const MAX_TASKS_PER_STEP = 10;
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function actionNodeFor(type: string): string {
@@ -175,6 +178,18 @@ export function createReviewTaskNode() {
         const moreTasksCheck = await evaluateMoreTasks(state, step, task);
 
         if (moreTasksCheck.needs_more_tasks) {
+            const taskCount = updatedStep?.tasks.length ?? step.tasks.length;
+            // Gate: prevent infinite task creation
+            if (taskCount >= MAX_TASKS_PER_STEP) {
+                return {
+                    current_goal: updatedGoal,
+                    current_step: undefined,
+                    target_node: 'review_step',
+                    from_node: 'review_task',
+                    result_summary: `Max tasks per step (${MAX_TASKS_PER_STEP}) reached — forcing step review.`,
+                };
+            }
+
             return {
                 current_goal: updatedGoal,
                 current_step: updatedStep,

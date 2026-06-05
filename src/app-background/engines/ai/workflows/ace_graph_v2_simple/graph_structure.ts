@@ -33,11 +33,10 @@ const aceV2Graph = {
         { source: 'action_context', target: 'review_task', graph: 'ace-v2', type: 'route' },
         { source: 'action_searching', target: 'review_task', graph: 'ace-v2', type: 'route' },
         { source: 'action_speaking', target: 'review_task', graph: 'ace-v2', type: 'route' },
-        { source: 'review_task', target: 'executor', graph: 'ace-v2', type: 'route' },
         { source: 'review_task', target: 'review_step', graph: 'ace-v2', type: 'route' },
         { source: 'review_step', target: 'orchestrator_step', graph: 'ace-v2', type: 'route' },
         { source: 'review_step', target: 'review_goal', graph: 'ace-v2', type: 'route' },
-        { source: 'review_goal', target: 'orchestrator_step', graph: 'ace-v2', type: 'route' },
+        { source: 'review_goal', target: 'orchestrator_goal', graph: 'ace-v2', type: 'route' },
         { source: 'review_goal', target: '__end__', graph: 'ace-v2', type: 'route' },
     ],
 };

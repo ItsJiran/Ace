@@ -1,6 +1,6 @@
 import { AIMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import type { AceAgentV2State, AceAgentGoal, AceAgentStep } from '../../types';
 
@@ -17,11 +17,15 @@ function markTaskDone(
 }
 
 async function speakToUser(state: AceAgentV2State, taskSummary: string, payload: Record<string, unknown>) {
-    const model = await mainModel({ runtime: getConfig() as never });
-    return await model.invoke([
-        ...(state.messages ?? []),
-        new AIMessage(`Speak to the user: ${taskSummary}\nContext: ${JSON.stringify(payload)}`),
-    ]);
+    return await invokeLLM({
+        runtime: getConfig() as never,
+        messages: [
+            ...(state.messages ?? []),
+            new AIMessage(`Speak to the user: ${taskSummary}\nContext: ${JSON.stringify(payload)}`),
+        ],
+        nodeName: 'action_speaking',
+        graphName: 'ace-v2',
+    });
 }
 
 /**

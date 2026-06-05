@@ -87,3 +87,53 @@ export async function emitGraphEvent(
     await emit(threadUid, type, node, graph, data);
 }
 
+// ── LLM call lifecycle events ──────────────────────────────────────────────
+
+/**
+ * Emitted before each LLM invoke inside a node.
+ * @param threadUid - configurable.thread_id
+ * @param nodeName  - node that owns this LLM call
+ * @param graphName - graph name
+ * @param info      - { attempt, promptPreview, ... }
+ */
+export async function emitLLMStart(
+    threadUid: string,
+    nodeName: string,
+    graphName: string,
+    info?: Record<string, unknown>,
+) {
+    await emit(threadUid, 'llm-call-start', nodeName, graphName, undefined, info);
+}
+
+/**
+ * Emitted after a successful LLM invoke.
+ * @param threadUid - configurable.thread_id
+ * @param nodeName  - node that owns this LLM call
+ * @param graphName - graph name
+ * @param info      - { attempt, responsePreview, durationMs, ... }
+ */
+export async function emitLLMEnd(
+    threadUid: string,
+    nodeName: string,
+    graphName: string,
+    info?: Record<string, unknown>,
+) {
+    await emit(threadUid, 'llm-call-end', nodeName, graphName, undefined, info);
+}
+
+/**
+ * Emitted when an LLM invoke fails and is being retried.
+ * @param threadUid - configurable.thread_id
+ * @param nodeName  - node that owns this LLM call
+ * @param graphName - graph name
+ * @param info      - { attempt, error: string, ... }
+ */
+export async function emitLLMRetry(
+    threadUid: string,
+    nodeName: string,
+    graphName: string,
+    info?: Record<string, unknown>,
+) {
+    await emit(threadUid, 'llm-call-retry', nodeName, graphName, undefined, info);
+}
+

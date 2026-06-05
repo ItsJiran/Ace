@@ -9,7 +9,7 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import type { AceAgentV2State, AceAgentStep, AceAgentTask } from '../../types';
 
 export const TaskStatusVerdict = z.object({
@@ -23,9 +23,10 @@ export const TaskStatusVerdict = z.object({
 export type TaskStatusResult = z.infer<typeof TaskStatusVerdict>;
 
 export async function evaluateTaskStatus(_state: AceAgentV2State, step: AceAgentStep, task: AceAgentTask): Promise<TaskStatusResult> {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: TaskStatusVerdict });
-    return await model.invoke([
-        new SystemMessage([
+    return await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: TaskStatusVerdict,
+        messages: [new SystemMessage([
             'Classify whether this task ACHIEVED its goal or FAILED.',
             '',
             'ACHIEVED means: the action completed AND the output is relevant, useful, and addresses the task summary.',
@@ -40,6 +41,8 @@ export async function evaluateTaskStatus(_state: AceAgentV2State, step: AceAgent
             `Task: ${task.type} / ${task.summary}`,
             `Payload: ${JSON.stringify(task.payload).slice(0, 300)}`,
             `Output: ${task.output ? JSON.stringify(task.output).slice(0, 500) : '(empty)'}`,
-        ].join('\n')),
-    ]);
+        ].join('\n'))],
+        nodeName: 'review_task',
+        graphName: 'ace-v2',
+    });
 }

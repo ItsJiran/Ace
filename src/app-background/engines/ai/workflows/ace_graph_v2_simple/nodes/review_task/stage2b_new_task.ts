@@ -6,7 +6,7 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import type { AceAgentV2State, AceAgentStep, AceAgentTask } from '../../types';
 
 export const NewTaskCheckVerdict = z.object({
@@ -22,9 +22,10 @@ export async function evaluateNewTask(
     step: AceAgentStep,
     task: AceAgentTask,
 ): Promise<NewTaskCheckResult> {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: NewTaskCheckVerdict });
-    return await model.invoke([
-        new SystemMessage([
+    return await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: NewTaskCheckVerdict,
+        messages: [new SystemMessage([
             'This task cannot be retried further. Decide whether the STEP can still be saved by creating a DIFFERENT task.',
             '',
             'A new task makes sense when: a different approach/tool could achieve the same sub-goal,',
@@ -41,6 +42,8 @@ export async function evaluateNewTask(
             '',
             'All tasks in this step:',
             ...step.tasks.map((t) => `  [${t.status}] ${t.type}/${t.summary}`),
-        ].join('\n')),
-    ]);
+        ].join('\n'))],
+        nodeName: 'review_task',
+        graphName: 'ace-v2',
+    });
 }

@@ -1,7 +1,7 @@
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import type { AceAgentV2State, AceAgentGoal, AceAgentStep } from '../../types';
 
@@ -106,17 +106,23 @@ function updateGoalPrompt(state: AceAgentV2State): string {
 // ── Functions ──────────────────────────────────────────────────────────────
 
 async function classify(state: AceAgentV2State): Promise<GoalClassifyType> {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: GoalClassify });
-    return await model.invoke([
-        new SystemMessage(classifyPrompt(state)),
-    ]);
+    return await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: GoalClassify,
+        messages: [new SystemMessage(classifyPrompt(state))],
+        nodeName: 'orchestrator_goal',
+        graphName: 'ace-v2',
+    });
 }
 
 async function generateNewGoal(state: AceAgentV2State, classification: GoalClassifyType) {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: NewGoalOutput });
-    const result = await model.invoke([
-        new SystemMessage(newGoalPrompt(state)),
-    ]);
+    const result = await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: NewGoalOutput,
+        messages: [new SystemMessage(newGoalPrompt(state))],
+        nodeName: 'orchestrator_goal',
+        graphName: 'ace-v2',
+    });
 
     goalCounter++;
     const firstStep: AceAgentStep = {
@@ -138,10 +144,13 @@ async function generateNewGoal(state: AceAgentV2State, classification: GoalClass
 }
 
 async function generateUpdatedGoal(state: AceAgentV2State, classification: GoalClassifyType) {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: UpdateGoalOutput });
-    const result = await model.invoke([
-        new SystemMessage(updateGoalPrompt(state)),
-    ]);
+    const result = await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: UpdateGoalOutput,
+        messages: [new SystemMessage(updateGoalPrompt(state))],
+        nodeName: 'orchestrator_goal',
+        graphName: 'ace-v2',
+    });
 
     goalCounter++;
     const newSteps: AceAgentStep[] = result.steps.map((s: any, i: any) => {

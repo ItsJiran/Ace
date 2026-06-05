@@ -398,7 +398,7 @@ class AgentThreadEngineSingleton extends Engine {
         try {
             await streamEvents(
                 await SingletonAgentInstance.getInstance().stream(
-                    { messages: [new HumanMessage(normalizedPrompt)] },
+                    { messages: [new HumanMessage(normalizedPrompt)], original_prompt: normalizedPrompt },
                     streamRuntimeConfig,
                 ),
             );

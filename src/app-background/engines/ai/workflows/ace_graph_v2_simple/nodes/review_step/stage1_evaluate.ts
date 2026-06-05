@@ -6,7 +6,7 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import type { AceAgentV2State, AceAgentGoal } from '../../types';
 
 export const StepOutcomeVerdict = z.object({
@@ -24,9 +24,10 @@ export async function evaluateStepOutcome(
     goal: AceAgentGoal,
     step: AceAgentGoal['steps'][number],
 ): Promise<StepOutcomeResult> {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: StepOutcomeVerdict });
-    return await model.invoke([
-        new SystemMessage([
+    return await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: StepOutcomeVerdict,
+        messages: [new SystemMessage([
             'Evaluate whether this step has successfully accomplished its phase.',
             '',
             'Look at the completed tasks — did their outputs actually achieve what the step set out to do?',
@@ -45,6 +46,8 @@ export async function evaluateStepOutcome(
             ...step.tasks.map((t) =>
                 `  [${t.status}] ${t.type}/${t.summary}${t.output ? ` → ${JSON.stringify(t.output).slice(0, 120)}` : ''}`,
             ),
-        ].join('\n')),
-    ]);
+        ].join('\n'))],
+        nodeName: 'review_step',
+        graphName: 'ace-v2',
+    });
 }

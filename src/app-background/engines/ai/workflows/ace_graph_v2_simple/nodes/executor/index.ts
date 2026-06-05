@@ -1,7 +1,7 @@
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
+import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import type { AceAgentV2State, AceAgentStep, AceAgentTask } from '../../types';
 
@@ -79,8 +79,13 @@ async function generateTask(
     step: AceAgentStep,
     goal: AceAgentV2State['current_goal'],
 ): Promise<{ task: AceAgentTask; rationale: string }> {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: TaskOutput });
-    const result = await model.invoke([new SystemMessage(taskPrompt(state, step, goal))]);
+    const result = await invokeLLM({
+        runtime: getConfig() as never,
+        structuredOutput: TaskOutput,
+        messages: [new SystemMessage(taskPrompt(state, step, goal))],
+        nodeName: 'executor',
+        graphName: 'ace-v2',
+    });
 
     const task: AceAgentTask = {
         id: `task-${Date.now()}-0`,
