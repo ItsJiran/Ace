@@ -1,5 +1,6 @@
 /**
- * Stage 3b (success + output OK) — Check if the current step needs more tasks.
+ * Stage 2a (task achieved) — Check if the step needs more tasks,
+ * or if the step is complete and ready for review_step.
  */
 
 import { SystemMessage } from '@langchain/core/messages';
@@ -24,7 +25,7 @@ export async function evaluateMoreTasks(
     const model = await mainModel({ runtime: getConfig() as never, structuredOutput: MoreTasksVerdict });
     return await model.invoke([
         new SystemMessage([
-            'This task SUCCEEDED with correct output. Now decide whether the current STEP needs MORE tasks.',
+            'This task was ACHIEVED successfully. Now decide whether the current STEP needs MORE tasks.',
             '',
             'More tasks are needed when: the step goal is not fully accomplished,',
             'there are remaining sub-steps, or follow-up actions are required.',
@@ -32,7 +33,7 @@ export async function evaluateMoreTasks(
             '',
             'If more tasks are needed, describe what kind of task (type + summary) in task_suggestion.',
             '',
-            '--- TASK CONTEXT ---',
+            '--- STEP CONTEXT ---',
             `Step phase: ${step.phase}`,
             `Completed task: ${task.type} / ${task.summary}`,
             `Output summary: ${task.output ? JSON.stringify(task.output).slice(0, 300) : '(empty)'}`,

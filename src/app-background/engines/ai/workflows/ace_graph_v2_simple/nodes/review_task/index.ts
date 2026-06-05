@@ -5,7 +5,8 @@
  * ┌──────────────────────────────────────────────────────────────────┐
  * │  action_* completes → task.output is populated                    │
  * │       ↓                                                          │
- * │  ┌── Stage 1: FAILED or SUCCESS? ────────────────────────────┐  │
+ * │  ┌── Stage 1: ACHIEVED or FAILED? ───────────────────────────┐  │
+ * │  │  (considers both completion AND output quality)             │  │
  * │  │                                                             │  │
  * │  │  FAILED ──────────────────────────────────────────────┐    │  │
  * │  │    │                                                   │    │  │
@@ -17,13 +18,9 @@
  * │  │          YES → executor (new task)                     │    │  │
  * │  │          NO → review_step (give up)                    │    │  │
  * │  │                                                        │    │  │
- * │  │  SUCCESS ──────────────────────────────────────────────┘    │  │
+ * │  │  ACHIEVED ─────────────────────────────────────────────┘    │  │
  * │  │    │                                                        │  │
- * │  │    ├─ Stage 3a: Does output match expectations?             │  │
- * │  │    │     NO + under max → action_* (retry)                  │  │
- * │  │    │     NO + exhausted → Stage 2b (new task?)              │  │
- * │  │    │                                                        │  │
- * │  │    └─ Stage 3b (output OK): Does step need more tasks?      │  │
+ * │  │    └─ Stage 2a: Does step need more tasks?                  │  │
  * │  │          YES → executor + target_node_reason (new task)     │  │
  * │  │          NO → review_step                                   │  │
  * │  └──────────────────────────────────────────────────────────────┘  │
@@ -38,22 +35,20 @@
  *
  * File layout:
  *   index.ts              — node entry point + helpers + routing logic
- *   stage1_status.ts      — Stage 1: classify task as failed/success
- *   stage2a_retry.ts      — Stage 2a: check if retry can fix the failure
- *   stage2b_new_task.ts   — Stage 2b: check if a new task can save the step
- *   stage3a_output_match.ts — Stage 3a: check if output matches expectations
- *   stage3b_more_tasks.ts — Stage 3b: check if step needs more tasks
+ *   stage1_status.ts      — Stage 1: classify task as achieved/failed
+ *   stage2a_retry.ts      — Stage 2a (failed): check if retry can fix it
+ *   stage2b_new_task.ts   — Stage 2b (failed): check if new task can save step
+ *   stage2a_next.ts       — Stage 2a (achieved): check if step needs more tasks
  */
 
 import { getConfig } from '@langchain/langgraph';
 import { emitNodeStart } from '#/app-background/lib/utils/ai/emit-graph-event';
-import type { AceAgentV2State } from '../../types';
+import type { AceAgentV2State, AceAgentGoal, AceAgentStep, AceAgentTask } from '../../types';
 
 import { evaluateTaskStatus } from './stage1_status';
 import { evaluateRetry } from './stage2a_retry';
 import { evaluateNewTask } from './stage2b_new_task';
-import { evaluateOutputMatch } from './stage3a_output_match';
-import { evaluateMoreTasks } from './stage3b_more_tasks';
+import { evaluateMoreTasks } from './stage2a_next';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -71,6 +66,24 @@ function actionNodeFor(type: string): string {
     }
 }
 
+function applyTaskStatus(
+    goal: AceAgentGoal | undefined,
+    step: AceAgentStep | undefined,
+    taskId: string,
+    status: AceAgentTask['status'],
+    extra?: Partial<AceAgentTask>,
+): { goal: AceAgentGoal | undefined; step: AceAgentStep | undefined } {
+    if (!goal || !step) return { goal, step };
+    const updatedStep: AceAgentStep = {
+        ...step,
+        tasks: step.tasks.map((t) => (t.id === taskId ? { ...t, status, ...extra } : t)),
+    };
+    return {
+        goal: { ...goal, steps: goal.steps.map((s) => (s.id === step.id ? updatedStep : s)) },
+        step: updatedStep,
+    };
+}
+
 // ── Node ───────────────────────────────────────────────────────────────────
 
 export function createReviewTaskNode() {
@@ -81,8 +94,9 @@ export function createReviewTaskNode() {
 
         if (state.is_stopped) return { result_summary: 'Stopped.', from_node: 'review_task' };
 
+        const goal = state.current_goal;
         const step = state.current_step;
-        if (!step) return { target_node: 'review_step', result_summary: 'No step.', from_node: 'review_task' };
+        if (!goal || !step) return { target_node: 'review_step', result_summary: 'No step.', from_node: 'review_task' };
 
         const task = step.tasks.find((t) => t.status === 'in_progress');
         if (!task || !task.output) {
@@ -92,7 +106,7 @@ export function createReviewTaskNode() {
         const maxRetries = task.max_retries || MAX_RETRIES;
 
         // ══════════════════════════════════════════════════════════════
-        // Stage 1: FAILED or SUCCESS?
+        // Stage 1: ACHIEVED or FAILED?
         // ══════════════════════════════════════════════════════════════
 
         const statusCheck = await evaluateTaskStatus(state, step, task);
@@ -106,7 +120,13 @@ export function createReviewTaskNode() {
 
                 if (retryCheck.can_retry) {
                     const next = task.retry_count + 1;
+                    const { goal: updatedGoal, step: updatedStep } = applyTaskStatus(
+                        goal, step, task.id, 'in_progress', { retry_count: next },
+                    );
                     return {
+                        current_goal: updatedGoal,
+                        current_step: updatedStep,
+                        current_task: { ...task, retry_count: next },
                         target_node: actionNodeFor(task.type),
                         target_node_reason: `Retry #${next}: ${retryCheck.fix_instruction}`,
                         from_node: 'review_task',
@@ -119,7 +139,12 @@ export function createReviewTaskNode() {
             const newTaskCheck = await evaluateNewTask(state, step, task);
 
             if (newTaskCheck.can_new_task) {
+                const { goal: updatedGoal, step: updatedStep } = applyTaskStatus(
+                    goal, step, task.id, 'failed',
+                );
                 return {
+                    current_goal: updatedGoal,
+                    current_step: updatedStep,
                     target_node: 'executor',
                     target_node_reason: `Task failed — create new task: ${newTaskCheck.task_suggestion}`,
                     from_node: 'review_task',
@@ -128,53 +153,31 @@ export function createReviewTaskNode() {
             }
 
             // Give up → review_step
+            const { goal: updatedGoal, step: updatedStep } = applyTaskStatus(
+                goal, step, task.id, 'failed',
+            );
             return {
+                current_goal: updatedGoal,
+                current_step: updatedStep,
                 target_node: 'review_step',
                 from_node: 'review_task',
                 result_summary: `Cannot recover step: ${newTaskCheck.reasoning}`,
             };
         }
 
-        // ── SUCCESS branch ───────────────────────────────────────────
+        // ── ACHIEVED branch — task done, toggle to completed ─────────
 
-        // Stage 3a: Output matches?
-        const outputCheck = await evaluateOutputMatch(state, step, task, maxRetries);
+        const { goal: updatedGoal, step: updatedStep } = applyTaskStatus(
+            goal, step, task.id, 'completed',
+        );
 
-        if (!outputCheck.output_matches) {
-            if (task.retry_count < maxRetries) {
-                const next = task.retry_count + 1;
-                return {
-                    target_node: actionNodeFor(task.type),
-                    target_node_reason: `Output fix #${next}: ${outputCheck.fix_instruction}`,
-                    from_node: 'review_task',
-                    result_summary: outputCheck.reasoning,
-                };
-            }
-
-            // Retries exhausted → treat as failure: check if new task can solve
-            const newTaskCheck = await evaluateNewTask(state, step, task);
-
-            if (newTaskCheck.can_new_task) {
-                return {
-                    target_node: 'executor',
-                    target_node_reason: `Output retries exhausted — create new task: ${newTaskCheck.task_suggestion}`,
-                    from_node: 'review_task',
-                    result_summary: newTaskCheck.reasoning,
-                };
-            }
-
-            return {
-                target_node: 'review_step',
-                from_node: 'review_task',
-                result_summary: `Output retries exhausted, cannot recover: ${newTaskCheck.reasoning}`,
-            };
-        }
-
-        // Stage 3b: Output OK — step needs more tasks?
+        // Stage 2a: Step needs more tasks?
         const moreTasksCheck = await evaluateMoreTasks(state, step, task);
 
         if (moreTasksCheck.needs_more_tasks) {
             return {
+                current_goal: updatedGoal,
+                current_step: updatedStep,
                 target_node: 'executor',
                 target_node_reason: `Create next task: ${moreTasksCheck.task_suggestion}`,
                 from_node: 'review_task',
@@ -184,6 +187,8 @@ export function createReviewTaskNode() {
 
         // Step done → review_step
         return {
+            current_goal: updatedGoal,
+            current_step: undefined,
             target_node: 'review_step',
             from_node: 'review_task',
             result_summary: moreTasksCheck.reasoning,

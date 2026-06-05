@@ -1,55 +1,46 @@
-import { AIMessage, SystemMessage } from '@langchain/core/messages';
+/**
+ * Review Step — evaluates whether a step's tasks were sufficient,
+ * then decides: create a new step, or give up and move to review_goal.
+ *
+ * Flow (each classification uses its own LLM call):
+ * ┌──────────────────────────────────────────────────────────────────┐
+ * │  review_task → step_done → review_step                           │
+ * │       ↓                                                          │
+ * │  ┌── Stage 1: Step achieved its phase? ──────────────────────┐  │
+ * │  │                                                             │  │
+ * │  │  STEP_ACHIEVED ────────────────────────────────────────┐   │  │
+ * │  │    │                                                    │   │  │
+ * │  │    └─ Stage 2a: Goal complete?                          │   │  │
+ * │  │          goal_done → review_goal                        │   │  │
+ * │  │          need_next_step → orchestrator_step (+ reason)  │   │  │
+ * │  │                                                         │   │  │
+ * │  │  STEP_NOT_ACHIEVED ─────────────────────────────────────┘   │  │
+ * │  │    │                                                        │  │
+ * │  │    └─ Stage 2b: Can recover with new step?                  │  │
+ * │  │          can_new_step → orchestrator_step (+ reason)        │  │
+ * │  │          give_up → review_goal                              │  │
+ * │  └──────────────────────────────────────────────────────────────┘  │
+ * │                                                                    │
+ * │  Special case: "Aborting Goal" step → review_goal immediately      │
+ * └────────────────────────────────────────────────────────────────────┘
+ *
+ * File layout:
+ *   index.ts              — node entry point + routing logic
+ *   stage1_evaluate.ts    — Stage 1: did step achieve its phase?
+ *   stage2a_goal_check.ts — Stage 2a: is the goal complete?
+ *   stage2b_recover.ts    — Stage 2b: can a new step recover?
+ */
+
 import { getConfig } from '@langchain/langgraph';
-import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
 import { emitNodeStart } from '#/app-background/lib/utils/ai/emit-graph-event';
-import type { AceAgentV2State, AceAgentGoal } from '../../types';
+import type { AceAgentV2State } from '../../types';
 
-// ── Structured output ──────────────────────────────────────────────────────
-
-const StepReviewOutput = z.object({
-    verdict: z.enum(['step_done', 'step_incomplete', 'goal_done'])
-        .describe('step_done=step sufficient, goal needs more steps. step_incomplete=tasks insufficient, need new approach. goal_done=goal achieved.'),
-    reasoning: z.string(),
-});
-
-// ── LLM Review ─────────────────────────────────────────────────────────────
-
-async function reviewWithLLM(state: AceAgentV2State, goal: AceAgentGoal, step: AceAgentGoal['steps'][number]) {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: StepReviewOutput });
-    return await model.invoke([
-        new SystemMessage([
-            'Evaluate whether this step has been sufficiently completed.',
-            '',
-            '- `step_done` — completed tasks are sufficient. Goal still needs more steps.',
-            '- `step_incomplete` — tasks are NOT sufficient. Need a different approach.',
-            '- `goal_done` — all completed steps achieve the goal. No more steps needed.',
-            '',
-            'Consider: did the tasks actually accomplish the step phase?',
-            'Consider: given all completed steps, is the goal fully met?',
-        ].join('\n')),
-        ...(state.messages ?? []),
-        new AIMessage([
-            `Goal: ${goal.objective}`,
-            `Current Step: ${step.phase}`,
-            `All Steps: ${goal.steps.map((s) => `[${s.status}] ${s.phase}`).join(', ')}`,
-            `Tasks: ${step.tasks.map((t) => `[${t.status}] ${t.type}/${t.summary}${t.output ? ` → ${JSON.stringify(t.output).slice(0, 100)}` : ''}`).join(' | ')}`,
-        ].join('\n')),
-    ]);
-}
+import { evaluateStepOutcome } from './stage1_evaluate';
+import { evaluateGoalComplete } from './stage2a_goal_check';
+import { evaluateRecover } from './stage2b_recover';
 
 // ── Node ───────────────────────────────────────────────────────────────────
 
-/**
- * Review Step — evaluates whether a step's tasks are sufficient.
- *
- * Flow:
- * 1. Aborting Goal → mark goal failed → review_goal
- * 2. LLM review:
- *    - step_incomplete → orchestrator_step (new approach)
- *    - step_done → orchestrator_step (next step)
- *    - goal_done → review_goal
- */
 export function createReviewStepNode() {
     return async function reviewStepNode(state: AceAgentV2State): Promise<Partial<AceAgentV2State>> {
         const config = getConfig();
@@ -62,59 +53,61 @@ export function createReviewStepNode() {
         const step = state.current_step;
         if (!goal || !step) return { target_node: 'review_goal', result_summary: 'No active step.', from_node: 'review_step' };
 
-        // Give up / aborting goal → mark goal failed → review_goal
+        // Special case: orchestrator already gave up on this goal
         if (step.phase.toLowerCase().includes('aborting goal')) {
-            const failedGoal = { ...goal, status: 'failed' as const };
-            const goals = state.goals?.map((g) => g.id === failedGoal.id ? failedGoal : g) ?? [failedGoal];
             return {
-                goals,
-                current_goal: failedGoal,
                 target_node: 'review_goal',
                 from_node: 'review_step',
-                result_summary: 'Goal abandoned.',
+                result_summary: 'Goal abandoned by orchestrator.',
             };
         }
 
-        // LLM review
-        const review = await reviewWithLLM(state, goal, step);
+        // ══════════════════════════════════════════════════════════════
+        // Stage 1: Did the step achieve its phase?
+        // ══════════════════════════════════════════════════════════════
 
-        if (review.verdict === 'step_incomplete') {
-            const failedStep = { ...step, status: 'failed' as const };
-            const goalWithFailed = { ...goal, steps: goal.steps.map((s) => s.id === step.id ? failedStep : s) };
+        const outcome = await evaluateStepOutcome(state, goal, step);
+
+        // ── Step achieved ────────────────────────────────────────────
+
+        if (outcome.outcome === 'step_achieved') {
+            const goalCheck = await evaluateGoalComplete(state, goal);
+
+            if (goalCheck.verdict === 'goal_done') {
+                return {
+                    target_node: 'review_goal',
+                    from_node: 'review_step',
+                    result_summary: goalCheck.reasoning,
+                };
+            }
+
+            // need_next_step
             return {
-                current_goal: goalWithFailed,
-                current_step: undefined,
                 target_node: 'orchestrator_step',
-                target_node_reason: review.reasoning,
+                target_node_reason: `Step achieved — create next step: ${goalCheck.next_step_suggestion}`,
                 from_node: 'review_step',
-                result_summary: review.reasoning,
+                result_summary: goalCheck.reasoning,
             };
         }
 
-        // step_done or goal_done — mark step completed
-        const completedStep = { ...step, status: 'completed' as const, output: review.reasoning };
-        const updatedGoal = { ...goal, steps: goal.steps.map((s) => s.id === step.id ? completedStep : s) };
+        // ── Step not achieved ────────────────────────────────────────
 
-        if (review.verdict === 'goal_done') {
-            const finalGoal = { ...updatedGoal, status: 'completed' as const };
-            const goals = state.goals?.map((g) => g.id === finalGoal.id ? finalGoal : g) ?? [finalGoal];
+        const recoverCheck = await evaluateRecover(state, goal, step);
+
+        if (recoverCheck.can_new_step) {
             return {
-                goals,
-                current_goal: finalGoal,
-                target_node: 'review_goal',
+                target_node: 'orchestrator_step',
+                target_node_reason: `Step failed — create new step: ${recoverCheck.step_suggestion}`,
                 from_node: 'review_step',
-                result_summary: review.reasoning,
+                result_summary: recoverCheck.reasoning,
             };
         }
 
-        // step_done
+        // Give up → review_goal
         return {
-            current_goal: updatedGoal,
-            current_step: undefined,
-            target_node: 'orchestrator_step',
-            target_node_reason: review.reasoning,
+            target_node: 'review_goal',
             from_node: 'review_step',
-            result_summary: review.reasoning,
+            result_summary: `Cannot recover goal: ${recoverCheck.reasoning}`,
         };
     };
 }
