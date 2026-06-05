@@ -86,9 +86,9 @@ export class AgentThreadStreamHandlers {
     }
 
     private async updateRuntime(thread_uid: string, patch: Partial<AgentClientThreadRuntimeState>) {
-        await KernelEngine.updateMemory(
+        await KernelEngine.writeMemory(
             AgentClientEngine.thread_runtime_memory_uid(thread_uid),
-            patch,
+            { ...patch, last_event_at: Date.now() },
         );
     }
 
@@ -280,6 +280,19 @@ export class AgentThreadStreamHandlers {
                 this.emitDebug(thread_uid, event, {
                     result: 'invoke completed — stream truly finished',
                     snapshot: AgentClientEngine.readThreadFromMemory(thread_uid)?.state as Record<string, unknown> | undefined,
+                });
+                break;
+
+            case 'invoke-interrupted':
+                // User stopped the run — keep accumulated messages intact.
+                // Do NOT sync from checkpointer (which may be stale).
+                await this.updateRuntime(thread_uid, {
+                    is_streaming: false,
+                    last_error: event.data?.error ?? 'Run interrupted',
+                });
+                this.clearConverter(thread_uid);
+                this.emitDebug(thread_uid, event, {
+                    result: 'invoke interrupted by user — messages preserved',
                 });
                 break;
 

@@ -7,6 +7,7 @@
 export type AgentClientThreadRuntimeState = {
     is_streaming: boolean;
     last_event?: string;
+    last_event_at?: number;
     last_error?: string;
     active_node?: string;
 };

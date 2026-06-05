@@ -15,7 +15,7 @@ import { Engine } from '#/shared/engines/engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai.ts';
 import { AgentStreamAnyEvent } from '#/shared/schemas/agent-stream-events';
-import { getAceGraphStructure } from './ai/workflows/ace_graph_v1/graphs/graph_structure';
+import { getActiveGraphStructure } from './ai/workflows/ace_graph_v2_simple/graph_structure';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
@@ -38,6 +38,7 @@ class AgentThreadEngineSingleton extends Engine {
             controller: AbortController;
             promise: Promise<void>;
             started_at: number;
+            wasInterrupted?: boolean;
         }
     >();
 
@@ -99,6 +100,15 @@ class AgentThreadEngineSingleton extends Engine {
             { owner: this.constructor.name },
         );
 
+        // --- Health check ---
+        await RPCEngine.handle(
+            'ai.isThreadRunning',
+            async (payload: { thread_uid?: string }) => {
+                return this.activeThreadRuns.has(String(payload.thread_uid || ''));
+            },
+            { owner: this.constructor.name },
+        );
+
         // --- Raw state RPCs (return AceAgentWorkflowState, not AgentThread) ---
         await RPCEngine.handle(
             'ai.listThreads',
@@ -125,12 +135,11 @@ class AgentThreadEngineSingleton extends Engine {
         );
 
         // --- Graph structure (for AgentGraphDebug) ---
-        // Uses the structured definition from graph_structure.ts instead of
-        // LangGraph's raw getGraph() output which can be messy/incomplete.
+        // Uses structured definition from ace_graph_v2_simple.
         await RPCEngine.handle(
             'ai.getGraph',
             async () => {
-                return getAceGraphStructure();
+                return getActiveGraphStructure();
             },
             { owner: this.constructor.name },
         );
@@ -394,10 +403,13 @@ class AgentThreadEngineSingleton extends Engine {
                 ),
             );
 
-            // Emit invoke-completed so client knows the prompt truly finished.
+            // Check if this run was interrupted — emit accordingly.
+            const activeRun = this.activeThreadRuns.get(thread_uid);
+            const wasInterrupted = activeRun?.wasInterrupted === true;
+
             await this.emitProtocolThreadEvent(thread_uid, {
                 channel: 'invoke',
-                type: 'invoke-completed',
+                type: wasInterrupted ? 'invoke-interrupted' : 'invoke-completed',
                 seq: null,
                 node: null,
                 data: { thread_uid },
@@ -405,7 +417,6 @@ class AgentThreadEngineSingleton extends Engine {
         } catch (error) {
             this.log(`[AgentThreadEngine] stream failed for ${thread_uid}:`, error);
 
-            // Emit invoke-failed so client can enter error recovery.
             await this.emitProtocolThreadEvent(thread_uid, {
                 channel: 'invoke',
                 type: 'invoke-failed',
@@ -501,18 +512,20 @@ class AgentThreadEngineSingleton extends Engine {
         if (!activeRun) return false;
 
         // Inject is_interrupted flag into root state so running nodes
-        // (and the liveness-guard middleware) detect the interruption.
+        // (and the supervision edge liveness check) detect the interruption
+        // and exit gracefully via __end__.
         try {
             await SingletonAgentInstance.getInstance().updateState(
                 { configurable: { thread_id: thread_uid } },
-                { is_interrupted: true },
+                { is_stopped: true },
             );
+            activeRun.wasInterrupted = true;
         } catch {
-            // updateState may fail if graph isn't running — that's fine,
-            // we still abort the stream below.
+            // updateState may fail if graph isn't running — that's fine.
         }
 
-        activeRun.controller.abort(new Error(`Thread ${thread_uid} aborted by user.`));
+        // Let the graph finish on its own — supervision edge will detect
+        // is_interrupted and route to __end__ cleanly.
         await activeRun.promise;
         return true;
     }

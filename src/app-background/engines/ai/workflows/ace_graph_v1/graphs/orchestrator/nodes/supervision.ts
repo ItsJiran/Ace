@@ -28,11 +28,11 @@ type OrchestratorSupervisionDecisionType = z.infer<typeof OrchestratorSupervisio
 function resolvePassedMessage(
     state: AceAgentOrchestratorState,
 ): string | null {
-    if (!state.passed_message) return null;
-
-    // `passed_message` acts as the routing intent from parent;
-    // let the orchestrator node unpack it and create the right tasks.
-    return 'orchestrator';
+    // passed_message from wrapper OR target_node from parent supervision edge
+    if (state.passed_message || (state.target_node && state.target_node_reason)) {
+        return 'orchestrator';
+    }
+    return null;
 }
 
 // ── Phase 2: Task evaluation ───────────────────────────────────────────────
@@ -115,7 +115,7 @@ async function resolveModelRoute(
     const decision: OrchestratorSupervisionDecisionType =
         await model.invoke(prompt);
 
-    return decision.next_node;
+    return decision?.next_node ?? '__end__';
 }
 
 // ── Main supervision edge ──────────────────────────────────────────────────
@@ -134,6 +134,9 @@ async function resolveModelRoute(
 export async function orchestratorSupervisionEdge(
     state: AceAgentOrchestratorState,
 ): Promise<string> {
+    // Phase 0: liveness check — stop immediately if interrupted
+    if ((state as any).is_interrupted) return '__end__';
+
     // Phase 1: handle passed_message from parent
     const passedRoute = resolvePassedMessage(state);
     if (passedRoute !== null) return passedRoute;

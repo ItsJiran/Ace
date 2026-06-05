@@ -231,7 +231,11 @@ export function createPlannerNode() {
             },
         };
 
-        if (threadUid) emitNodeEnd(threadUid, 'planner', 'orchestrator', result).catch(() => {});
+        if (threadUid) emitNodeEnd(threadUid, 'planner', 'orchestrator', result, {
+            parent_task_count: parentTasks.length,
+            plan: plan.plan_rationale,
+            tasks: parentTasks.map((t) => `→ ${t.type}: ${t.summary}`),
+        }).catch(() => {});
         return result;
     };
 }

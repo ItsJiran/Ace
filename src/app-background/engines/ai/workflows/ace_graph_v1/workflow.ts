@@ -4,13 +4,14 @@ import { END, InMemoryStore, MemorySaver, START, StateGraph } from '@langchain/l
 import { AceAgentState } from './nodes/agent-state';
 import { createSummarizationNode } from './nodes/summarization';
 import { supervisionEdge } from './nodes/edges/supervision-edge';
-import { initOrchestratorWrapper, callOrchestrator } from './nodes/orchestrator-wrapper';
-import { initExecutorWrapper, callExecutor } from './nodes/executor-wrapper';
+import { compileOrchestratorGraph } from './graphs/orchestrator/workflow';
+import { compileExecutorGraph } from './graphs/executor/workflow';
 
 /**
  * ACE Graph v1 — Full workflow with supervision-based routing.
  *
- * Subgraphs are called via wrapper nodes that transform parent ↔ subgraph state.
+ * Subgraphs are integrated as native LangGraph nodes via `.addNode(name, compiledGraph)`.
+ * This enables proper interrupt/resume via Command and automatic state sharing.
  *
  *             START
  *               │
@@ -20,7 +21,7 @@ import { initExecutorWrapper, callExecutor } from './nodes/executor-wrapper';
  *    ┌──────────┼──────────┬──────────┐      │
  *    ▼          ▼          ▼          ▼      │
  * orchestrator executor summarization  │      │
- * (wrapper)   (wrapper)       │        │      │
+ *  (subgraph)  (subgraph)      │        │      │
  *    │          │              ▼        │      │
  *    └──────────┘             END       │      │
  *               │                       │      │
@@ -35,21 +36,22 @@ export function compileAceGraphV1(options?: {
     const checkpointer = options?.checkpointer ?? new MemorySaver();
     const store = options?.store ?? new InMemoryStore();
 
-    // Initialize subgraph wrappers
-    initOrchestratorWrapper({ checkpointer, store });
-    initExecutorWrapper({ checkpointer, store });
+    // Compile subgraphs with the same checkpointer/store for native integration
+    const orchestratorGraph = compileOrchestratorGraph({ checkpointer, store });
+    const executorGraph = compileExecutorGraph({ checkpointer, store });
 
     const graph = new StateGraph(AceAgentState)
-        // Wrapper nodes (call subgraphs)
-        .addNode('orchestrator', callOrchestrator)
-        .addNode('executor', callExecutor)
-        .addNode('summarization', createSummarizationNode)
+        // Native subgraph nodes — LangGraph handles state sync automatically
+        .addNode('orchestrator', orchestratorGraph)
+        .addNode('executor', executorGraph)
+        .addNode('summarization', createSummarizationNode())
 
         // START → supervision edge
         .addConditionalEdges(START, supervisionEdge, [
             'orchestrator',
             'executor',
             'summarization',
+            '__end__',
         ])
 
         // After workers → supervision edge (loop)
@@ -57,11 +59,13 @@ export function compileAceGraphV1(options?: {
             'orchestrator',
             'executor',
             'summarization',
+            '__end__',
         ])
         .addConditionalEdges('executor', supervisionEdge, [
             'orchestrator',
             'executor',
             'summarization',
+            '__end__',
         ])
 
         // summarization → END

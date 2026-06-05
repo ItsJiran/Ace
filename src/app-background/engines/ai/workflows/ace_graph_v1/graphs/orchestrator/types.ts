@@ -18,7 +18,7 @@ export interface AceAgentOrchestratorState extends AceAgentWorkflowBaseSubgraphs
 
 export interface AceAgentOrchestratorTask {
     id: string;
-    type: 'planner' | 'contextor' | 'thought' | 'orchestrator' | '__end__';
+    type: 'planner' | 'contextor' | 'orchestrator' | '__end__';
     summary: string;
     payload: Record<string, unknown>;
     status: 'pending' | 'in_progress' | 'completed' | 'failed';

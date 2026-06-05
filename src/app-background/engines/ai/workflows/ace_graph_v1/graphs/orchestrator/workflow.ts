@@ -4,11 +4,9 @@ import type { BaseMessage } from '@langchain/core/messages';
 import type { AceAgentWorkflowContext } from '../../types';
 import type { AceAgentOrchestratorParent, AceAgentOrchestratorTask } from './types';
 import { initContextorGraph } from '../contextor/workflow';
-import { initThoughtGraph } from '../thought/workflow';
 import { orchestratorSupervisionEdge } from './nodes/supervision';
 import createPlannerNode from './nodes/planner';
 import createContextorNode from './nodes/contextor';
-import createThoughtNode from './nodes/thought';
 import createOrchestratorNode from './nodes/orchestrator';
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -107,47 +105,40 @@ export function compileOrchestratorGraph(options?: {
 
     // Initialize sub-subgraphs that the orchestrator delegates to
     initContextorGraph({ checkpointer, store });
-    initThoughtGraph({ checkpointer, store });
+    // initThoughtGraph disabled — re-enable when thought subgraph is efficient enough
 
     const graph = new StateGraph(OrchestratorStateAnnotation)
-        // Nodes
+        // Nodes (thought disabled for efficiency)
         .addNode('planner', createPlannerNode())
         .addNode('contextor', createContextorNode())
-        .addNode('thought', createThoughtNode())
         .addNode('orchestrator', createOrchestratorNode())
 
         // START → supervision edge
         .addConditionalEdges(START, orchestratorSupervisionEdge, [
             'planner',
             'contextor',
-            'thought',
             'orchestrator',
+            '__end__',
         ])
 
         // After workers → supervision edge (loop)
         .addConditionalEdges('planner', orchestratorSupervisionEdge, [
             'planner',
             'contextor',
-            'thought',
             'orchestrator',
+            '__end__',
         ])
         .addConditionalEdges('contextor', orchestratorSupervisionEdge, [
             'planner',
             'contextor',
-            'thought',
             'orchestrator',
-        ])
-        .addConditionalEdges('thought', orchestratorSupervisionEdge, [
-            'planner',
-            'contextor',
-            'thought',
-            'orchestrator',
+            '__end__',
         ])
         .addConditionalEdges('orchestrator', orchestratorSupervisionEdge, [
             'planner',
             'contextor',
-            'thought',
             'orchestrator',
+            '__end__',
         ]);
 
     return graph.compile({

@@ -1,14 +1,14 @@
 import { MemorySaver } from '@langchain/langgraph';
 
-import { compileAceGraphV1 } from './workflows';
+import { compileActiveGraph } from './workflows';
 
 export default class SingletonAgentInstance {
     private static _instance: SingletonAgentInstance;
-    private static _value: ReturnType<typeof compileAceGraphV1> | null = null;
+    private static _value: ReturnType<typeof compileActiveGraph> | null = null;
 
     private static ensureValue() {
         if (!SingletonAgentInstance._value) {
-            SingletonAgentInstance._value = compileAceGraphV1({
+            SingletonAgentInstance._value = compileActiveGraph({
                 checkpointer: new MemorySaver(),
             });
         }
@@ -18,22 +18,18 @@ export default class SingletonAgentInstance {
 
     private constructor() {}
 
-    public get value(): ReturnType<typeof compileAceGraphV1> {
-        return SingletonAgentInstance.ensureValue() as ReturnType<typeof compileAceGraphV1>;
+    public get value(): ReturnType<typeof compileActiveGraph> {
+        return SingletonAgentInstance.ensureValue() as ReturnType<typeof compileActiveGraph>;
     }
 
     public async stream(
-        state: Parameters<ReturnType<typeof compileAceGraphV1>['invoke']>[0],
+        state: Parameters<ReturnType<typeof compileActiveGraph>['invoke']>[0],
         config: Record<string, unknown> & { version: 'v3' },
     ){
         console.log('[AIStreamBridge] config', config);
         return await this.value.streamEvents(state, config);
     }
 
-    /**
-     * Inject values directly into the root state channel while a run is active.
-     * Used by stopThreadPrompt to signal is_interrupted to running nodes.
-     */
     public async updateState(
         config: Record<string, unknown>,
         values: Record<string, unknown>,

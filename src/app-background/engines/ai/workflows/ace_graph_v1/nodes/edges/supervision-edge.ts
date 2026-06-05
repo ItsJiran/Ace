@@ -81,6 +81,7 @@ async function resolveModelRoute(
     state: AceAgentWorkflowState,
 ): Promise<string> {
     const config = getConfig();
+
     const model = await mainModel({
         runtime: config as never,
         structuredOutput: SupervisionDecision,
@@ -91,7 +92,7 @@ async function resolveModelRoute(
     const decision: SupervisionDecisionType =
         await model.invoke(prompt);
 
-    return decision.next_node;
+    return decision?.next_node ?? '__end__';
 }
 
 // ── Main supervision edge ──────────────────────────────────────────────────
@@ -107,6 +108,9 @@ async function resolveModelRoute(
 export async function supervisionEdge(
     state: AceAgentWorkflowState,
 ): Promise<string> {
+    // Phase 0: liveness check — stop immediately if interrupted
+    if ((state as any).is_interrupted) return '__end__';
+
     // Phase 1: explicit target_node
     const explicit = resolveExplicitTarget(state);
     if (explicit !== null) return explicit;

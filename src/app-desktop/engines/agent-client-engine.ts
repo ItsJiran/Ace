@@ -3,8 +3,7 @@ import { ConfigEngine } from '#/shared/engines/config-engine';
 import { DefaultConfigAI } from '#/shared/constants/config';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
-import type {
-    AceAgentWorkflowState,
+import {
     AgentThread,
     AgentConfigurableType,
     AIProviderType,
@@ -19,6 +18,7 @@ import { AI_THREAD_STREAM_EVENT_SLUG, AI_GRAPH_OBSERVE_SLUG } from '#/shared/sch
 import AgentThreadStreamHandlers from './agent/agent-thread-stream-handlers';
 import resolveAgentInvokeContext from './ai/resolve-agent-context';
 import normalizeMessages from './ai/utils/normalize-messages';
+import { AceAgentWorkflowState } from '#/app-background/engines/ai/workflows/ace_graph_v1/types';
 
 // AgentClientEngine is the desktop-side control plane for AI threads.
 //
@@ -162,6 +162,11 @@ class AgentClientEngineSingleton extends Engine {
 
         this.syncThreadMemory(thread);
 
+        // Initialize runtime state so the stop button can sync immediately.
+        KernelEngine.writeMemory(this.thread_runtime_memory_uid(thread_uid), {
+            is_streaming: false,
+        } as AgentClientThreadRuntimeState);
+
         // Register in background so listThreads can find it.
         RPCEngine.invoke('ai.syncThread', { thread_uid }).catch(() => {});
 
@@ -219,7 +224,7 @@ class AgentClientEngineSingleton extends Engine {
         overrides: Partial<AgentConfigurableType> = {},
     ) {
         // Optimistic: mark streaming before the RPC round-trip so UI reacts instantly.
-        await KernelEngine.updateMemory(this.thread_runtime_memory_uid(threadUid), {
+        KernelEngine.writeMemory(this.thread_runtime_memory_uid(threadUid), {
             is_streaming: true,
         } as AgentClientThreadRuntimeState);
 
@@ -244,7 +249,59 @@ class AgentClientEngineSingleton extends Engine {
         })) ?? false) as boolean;
     }
 
+    // + --------------- HEALTH CHECK ------------------- +
+
+    /**
+     * Periodically checks if a thread is still running on the background.
+     * If the background process died or the stream was lost, this will
+     * detect it and update the runtime state accordingly.
+     */
+    async healthCheckThread(threadUid: string): Promise<boolean> {
+        try {
+            const isRunning = (await RPCEngine.invoke('ai.isThreadRunning', {
+                thread_uid: threadUid,
+            }, { timeoutMs: 3000 })) as boolean;
+
+            if (!isRunning) {
+                // Background confirms not running — ensure runtime reflects this.
+                const current = KernelEngine.readMemory(
+                    this.thread_runtime_memory_uid(threadUid),
+                ) as AgentClientThreadRuntimeState | undefined;
+
+                if (current?.is_streaming) {
+                    KernelEngine.writeMemory(this.thread_runtime_memory_uid(threadUid), {
+                        is_streaming: false,
+                        last_error: 'Stream ended unexpectedly (health check)',
+                        last_event_at: Date.now(),
+                    } as AgentClientThreadRuntimeState);
+                }
+            }
+
+            return isRunning;
+        } catch {
+            // RPC failed — background is unreachable.
+            KernelEngine.writeMemory(this.thread_runtime_memory_uid(threadUid), {
+                is_streaming: false,
+                last_error: 'Background unreachable',
+                last_event_at: Date.now(),
+            } as AgentClientThreadRuntimeState);
+            return false;
+        }
+    }
+
     // + --------------- RAW STATE HYDRATION ------------- +
+
+    /**
+     * Fetches raw agent workflow state from LangGraph checkpointer.
+     * Returns the full state (goals, steps, thoughts, etc.) without
+     * converting to AgentChatTurn[] — useful for debug tools and
+     * inspecting the agent's internal reasoning.
+     */
+    async readRawState(threadUid: string): Promise<AceAgentWorkflowState | null> {
+        return (await RPCEngine.invoke('ai.readThread', {
+            thread_uid: threadUid,
+        })) as AceAgentWorkflowState | null;
+    }
 
     /**
      * Fetches raw AceAgentWorkflowState from LangGraph checkpointer
@@ -268,7 +325,6 @@ class AgentClientEngineSingleton extends Engine {
             model: existing?.model,
             provider: existing?.provider,
             state: {
-                messages,
                 messages,
             },
             created_at: existing?.created_at ?? Date.now(),

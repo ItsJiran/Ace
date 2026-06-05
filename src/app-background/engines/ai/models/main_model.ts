@@ -1,7 +1,6 @@
 import { initChatModel } from 'langchain';
 import type { z } from 'zod';
 import { AgentConfigType, type AIProviderType } from '#/shared/schemas/ai.ts';
-import resolveConfiguredProviderName from '#/app-background/lib/utils/ai/resolve-configured-provider-name';
 import resolveApiKey from '#/app-background/lib/utils/ai/resolve-api-key';
 import { getCachedApiKey } from '#/app-background/lib/utils/ai/api-key-session-cache';
 
@@ -51,9 +50,10 @@ interface MainModelPlainOptions extends MainModelOptions {
 export default async function mainModel(
     options: MainModelWithStructuredOutputOptions | MainModelWithToolsOptions | MainModelPlainOptions,
 ) {
+    console.log('[mainModel] Initializing model with options:', options);
+
     const provider =
-        options.provider ??
-        (options.runtime ? resolveConfiguredProviderName(options.runtime) : undefined) ??
+        (options.runtime?.configurable?.provider as AIProviderType | undefined) ??
         'openai';
 
     const modelName = options.model;
@@ -66,7 +66,9 @@ export default async function mainModel(
     // Build model identifier: "provider:model" or just "provider"
     const modelIdentifier = modelName ? `${provider}:${modelName}` : provider;
 
-    const baseModel = await initChatModel(modelIdentifier, {
+    console.log(`[mainModel] Resolved model identifier: ${modelIdentifier}`);
+
+    const baseModel = await initChatModel(`${options.runtime?.configurable?.provider}:${options.runtime?.configurable.model}`, {
         ...(resolvedApiKey ? { apiKey: resolvedApiKey } : {}),
     });
 

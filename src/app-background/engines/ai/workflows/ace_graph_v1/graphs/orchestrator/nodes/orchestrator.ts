@@ -18,7 +18,7 @@ const OrchestratorPlanSchema = z.object({
         .array(
             z.object({
                 type: z
-                    .enum(['planner', 'contextor', 'thought', 'orchestrator', '__end__'])
+                    .enum(['planner', 'contextor', 'orchestrator', '__end__'])
                     .describe('The orchestrator subgraph node to route to.'),
                 summary: z
                     .string()
@@ -47,31 +47,28 @@ function buildOrchestratorSystemPrompt(state: AceAgentOrchestratorState): string
         '',
         '| Node | Purpose | Required? |',
         '|------|---------|-----------|',
-        '| `thought` | Reason deeply about the problem — analyse intent, break down unknowns, identify what context is needed. | Always first |',
-        '| `planner` | Take the reasoning from `thought` and produce concrete, ordered action steps. | Always after thought |',
+        '| `planner` | Break down the high-level intent into concrete, ordered action steps for the parent graph. | Always first |',
         '| `contextor` | Gather relevant context (files, tool schemas, existing info) from the workspace. | Optional — only if context is missing or outdated |',
         '| `orchestrator` | Supervise — review progress, adjust tasks, or signal completion (`__end__`). | Always last before loop/end |',
         '',
-        '**Expected flow**: thought → planner → (contextor?) → orchestrator → __end__',
+        '**Expected flow**: planner → (contextor?) → orchestrator → __end__',
         '',
         'When to include `contextor`:',
         '- The original prompt references files, tools, or project structure that you do not yet see in the existing messages.',
-        '- The `thought` analysis flagged missing information.',
         '- Do NOT include `contextor` if sufficient context is already present — skip directly to `orchestrator`.',
     ].join('\n');
 
     const planningRules = [
         '### Planning Rules',
         '',
-        '1. ALWAYS start with `thought` — reasoning before planning.',
-        '2. `planner` always follows `thought`.',
-        '3. `contextor` is OPTIONAL — only include when context is genuinely needed.',
-        '4. End the task list with `orchestrator` (for review) then `__end__`.',
-        '5. Each task must have a clear, actionable `summary` — one sentence.',
-        '6. Use `payload` sparingly — only for node-specific hints (e.g. tool names for contextor).',
+        '1. Start with `planner` — it creates the action plan for the parent graph.',
+        '2. `contextor` is OPTIONAL — only include when context is genuinely needed.',
+        '3. End the task list with `orchestrator` (for review) then `__end__`.',
+        '4. Each task must have a clear, actionable `summary` — one sentence.',
+        '5. Use `payload` sparingly — only for node-specific hints (e.g. tool names for contextor).',
         hasTarget
-            ? '7. The plan MUST revolve around the target_node described below.'
-            : '7. Derive the plan from original_prompt and passed_message.',
+            ? '6. The plan MUST revolve around the target_node described below.'
+            : '6. Derive the plan from original_prompt and passed_message.',
     ].join('\n');
 
     const exampleOutput = [
@@ -82,13 +79,12 @@ function buildOrchestratorSystemPrompt(state: AceAgentOrchestratorState): string
         '```json',
         '{',
         '  "tasks": [',
-        '    { "type": "thought", "summary": "Analyse: what does refactoring to JWT entail? What files are likely involved?" },',
         '    { "type": "planner", "summary": "Plan: 1) Find auth files 2) Replace session logic with JWT 3) Update middleware" },',
         '    { "type": "contextor", "summary": "Retrieve auth module files and current session implementation" },',
         '    { "type": "orchestrator", "summary": "Review gathered context and plan — ready for executor" },',
         '    { "type": "__end__", "summary": "Orchestrator plan complete — hand off to parent" }',
         '  ],',
-        '  "plan_rationale": "No auth context available, so included contextor. thought→planner→contextor→orchestrator→end is the natural flow."',
+        '  "plan_rationale": "No auth context available, so included contextor. planner→contextor→orchestrator→end is the natural flow."',
         '}',
         '```',
         '',
@@ -97,12 +93,11 @@ function buildOrchestratorSystemPrompt(state: AceAgentOrchestratorState): string
         '```json',
         '{',
         '  "tasks": [',
-        '    { "type": "thought", "summary": "Analyse the existing file tree and README to understand project purpose" },',
         '    { "type": "planner", "summary": "Plan: summarise project purpose based on available context" },',
         '    { "type": "orchestrator", "summary": "Review summary — ready to conclude" },',
         '    { "type": "__end__", "summary": "Summary complete — no further context needed" }',
         '  ],',
-        '  "plan_rationale": "Context already available — skipped contextor. thought→planner→orchestrator→end is sufficient."',
+        '  "plan_rationale": "Context already available — skipped contextor. planner→orchestrator→end is sufficient."',
         '}',
         '```',
     ].join('\n');
@@ -208,7 +203,12 @@ export function createOrchestratorNode() {
             passed_message: '',
         };
 
-        if (threadUid) emitNodeEnd(threadUid, 'orchestrator', 'orchestrator', result).catch(() => {});
+        if (threadUid) emitNodeEnd(threadUid, 'orchestrator', 'orchestrator', result, {
+            task_count: tasks.length,
+            plan: plan.plan_rationale,
+            tasks: tasks.map((t) => `[${t.type}] ${t.summary}`),
+        }).catch(() => {});
+
         return result;
     };
 }

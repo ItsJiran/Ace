@@ -116,6 +116,7 @@ export function compileThoughtGraph(options?: {
             'reflect',
             'critique',
             'synthesize',
+            '__end__',
         ])
 
         // After workers → supervision edge (loop)
@@ -124,24 +125,28 @@ export function compileThoughtGraph(options?: {
             'reflect',
             'critique',
             'synthesize',
+            '__end__',
         ])
         .addConditionalEdges('reflect', thoughtSupervisionEdge, [
             'analyze',
             'reflect',
             'critique',
             'synthesize',
+            '__end__',
         ])
         .addConditionalEdges('critique', thoughtSupervisionEdge, [
             'analyze',
             'reflect',
             'critique',
             'synthesize',
+            '__end__',
         ])
         .addConditionalEdges('synthesize', thoughtSupervisionEdge, [
             'analyze',
             'reflect',
             'critique',
             'synthesize',
+            '__end__',
         ]);
 
     return graph.compile({

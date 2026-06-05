@@ -78,6 +78,9 @@ async function resolveModelRoute(state: AceAgentThoughtState): Promise<string> {
 export async function thoughtSupervisionEdge(
     state: AceAgentThoughtState,
 ): Promise<string> {
+    // Phase 0: liveness check — stop immediately if interrupted
+    if ((state as any).is_interrupted) return '__end__';
+
     // Phase 1: passed_message
     const passedRoute = resolvePassedMessage(state);
     if (passedRoute !== null) return passedRoute;
