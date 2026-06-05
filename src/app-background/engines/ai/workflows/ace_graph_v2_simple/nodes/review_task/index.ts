@@ -35,57 +35,31 @@
  * │    → returns to review_task → re-evaluates                        │
  * │    → max 3 retries → proceeds to next stage                       │
  * └────────────────────────────────────────────────────────────────────┘
+ *
+ * File layout:
+ *   index.ts              — node entry point + helpers + routing logic
+ *   stage1_status.ts      — Stage 1: classify task as failed/success
+ *   stage2a_retry.ts      — Stage 2a: check if retry can fix the failure
+ *   stage2b_new_task.ts   — Stage 2b: check if a new task can save the step
+ *   stage3a_output_match.ts — Stage 3a: check if output matches expectations
+ *   stage3b_more_tasks.ts — Stage 3b: check if step needs more tasks
  */
 
-import { SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
-import { z } from 'zod';
-import mainModel from '../../../../models/main_model';
 import { emitNodeStart } from '#/app-background/lib/utils/ai/emit-graph-event';
-import type { AceAgentV2State, AceAgentStep, AceAgentTask } from '../../types';
+import type { AceAgentV2State } from '../../types';
 
-// ── Structured outputs — one schema per classification stage ──────────────
+import { evaluateTaskStatus } from './stage1_status';
+import { evaluateRetry } from './stage2a_retry';
+import { evaluateNewTask } from './stage2b_new_task';
+import { evaluateOutputMatch } from './stage3a_output_match';
+import { evaluateMoreTasks } from './stage3b_more_tasks';
 
-/** Stage 1: Did the task fail or succeed? */
-const TaskStatusVerdict = z.object({
-    status: z.enum(['failed', 'success']).describe(
-        'failed=action could not complete, returned error, or produced empty/invalid output. ' +
-        'success=action completed and produced output (quality reviewed separately).',
-    ),
-    reasoning: z.string().describe('Brief explanation.'),
-});
-
-/** Stage 2a (failed): Can we retry with corrected input? */
-const RetryCheckVerdict = z.object({
-    can_retry: z.boolean().describe('Whether this failure can be fixed by retrying with corrected input/payload.'),
-    fix_instruction: z.string().describe('Concrete instruction for the action node on what to fix.'),
-    reasoning: z.string().describe('Why retry will or won\'t work.'),
-});
-
-/** Stage 2b (failed + no retry / success + output exhausted): Can a new task solve this? */
-const NewTaskCheckVerdict = z.object({
-    can_new_task: z.boolean().describe('Whether creating a different task can solve the step.'),
-    task_suggestion: z.string().describe('What kind of task to create (type + summary).'),
-    reasoning: z.string().describe('Why a new task will or won\'t help.'),
-});
-
-/** Stage 3a (success): Does the output match expectations? */
-const OutputMatchVerdict = z.object({
-    output_matches: z.boolean().describe('Whether the task output matches expectations (relevant, complete, correct format).'),
-    fix_instruction: z.string().describe('What to adjust when retrying (if mismatch).'),
-    reasoning: z.string().describe('Why output matches or not.'),
-});
-
-/** Stage 3b (success + match): Does the step need more tasks? */
-const MoreTasksVerdict = z.object({
-    needs_more_tasks: z.boolean().describe('Whether the current step needs additional tasks to complete its phase.'),
-    task_suggestion: z.string().describe('What kind of task to create next (type + summary).'),
-    reasoning: z.string().describe('Why more tasks are needed or the step is done.'),
-});
+// ── Constants ──────────────────────────────────────────────────────────────
 
 const MAX_RETRIES = 3;
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function actionNodeFor(type: string): string {
     switch (type) {
@@ -97,126 +71,7 @@ function actionNodeFor(type: string): string {
     }
 }
 
-// ── LLM Evaluation Stages ─────────────────────────────────────────────────
-
-/** Stage 1: Classify task as failed or succeeded. */
-async function evaluateTaskStatus(_state: AceAgentV2State, step: AceAgentStep, task: AceAgentTask) {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: TaskStatusVerdict });
-    return await model.invoke([
-        new SystemMessage([
-            'Classify whether this task FAILED or SUCCEEDED.',
-            '',
-            'FAILED means: the action could not complete, returned an error, produced genuinely empty/invalid output,',
-            'or the tool call itself failed (permission denied, not found, etc.).',
-            'SUCCESS means: the action completed and produced some output — even if the quality still needs review.',
-            '',
-            'Only output "failed" or "success".',
-            '',
-            '--- TASK CONTEXT ---',
-            `Step phase: ${step.phase}`,
-            `Task: ${task.type} / ${task.summary}`,
-            `Payload: ${JSON.stringify(task.payload).slice(0, 300)}`,
-            `Output: ${task.output ? JSON.stringify(task.output).slice(0, 500) : '(empty)'}`,
-        ].join('\n')),
-    ]);
-}
-
-/** Stage 2a (failed): Check if retry can fix it. */
-async function evaluateRetry(_state: AceAgentV2State, step: AceAgentStep, task: AceAgentTask) {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: RetryCheckVerdict });
-    return await model.invoke([
-        new SystemMessage([
-            'This task FAILED. Decide whether it can be fixed by retrying with corrected input/payload.',
-            '',
-            'Retry makes sense when: wrong payload/params, temporary error, small adjustment needed.',
-            'Retry does NOT make sense when: fundamentally wrong approach, tool unavailable,',
-            'permissions missing, permanent failure, or the task itself is impossible.',
-            '',
-            'Provide a concrete fix_instruction for the action node if retry is possible.',
-            '',
-            '--- TASK CONTEXT ---',
-            `Step phase: ${step.phase}`,
-            `Task: ${task.type} / ${task.summary}`,
-            `Payload: ${JSON.stringify(task.payload).slice(0, 300)}`,
-            `Output: ${task.output ? JSON.stringify(task.output).slice(0, 500) : '(empty)'}`,
-            `Retry #${task.retry_count} / ${task.max_retries || MAX_RETRIES}`,
-        ].join('\n')),
-    ]);
-}
-
-/** Stage 2b (failed + no retry, or success + output retries exhausted): Can a new task solve the step? */
-async function evaluateNewTask(_state: AceAgentV2State, step: AceAgentStep, task: AceAgentTask) {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: NewTaskCheckVerdict });
-    return await model.invoke([
-        new SystemMessage([
-            'This task cannot be retried further. Decide whether the STEP can still be saved by creating a DIFFERENT task.',
-            '',
-            'A new task makes sense when: a different approach/tool could achieve the same sub-goal,',
-            'or the step needs a prerequisite task first.',
-            'Give up when: the step itself is impossible, all approaches are blocked,',
-            'or the goal is fundamentally unreachable.',
-            '',
-            'If a new task could help, describe what kind of task (type + summary) in task_suggestion.',
-            '',
-            '--- TASK CONTEXT ---',
-            `Step phase: ${step.phase}`,
-            `Failed task: ${task.type} / ${task.summary}`,
-            `Task output: ${task.output ? JSON.stringify(task.output).slice(0, 500) : '(empty)'}`,
-            '',
-            'All tasks in this step:',
-            ...step.tasks.map((t) => `  [${t.status}] ${t.type}/${t.summary}`),
-        ].join('\n')),
-    ]);
-}
-
-/** Stage 3a (success): Check if output matches expectations. */
-async function evaluateOutputMatch(_state: AceAgentV2State, step: AceAgentStep, task: AceAgentTask) {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: OutputMatchVerdict });
-    return await model.invoke([
-        new SystemMessage([
-            'This task SUCCEEDED (completed without error). Now evaluate whether the OUTPUT matches expectations.',
-            '',
-            'Output MATCHES when: result is relevant, reasonably complete, and addresses the task summary.',
-            'Output MISMATCHES when: result is off-topic, incomplete, wrong format,',
-            'or doesn\'t address what the task asked for.',
-            '',
-            'If mismatch, provide a concrete fix_instruction for the action node to retry with adjusted expectations.',
-            '',
-            '--- TASK CONTEXT ---',
-            `Step phase: ${step.phase}`,
-            `Task: ${task.type} / ${task.summary}`,
-            `Payload: ${JSON.stringify(task.payload).slice(0, 300)}`,
-            `Output: ${task.output ? JSON.stringify(task.output).slice(0, 500) : '(empty)'}`,
-            `Retry #${task.retry_count} / ${task.max_retries || MAX_RETRIES}`,
-        ].join('\n')),
-    ]);
-}
-
-/** Stage 3b (success + match): Does the step need more tasks? */
-async function evaluateMoreTasks(_state: AceAgentV2State, step: AceAgentStep, task: AceAgentTask) {
-    const model = await mainModel({ runtime: getConfig() as never, structuredOutput: MoreTasksVerdict });
-    return await model.invoke([
-        new SystemMessage([
-            'This task SUCCEEDED with correct output. Now decide whether the current STEP needs MORE tasks.',
-            '',
-            'More tasks are needed when: the step goal is not fully accomplished,',
-            'there are remaining sub-steps, or follow-up actions are required.',
-            'Step is done when: all necessary work for this phase is complete.',
-            '',
-            'If more tasks are needed, describe what kind of task (type + summary) in task_suggestion.',
-            '',
-            '--- TASK CONTEXT ---',
-            `Step phase: ${step.phase}`,
-            `Completed task: ${task.type} / ${task.summary}`,
-            `Output summary: ${task.output ? JSON.stringify(task.output).slice(0, 300) : '(empty)'}`,
-            '',
-            'All tasks in this step:',
-            ...step.tasks.map((t) => `  [${t.status}] ${t.type}/${t.summary}${t.output ? ` → ${JSON.stringify(t.output).slice(0, 80)}` : ''}`),
-        ].join('\n')),
-    ]);
-}
-
-// ── Node ──────────────────────────────────────────────────────────────────
+// ── Node ───────────────────────────────────────────────────────────────────
 
 export function createReviewTaskNode() {
     return async function reviewTaskNode(state: AceAgentV2State): Promise<Partial<AceAgentV2State>> {
@@ -242,12 +97,12 @@ export function createReviewTaskNode() {
 
         const statusCheck = await evaluateTaskStatus(state, step, task);
 
-        // ── FAILED branch ───────────────────────────────────────────
+        // ── FAILED branch ────────────────────────────────────────────
 
         if (statusCheck.status === 'failed') {
             // Stage 2a: Can retry?
             if (task.retry_count < maxRetries) {
-                const retryCheck = await evaluateRetry(state, step, task);
+                const retryCheck = await evaluateRetry(state, step, task, maxRetries);
 
                 if (retryCheck.can_retry) {
                     const next = task.retry_count + 1;
@@ -280,10 +135,10 @@ export function createReviewTaskNode() {
             };
         }
 
-        // ── SUCCESS branch ──────────────────────────────────────────
+        // ── SUCCESS branch ───────────────────────────────────────────
 
         // Stage 3a: Output matches?
-        const outputCheck = await evaluateOutputMatch(state, step, task);
+        const outputCheck = await evaluateOutputMatch(state, step, task, maxRetries);
 
         if (!outputCheck.output_matches) {
             if (task.retry_count < maxRetries) {
