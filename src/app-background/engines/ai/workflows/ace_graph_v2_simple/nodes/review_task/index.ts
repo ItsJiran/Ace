@@ -16,13 +16,13 @@
  * │  │    │                                                   │    │  │
  * │  │    └─ Stage 2b: Can a new task solve this?             │    │  │
  * │  │          YES → executor (new task)                     │    │  │
- * │  │          NO → review_step (give up)                    │    │  │
+ * │  │          NO → thought (give up)                    │    │  │
  * │  │                                                        │    │  │
  * │  │  ACHIEVED ─────────────────────────────────────────────┘    │  │
  * │  │    │                                                        │  │
  * │  │    └─ Stage 2a: Does step need more tasks?                  │  │
  * │  │          YES → executor + target_node_reason (new task)     │  │
- * │  │          NO → review_step                                   │  │
+ * │  │          NO → thought                                   │  │
  * │  └──────────────────────────────────────────────────────────────┘  │
  * │                                                                    │
  * │  Retry flow:                                                       │
@@ -43,7 +43,7 @@
 
 import { getConfig } from '@langchain/langgraph';
 import { emitNodeStart } from '#/app-background/lib/utils/ai/emit-graph-event';
-import type { AceAgentV2State, AceAgentGoal, AceAgentStep, AceAgentTask } from '../../types';
+import type { AceAgentV2State, AceAgentStep, AceAgentTask } from '../../types';
 
 import { evaluateTaskStatus } from './stage1_status';
 import { evaluateRetry } from './stage2a_retry';
@@ -70,20 +70,15 @@ function actionNodeFor(type: string): string {
 }
 
 function applyTaskStatus(
-    goal: AceAgentGoal | undefined,
     step: AceAgentStep | undefined,
     taskId: string,
     status: AceAgentTask['status'],
     extra?: Partial<AceAgentTask>,
-): { goal: AceAgentGoal | undefined; step: AceAgentStep | undefined } {
-    if (!goal || !step) return { goal, step };
-    const updatedStep: AceAgentStep = {
+): AceAgentStep | undefined {
+    if (!step) return undefined;
+    return {
         ...step,
         tasks: step.tasks.map((t) => (t.id === taskId ? { ...t, status, ...extra } : t)),
-    };
-    return {
-        goal: { ...goal, steps: goal.steps.map((s) => (s.id === step.id ? updatedStep : s)) },
-        step: updatedStep,
     };
 }
 
@@ -97,9 +92,8 @@ export function createReviewTaskNode() {
 
         if (state.is_stopped) return { result_summary: 'Stopped.', from_node: 'review_task' };
 
-        const goal = state.current_goal;
         const step = state.current_step;
-        if (!goal || !step) return { target_node: 'review_step', result_summary: 'No step.', from_node: 'review_task' };
+        if (!step) return { target_node: 'thought', result_summary: 'No step.', from_node: 'review_task' };
 
         const task = step.tasks.find((t) => t.status === 'in_progress');
         if (!task || !task.output) {
@@ -123,11 +117,10 @@ export function createReviewTaskNode() {
 
                 if (retryCheck.can_retry) {
                     const next = task.retry_count + 1;
-                    const { goal: updatedGoal, step: updatedStep } = applyTaskStatus(
-                        goal, step, task.id, 'in_progress', { retry_count: next },
+                    const updatedStep = applyTaskStatus(
+                        step, task.id, 'in_progress', { retry_count: next },
                     );
                     return {
-                        current_goal: updatedGoal,
                         current_step: updatedStep,
                         current_task: { ...task, retry_count: next },
                         target_node: actionNodeFor(task.type),
@@ -142,11 +135,10 @@ export function createReviewTaskNode() {
             const newTaskCheck = await evaluateNewTask(state, step, task);
 
             if (newTaskCheck.can_new_task) {
-                const { goal: updatedGoal, step: updatedStep } = applyTaskStatus(
-                    goal, step, task.id, 'failed',
+                const updatedStep = applyTaskStatus(
+                    step, task.id, 'failed',
                 );
                 return {
-                    current_goal: updatedGoal,
                     current_step: updatedStep,
                     target_node: 'executor',
                     target_node_reason: `Task failed — create new task: ${newTaskCheck.task_suggestion}`,
@@ -155,23 +147,23 @@ export function createReviewTaskNode() {
                 };
             }
 
-            // Give up → review_step
-            const { goal: updatedGoal, step: updatedStep } = applyTaskStatus(
-                goal, step, task.id, 'failed',
+            // Give up → review_step (if in step context) or thought
+            const updatedStep = applyTaskStatus(
+                step, task.id, 'failed',
             );
             return {
-                current_goal: updatedGoal,
                 current_step: updatedStep,
-                target_node: 'review_step',
+                tasks: updatedStep ? updatedStep.tasks : [],
+                target_node: step.tasks.length > 1 ? 'review_step' : 'thought',
                 from_node: 'review_task',
-                result_summary: `Cannot recover step: ${newTaskCheck.reasoning}`,
+                result_summary: `Cannot recover: ${newTaskCheck.reasoning}`,
             };
         }
 
         // ── ACHIEVED branch — task done, toggle to completed ─────────
 
-        const { goal: updatedGoal, step: updatedStep } = applyTaskStatus(
-            goal, step, task.id, 'completed',
+        const updatedStep = applyTaskStatus(
+            step, task.id, 'completed',
         );
 
         // Stage 2a: Step needs more tasks?
@@ -182,16 +174,14 @@ export function createReviewTaskNode() {
             // Gate: prevent infinite task creation
             if (taskCount >= MAX_TASKS_PER_STEP) {
                 return {
-                    current_goal: updatedGoal,
                     current_step: undefined,
-                    target_node: 'review_step',
+                    target_node: 'thought',
                     from_node: 'review_task',
                     result_summary: `Max tasks per step (${MAX_TASKS_PER_STEP}) reached — forcing step review.`,
                 };
             }
 
             return {
-                current_goal: updatedGoal,
                 current_step: updatedStep,
                 target_node: 'executor',
                 target_node_reason: `Create next task: ${moreTasksCheck.task_suggestion}`,
@@ -200,11 +190,12 @@ export function createReviewTaskNode() {
             };
         }
 
-        // Step done → review_step
+        // Step done → review_step (if step context) or thought (standalone task)
+        const isStepContext = step.tasks.length > 1 ||
+            (step.phase && !['Speaking', 'speaking', 'Tool', 'tool'].some(p => step.phase.startsWith(p)));
         return {
-            current_goal: updatedGoal,
-            current_step: undefined,
-            target_node: 'review_step',
+            current_step: isStepContext ? undefined : undefined,
+            target_node: isStepContext ? 'review_step' : 'thought',
             from_node: 'review_task',
             result_summary: moreTasksCheck.reasoning,
         };

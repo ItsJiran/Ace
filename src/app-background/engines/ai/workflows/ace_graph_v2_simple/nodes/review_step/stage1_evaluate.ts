@@ -7,7 +7,7 @@ import { SystemMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
 import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
-import type { AceAgentV2State, AceAgentGoal } from '../../types';
+import type { AceAgentV2State, AceAgentStep } from '../../types';
 
 export const StepOutcomeVerdict = z.object({
     outcome: z.enum(['step_achieved', 'step_not_achieved']).describe(
@@ -21,8 +21,7 @@ export type StepOutcomeResult = z.infer<typeof StepOutcomeVerdict>;
 
 export async function evaluateStepOutcome(
     _state: AceAgentV2State,
-    goal: AceAgentGoal,
-    step: AceAgentGoal['steps'][number],
+    step: AceAgentStep,
 ): Promise<StepOutcomeResult> {
     return await invokeLLM({
         runtime: getConfig() as never,
@@ -38,9 +37,7 @@ export async function evaluateStepOutcome(
             'Only output "step_achieved" or "step_not_achieved".',
             '',
             '--- STEP CONTEXT ---',
-            `Goal: ${goal.objective}`,
             `Step phase: ${step.phase}`,
-            `All steps so far: ${goal.steps.map((s) => `[${s.status}] ${s.phase}`).join(', ')}`,
             '',
             'Tasks in this step:',
             ...step.tasks.map((t) =>

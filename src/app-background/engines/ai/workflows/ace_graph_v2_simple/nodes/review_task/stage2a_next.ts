@@ -28,7 +28,7 @@ export async function evaluateMoreTasks(
         messages: [new SystemMessage([
             'This task was ACHIEVED successfully. Now decide whether the current STEP needs MORE tasks.',
             '',
-            'More tasks are needed when: the step goal is not fully accomplished,',
+            'More tasks are needed when: the step phase is not fully accomplished,',
             'there are remaining sub-steps, or follow-up actions are required.',
             'Step is done when: all necessary work for this phase is complete.',
             '',

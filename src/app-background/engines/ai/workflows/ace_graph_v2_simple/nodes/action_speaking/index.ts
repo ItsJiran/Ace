@@ -2,18 +2,14 @@ import { AIMessage } from '@langchain/core/messages';
 import { getConfig } from '@langchain/langgraph';
 import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
-import type { AceAgentV2State, AceAgentGoal, AceAgentStep } from '../../types';
+import type { AceAgentV2State, AceAgentStep } from '../../types';
 
 function markTaskDone(
-    goal: AceAgentGoal | undefined, step: AceAgentStep | undefined,
+    step: AceAgentStep | undefined,
     taskId: string, status: 'completed' | 'failed', output?: Record<string, unknown>,
-): { goal: AceAgentGoal | undefined; step: AceAgentStep | undefined } {
-    if (!goal || !step) return { goal, step };
-    const updatedStep = { ...step, tasks: step.tasks.map((t) => t.id === taskId ? { ...t, status, output } : t) };
-    return {
-        goal: { ...goal, steps: goal.steps.map((s) => s.id === step.id ? updatedStep : s) },
-        step: updatedStep,
-    };
+): AceAgentStep | undefined {
+    if (!step) return undefined;
+    return { ...step, tasks: step.tasks.map((t) => t.id === taskId ? { ...t, status, output } : t) };
 }
 
 async function speakToUser(state: AceAgentV2State, taskSummary: string, payload: Record<string, unknown>) {
@@ -46,14 +42,13 @@ export function createActionSpeaking() {
         const response = await speakToUser(state, task.summary, task.payload);
         const responseStr = typeof response === 'string' ? response : JSON.stringify(response);
 
-        const { goal, step } = markTaskDone(state.current_goal, state.current_step, task.id, 'completed', { response: responseStr });
+        const updatedStep = markTaskDone(state.current_step, task.id, 'completed', { response: responseStr });
 
         const out: Partial<AceAgentV2State> = {
             messages: [
                 new AIMessage({ content: responseStr, name: 'ace-v2-speaking' }),
             ],
-            current_goal: goal,
-            current_step: step,
+            current_step: updatedStep,
             current_task: undefined,
             result_summary: `Spoke: ${task.summary}`,
         };

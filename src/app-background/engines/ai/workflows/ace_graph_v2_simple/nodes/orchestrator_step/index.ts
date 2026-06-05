@@ -11,12 +11,12 @@ const AddStepsOutput = z.object({
     steps: z
         .array(
             z.object({
-                phase: z.string().describe('New step phase. If give_up is true, name this "Aborting Goal".'),
+                phase: z.string().describe('New step phase. If give_up is true, name this "Aborting".'),
             }),
         )
         .describe('Next step(s) to append. Can be empty if give_up is true.'),
     give_up: z.boolean().describe(
-        'Set to true ONLY if you are stuck in an unrecoverable error loop, lack necessary tools/permissions, or the Reviewer Feedback indicates the goal is impossible.',
+        'Set to true ONLY if you are stuck in an unrecoverable error loop, lack necessary tools/permissions, or the Reviewer Feedback indicates the objective is impossible.',
     ),
     rationale: z.string().describe('Explanation of your decision (either for the next step or why you decided to give up).'),
 });
@@ -24,15 +24,11 @@ const AddStepsOutput = z.object({
 // ── Prompt ─────────────────────────────────────────────────────────────────
 
 function addStepsPrompt(state: AceAgentV2State): string {
-    const goal = state.current_goal;
-    const allSteps = goal?.steps ?? [];
+    const allSteps = state.steps ?? [];
     const lastStep = allSteps[allSteps.length - 1];
 
     const lines = [
-        'Create a new step for this goal based on the results already obtained.',
-        '',
-        '### Goal',
-        goal ? `Objective: ${goal.objective}` : 'None.',
+        'Create a new step based on the results already obtained.',
         '',
         '### Steps Taken So Far',
         ...allSteps.map((s, i) => {
@@ -105,10 +101,10 @@ async function generateNextSteps(state: AceAgentV2State) {
 // ── Node ───────────────────────────────────────────────────────────────────
 
 /**
- * Orchestrator Step — generates the next step toward a goal (ReAct pattern).
+ * Orchestrator Step — generates the next step in a ReAct pattern.
  * Always routes to executor. Reviewer determines when done.
  *
- * Flow: orchestrator_goal → orchestrator_step → executor → ...
+ * Flow: thought → orchestrator_step → executor → ...
  *                                          ↑ reviewer ──┘
  */
 export function createOrchestratorStepNode() {
@@ -124,19 +120,16 @@ export function createOrchestratorStepNode() {
 
         const { steps, give_up, rationale } = await generateNextSteps(state);
 
-        const updatedGoal = state.current_goal
-            ? { ...state.current_goal, steps: [...state.current_goal.steps, ...steps] }
-            : undefined;
         const firstNewStep = steps[0];
 
         const output: Partial<AceAgentV2State> = {
             messages: [new AIMessage({
                 content: give_up
-                    ? `Giving up on goal: ${rationale}`
+                    ? `Giving up: ${rationale}`
                     : `Next step: ${steps.map((s) => s.phase).join(', ')} — ${rationale}`,
                 name: 'ace-v2-step',
             })],
-            current_goal: updatedGoal,
+            steps,
             current_step: firstNewStep,
             target_node_reason: undefined,
             from_node: 'orchestrator_step',

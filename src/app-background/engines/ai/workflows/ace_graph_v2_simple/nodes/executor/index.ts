@@ -22,51 +22,78 @@ function actionNodeFor(type: string): string {
     }
 }
 
-function taskPrompt(state: AceAgentV2State, step: AceAgentStep, goal: AceAgentV2State['current_goal']): string {
+function taskPrompt(state: AceAgentV2State, step: AceAgentStep): string {
     const allTasks = step.tasks;
     const lastTask = allTasks[allTasks.length - 1];
+    const lastThought = state.thoughts?.[state.thoughts.length - 1];
+    const isDirectTask = step.phase === 'Direct task' && allTasks.length === 0;
 
-    const lines = [
-        'Create a new task for this step based on the results already obtained.',
-        '',
-        // '### Goal',
-        // goal ? `Objective: ${goal.objective}` : 'None.',
-        '',
-        '### Step',
-        `Phase: ${step.phase}`,
-    ];
+    const lines: string[] = [];
 
-    if (allTasks.length > 0) {
+    // ── User intent ──────────────────────────────────────────────────
+    lines.push(
+        `User request: "${state.original_prompt}"`,
+    );
+
+    // ── Thought context ──────────────────────────────────────────────
+    if (lastThought) {
         lines.push(
             '',
-            '### Tasks Done So Far',
-            ...allTasks.map((t, i) => {
-                const icon = t.status === 'completed' ? '✓' : t.status === 'failed' ? '✗' : '▶';
-                return `  ${i + 1}. [${icon}] ${t.type}/${t.summary}${t.output ? ` → ${JSON.stringify(t.output).slice(0, 80)}` : ''}`;
-            }),
+            `Agent reasoning: "${lastThought.reasoning}"`,
         );
     }
 
-    if (lastTask) {
+    // ── Step context ─────────────────────────────────────────────────
+    if (isDirectTask) {
         lines.push(
             '',
-            '### Last Task Result',
-            `Status: ${lastTask.status.toUpperCase()}`,
-            `Type: ${lastTask.type}`,
-            `Summary: ${lastTask.summary}`,
+            '### Context',
+            'This is a standalone task — no prior steps exist.',
+            'Create the FIRST task that directly addresses the user request.',
+            'Use the agent reasoning above to guide what task to create.',
         );
-        if (lastTask.output) {
-            lines.push(`Output: ${JSON.stringify(lastTask.output).slice(0, 200)}`);
+    } else {
+        lines.push(
+            '',
+            '### Step',
+            `Phase: ${step.phase}`,
+        );
+
+        if (allTasks.length > 0) {
+            lines.push(
+                '',
+                '### Tasks Done So Far',
+                ...allTasks.map((t, i) => {
+                    const icon = t.status === 'completed' ? '✓' : t.status === 'failed' ? '✗' : '▶';
+                    return `  ${i + 1}. [${icon}] ${t.type}/${t.summary}${t.output ? ` → ${JSON.stringify(t.output).slice(0, 80)}` : ''}`;
+                }),
+            );
+        }
+
+        if (lastTask) {
+            lines.push(
+                '',
+                '### Last Task Result',
+                `Status: ${lastTask.status.toUpperCase()}`,
+                `Type: ${lastTask.type}`,
+                `Summary: ${lastTask.summary}`,
+            );
+            if (lastTask.output) {
+                lines.push(`Output: ${JSON.stringify(lastTask.output).slice(0, 200)}`);
+            }
         }
     }
 
+    // ── Rules ────────────────────────────────────────────────────────
     lines.push(
         '',
         '### Rules',
         '- Create the NEXT task that REVOLVES around the results obtained so far.',
         lastTask?.status === 'failed'
             ? '- Last task FAILED — take a DIFFERENT approach. Do NOT repeat what failed.'
-            : '- Build on what was just completed — what naturally comes next?',
+            : isDirectTask
+                ? '- This is the FIRST task — make it count. Address the user request directly.'
+                : '- Build on what was just completed — what naturally comes next?',
         '- Each task is a single, concrete action.',
         '- Types: tool (execute/modify), context (gather info), searching (find files/patterns), speaking (respond to user).',
     );
@@ -77,12 +104,11 @@ function taskPrompt(state: AceAgentV2State, step: AceAgentStep, goal: AceAgentV2
 async function generateTask(
     state: AceAgentV2State,
     step: AceAgentStep,
-    goal: AceAgentV2State['current_goal'],
 ): Promise<{ task: AceAgentTask; rationale: string }> {
     const result = await invokeLLM({
         runtime: getConfig() as never,
         structuredOutput: TaskOutput,
-        messages: [new SystemMessage(taskPrompt(state, step, goal))],
+        messages: [new SystemMessage(taskPrompt(state, step))],
         nodeName: 'executor',
         graphName: 'ace-v2',
     });
@@ -108,11 +134,34 @@ export function createExecutorNode() {
 
         if (state.is_stopped) return { result_summary: 'Stopped.', from_node: 'executor' };
 
-        const goal = state.current_goal;
         const step = state.current_step;
-        if (!goal || !step) return { result_summary: 'No active goal/step.', from_node: 'executor' };
+        if (!step) {
+            // create_task flow — no step wrapper, create minimal step
+            const minimalStep: AceAgentStep = {
+                id: `step-${Date.now()}-direct`,
+                phase: 'Direct task',
+                tasks: [],
+                status: 'in_progress',
+            };
+            const { task, rationale } = await generateTask(state, minimalStep);
+            const updatedStep = { ...minimalStep, tasks: [...minimalStep.tasks, task] };
 
-        const { task, rationale } = await generateTask(state, step, goal);
+            const output: Partial<AceAgentV2State> = {
+                messages: [new AIMessage({
+                    content: `Task: ${task.type}/${task.summary} — ${rationale}`,
+                    name: 'ace-v2-executor',
+                })],
+                current_step: updatedStep,
+                current_task: task,
+                target_node: actionNodeFor(task.type),
+                from_node: 'executor',
+                result_summary: rationale,
+            };
+            if (threadUid) emitNodeEnd(threadUid, 'executor', 'ace-v2', output).catch(() => {});
+            return output;
+        }
+
+        const { task, rationale } = await generateTask(state, step);
         const updatedStep = { ...step, tasks: [...step.tasks, task], status: 'in_progress' as const };
 
         const output: Partial<AceAgentV2State> = {
@@ -120,7 +169,6 @@ export function createExecutorNode() {
                 content: `Task: ${task.type}/${task.summary} — ${rationale}`,
                 name: 'ace-v2-executor',
             })],
-            current_goal: goal ? { ...goal, steps: goal.steps.map((s) => s.id === step.id ? updatedStep : s) } : undefined,
             current_step: updatedStep,
             current_task: task,
             target_node: actionNodeFor(task.type),

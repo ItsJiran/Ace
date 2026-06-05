@@ -28,10 +28,10 @@ export async function evaluateNewTask(
         messages: [new SystemMessage([
             'This task cannot be retried further. Decide whether the STEP can still be saved by creating a DIFFERENT task.',
             '',
-            'A new task makes sense when: a different approach/tool could achieve the same sub-goal,',
+            'A new task makes sense when: a different approach/tool could achieve the same sub-problem,',
             'or the step needs a prerequisite task first.',
             'Give up when: the step itself is impossible, all approaches are blocked,',
-            'or the goal is fundamentally unreachable.',
+            'or the problem is fundamentally unsolvable.',
             '',
             'If a new task could help, describe what kind of task (type + summary) in task_suggestion.',
             '',

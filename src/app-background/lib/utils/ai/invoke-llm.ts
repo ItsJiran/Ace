@@ -60,8 +60,7 @@ export type InvokeLLMOptions = InvokeLLMStructured | InvokeLLMTools | InvokeLLMP
 function promptPreview(messages: BaseMessage[]): string {
     const first = messages[0];
     if (!first) return '(empty)';
-    const text = typeof first.content === 'string' ? first.content : JSON.stringify(first.content);
-    return text.slice(0, 200);
+    return typeof first.content === 'string' ? first.content : JSON.stringify(first.content);
 }
 
 export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
@@ -94,8 +93,8 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
             const durationMs = Date.now() - startTime;
 
             const resultPreview = typeof result === 'string'
-                ? result.slice(0, 200)
-                : JSON.stringify(result).slice(0, 200);
+                ? result
+                : JSON.stringify(result);
 
             emitLLMEnd(threadUid, options.nodeName, options.graphName, {
                 attempt,
