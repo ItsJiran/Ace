@@ -92,14 +92,11 @@
   }
 
   .page-noise {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
+    @apply fixed inset-0 pointer-events-none opacity-100;
     background-image:
       radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 34%),
       radial-gradient(circle at 80% 20%, rgba(130, 130, 145, 0.06), transparent 30%),
       radial-gradient(circle at bottom right, rgba(100, 100, 115, 0.04), transparent 32%);
-    opacity: 1;
   }
 
   
@@ -109,14 +106,13 @@
   }
 
   .ace-shell {
-    position: relative;
-    overflow: hidden;
-    backdrop-filter: blur(22px);
+    @apply relative overflow-hidden;
   }
 
   .ace-shell-first {
+    @apply border;
     background: var(--ace-shell-bg);
-    border: 1px solid var(--ace-shell-border);
+    border-color: var(--ace-shell-border);
     box-shadow: var(--ace-shell-shadow);
     color: var(--ace-text-primary);
   }
@@ -125,67 +121,43 @@
   .flow-card,
   .stack-card,
   .demo-frame {
+    @apply border;
     background: var(--ace-container-bg);
-    border: 1px solid var(--ace-container-border);
+    border-color: var(--ace-container-border);
     color: var(--ace-text-primary);
   }
 
   .ace-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.55rem;
-    border-radius: 14px;
-    padding: 0.7rem 1rem;
-    text-decoration: none;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    transition:
-      transform 160ms ease,
-      border-color 160ms ease,
-      background 160ms ease,
-      color 160ms ease;
+    @apply inline-flex items-center justify-center gap-[0.55rem] rounded-[14px] px-4 py-[0.7rem] no-underline text-[10px] font-bold tracking-[0.12em] uppercase transition-[transform,border-color,background,color] duration-160 ease;
   }
 
   .ace-btn:hover,
   .ace-theme-toggle:hover {
-    transform: translateY(-1px);
+    @apply -translate-y-px;
   }
 
   .eyebrow {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.24em;
+    @apply text-[11px] font-bold uppercase tracking-[0.24em];
     color: var(--ace-eyebrow);
   }
 
   .ace-pill {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    border: 1px solid var(--ace-pill-border);
+    @apply inline-flex items-center rounded-full border px-3 py-[0.45rem] text-[10px] font-bold uppercase;
+    border-color: var(--ace-pill-border);
     background: var(--ace-pill-bg);
-    padding: 0.45rem 0.75rem;
     color: var(--ace-text-subtle);
   }
 
-  .ace-pill {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
   .ace-kicker {
-    border: 1px solid var(--ace-kicker-border);
+    @apply border;
+    border-color: var(--ace-kicker-border);
     background: var(--ace-kicker-bg);
     color: var(--ace-kicker-text);
   }
 
   .ace-btn-first {
-    border: 1px solid var(--ace-btn-primary-border);
+    @apply border;
+    border-color: var(--ace-btn-primary-border);
     background: var(--ace-btn-primary-bg);
     box-shadow: 0 12px 28px rgba(39, 60, 130, 0.24);
     color: var(--ace-btn-primary-text);
@@ -193,45 +165,27 @@
 
   .ace-btn-secondary,
   .ace-theme-toggle {
-    border: 1px solid var(--ace-btn-secondary-border);
+    @apply border;
+    border-color: var(--ace-btn-secondary-border);
     background: var(--ace-btn-secondary-bg);
     color: var(--ace-btn-secondary-text);
   }
 
   .ace-theme-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.4rem;
-    border-radius: 999px;
-    padding: 0 0.95rem;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    transition:
-      transform 160ms ease,
-      border-color 160ms ease,
-      background 160ms ease,
-      color 160ms ease;
+    @apply inline-flex items-center justify-center min-h-[2.4rem] rounded-full px-[0.95rem] text-[10px] font-bold tracking-[0.12em] uppercase transition-[transform,border-color,background,color] duration-160 ease;
   }
 
   .cta-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1rem;
-    height: 1rem;
-    flex-shrink: 0;
+    @apply inline-flex items-center justify-center w-4 h-4 shrink-0;
   }
 
   .cta-icon svg {
-    width: 100%;
-    height: 100%;
+    @apply w-full h-full;
   }
 
   .ace-inline-panel {
-    border: 1px solid var(--ace-inline-border);
+    @apply border;
+    border-color: var(--ace-inline-border);
     background: var(--ace-inline-bg);
     color: var(--ace-text-muted);
   }
@@ -258,76 +212,50 @@
   }
 
   .flow-card {
-    border-radius: 18px;
-    padding: 1rem;
+    @apply rounded-[18px] p-4;
   }
 
   .flow-title {
-    font-size: 14px;
-    font-weight: 700;
+    @apply text-sm font-bold;
   }
 
   .flow-copy {
-    margin-top: 0.5rem;
-    font-size: 12px;
-    line-height: 1.65;
+    @apply mt-2 text-xs leading-relaxed;
   }
 
   .stack-card {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.85rem;
-    border-radius: 18px;
-    padding: 0.95rem;
+    @apply flex items-start gap-[0.85rem] rounded-[18px] p-[0.95rem];
   }
 
   .stack-card-accent {
     background: linear-gradient(145deg, rgba(70, 70, 82, 0.28), rgba(50, 50, 62, 0.22));
   }
   .stack-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 12px;
-    border: 1px solid var(--ace-stack-icon-border);
+    @apply inline-flex items-center justify-center min-w-[2.25rem] h-[2.25rem] rounded-xl border text-[11px] font-extrabold tracking-[0.08em];
+    border-color: var(--ace-stack-icon-border);
     background: var(--ace-stack-icon-bg);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
     color: var(--ace-stack-icon-text);
   }
 
   .stack-title {
-    font-size: 13px;
-    font-weight: 700;
+    @apply text-[13px] font-bold;
   }
 
   .stack-copy {
-    margin-top: 0.25rem;
-    font-size: 12px;
-    line-height: 1.55;
+    @apply mt-1 text-xs leading-[1.55];
   }
 
   .demo-frame {
-    overflow: hidden;
-    border-radius: 22px;
-    padding: 0.9rem;
+    @apply overflow-hidden rounded-[22px] p-[0.9rem];
   }
 
   .demo-media {
-    display: block;
-    width: 100%;
-    border-radius: 16px;
-    border: 1px solid var(--ace-inline-border);
-    object-fit: cover;
+    @apply block w-full rounded-2xl border object-cover;
+    border-color: var(--ace-inline-border);
     box-shadow: 0 18px 42px rgba(2, 2, 4, 0.35);
   }
 
   .demo-caption {
-    margin-top: 0.85rem;
-    font-size: 12px;
-    line-height: 1.65;
+    @apply mt-[0.85rem] text-xs leading-relaxed;
   }
 }

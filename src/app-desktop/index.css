@@ -470,21 +470,13 @@ body,
     }
 
     .ace-shell {
-        position: relative;
-        overflow: hidden;
-        opacity: 20%;
+        @apply relative overflow-hidden opacity-20;
     }
 
     .ace-shell::before,
     .ace-shell-first::before {
-        @apply opacity-0;
+        @apply opacity-0 absolute inset-0 transition-opacity duration-300 ease-in-out;
         content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        transition: opacity 0.3s ease-in-out;
         z-index: -1;
     }
 
@@ -496,12 +488,9 @@ body,
     }
 
     .ace-shell-first {
-        @apply backdrop-blur-glass transition duration-300;
+        @apply backdrop-blur-glass transition duration-300 text-[13px] font-medium tracking-[0.01em];
         background: var(--ace-shell-first-bg);
         color: var(--ace-shell-first-text);
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: 0.01em;
     }
 
     .ace-shell-first::before {
@@ -514,7 +503,8 @@ body,
     .ace-shell.active .ace-shell-first,
     .ace-shell.active.ace-shell-first,
     .ace-shell.active .ace-shell-first {
-        border: 1px solid var(--ace-shell-first-active-border);
+        @apply border;
+        border-color: var(--ace-shell-first-active-border);
         color: var(--ace-shell-first-active-text);
     }
 
@@ -525,45 +515,49 @@ body,
     }
 
     .ace-container-first {
+        @apply border;
         background: var(--ace-container-first-bg);
-        border: 1px solid var(--ace-container-first-border);
+        border-color: var(--ace-container-first-border);
         border-bottom-color: var(--ace-container-first-border-bottom);
         color: var(--ace-container-first-text);
     }
 
     .ace-container-second {
-        border-radius: 8px;
-        border: 1px solid var(--ace-container-second-border);
+        @apply border rounded-lg p-1;
         background: var(--ace-container-second-bg);
+        border-color: var(--ace-container-second-border);
         box-shadow: var(--ace-container-second-shadow);
-        padding: 4px;
         color: var(--ace-container-second-text);
     }
 
     .ace-container-third {
+        @apply border;
         background: var(--ace-container-third-bg);
-        border: 1px solid var(--ace-container-third-border);
+        border-color: var(--ace-container-third-border);
         border-bottom-color: var(--ace-container-third-border-bottom);
         color: var(--ace-container-third-text);
     }
 
     .ace-container-fourth {
+        @apply border;
         background: var(--ace-container-fourth-bg);
-        border: 1px solid var(--ace-container-fourth-border);
+        border-color: var(--ace-container-fourth-border);
         border-bottom-color: var(--ace-container-fourth-border-bottom);
         color: var(--ace-container-fourth-text);
     }
 
     .ace-container-fifth {
+        @apply border;
         background: var(--ace-container-fifth-bg);
-        border: 1px solid var(--ace-container-fifth-border);
+        border-color: var(--ace-container-fifth-border);
         border-bottom-color: var(--ace-container-fifth-border-bottom);
         color: var(--ace-container-fifth-text);
     }
 
     .ace-container-sixth {
+        @apply border;
         background: var(--ace-container-sixth-bg);
-        border: 1px solid var(--ace-container-sixth-border);
+        border-color: var(--ace-container-sixth-border);
         border-bottom-color: var(--ace-container-sixth-border-bottom);
         color: var(--ace-container-sixth-text);
     }
@@ -576,20 +570,15 @@ body,
     .ace-btn,
     .ace-btn-first,
     .ace-btn-secondary {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
+        @apply flex items-center justify-center cursor-pointer;
     }
 
     .ace-btn-first {
-        border-radius: 8px;
-        border: 1px solid var(--ace-btn-first-border);
+        @apply border rounded-lg p-1 transition-[background] duration-150;
         background: var(--ace-btn-first-bg);
+        border-color: var(--ace-btn-first-border);
         box-shadow: var(--ace-btn-first-shadow);
         color: var(--ace-btn-first-text);
-        padding: 4px;
-        transition: background 0.15s;
     }
 
     .ace-btn-first:hover {
@@ -606,13 +595,11 @@ body,
     }
 
     .ace-btn-secondary {
-        border-radius: 8px;
-        border: 1px solid var(--ace-btn-second-border);
+        @apply border rounded-lg p-1 transition-[background] duration-150;
         background: var(--ace-btn-second-bg);
+        border-color: var(--ace-btn-second-border);
         box-shadow: var(--ace-btn-second-shadow);
-        padding: 4px;
         color: var(--ace-btn-second-text);
-        transition: background 0.15s;
     }
 
     .ace-btn-secondary:hover {
@@ -629,13 +616,11 @@ body,
     }
 
     .ace-btn-fourth {
-        border-radius: 8px;
-        border: 1px solid var(--ace-btn-fourth-border);
+        @apply border rounded-lg p-1 transition-[background] duration-150;
         background: var(--ace-btn-fourth-bg);
+        border-color: var(--ace-btn-fourth-border);
         box-shadow: var(--ace-btn-fourth-shadow);
-        padding: 4px;
         color: var(--ace-btn-fourth-text);
-        transition: background 0.15s;
     }
 
     .ace-btn-fourth:hover {
@@ -652,13 +637,11 @@ body,
     }
 
     .ace-btn-sixth {
-        border-radius: 8px;
-        border: 1px solid var(--ace-btn-sixth-border);
+        @apply border rounded-lg p-1 transition-[background] duration-150;
         background: var(--ace-btn-sixth-bg);
+        border-color: var(--ace-btn-sixth-border);
         box-shadow: var(--ace-btn-sixth-shadow);
-        padding: 4px;
         color: var(--ace-btn-sixth-text);
-        transition: background 0.15s;
     }
 
     .ace-btn-sixth:hover {
@@ -675,13 +658,10 @@ body,
     }
 
     .ace-input-first {
+        @apply border rounded-xl transition-[background,border-color] duration-150;
         background: var(--ace-input-first-bg);
-        border: 1px solid var(--ace-input-first-border);
-        border-radius: 12px;
+        border-color: var(--ace-input-first-border);
         color: var(--ace-input-first-text);
-        transition:
-            background 0.15s,
-            border-color 0.15s;
     }
 
     .ace-shell:hover.ace-input-first,
@@ -694,25 +674,19 @@ body,
     }
 
     .ace-ai-chatbar {
-        min-height: 0;
+        @apply min-h-0;
     }
 
     .ace-chat-message-list {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
+        @apply flex flex-col gap-4;
     }
 
     .ace-chat-empty-copy {
-        max-width: 28rem;
-        line-height: 1.65;
+        @apply max-w-md leading-relaxed;
     }
 
     .ace-chat-turn-label {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
+        @apply text-[11px] font-semibold tracking-[0.22em] uppercase;
         color: var(--ace-chat-label-text);
     }
 
@@ -721,18 +695,10 @@ body,
     }
 
     .ace-chat-status-pill {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 999px;
-        border: 1px solid var(--ace-chat-pill-border);
+        @apply inline-flex items-center justify-center rounded-full border px-[0.65rem] py-[0.3rem] text-[10px] font-bold tracking-[0.18em] uppercase;
         background: var(--ace-chat-pill-bg);
+        border-color: var(--ace-chat-pill-border);
         color: var(--ace-chat-pill-text);
-        padding: 0.3rem 0.65rem;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
     }
 
     .ace-chat-status-pill.is-streaming {
@@ -742,11 +708,10 @@ body,
     }
 
     .semi-transparent {
-        opacity: 0.5;
+        @apply opacity-50;
     }
 
     .transparent {
-        opacity: 0;
-        pointer-events: none;
+        @apply opacity-0 pointer-events-none;
     }
 }

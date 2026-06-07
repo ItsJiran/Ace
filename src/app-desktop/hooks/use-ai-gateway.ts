@@ -3,7 +3,7 @@ import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import type { AIProviderType } from '#/shared/schemas/ai';
 import { AIProviders } from '#/shared/constants/ai';
 import { DefaultConfigAI } from '#/shared/constants/config';
-import type { ConfigAI_V0_0_0_Type } from '#/shared/constants/config';
+import type { InferConfigData } from '#/shared/schemas/config';
 
 type ModelOptionType = {
     id: string;
@@ -11,7 +11,7 @@ type ModelOptionType = {
 };
 
 export function useAIGateway() {
-    const gatewayConfig = useAceMemory<ConfigAI_V0_0_0_Type>(DefaultConfigAI.memory_uid);
+    const gatewayConfig = useAceMemory<InferConfigData<typeof DefaultConfigAI>>(DefaultConfigAI.memory_uid);
 
     const [selectedProvider, setSelectedProvider] = useState<AIProviderType>(AIProviders.OPENAI);
     const [selectedModel, setSelectedModel] = useState<string>('');

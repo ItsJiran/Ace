@@ -34,10 +34,16 @@ export const ConfigStorageSchema = z.object({
     version: z.union([z.number(), z.string()]),
     config: ConfigSchemaMapSchema,
 });
-export type ConfigStorageType = z.infer<typeof ConfigStorageSchema>;
+export type ConfigStorageType<TVersions extends readonly string[] = readonly string[]> = z.infer<typeof ConfigStorageSchema> & {
+    version: TVersions[number];
+};
 
 export const ConfigStorageMapSchema = z.record(
     z.string(),
     ConfigStorageSchema,
 );
 export type ConfigStorageMapType = z.infer<typeof ConfigStorageMapSchema>;
+
+/** Derive the runtime config data type from a DefaultConfig's schema map. */
+export type InferConfigData<T extends ConfigStorageType> =
+    z.infer<z.ZodObject<Extract<T['config'], Record<string, z.ZodTypeAny>>>>;

@@ -2,7 +2,6 @@ import { initChatModel } from 'langchain';
 import type { z } from 'zod';
 import { AgentConfigType, type AIProviderType } from '#/shared/schemas/ai.ts';
 import resolveApiKey from '#/app-background/lib/utils/ai/resolve-api-key';
-import { getCachedApiKey } from '#/app-background/lib/utils/ai/api-key-session-cache';
 
 
 interface MainModelOptions {
@@ -60,8 +59,7 @@ export default async function mainModel(
 
     const resolvedApiKey =
         options.apiKey ??
-        (await resolveApiKey(provider as AIProviderType)) ??
-        getCachedApiKey(provider);
+        (await resolveApiKey(provider as AIProviderType));
 
     // Build model identifier: "provider:model" or just "provider"
     const modelIdentifier = modelName ? `${provider}:${modelName}` : provider;
