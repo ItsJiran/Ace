@@ -1,65 +1,100 @@
 /**
- * Review Node — evaluates the result of the action and summarizes
- * for the next thought cycle.
+ * Review Node — evaluates the action result.
  *
- * Populates current_cycle.review_result with a concise summary.
+ * Quick heuristic: [UNAVAILABLE] → auto-redirect to action node.
+ * Otherwise → summarize via LLM → route to thought (next cycle).
  */
 
 import { SystemMessage } from '@langchain/core/messages';
-import { getConfig } from '@langchain/langgraph';
+import { Command, END, getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
 import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart } from '#/app-background/lib/utils/ai/emit-graph-event';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
 import type { AceAgentV3State } from '../../types';
 
-// ── Structured output ──────────────────────────────────────────────────────
+// ── Structured output ─────────────────────────────────────────────────────
 
 const ReviewResult = z.object({
     summary: z.string().describe(
-        'Concise summary of what happened in this action. What was done, what was the result? ' +
-        'This will be used by the next thought cycle as context.',
-    ),
-    is_complete: z.boolean().describe(
-        'Whether the user request is fully satisfied. True only when all work is done.',
+        'Concise 1-2 sentence summary of what happened. What was done, what was the result?\n' +
+        'Examples:\n' +
+        '  - "User was greeted successfully with a friendly response."\n' +
+        '  - "package.json was read — Express is not yet installed."\n' +
+        '  - "npm install express completed successfully — Express 4.21 added to dependencies."',
     ),
 });
 
-// ── Prompt ─────────────────────────────────────────────────────────────────
+// ── Prompt ────────────────────────────────────────────────────────────────
 
 function reviewPrompt(state: AceAgentV3State): string {
     const cycle = state.current_cycle;
     if (!cycle) return 'No active cycle to review.';
 
+    // Read the action result from the last message
+    const msgs = state.messages ?? [];
+    const lastMsg = msgs[msgs.length - 1];
+    const actionResult = typeof lastMsg?.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg?.content ?? 'No output.');
+
     return [
-        'Review the result of this action cycle and summarize what happened.',
+        'Summarize what happened in this action cycle.',
         '',
-        '### Cycle',
-        `Subject: "${cycle.subject}"`,
-        `Thought: "${cycle.thought}"`,
-        `Action: ${cycle.action.target.name} — "${cycle.action.thought}"`,
+        '### Action',
+        `Target: ${cycle.action.target.name}`,
+        `Plan: "${cycle.action.thought}"`,
+        `Output: "${actionResult.slice(0, 300)}"`,
+        '',
+        '### Context',
+        `User request: "${state.original_prompt}"`,
+        `Agent analysis: "${cycle.thought}"`,
         '',
         '### Instructions',
         '- Write a concise 1-2 sentence summary of what was accomplished.',
-        '- Set is_complete=true ONLY if the original user request is fully done.',
-        '- Be objective: note failures, partial results, or what still needs work.',
-        '',
-        'This summary will be used by the next thought cycle as context.',
+        '- Be objective: note what was done and what the outcome was.',
+        '- This summary will be used by the next thought cycle.',
     ].join('\n');
 }
 
 // ── Node ───────────────────────────────────────────────────────────────────
 
 export function createReviewNode() {
-    return async function reviewNode(state: AceAgentV3State): Promise<Partial<AceAgentV3State>> {
+    return async function reviewNode(state: AceAgentV3State): Promise<Partial<AceAgentV3State> | Command> {
         const config = getConfig();
         const threadUid = (config as any)?.configurable?.thread_id;
         if (threadUid) emitNodeStart(threadUid, 'review', 'ace-v3', state).catch(() => {});
 
-        if (state.is_stopped) return { result_summary: 'Stopped.', from_node: 'review' };
+        if (threadUid && !KernelEngine.readMemory(`thread:active:${threadUid}`)) {
+            return new Command({ goto: END });
+        }
 
         const cycle = state.current_cycle;
-        if (!cycle) return { target_node: 'thought', result_summary: 'No cycle to review.', from_node: 'review' };
+        if (!cycle) return { target_node: 'thought', from_node: 'review' };
 
+        // Quick heuristic: [UNAVAILABLE] in last message → redirect back to action
+        const msgs = state.messages ?? [];
+        const lastContent = typeof msgs[msgs.length - 1]?.content === 'string'
+            ? msgs[msgs.length - 1].content as string
+            : '';
+        const isUnavailable = lastContent.startsWith('⏳') || lastContent.includes('sedang dalam tahap pengembangan');
+
+        if (isUnavailable) {
+            const failureReason = `Action ${cycle.action.target.name} is not yet implemented.`;
+            const updatedCycle = { ...cycle, review_result: `[FAILED] ${failureReason}` };
+            const cycles = state.cycles ?? [];
+            const updatedCycles = cycles.length > 0
+                ? [...cycles.slice(0, -1), updatedCycle]
+                : [updatedCycle];
+
+            return {
+                cycles: updatedCycles,
+                current_cycle: updatedCycle,
+                target_node: 'action',
+                target_node_reason: failureReason,
+                from_node: 'review',
+            };
+        }
+
+        // Summarize
         const result = await invokeLLM({
             runtime: getConfig() as never,
             structuredOutput: ReviewResult,
@@ -68,22 +103,20 @@ export function createReviewNode() {
             graphName: 'ace-v3',
         });
 
-        const updatedCycle = { ...cycle, review_result: result.summary };
+        const summary = result?.summary ?? 'Action completed.';
+
+        const updatedCycle = { ...cycle, review_result: summary };
         const cycles = state.cycles ?? [];
-        // Replace the last cycle with the reviewed one
         const updatedCycles = cycles.length > 0
             ? [...cycles.slice(0, -1), updatedCycle]
             : [updatedCycle];
 
-        const output: Partial<AceAgentV3State> = {
+        return {
             cycles: updatedCycles,
             current_cycle: updatedCycle,
-            target_node: result.is_complete ? '__end__' : 'thought',
-            target_node_reason: result.summary,
+            target_node: 'thought',
+            target_node_reason: summary,
             from_node: 'review',
-            result_summary: result.summary,
         };
-
-        return output;
     };
 }

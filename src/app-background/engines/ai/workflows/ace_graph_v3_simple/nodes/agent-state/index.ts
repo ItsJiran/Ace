@@ -23,10 +23,6 @@ export const AceAgentV3State = Annotation.Root({
         reducer: (_, next) => next,
         default: () => 0,
     }),
-    is_stopped: Annotation<boolean | undefined>({
-        reducer: (_, next) => next,
-        default: () => undefined,
-    }),
     target_node: Annotation<string | undefined>({
         reducer: (_, next) => next,
         default: () => undefined,
@@ -38,9 +34,5 @@ export const AceAgentV3State = Annotation.Root({
     from_node: Annotation<string | undefined>({
         reducer: (_, next) => next,
         default: () => undefined,
-    }),
-    result_summary: Annotation<string>({
-        reducer: (_, next) => next,
-        default: () => '',
     }),
 });

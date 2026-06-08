@@ -12,8 +12,8 @@ const aceV3Graph = {
         { id: 'action_tool', label: 'action_tool', graph: 'ace-v3', type: 'tool' },
         { id: 'action_context', label: 'action_context', graph: 'ace-v3', type: 'tool' },
         { id: 'action_mcp', label: 'action_mcp', graph: 'ace-v3', type: 'tool' },
+        { id: 'action_end', label: 'action_end', graph: 'ace-v3', type: 'end' },
         { id: 'review', label: 'review', graph: 'ace-v3', type: 'llm' },
-        { id: '__end__', label: 'END', graph: 'ace-v3', type: 'end' },
     ],
     edges: [
         { source: '__start__', target: 'thought', graph: 'ace-v3', type: 'route' },
@@ -22,12 +22,13 @@ const aceV3Graph = {
         { source: 'action', target: 'action_tool', graph: 'ace-v3', type: 'route' },
         { source: 'action', target: 'action_context', graph: 'ace-v3', type: 'route' },
         { source: 'action', target: 'action_mcp', graph: 'ace-v3', type: 'route' },
+        { source: 'action', target: 'action_end', graph: 'ace-v3', type: 'route' },
         { source: 'action_speak', target: 'review', graph: 'ace-v3', type: 'route' },
         { source: 'action_tool', target: 'review', graph: 'ace-v3', type: 'route' },
         { source: 'action_context', target: 'review', graph: 'ace-v3', type: 'route' },
         { source: 'action_mcp', target: 'review', graph: 'ace-v3', type: 'route' },
         { source: 'review', target: 'thought', graph: 'ace-v3', type: 'route' },
-        { source: 'review', target: '__end__', graph: 'ace-v3', type: 'route' },
+        { source: 'review', target: 'action', graph: 'ace-v3', type: 'route' },
     ],
 };
 

@@ -12,10 +12,11 @@ import SingletonAgentInstance from './ai/agent-instance';
 import { createAIStreamEventBridge } from './ai/agent-stream-events';
 import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai.ts';
 import { AgentStreamAnyEvent } from '#/shared/schemas/agent-stream-events';
-import { getActiveGraphStructure } from './ai/workflows/ace_graph_v2_simple/graph_structure';
+import { getActiveGraphStructure } from './ai/workflows/ace_graph_v3_simple/graph_structure';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 
@@ -135,7 +136,7 @@ class AgentThreadEngineSingleton extends Engine {
         );
 
         // --- Graph structure (for AgentGraphDebug) ---
-        // Uses structured definition from ace_graph_v2_simple.
+        // Uses structured definition from ace_graph_v3_simple.
         await RPCEngine.handle(
             'ai.getGraph',
             async () => {
@@ -451,6 +452,7 @@ class AgentThreadEngineSingleton extends Engine {
                 const currentRun = this.activeThreadRuns.get(input.thread_uid);
                 if (currentRun?.promise === runPromise) {
                     this.activeThreadRuns.delete(input.thread_uid);
+                    KernelEngine.deleteMemory(`thread:active:${input.thread_uid}`);
                 }
             });
 
@@ -499,6 +501,9 @@ class AgentThreadEngineSingleton extends Engine {
             started_at: Date.now(),
         });
 
+        // Track active thread in KernelEngine so nodes can detect interruption
+        KernelEngine.createOrUpdateMemory(`thread:active:${thread_uid}`, true, 'agent-thread-engine');
+
         return {
             ok: true,
             started: true,
@@ -511,18 +516,9 @@ class AgentThreadEngineSingleton extends Engine {
         const activeRun = this.activeThreadRuns.get(thread_uid);
         if (!activeRun) return false;
 
-        // Inject is_interrupted flag into root state so running nodes
-        // (and the supervision edge liveness check) detect the interruption
-        // and exit gracefully via __end__.
-        try {
-            await SingletonAgentInstance.getInstance().updateState(
-                { configurable: { thread_id: thread_uid } },
-                { is_stopped: true },
-            );
-            activeRun.wasInterrupted = true;
-        } catch {
-            // updateState may fail if graph isn't running — that's fine.
-        }
+        // Mark thread as inactive in KernelEngine — nodes check this to exit
+        KernelEngine.deleteMemory(`thread:active:${thread_uid}`);
+        activeRun.wasInterrupted = true;
 
         // Let the graph finish on its own — supervision edge will detect
         // is_interrupted and route to __end__ cleanly.

@@ -94,6 +94,7 @@ function SystemAIChatWindowBody({
         setSelectedProvider,
         selectedModel,
         setSelectedModel,
+        providerOptions,
         modelOptions,
         ensureSelectedModel,
         fetchModels,
@@ -203,6 +204,7 @@ function SystemAIChatWindowBody({
                 setSelectedProvider={setSelectedProvider}
                 resolvedModel={resolvedModel}
                 setSelectedModel={setSelectedModel}
+                providerOptions={providerOptions}
                 modelOptions={modelOptions}
                 fetchModels={fetchModels}
                 handleCreateThread={handleCreateThread}

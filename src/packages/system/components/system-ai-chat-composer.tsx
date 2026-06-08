@@ -1,15 +1,15 @@
 import { ArrowUp, PauseCircle, Plus, RefreshCcw } from 'lucide-react';
 
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
-import type { AIProviderType } from '#/shared/schemas/ai';
 
 type ModelOption = { id: string; name?: string };
 
 type SystemAIChatComposerProps = {
-	selectedProvider: AIProviderType;
-	setSelectedProvider: (provider: AIProviderType) => void;
+	selectedProvider: string;
+	setSelectedProvider: (provider: string) => void;
 	resolvedModel: string;
 	setSelectedModel: (model: string) => void;
+	providerOptions: string[];
 	modelOptions: ModelOption[];
 	fetchModels: () => Promise<unknown>;
 	handleCreateThread: () => Promise<void>;
@@ -25,6 +25,7 @@ export function SystemAIChatComposer({
 	setSelectedProvider,
 	resolvedModel,
 	setSelectedModel,
+	providerOptions,
 	modelOptions,
 	fetchModels,
 	handleCreateThread,
@@ -41,12 +42,16 @@ export function SystemAIChatComposer({
 			<div className="flex flex-wrap items-center gap-2">
 				<select
 					value={selectedProvider}
-					onChange={(event) => setSelectedProvider(event.target.value as AIProviderType)}
+					onChange={(event) => setSelectedProvider(event.target.value)}
 					className={[targets.input.first, 'min-w-[112px] rounded-xl px-3 py-2 text-sm'].join(' ')}
 				>
-					<option value="openai">openai</option>
-					<option value="google">google</option>
-					<option value="anthropic">anthropic</option>
+					{providerOptions.length === 0 ? (
+						<option value={selectedProvider}>{selectedProvider}</option>
+					) : (
+						providerOptions.map((name) => (
+							<option key={name} value={name}>{name}</option>
+						))
+					)}
 				</select>
 
 				<select

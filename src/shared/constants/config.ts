@@ -201,3 +201,4 @@ export const DefaultConfigAI: ConfigStorageType<typeof CONFIG_AI_VERSIONS> = {
     version: '0.0.1',
     config: ConfigAI_V0_0_1_SchemaMap,
 };
+export type DefaultConfigAIType = typeof DefaultConfigAI;

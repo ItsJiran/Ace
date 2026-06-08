@@ -2,7 +2,7 @@ import { initChatModel } from 'langchain';
 import type { z } from 'zod';
 import { AgentConfigType, type AIProviderType } from '#/shared/schemas/ai.ts';
 import resolveApiKey from '#/app-background/lib/utils/ai/resolve-api-key';
-
+import { ConfigEngine } from '#/shared/engines/config-engine';
 
 interface MainModelOptions {
     /** AI provider (e.g. 'openai', 'anthropic'). Resolved from config if not given. */
@@ -13,23 +13,24 @@ interface MainModelOptions {
     apiKey?: string;
     /** Optional runtime config for provider resolution. */
     runtime?: AgentConfigType;
+    tools?: any;
 }
 
 interface MainModelWithStructuredOutputOptions extends MainModelOptions {
     /** Zod schema for structured output. */
     structuredOutput: z.ZodType<any>;
-    tools?: never;
+    tools?: any;
 }
 
 interface MainModelWithToolsOptions extends MainModelOptions {
-    structuredOutput?: never;
+    structuredOutput?: any;
     /** Tools to bind to the model. */
     tools: Array<{ type: string; [key: string]: unknown }>;
 }
 
 interface MainModelPlainOptions extends MainModelOptions {
-    structuredOutput?: never;
-    tools?: never;
+    structuredOutput?: any;
+    tools?: any;
 }
 
 /**
@@ -47,36 +48,43 @@ interface MainModelPlainOptions extends MainModelOptions {
  * const model = await mainModel({ provider: 'openai', tools: [{ type: 'web_search' }] });
  */
 export default async function mainModel(
-    options: MainModelWithStructuredOutputOptions | MainModelWithToolsOptions | MainModelPlainOptions,
+    options:
+        | MainModelWithStructuredOutputOptions
+        | MainModelWithToolsOptions
+        | MainModelPlainOptions,
 ) {
     console.log('[mainModel] Initializing model with options:', options);
 
-    const provider =
-        (options.runtime?.configurable?.provider as AIProviderType | undefined) ??
-        'openai';
+    const provider = (options.runtime?.configurable?.provider as string | undefined) ?? 'openai';
 
-    const modelName = options.model;
+    const modelName = options.model ?? options.runtime?.configurable?.model;
 
-    const resolvedApiKey =
-        options.apiKey ??
-        (await resolveApiKey(provider as AIProviderType));
+    const resolvedApiKey = options.apiKey ?? (await resolveApiKey(provider as AIProviderType));
 
     // Build model identifier: "provider:model" or just "provider"
     const modelIdentifier = modelName ? `${provider}:${modelName}` : provider;
 
     console.log(`[mainModel] Resolved model identifier: ${modelIdentifier}`);
 
-    const baseModel = await initChatModel(`${options.runtime?.configurable?.provider}:${options.runtime?.configurable.model}`, {
+    // Resolve gateway URL from config (e.g. DeepSeek, Ollama, OpenRouter)
+    const providers = ConfigEngine.getConfigItem<Record<string, { gateway?: string }>>('ai', 'ai.providers');
+    const gateway = providers?.[provider]?.gateway || undefined;
+    if (gateway) {
+        console.log(`[mainModel] Using custom gateway for ${provider}: ${gateway}`);
+    }
+
+    const baseModel = await initChatModel(modelIdentifier, {
         ...(resolvedApiKey ? { apiKey: resolvedApiKey } : {}),
+        ...(gateway ? { configuration: { baseURL: gateway } } : {}),
     });
 
+    // Always bind tools (empty array if none) — DeepSeek needs tool_choice: 'auto'
+    const tools = options.tools ?? [];
+    const model = baseModel.bindTools(tools, { tool_choice: 'auto' });
+
     if (options.structuredOutput) {
-        return baseModel.withStructuredOutput(options.structuredOutput);
+        return model.withStructuredOutput(options.structuredOutput);
     }
 
-    if (options.tools) {
-        return baseModel.bindTools(options.tools);
-    }
-
-    return baseModel;
+    return model;
 }

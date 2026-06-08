@@ -92,9 +92,28 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
             const result = await model.invoke(messages);
             const durationMs = Date.now() - startTime;
 
-            const resultPreview = typeof result === 'string'
-                ? result
-                : JSON.stringify(result);
+            // With structured output, model.invoke() returns AIMessage with parsed
+            // data in tool_calls or additional_kwargs. Extract the actual data.
+            let resolved: unknown = result;
+            if (hasStructuredOutput && result && typeof result === 'object' && 'content' in result) {
+                const msg = result as { content: unknown; additional_kwargs?: Record<string, unknown>; tool_calls?: Array<{ args: unknown }> };
+                const toolCall = msg.tool_calls?.[0];
+                if (toolCall?.args) {
+                    resolved = toolCall.args;
+                } else if (msg.additional_kwargs) {
+                    resolved = msg.additional_kwargs;
+                } else {
+                    try {
+                        resolved = typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content;
+                    } catch {
+                        resolved = msg.content;
+                    }
+                }
+            }
+
+            const resultPreview = typeof resolved === 'string'
+                ? resolved
+                : JSON.stringify(resolved);
 
             emitLLMEnd(threadUid, options.nodeName, options.graphName, {
                 attempt,
@@ -102,7 +121,7 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
                 resultPreview,
             }).catch(() => {});
 
-            return result;
+            return resolved;
         } catch (error: any) {
             if (attempt > MAX_RETRIES) throw error;
 

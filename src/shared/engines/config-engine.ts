@@ -1,5 +1,6 @@
 import { FSEngine } from './fs-engine';
 import { KernelEngine } from './kernel-engine';
+import { RPCEngine } from './rpc-engine';
 import { DefaultConfigGeneral, DefaultConfigKeybinds, DefaultConfigAI } from '#/shared/constants/config';
 import { EventBus } from './event-engine';
 import type {
@@ -50,7 +51,18 @@ class ConfigEngineSingleton extends Engine {
         }
     }
 
-    async setupEventRoutes() {}
+    async setupEventRoutes() {
+        // RPC: allow the desktop-side ConfigEngine to ping the background
+        // to re-sync a storage from disk after a config update.
+        await RPCEngine.handle(
+            'config.syncFileToRam',
+            async (payload: { storageKey?: string }) => {
+                const key = payload.storageKey ?? 'ai';
+                await this.syncConfigFileToRam(key);
+            },
+            { owner: this.constructor.name },
+        );
+    }
 
     async setupKernelSpace() {
         KernelEngine.registerSystemMemory(
@@ -192,6 +204,11 @@ class ConfigEngineSingleton extends Engine {
                 value,
                 config: nextConfig,
             },
+        });
+
+        // Notify the background process to re-sync its RAM from the updated file
+        RPCEngine.invoke('config.syncFileToRam', { storageKey }).catch((err) => {
+            this.log(`Failed to notify background of config sync for ${storageKey}:`, err);
         });
     }
 

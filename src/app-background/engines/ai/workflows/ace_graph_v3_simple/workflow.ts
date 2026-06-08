@@ -9,15 +9,16 @@ import { createActionTool } from './nodes/action_tool';
 import { createActionContext } from './nodes/action_context';
 import { createActionMcp } from './nodes/action_mcp';
 import { createReviewNode } from './nodes/review';
+import { createActionEnd } from './nodes/action_end';
 
 /**
  * ACE Graph v3 — Cycle-based architecture.
  *
- *   START → thought → action → review ─┐
- *             ↑                         │
- *             └─────────────────────────┘ (next cycle)
- *                           │
- *                          END (review decides done)
+ *   START → thought → action → [sub-action] → review ─┐
+ *             ↑                                        │
+ *             └────────────────────────────────────────┘ (next cycle)
+ *                          │
+ *                     action_end → END (thought decides done)
  */
 export function compileAceGraphV3(options?: {
     checkpointer?: BaseCheckpointSaver;
@@ -33,6 +34,7 @@ export function compileAceGraphV3(options?: {
         .addNode('action_tool', createActionTool())
         .addNode('action_context', createActionContext())
         .addNode('action_mcp', createActionMcp())
+        .addNode('action_end', createActionEnd())
         .addNode('review', createReviewNode())
 
         // Entry
@@ -41,9 +43,9 @@ export function compileAceGraphV3(options?: {
         // thought → action (always)
         .addEdge('thought', 'action')
 
-        // action → routes to sub-action node
+        // action → routes to sub-action node (including action_end)
         .addConditionalEdges('action', (s) => (s as any).target_node ?? 'action_speak', [
-            'action_speak', 'action_tool', 'action_context', 'action_mcp',
+            'action_speak', 'action_tool', 'action_context', 'action_mcp', 'action_end', '__end__',
         ])
 
         // All sub-actions → review
@@ -52,9 +54,12 @@ export function compileAceGraphV3(options?: {
         .addEdge('action_context', 'review')
         .addEdge('action_mcp', 'review')
 
-        // review → thought (next cycle) or END
+        // action_end → END
+        .addEdge('action_end', END)
+
+        // review → thought (normal) or action (retry on failure)
         .addConditionalEdges('review', (s) => (s as any).target_node ?? 'thought', [
-            'thought', '__end__',
+            'thought', 'action', '__end__',
         ]);
 
     return graph.compile({ checkpointer, store });

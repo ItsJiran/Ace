@@ -1,29 +1,33 @@
 /**
  * Action: MCP — Model Context Protocol integration.
- * STUB — not yet implemented.
+ * PENDING — under development.
  */
 
 import { AIMessage } from '@langchain/core/messages';
-import { getConfig } from '@langchain/langgraph';
+import { Command, END, getConfig } from '@langchain/langgraph';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
-import type { AceAgentV3State } from '../../../types';
+import { KernelEngine } from '#/shared/engines/kernel-engine';
+import type { AceAgentV3State } from '../../types';
 
 export function createActionMcp() {
-    return async function actionMcp(state: AceAgentV3State): Promise<Partial<AceAgentV3State>> {
+    return async function actionMcp(state: AceAgentV3State): Promise<Partial<AceAgentV3State> | Command> {
         const config = getConfig();
         const threadUid = (config as any)?.configurable?.thread_id;
         if (threadUid) emitNodeStart(threadUid, 'action_mcp', 'ace-v3', state).catch(() => {});
 
-        if (state.is_stopped) return { result_summary: 'Stopped.', from_node: 'action_mcp' };
+        if (threadUid && !KernelEngine.readMemory(`thread:active:${threadUid}`)) {
+            return new Command({ goto: END });
+        }
 
         const cycle = state.current_cycle;
-        const actionThought = cycle?.action?.thought ?? 'Execute MCP action.';
+        const actionPlan = cycle?.action?.thought ?? 'Execute MCP action.';
+
+        const msg = `⏳ Action MCP sedang dalam tahap pengembangan. Rencana: "${actionPlan}". Silakan coba action lain atau akhiri sesi.`;
 
         const output: Partial<AceAgentV3State> = {
-            messages: [new AIMessage({ content: `[STUB] MCP: ${actionThought}`, name: 'ace-v3-mcp' })],
+            messages: [new AIMessage({ content: msg, name: 'ace-v3-mcp' })],
             target_node: 'review',
             from_node: 'action_mcp',
-            result_summary: `[STUB] MCP executed: ${actionThought.slice(0, 100)}`,
         };
 
         if (threadUid) emitNodeEnd(threadUid, 'action_mcp', 'ace-v3', output).catch(() => {});
