@@ -1,5 +1,3 @@
-import { WorkflowNodeNames } from "../../shared/schemas/ai";
-
 /**
  * The reason why I need to redeclare the type is that in the LangGraph documentation, I can't find any clear definition of the event that is emitted in the stream, and 
  * also the event is emitted in a very flexible way, which makes it hard for us to define a clear type for the event. So I decided to 
@@ -21,7 +19,7 @@ export type AgentStreamEvent = {
     type : string;
     seq : number | null;
     data : Record<string, unknown>;
-    node : typeof WorkflowNodeNames[keyof typeof WorkflowNodeNames] | null;
+    node : string | null;
     /** Raw LangGraph event — preserved for debugging. */
     raw_graph_event?: unknown;
 }

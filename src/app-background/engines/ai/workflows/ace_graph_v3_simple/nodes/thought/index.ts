@@ -187,7 +187,7 @@ export function createThoughtNode() {
 
         const output: Partial<AceAgentV3State> = {
             messages: [new AIMessage({
-                content: `[${actionType}] ${thoughtStr.slice(0, 200)}`,
+                content: `${thoughtStr} ${actionType} ${actionReason}`,
                 name: 'ace-v3-thought',
             })],
             cycles: [cycle],
@@ -197,15 +197,6 @@ export function createThoughtNode() {
             target_node_reason: actionReason,
             from_node: 'thought',
         };
-
-        if (isEnd) {
-            // Append a courtesy summary and route directly to END
-            const summary = buildEndSummary(state, thoughtStr);
-            output.messages!.push(new AIMessage({
-                content: `✅ ${summary}`,
-                name: 'ace-v3-end',
-            }));
-        }
 
         if (threadUid) emitNodeEnd(threadUid, 'thought', 'ace-v3', output, {
             cycle: cycleNum,
@@ -225,10 +216,4 @@ function lastCycleReview(state: AceAgentV3State): string | undefined {
         return lastMsg.content.slice(0, 300);
     }
     return undefined;
-}
-
-/** Build a short end-of-session summary. */
-function buildEndSummary(state: AceAgentV3State, finalThought: string): string {
-    const totalActions = state.cycles?.length ?? 0;
-    return `Session completed after ${totalActions} cycle(s). ${finalThought.slice(0, 200)}`;
 }

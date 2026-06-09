@@ -1,21 +1,17 @@
 const WorkflowNodes: string[] = ['agent', 'reasoning', 'router', 'orchestrator', 'executor', 'observe'];
 import {
+    AgentStreamAnyEvent,
     AgentStreamEvent,
-    AgentStreamMessageContentBlockEvent,
-    AgentStreamMessageFinishEvent,
-    AgentStreamMessageStartEvent,
-    AgentStreamMessageUsageEvent,
-    AgentStreamToolDeltaEvent,
-    AgentStreamToolErrorEvent,
-    AgentStreamToolFinishedEvent,
-    AgentStreamToolStartedEvent,
+    AgentStreamLifecycleEvent,
+    AgentStreamMessageEvent,
+    AgentStreamToolEvent,
 } from '#/shared/schemas/agent-stream-events';
 
 /**
  * Extracts and normalises all relevant fields from a raw LangGraph stream event into a
  * typed `AgentStreamEvent`, so callers never have to repeat the same defensive casts.
  */
-export function extractAgentStreamEvent(event: any): any | null | undefined {
+export function extractAgentStreamEvent(event: any): AgentStreamAnyEvent | null | undefined {
     if (event == null || typeof event !== 'object') return null;
 
     switch (event.method) {
@@ -53,10 +49,7 @@ export function extractAgentStreamEvent(event: any): any | null | undefined {
 export function resolveStreamToolEvent(
     event: any,
 ):
-    | AgentStreamToolStartedEvent
-    | AgentStreamToolDeltaEvent
-    | AgentStreamToolErrorEvent
-    | AgentStreamToolFinishedEvent
+    | AgentStreamToolEvent
     | null
     | undefined {
     if (event?.method != 'tools') return null;
@@ -122,7 +115,7 @@ export function resolveStreamToolEvent(
 
 // + --------- Resolve Lifecycle Event -----------------
 
-export function resolveStreamLifecycleEvent(event: any): any | null | undefined {
+export function resolveStreamLifecycleEvent(event: any): AgentStreamLifecycleEvent | null | undefined {
     const node = resolveNodeFromNamespace(event?.params?.namespace);
     if (event?.method != 'lifecycle') return null;
 
@@ -167,10 +160,7 @@ export function resolveStreamLifecycleEvent(event: any): any | null | undefined 
 export function resolveStreamMessageEvent(
     event: any,
 ):
-    | AgentStreamMessageStartEvent
-    | AgentStreamMessageFinishEvent
-    | AgentStreamMessageUsageEvent
-    | AgentStreamMessageContentBlockEvent
+    | AgentStreamMessageEvent
     | null
     | undefined {
     const node = resolveNodeFromNamespace(event?.params?.namespace);
