@@ -17,6 +17,8 @@ type SystemAIChatMessagesHistoryProps = {
     parentHeight: number | null;
 };
 
+import { XmlTagRenderer } from './xml-tag-renderer';
+
 export function SystemAIChatMessagesHistory({
     turns,
     targets,
@@ -45,7 +47,7 @@ export function SystemAIChatMessagesHistory({
                     key={`turn-${turn_index}`}
                     ref={isLastTurn ? lastTurnRef : undefined}
                     className={isLastTurn ? 'w-full' : 'h-fit w-full'}
-                    style={isLastTurn && parentHeight != null ? { "min-height": parentHeight } : undefined}
+                    style={isLastTurn && parentHeight != null ? { minHeight: parentHeight } : undefined}
                 >
                     {/* --- HUMAN MESSAGE --- */}
                     {turn.human ? (
@@ -81,9 +83,7 @@ export function SystemAIChatMessagesHistory({
                                             if (response.type === 'AIMessage') {
                                                 return (
                                                     <div key={`resp-${index}`}>
-                                                        <div className="whitespace-pre-wrap">
-                                                            {response.content}
-                                                        </div>
+                                                        <XmlTagRenderer content={response.content} />
                                                     </div>
                                                 );
                                             }
@@ -110,8 +110,8 @@ export function SystemAIChatMessagesHistory({
                                                     switch (item.type) {
                                                         case 'messages':
                                                             return (
-                                                                <div key={`eph-${ephemeral_index}`} className="whitespace-pre-wrap">
-                                                                    {item.content}
+                                                                <div key={`eph-${ephemeral_index}`}>
+                                                                    <XmlTagRenderer content={item.content as string[]} />
                                                                 </div>
                                                             );
 

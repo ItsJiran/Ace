@@ -7,10 +7,12 @@ import { AIMessage } from '@langchain/core/messages';
 import { Command, END, getConfig } from '@langchain/langgraph';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
+import { buildErrorRecoveryCommand } from '../recovery-error-helper';
 import type { AceAgentV3State } from '../../types';
 
 export function createActionTool() {
     return async function actionTool(state: AceAgentV3State): Promise<Partial<AceAgentV3State> | Command> {
+        try {
         const config = getConfig();
         const threadUid = (config as any)?.configurable?.thread_id;
         if (threadUid) emitNodeStart(threadUid, 'action_tool', 'ace-v3', state).catch(() => {});
@@ -32,5 +34,9 @@ export function createActionTool() {
 
         if (threadUid) emitNodeEnd(threadUid, 'action_tool', 'ace-v3', output).catch(() => {});
         return output;
+        } catch (error) {
+            console.error('[action_tool] Error:', error);
+            return buildErrorRecoveryCommand(error, 'action_tool');
+        }
     };
 }

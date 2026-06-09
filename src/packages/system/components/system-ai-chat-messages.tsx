@@ -4,6 +4,7 @@ import type {
     AgentClientThreadRuntimeState,
 } from '#/shared/schemas/agent-client-ephemeral';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
+import { RPCEngine } from '#/shared/engines/rpc-engine';
 import { SystemAIChatMessagesEmptyState } from './system-ai-chat-messages-empty-state';
 import { SystemAIChatMessagesHistory } from './system-ai-chat-messages-history';
 import { AgentChatTurn } from '#/shared/schemas/agent-thread-state';
@@ -40,6 +41,19 @@ export function SystemAIChatMessages({
         ro.observe(el);
         return () => ro.disconnect();
     }, []);
+
+    // Handle interrupt Continue button click from InterruptBlock
+    useEffect(() => {
+        const handler = () => {
+            if (currentThreadUid) {
+                RPCEngine.invoke('ai.continueThreadPrompt', {
+                    thread_uid: currentThreadUid,
+                }).catch(console.error);
+            }
+        };
+        window.addEventListener('ace:interrupt-continue', handler);
+        return () => window.removeEventListener('ace:interrupt-continue', handler);
+    }, [currentThreadUid]);
 
     return (
         <div

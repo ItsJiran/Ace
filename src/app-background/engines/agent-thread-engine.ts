@@ -1,4 +1,5 @@
 import { HumanMessage } from '@langchain/core/messages';
+import { Command } from '@langchain/langgraph';
 import { AIProviders } from '#/shared/constants/ai.ts';
 
 import {
@@ -39,7 +40,6 @@ class AgentThreadEngineSingleton extends Engine {
             controller: AbortController;
             promise: Promise<void>;
             started_at: number;
-            wasInterrupted?: boolean;
         }
     >();
 
@@ -97,6 +97,14 @@ class AgentThreadEngineSingleton extends Engine {
             'ai.stopThreadPrompt',
             async (payload: { thread_uid?: string }) => {
                 return await this.stopThreadPrompt(String(payload.thread_uid || ''));
+            },
+            { owner: this.constructor.name },
+        );
+
+        await RPCEngine.handle(
+            'ai.continueThreadPrompt',
+            async (payload: { thread_uid?: string }) => {
+                return await this.continueThreadPrompt(String(payload.thread_uid || ''));
             },
             { owner: this.constructor.name },
         );
@@ -404,23 +412,36 @@ class AgentThreadEngineSingleton extends Engine {
                 ),
             );
 
-            // Check if this run was interrupted — emit accordingly.
-            const activeRun = this.activeThreadRuns.get(thread_uid);
-            const wasInterrupted = activeRun?.wasInterrupted === true;
+            // Check if the signal was aborted (stopThreadPrompt called)
+            if (signal?.aborted) {
+                await this.emitProtocolThreadEvent(thread_uid, {
+                    channel: 'invoke',
+                    type: 'invoke-interrupted',
+                    seq: null,
+                    node: null,
+                    data: { thread_uid },
+                } as AgentStreamAnyEvent);
+                return;
+            }
 
             await this.emitProtocolThreadEvent(thread_uid, {
                 channel: 'invoke',
-                type: wasInterrupted ? 'invoke-interrupted' : 'invoke-completed',
+                type: 'invoke-completed',
                 seq: null,
                 node: null,
                 data: { thread_uid },
             } as AgentStreamAnyEvent);
         } catch (error) {
-            this.log(`[AgentThreadEngine] stream failed for ${thread_uid}:`, error);
+            // Detect abort vs genuine error
+            const isAborted =
+                error instanceof Error &&
+                (error.name === 'AbortError' || error.message?.includes('abort'));
+
+            this.log(`[AgentThreadEngine] stream ${isAborted ? 'aborted' : 'failed'} for ${thread_uid}:`, error);
 
             await this.emitProtocolThreadEvent(thread_uid, {
                 channel: 'invoke',
-                type: 'invoke-failed',
+                type: isAborted ? 'invoke-interrupted' : 'invoke-failed',
                 seq: null,
                 node: null,
                 data: {
@@ -518,12 +539,121 @@ class AgentThreadEngineSingleton extends Engine {
 
         // Mark thread as inactive in KernelEngine — nodes check this to exit
         KernelEngine.deleteMemory(`thread:active:${thread_uid}`);
-        activeRun.wasInterrupted = true;
 
-        // Let the graph finish on its own — supervision edge will detect
-        // is_interrupted and route to __end__ cleanly.
+        // Trigger AbortController — signal propagates to LangGraph stream and LLM calls
+        activeRun.controller.abort();
+
+        // Wait for the aborted run to settle
         await activeRun.promise;
         return true;
+    }
+
+    /**
+     * Resumes a graph that was paused via interrupt() (e.g. recovery_error).
+     * Sends Command({ resume: null }) so the graph continues from the interrupt point.
+     */
+    public async continueThreadPrompt(thread_uid: string) {
+        if (!thread_uid) return { ok: false, thread_uid };
+
+        this.knownThreadIds.add(thread_uid);
+
+        const existingRun = this.activeThreadRuns.get(thread_uid);
+        if (existingRun) {
+            return {
+                ok: true,
+                started: false,
+                thread_uid,
+                already_running: true,
+                started_at: existingRun.started_at,
+            };
+        }
+
+        const controller = new AbortController();
+        const runPromise = this.runThreadContinue(thread_uid, controller.signal)
+            .catch((error) => {
+                this.log(`[AgentThreadEngine] continue run failed for ${thread_uid}:`, error);
+            })
+            .finally(() => {
+                this.activeThreadRuns.delete(thread_uid);
+                KernelEngine.deleteMemory(`thread:active:${thread_uid}`);
+            });
+
+        this.activeThreadRuns.set(thread_uid, {
+            controller,
+            promise: runPromise,
+            started_at: Date.now(),
+        });
+
+        KernelEngine.createOrUpdateMemory(`thread:active:${thread_uid}`, true, 'agent-thread-engine');
+
+        return { ok: true, started: true, thread_uid, started_at: Date.now() };
+    }
+
+    /**
+     * Resumes a paused graph with Command({ resume: null }).
+     * LangGraph will continue from the last interrupt() call.
+     */
+    private async runThreadContinue(
+        thread_uid: string,
+        signal?: AbortSignal,
+    ): Promise<void> {
+        const streamEvents = createAIStreamEventBridge({
+            threadUid: thread_uid,
+            emitProtocolThreadEvent: async (nextThreadUid, event: AgentStreamAnyEvent) =>
+                await this.emitProtocolThreadEvent(nextThreadUid, event),
+        });
+
+        const streamRuntimeConfig = this.resolveThreadRuntimeConfig({
+            thread_uid,
+            provider: AIProviders.OPENAI,
+            overrides: {},
+            signal,
+        });
+
+        try {
+            await streamEvents(
+                await SingletonAgentInstance.getInstance().stream(
+                    new Command({ resume: null }),
+                    streamRuntimeConfig,
+                ),
+            );
+
+            if (signal?.aborted) {
+                await this.emitProtocolThreadEvent(thread_uid, {
+                    channel: 'invoke',
+                    type: 'invoke-interrupted',
+                    seq: null,
+                    node: null,
+                    data: { thread_uid },
+                } as AgentStreamAnyEvent);
+                return;
+            }
+
+            await this.emitProtocolThreadEvent(thread_uid, {
+                channel: 'invoke',
+                type: 'invoke-completed',
+                seq: null,
+                node: null,
+                data: { thread_uid },
+            } as AgentStreamAnyEvent);
+        } catch (error) {
+            const isAborted =
+                error instanceof Error &&
+                (error.name === 'AbortError' || error.message?.includes('abort'));
+
+            this.log(`[AgentThreadEngine] continue ${isAborted ? 'aborted' : 'failed'} for ${thread_uid}:`, error);
+
+            await this.emitProtocolThreadEvent(thread_uid, {
+                channel: 'invoke',
+                type: isAborted ? 'invoke-interrupted' : 'invoke-failed',
+                seq: null,
+                node: null,
+                data: {
+                    thread_uid,
+                    error: error instanceof Error ? error.message : String(error),
+                },
+            } as AgentStreamAnyEvent);
+        }
     }
 }
 

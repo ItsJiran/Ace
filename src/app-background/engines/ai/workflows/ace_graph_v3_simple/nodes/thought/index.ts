@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
+import { buildErrorRecoveryCommand } from '../recovery-error-helper';
 import type { AceAgentV3State } from '../../types';
 
 // ── Structured output ─────────────────────────────────────────────────────
@@ -86,17 +87,30 @@ function thoughtPrompt(state: AceAgentV3State): string {
     } else {
         lines.push(
             '',
-            '### Cycle History',
-            ...cycles.slice(-5).map((c, i) =>
-                `  ${cycles.length - 4 + i}. "${c.subject}" → ${c.action.target.name} → "${c.action.target.reason}"`,
-            ),
+            '### Cycle History — What Has Already Been Done',
+            'Each line shows one completed cycle: what was analyzed → action taken → reason.',
+            'Use this to avoid repeating work that is already finished.',
+            '',
+            'Format: [#]. "[subject]" → [action_type] → "[reason]"',
+            '',
+            ...cycles.slice(-5).map((c, i) => {
+                const num = cycles.length - 4 + i;
+                return `  ${num}. "${c.subject.slice(0, 100)}" → ${c.action.target.name} → "${c.action.target.reason.slice(0, 100)}"`;
+            }),
+        );
+
+        lines.push(
+            '',
+            '👉 If the most recent cycle already delivered a FINAL ANSWER to the user',
+            '(action_speak with a complete reply), you can use `action_type: "end"`.',
+            'Otherwise, decide what still needs to be done.',
         );
 
         if (lastActionResult) {
             lines.push(
                 '',
-                '### Last Action Output',
-                `"${lastActionResult}"`,
+                '### Last Action Output (raw XML from previous cycle)',
+                `${lastActionResult}`,
             );
         }
 
@@ -134,6 +148,7 @@ function thoughtPrompt(state: AceAgentV3State): string {
 
 export function createThoughtNode() {
     return async function thoughtNode(state: AceAgentV3State): Promise<Partial<AceAgentV3State> | Command> {
+        try {
         const config = getConfig();
         const threadUid = (config as any)?.configurable?.thread_id;
         if (threadUid) emitNodeStart(threadUid, 'thought', 'ace-v3', state).catch(() => {});
@@ -154,7 +169,7 @@ export function createThoughtNode() {
         }
 
         // Structured output: thought + action_type + action_reason
-        const result = await invokeLLM({
+        const { resolved, message } = await invokeLLM({
             runtime: getConfig() as never,
             structuredOutput: ThoughtAction,
             messages: [new SystemMessage(thoughtPrompt(state))],
@@ -162,9 +177,9 @@ export function createThoughtNode() {
             graphName: 'ace-v3',
         });
 
-        const thoughtStr = result?.thought ?? 'No observation.';
-        const actionType = result?.action_type ?? 'action_speak';
-        const actionReason = result?.action_reason ?? 'Fallback.';
+        const thoughtStr = resolved?.thought ?? 'No observation.';
+        const actionType = resolved?.action_type ?? 'action_speak';
+        const actionReason = resolved?.action_reason ?? 'Fallback.';
 
         // Determine subject for this cycle
         const subject = state.target_node_reason
@@ -186,10 +201,7 @@ export function createThoughtNode() {
         };
 
         const output: Partial<AceAgentV3State> = {
-            messages: [new AIMessage({
-                content: `${thoughtStr} ${actionType} ${actionReason}`,
-                name: 'ace-v3-thought',
-            })],
+            messages: [message],
             cycles: [cycle],
             current_cycle: cycle,
             global_cycle: cycleNum,
@@ -204,6 +216,10 @@ export function createThoughtNode() {
         }).catch(() => {});
 
         return output;
+        } catch (error) {
+            console.error('[thought] Error:', error);
+            return buildErrorRecoveryCommand(error, 'thought');
+        }
     };
 }
 

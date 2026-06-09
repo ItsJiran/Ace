@@ -27,6 +27,7 @@ import { emitLLMStart, emitLLMEnd, emitLLMRetry } from './emit-graph-event';
 import type { AgentConfigType } from '#/shared/schemas/ai';
 import { buildXmlPromptMessage } from './prompt-structured-output';
 import { parseXmlOutput } from '#/shared/lib/parse-structured-output';
+import { NetworkLLMError, ParsingXMLError, APIKeyNotResolvedError } from '#/shared/lib/agent-errors';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -83,27 +84,34 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
     const hasStructuredOutput = !!(options as InvokeLLMStructured).structuredOutput;
     const schema = (options as InvokeLLMStructured).structuredOutput;
 
-    // Build XML format prompt if structured output is requested
-    const xmlPromptMsg = hasStructuredOutput ? buildXmlPromptMessage(schema) : null;
-
     let messages = [...options.messages];
     let attempt = 0;
+
+    // Append XML format to the last system message so it's ONE coherent prompt
+    if (hasStructuredOutput && messages.length > 0) {
+        const last = messages[messages.length - 1];
+        if (typeof last.content === 'string') {
+            const xmlText = typeof buildXmlPromptMessage(schema).content === 'string'
+                ? buildXmlPromptMessage(schema).content as string
+                : '';
+            messages[messages.length - 1] = new SystemMessage(
+                `${last.content}\n\n${xmlText}`,
+            );
+        }
+    }
 
     while (true) {
         attempt++;
 
-        // Prepend XML format instructions so the model knows to output XML
-        const callMessages = xmlPromptMsg
-            ? [xmlPromptMsg, ...messages]
-            : messages;
+        // Extract AbortSignal from LangGraph config so LLM calls respect cancellation
+        const signal = (options.runtime as any)?.signal as AbortSignal | undefined;
 
         emitLLMStart(threadUid, options.nodeName, options.graphName, {
             attempt,
-            messageCount: callMessages.length,
+            messageCount: messages.length,
             hasStructuredOutput,
-            promptPreview: callMessages[0]?.content?.toString(),
+            promptPreview: messages[0]?.content?.toString(),
         }).catch(() => {});
-
         try {
             // Call mainModel as PLAIN — never pass structuredOutput
             const toolsOption = (options as InvokeLLMTools).tools;
@@ -113,18 +121,20 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
             });
 
             const startTime = Date.now();
-            const result = await model.invoke(callMessages);
+            const result = await model.invoke(messages, signal ? { signal } : {});
             const durationMs = Date.now() - startTime;
 
             // If plain (no structured output), return content as-is
             if (!hasStructuredOutput) {
                 const resolved = (result as any)?.content ?? result;
+                
                 emitLLMEnd(threadUid, options.nodeName, options.graphName, {
                     attempt,
                     durationMs,
                     resultPreview: typeof resolved === 'string' ? resolved : JSON.stringify(resolved),
                 }).catch(() => {});
-                return resolved;
+
+                return {resolved : resolved, message: result};
             }
 
             // ── Parse XML structured output ──
@@ -163,7 +173,10 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
                 }
 
                 if (attempt > MAX_RETRIES) {
-                    throw new Error(`XML structured output failed after ${attempt} attempts: ${errorMsg}`);
+                    throw new ParsingXMLError(
+                        `XML structured output failed after ${attempt} attempts: ${errorMsg}`,
+                        options.nodeName,
+                    );
                 }
 
                 await new Promise((r) => setTimeout(r, 500));
@@ -178,8 +191,50 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
                 resultPreview: JSON.stringify(resolved),
             }).catch(() => {});
 
-            return resolved;
+            return {resolved : resolved, message: result};
         } catch (error: any) {
+            // Re-throw already typed errors as-is
+            if (error instanceof ParsingXMLError) throw error;
+
+            // Detect API key not resolved / auth failures
+            const isApiKeyError =
+                error?.status === 401 ||
+                error?.status === 403 ||
+                error?.message?.includes('Invalid API key') ||
+                error?.message?.includes('Incorrect API key') ||
+                error?.message?.includes('API key not') ||
+                error?.message?.includes('authentication') ||
+                error?.message?.includes('not authorized') ||
+                error?.message?.includes('No API key');
+
+            if (isApiKeyError) {
+                throw new APIKeyNotResolvedError(
+                    error?.message ?? 'API key is not configured or invalid. Please set it in Settings.',
+                    options.nodeName,
+                );
+            }
+
+            // Detect network / LLM connectivity errors
+            const isNetworkError =
+                error?.name === 'AbortError' ||
+                error?.message?.includes('fetch failed') ||
+                error?.message?.includes('ECONNREFUSED') ||
+                error?.message?.includes('ETIMEDOUT') ||
+                error?.message?.includes('ENOTFOUND') ||
+                error?.message?.includes('network') ||
+                error?.message?.includes('timeout') ||
+                error?.message?.includes('rate_limit') ||
+                error?.status === 429 ||
+                error?.status === 502 ||
+                error?.status === 503;
+
+            if (isNetworkError) {
+                throw new NetworkLLMError(
+                    error?.message ?? String(error),
+                    options.nodeName,
+                );
+            }
+
             if (attempt > MAX_RETRIES) throw error;
 
             emitLLMRetry(threadUid, options.nodeName, options.graphName, {

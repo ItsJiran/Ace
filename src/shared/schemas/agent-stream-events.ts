@@ -48,7 +48,8 @@ export type AgentStreamMessageEvent =
 
 export type AgentStreamInvokeEvent =
     | AgentStreamInvokeCompletedEvent
-    | AgentStreamInvokeFailedEvent;
+    | AgentStreamInvokeFailedEvent
+    | AgentStreamInvokeInterruptedEvent;
 
 /** + -------------- STREAM TOOL ---------------- */
 
@@ -195,6 +196,14 @@ export type AgentStreamInvokeFailedEvent = AgentStreamEvent & {
     data: {
         thread_uid: string;
         error?: string;
+    };
+};
+
+export type AgentStreamInvokeInterruptedEvent = AgentStreamEvent & {
+    channel: 'invoke';
+    type: 'invoke-interrupted';
+    data: {
+        thread_uid: string;
     };
 };
 

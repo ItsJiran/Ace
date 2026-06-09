@@ -14,6 +14,8 @@ export default async function resolveApiKey(providerName: AIProviderType): Promi
     // 1. Config — user-set API key via settings UI
     const providers = ConfigEngine.getConfigItem<Record<string, { api_key?: string }>>('ai', 'ai.providers');
     const configKey = providers?.[providerName]?.api_key;
+
+    return null;
     if (configKey) return configKey;
 
     // 2. Session cache
