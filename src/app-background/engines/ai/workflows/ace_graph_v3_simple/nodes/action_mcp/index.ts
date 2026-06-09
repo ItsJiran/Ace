@@ -26,7 +26,7 @@ export function createActionMcp() {
 
         const output: Partial<AceAgentV3State> = {
             messages: [new AIMessage({ content: msg, name: 'ace-v3-mcp' })],
-            target_node: 'review',
+            target_node: 'thought',
             from_node: 'action_mcp',
         };
 

@@ -83,7 +83,8 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
 
         try {
             const model = await mainModel({
-                runtime: options.runtime,
+                // runtime: options.runtime,
+                ...options,
                 structuredOutput: (options as InvokeLLMStructured).structuredOutput,
                 tools: (options as InvokeLLMTools).tools,
             });
@@ -132,6 +133,8 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
                 maxRetries: MAX_RETRIES,
                 error: errorMsg.slice(0, 300),
             }).catch(() => {});
+
+            throw error; // For now, just throw the error instead of retrying, to avoid potential infinite loops. Remove this line to enable retries.
 
             // Feed error back so the model can self-correct its output format
             if (hasStructuredOutput) {

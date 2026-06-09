@@ -69,6 +69,7 @@ export default async function mainModel(
     // Resolve gateway URL from config (e.g. DeepSeek, Ollama, OpenRouter)
     const providers = ConfigEngine.getConfigItem<Record<string, { gateway?: string }>>('ai', 'ai.providers');
     const gateway = providers?.[provider]?.gateway || undefined;
+    
     if (gateway) {
         console.log(`[mainModel] Using custom gateway for ${provider}: ${gateway}`);
     }
@@ -78,13 +79,12 @@ export default async function mainModel(
         ...(gateway ? { configuration: { baseURL: gateway } } : {}),
     });
 
-    // Always bind tools (empty array if none) — DeepSeek needs tool_choice: 'auto'
-    const tools = options.tools ?? [];
-    const model = baseModel.bindTools(tools, { tool_choice: 'auto' });
+    if (options?.tools)
+        baseModel.bindTools(options.tools, { tool_choice: 'auto' });
 
-    if (options.structuredOutput) {
-        return model.withStructuredOutput(options.structuredOutput);
+    if (options?.structuredOutput) {
+        return baseModel.withStructuredOutput(options.structuredOutput);
     }
 
-    return model;
+    return baseModel;
 }

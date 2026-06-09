@@ -32,15 +32,6 @@ export function SystemAIChatHeader({
 
 	return (
 		<div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
-			<div className={[targets.btn.secondary, 'flex px-3'].join(' ')}>
-				<div className="flex flex-wrap items-center gap-2">
-					<span className={['ace-chat-status-pill', isStreaming ? 'is-streaming' : ''].join(' ')}>
-						{/* {aiStatus.label} */}
-					</span>
-					{/* <span className="text-xs text-zinc-400">{aiStatus.detail}</span> */}
-				</div>
-			</div>
-
 			<div className="w-fit flex-1 flex gap-2 items-end">
 				<button
 					type="button"

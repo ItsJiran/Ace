@@ -26,7 +26,7 @@ export function createActionContext() {
 
         const output: Partial<AceAgentV3State> = {
             messages: [new AIMessage({ content: msg, name: 'ace-v3-context' })],
-            target_node: 'review',
+            target_node: 'thought',
             from_node: 'action_context',
         };
 

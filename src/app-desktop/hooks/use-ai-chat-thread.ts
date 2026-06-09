@@ -152,7 +152,10 @@ export function useAIChatThread() {
             });
 
             await setCurrentThreadUid(threadUid);
-            AgentClientEngine.startThreadPrompt(threadUid, normalizedPrompt);
+            AgentClientEngine.startThreadPrompt(threadUid, normalizedPrompt, {
+                provider: selectedProvider,
+                model: selectedModel,
+            });
 
             return (
                 AgentClientEngine.readThreadFromMemory(

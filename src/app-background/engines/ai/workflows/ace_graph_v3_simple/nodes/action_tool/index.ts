@@ -26,7 +26,7 @@ export function createActionTool() {
 
         const output: Partial<AceAgentV3State> = {
             messages: [new AIMessage({ content: msg, name: 'ace-v3-tool' })],
-            target_node: 'review',
+            target_node: 'thought',
             from_node: 'action_tool',
         };
 

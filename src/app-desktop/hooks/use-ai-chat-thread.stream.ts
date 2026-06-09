@@ -107,7 +107,12 @@ function ensureBackgroundAIStreamListener() {
 
 function startBackgroundThreadRun(threadUid: string, prompt: string) {
 	const session = getThreadTransportSession(threadUid);
-	const runPromise = AgentClientEngine.startThreadPrompt(threadUid, prompt).finally(() => {
+	const runPromise = AgentClientEngine.startThreadPrompt(threadUid, prompt, {
+		provider : selectedProvider,
+		model: selectedModel,
+	}).catch((error) => {
+		console.error('Error in thread run:', error);
+	}).finally(() => {
 		if (session.activeRun === runPromise) {
 			session.activeRun = null;
 		}
@@ -127,123 +132,4 @@ export function submitPromptToThread(threadUid: string, prompt: string) {
 
 export function resolveActiveThreadUid(threadUid: string | null) {
 	return threadUid ?? null;
-}
-
-export async function waitForThreadRun(threadUid: string) {
-	const session = getThreadTransportSession(threadUid);
-	return await (session.activeRun ?? Promise.resolve(null));
-}
-
-export function createThreadTransport(threadUid: string | null) {
-	ensureBackgroundAIStreamListener();
-	const session = getThreadTransportSession(threadUid);
-
-	return {
-		threadId: resolveSessionKey(threadUid),
-		async open() {},
-		async send(command: Command) {
-			const activeThreadUid = resolveActiveThreadUid(threadUid);
-
-			if (command.method === 'subscription.subscribe') {
-				return {
-					type: 'success' as const,
-					id: command.id,
-					result: {
-						subscription_id: `${resolveSessionKey(threadUid)}:sub:${session.nextSubscriptionId++}`,
-					},
-				};
-			}
-
-			if (command.method === 'subscription.unsubscribe') {
-				return {
-					type: 'success' as const,
-					id: command.id,
-					result: {},
-				};
-			}
-
-			if (command.method === 'run.start' && activeThreadUid) {
-				const prompt = resolvePromptFromInput(command.params?.input);
-				if (prompt) {
-					const run = startBackgroundThreadRun(activeThreadUid, prompt);
-					return {
-						type: 'success' as const,
-						id: command.id,
-						result: {
-							run_id: run.runId,
-						},
-					};
-				}
-
-				await AgentClientEngine.syncCurrentThreadFromBackground(activeThreadUid);
-			}
-
-			return {
-				type: 'success' as const,
-				id: command.id,
-				result: {
-					run_id: crypto.randomUUID(),
-				},
-			};
-		},
-		async *events() {
-			for await (const message of session.queue) {
-				yield message;
-			}
-		},
-		async close() {},
-		async getState() {
-			const activeThreadUid = resolveActiveThreadUid(threadUid);
-			if (!activeThreadUid) {
-				return null;
-			}
-
-			const resolvedThread = AgentClientEngine.readThreadFromMemory(activeThreadUid);
-			if (!resolvedThread) {
-				return null;
-			}
-
-			return {
-				values: resolveThreadValues(resolvedThread),
-				checkpoint: resolvedThread.checkpoint_id
-					? {
-						checkpoint_id: resolvedThread.checkpoint_id,
-					}
-					: null,
-			};
-		},
-	} as AgentServerAdapter;
-}
-
-export function createLocalStreamClient(threadUid: string | null) {
-	const client = new LangGraphClient<Record<string, unknown>>({
-		apiUrl: 'http://127.0.0.1:8123',
-	});
-
-	client.threads.getState = async (requestedThreadId: string) => {
-		const activeThreadUid = requestedThreadId || resolveActiveThreadUid(threadUid);
-
-		if (!activeThreadUid) {
-			return null as never;
-		}
-
-		const resolvedThread = AgentClientEngine.readThreadFromMemory(activeThreadUid);
-		return resolveThreadStateSnapshot(resolvedThread ?? undefined) as never;
-	};
-
-	return client;
-}
-
-export function createStreamOptions(
-	threadUid: string | null,
-	currentThread: AgentThread | null,
-	onThreadId: (threadId: string) => void,
-) {
-	return {
-		threadId: threadUid,
-		transport: createThreadTransport(threadUid),
-		client: createLocalStreamClient(threadUid),
-		initialValues: resolveThreadValues(currentThread ?? undefined),
-		onThreadId,
-	} as unknown as CustomAdapterOptions<Record<string, unknown>>;
 }

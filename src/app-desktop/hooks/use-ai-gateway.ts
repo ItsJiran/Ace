@@ -45,8 +45,21 @@ export function useAIGateway() {
 
         return {};
     }, [gatewayConfig]);
-
     const providerOptions = useMemo(() => Object.keys(providers), [providers]);
+
+    // Resolve models for selected provider, with fallbacks
+    useEffect(() => {
+
+        if (selectedProvider && providers[selectedProvider]) {
+            const models = providers[selectedProvider].models;
+            if (models.length > 0) {
+                setSelectedModel(models[0]);
+            } else {
+                setSelectedModel('');
+            }
+        }
+
+    }, [selectedProvider]);
 
     useEffect(() => {
         if (configInitialised.current || !gatewayConfig) return;

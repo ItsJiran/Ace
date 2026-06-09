@@ -16,7 +16,10 @@ export function createActionEnd() {
         if (threadUid) emitNodeStart(threadUid, 'action_end', 'ace-v3', state).catch(() => {});
 
         const cycles = state.cycles ?? [];
-        const lastReview = cycles[cycles.length - 1]?.review_result ?? 'Request completed.';
+        const lastCycle = cycles[cycles.length - 1];
+        const lastReview = lastCycle?.action?.target?.reason
+            ?? lastCycle?.action?.result as string | undefined
+            ?? 'Request completed.';
 
         const output: Partial<AceAgentV3State> = {
             messages: [new AIMessage({

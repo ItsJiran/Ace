@@ -1,24 +1,27 @@
 import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
-import { END, InMemoryStore, MemorySaver, START, StateGraph } from '@langchain/langgraph';
+import { InMemoryStore, MemorySaver, START, StateGraph } from '@langchain/langgraph';
 
 import { AceAgentV3State } from './nodes/agent-state';
 import { createThoughtNode } from './nodes/thought';
-import { createActionNode } from './nodes/action';
 import { createActionSpeak } from './nodes/action_speak';
 import { createActionTool } from './nodes/action_tool';
 import { createActionContext } from './nodes/action_context';
 import { createActionMcp } from './nodes/action_mcp';
-import { createReviewNode } from './nodes/review';
-import { createActionEnd } from './nodes/action_end';
 
 /**
- * ACE Graph v3 — Cycle-based architecture.
+ * ACE Graph v3 — Simplified single-node decision architecture.
  *
- *   START → thought → action → [sub-action] → review ─┐
- *             ↑                                        │
- *             └────────────────────────────────────────┘ (next cycle)
- *                          │
- *                     action_end → END (thought decides done)
+ *   START → thought ─→ action_speak ─┐
+ *                 │                   │
+ *                 ├→ action_tool ─────┤
+ *                 │                   │
+ *                 ├→ action_context ──┼→ thought (next cycle)
+ *                 │                   │
+ *                 └→ action_mcp ─────┘
+ *
+ * thought produces structured output: { thought, action_type, action_reason }
+ * and routes directly to the correct sub-action — no intermediate action/review nodes.
+ * When `action_type === "end"`, thought routes directly to END.
  */
 export function compileAceGraphV3(options?: {
     checkpointer?: BaseCheckpointSaver;
@@ -29,38 +32,24 @@ export function compileAceGraphV3(options?: {
 
     const graph = new StateGraph(AceAgentV3State)
         .addNode('thought', createThoughtNode())
-        .addNode('action', createActionNode())
         .addNode('action_speak', createActionSpeak())
         .addNode('action_tool', createActionTool())
         .addNode('action_context', createActionContext())
         .addNode('action_mcp', createActionMcp())
-        .addNode('action_end', createActionEnd())
-        .addNode('review', createReviewNode())
 
         // Entry
         .addEdge(START, 'thought')
 
-        // thought → action (always)
-        .addEdge('thought', 'action')
-
-        // action → routes to sub-action node (including action_end)
-        .addConditionalEdges('action', (s) => (s as any).target_node ?? 'action_speak', [
-            'action_speak', 'action_tool', 'action_context', 'action_mcp', 'action_end', '__end__',
+        // thought → routes to sub-action node (or __end__ for termination)
+        .addConditionalEdges('thought', (s) => (s as any).target_node ?? 'action_speak', [
+            'action_speak', 'action_tool', 'action_context', 'action_mcp', '__end__',
         ])
 
-        // All sub-actions → review
-        .addEdge('action_speak', 'review')
-        .addEdge('action_tool', 'review')
-        .addEdge('action_context', 'review')
-        .addEdge('action_mcp', 'review')
-
-        // action_end → END
-        .addEdge('action_end', END)
-
-        // review → thought (normal) or action (retry on failure)
-        .addConditionalEdges('review', (s) => (s as any).target_node ?? 'thought', [
-            'thought', 'action', '__end__',
-        ]);
+        // All sub-actions → thought (next cycle)
+        .addEdge('action_speak', 'thought')
+        .addEdge('action_tool', 'thought')
+        .addEdge('action_context', 'thought')
+        .addEdge('action_mcp', 'thought');
 
     return graph.compile({ checkpointer, store });
 }

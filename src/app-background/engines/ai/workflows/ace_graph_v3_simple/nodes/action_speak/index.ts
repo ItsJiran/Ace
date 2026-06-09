@@ -23,8 +23,10 @@ export function createActionSpeak() {
         const actionPlan = cycle?.action?.thought ?? 'Respond to the user.';
         const originalPrompt = state.original_prompt;
         const cycleThought = cycle?.thought ?? '';
-        const cycles = state.cycles ?? [];
-        const lastResult = cycles[cycles.length - 1]?.review_result;
+        const lastMsg = state.messages?.[state.messages.length - 1];
+        const lastResult = typeof lastMsg?.content === 'string'
+            ? lastMsg.content.slice(0, 300)
+            : undefined;
 
         const systemPrompt = [
             'You are a helpful AI assistant responding to the user.',
@@ -56,7 +58,7 @@ export function createActionSpeak() {
 
         const output: Partial<AceAgentV3State> = {
             messages: [response],
-            target_node: 'review',
+            target_node: 'thought',
             from_node: 'action_speak',
         };
 

@@ -3,50 +3,50 @@ import type { BaseMessage } from '@langchain/core/messages';
 // ── Thought Cycle ──────────────────────────────────────────────────────────
 
 /**
- * A single think → act → review cycle.
+ * A single thought → action cycle.
  *
  * Flow:
- *   START → thought → action → action_* → review → thought (loop) or END
+ *   START → thought → action_* → thought (loop) or END
+ *
+ * The thought node produces structured output { thought, action_type, action_reason }
+ * and routes directly to the appropriate sub-action node — no intermediate nodes.
  *
  * Each cycle captures:
- *   - What was considered (subject) — can be the user prompt, a previous review_result,
+ *   - What was considered (subject) — can be the user prompt, a previous action result,
  *     a re-entry reason from target_node_reason, or any other trigger.
- *   - The agent's internal analysis (thought) — "From X I observe Y, this is simple/complex because Z"
- *   - What action was chosen (action.thought) — "Run: npm install express"
+ *   - The agent's analysis + decision (thought) — "From X I observe Y, routing to action_speak because Z"
+ *   - What action was chosen (action.thought) — same as thought, derived from structured output
  *   - Where to route (action.target.name) — action_speak | action_tool | action_context | action_mcp | end
  *   - Why that target (action.target.reason) — "Need to install a package"
- *   - What happened (review_result) — filled by review node after action completes
  *
  * Subject examples:
  *   - User prompt:          "install express in my project"
- *   - Previous review:      "package.json found, no Express listed."
+ *   - Previous action msg:  "package.json found, no Express listed."
  *   - Re-entry reason:      "action_tool is unavailable — try another approach."
  *   - Stale cycle re-check: "User was greeted, but request is not yet complete."
  *
  * Example (simple greeting):
  *   subject:      "hello"
- *   thought:      "From 'hello' I observe a casual greeting. SIMPLE — no tools needed."
+ *   thought:      "From 'hello' I observe a casual greeting. Route to action_speak because I should respond directly."
  *   action: {
- *     thought:    "Respond with a friendly greeting back."
+ *     thought:    "From 'hello' I observe a casual greeting..."
  *     target:     { name: "action_speak", reason: "Greeting — respond directly." }
  *   }
- *   review_result: "User was greeted successfully."
  *
  * Example (complex task):
  *   subject:      "install express in my project"
- *   thought:      "From 'install express' I observe the user wants Express.js. COMPLEX — need to check package.json first, then run npm install."
+ *   thought:      "From 'install express' I need to check package.json first. Route to action_context to read existing deps."
  *   action: {
- *     thought:    "Read ./package.json to check existing dependencies."
+ *     thought:    "From 'install express' I need to check package.json first..."
  *     target:     { name: "action_context", reason: "Need to inspect project structure first." }
  *   }
- *   review_result: "package.json found, no Express listed."
  */
 export interface ThoughtCycle {
-    /** What is being considered (user prompt, previous review_result, etc.). */
+    /** What is being considered (user prompt, previous action result, etc.). */
     subject: string;
     /** Internal monologue: observation + assessment from thought node. */
     thought: string;
-    /** The action decided by the agent (filled by action node after classification). */
+    /** The action decided by the agent (filled directly by thought node's structured output). */
     action: {
         /** What the agent intends to do — specific plan. */
         thought: string;
@@ -59,8 +59,6 @@ export interface ThoughtCycle {
     };
     /** Optional metadata (pointers, memory keys, etc.). */
     node_metadata?: Record<string, unknown>;
-    /** Review summary — result of the action (populated by review node). */
-    review_result?: string;
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
