@@ -11,6 +11,7 @@ const ACCENT = 'text-amber-400 border-amber-500/40';
 
 export function ReasonBlock({ text, done, isLast }: ReasonBlockProps) {
     return (
+        <>
         <ChainBlock
             icon={<Lightbulb className="w-3 h-3" />}
             label="Why"
@@ -19,6 +20,7 @@ export function ReasonBlock({ text, done, isLast }: ReasonBlockProps) {
             done={done}
             isLast={isLast}
         />
+        </>
     );
 }
 

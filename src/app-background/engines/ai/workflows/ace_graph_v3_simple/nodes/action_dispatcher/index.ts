@@ -25,6 +25,7 @@ const TARGET_MAP: Record<string, string> = {
     action_write_file: 'action_write_file',
     action_shell: 'action_shell',
     action_read_file: 'action_read_file',
+    action_step: 'action_step',
     end: 'action_end',
 };
 

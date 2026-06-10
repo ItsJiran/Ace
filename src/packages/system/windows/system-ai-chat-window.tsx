@@ -13,6 +13,7 @@ import { defineWindow } from '#/lib/define-registry';
 import { SystemAIChatComposer } from '#/packages/system/components/system-ai-chat-composer';
 import { SystemAIChatHeader } from '#/packages/system/components/system-ai-chat-header';
 import { SystemAIChatMessages } from '#/packages/system/components/system-ai-chat-messages';
+import { StepPlanCardWrapper } from '#/packages/system/components/step-plan-card';
 
 const resizeHandleDefinitions = [
     {
@@ -196,6 +197,8 @@ function SystemAIChatWindowBody({
                         // await retryLastPrompt(selectedProvider, resolvedModel);
                     }}
                 />
+
+                <StepPlanCardWrapper currentThreadUid={current_thread_uid} />
             </section>
 
             <SystemAIChatComposer

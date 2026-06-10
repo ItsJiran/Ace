@@ -66,7 +66,7 @@ export function ChainBlock({
                     )}
                 </div>
                 <div className={[' py-0.5 rounded-l-sm'].join(' ')}>
-                    <div className="text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap">
+                    <div className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--ace-container-first-text)' }}>
                         {text || '\u00A0'}
                     </div>
                 </div>

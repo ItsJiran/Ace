@@ -71,72 +71,135 @@ export function SystemAIChatMessagesHistory({
                         <div className="flex justify-start mt-4">
                             <div className="flex min-w-0 max-w-[88%] flex-col items-start gap-2">
                                 <div className="ace-chat-turn-label">Assistant</div>
-                                <div
-                                    className={[
-                                        targets.container.first,
-                                        'w-full rounded-[14px_14px_14px_4px] px-4 py-3 text-sm leading-6 text-zinc-500 shadow-sm',
-                                    ].join(' ')}
-                                >
-                                    <div className="flex flex-col gap-4">
-                                        {/* Settled AI Messages */}
-                                        {turn.responses.map((response, index) => {
-                                            if (response.type === 'AIMessage') {
-                                                return (
-                                                    <div key={`resp-${index}`}>
-                                                        <XmlTagRenderer content={response.content} />
-                                                    </div>
-                                                );
-                                            }
 
-                                            if (response.type === 'ToolMessage') {
-                                                return (
-                                                    <div key={`resp-${index}`}>
-                                                        <SystemAIChatToolMessage
-                                                            message={response}
-                                                        />
-                                                    </div>
-                                                );
-                                            }
-
-                                            return null;
-                                        })}
-
-                                        {/* Ephemeral Streaming (Only on last turn) */}
-                                        {isLastTurn &&
-                                        currentThreadRuntime?.is_streaming &&
-                                        ephemeralMessages.length > 0 ? (
-                                            <>
-                                                {ephemeralMessages.map((item, ephemeral_index) => {
-                                                    switch (item.type) {
-                                                        case 'messages':
-                                                            return (
-                                                                <div key={`eph-${ephemeral_index}`}>
-                                                                    <XmlTagRenderer content={item.content as string[]} />
-                                                                </div>
-                                                            );
-
-                                                        case 'tool':
-                                                            return (
-                                                                <div key={`eph-${ephemeral_index}`} className="flex items-center gap-2 text-zinc-500 animate-pulse">
-                                                                    <Wrench size={12} />
-                                                                    <span className="text-xs">
-                                                                        Running tool{' '}
-                                                                        {typeof item.content?.tool_name === 'string'
-                                                                            ? item.content.tool_name
-                                                                            : 'tool'}
-                                                                        ...
-                                                                    </span>
-                                                                </div>
-                                                            );
-
-                                                        default:
-                                                            return null;
+                                {/* Streaming rotating gradient wrapper */}
+                                {isLastTurn && currentThreadRuntime?.is_streaming ? (
+                                    <div
+                                        className="relative p-[1.5px] rounded-[14px_14px_14px_4px] overflow-hidden bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 animate-pulse"
+                                        style={{
+                                            boxShadow: '0 0 20px 3px rgba(129, 140, 248, 0.35), 0 0 45px 6px rgba(167, 139, 250, 0.15)',
+                                        }}
+                                    >
+                                        <div
+                                            className="absolute inset-0 animate-spin opacity-80"
+                                            style={{
+                                                animationDuration: '3s',
+                                                background: 'conic-gradient(from 0deg at 50% 50%, #818cf8 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #818cf8 100%)',
+                                            }}
+                                        />
+                                        <div
+                                            className="relative w-full rounded-[12px_12px_12px_2px] px-4 py-3 text-sm leading-6 border-0"
+                                            style={{
+                                                background: 'var(--ace-container-first-bg)',
+                                                color: 'var(--ace-container-first-text)',
+                                            }}
+                                        >
+                                            <div className="flex flex-col gap-4">
+                                                {turn.responses.map((response, index) => {
+                                                    if (response.type === 'AIMessage') {
+                                                        return (
+                                                            <div key={`resp-${index}`}>
+                                                                <XmlTagRenderer content={response.content} />
+                                                            </div>
+                                                        );
                                                     }
+                                                    if (response.type === 'ToolMessage') {
+                                                        return (
+                                                            <div key={`resp-${index}`}>
+                                                                <SystemAIChatToolMessage message={response} />
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
                                                 })}
-                                            </>
-                                        ) : null}
+                                                {ephemeralMessages.length > 0 &&
+                                                    ephemeralMessages.map((item, ephemeral_index) => {
+                                                        switch (item.type) {
+                                                            case 'messages':
+                                                                return (
+                                                                    <div key={`eph-${ephemeral_index}`}>
+                                                                        <XmlTagRenderer content={item.content as string[]} />
+                                                                    </div>
+                                                                );
+                                                            case 'tool':
+                                                                return (
+                                                                    <div key={`eph-${ephemeral_index}`} className="flex items-center gap-2 text-zinc-400 animate-pulse">
+                                                                        <Wrench size={12} />
+                                                                        <span className="text-xs">
+                                                                            Running{' '}
+                                                                            {typeof item.content?.tool_name === 'string'
+                                                                                ? item.content.tool_name
+                                                                                : 'tool'}
+                                                                            ...
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            default:
+                                                                return null;
+                                                        }
+                                                    })}
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div
+                                        className={[
+                                            targets.container.first,
+                                            'w-full rounded-[14px_14px_14px_4px] px-4 py-3 text-sm leading-6 shadow-sm',
+                                        ].join(' ')}
+                                    >
+                                        <div className="flex flex-col gap-4">
+                                            {turn.responses.map((response, index) => {
+                                                if (response.type === 'AIMessage') {
+                                                    return (
+                                                        <div key={`resp-${index}`}>
+                                                            <XmlTagRenderer content={response.content} />
+                                                        </div>
+                                                    );
+                                                }
+                                                if (response.type === 'ToolMessage') {
+                                                    return (
+                                                        <div key={`resp-${index}`}>
+                                                            <SystemAIChatToolMessage message={response} />
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })}
+                                            {isLastTurn &&
+                                            currentThreadRuntime?.is_streaming &&
+                                            ephemeralMessages.length > 0 ? (
+                                                <>
+                                                    {ephemeralMessages.map((item, ephemeral_index) => {
+                                                        switch (item.type) {
+                                                            case 'messages':
+                                                                return (
+                                                                    <div key={`eph-${ephemeral_index}`}>
+                                                                        <XmlTagRenderer content={item.content as string[]} />
+                                                                    </div>
+                                                                );
+                                                            case 'tool':
+                                                                return (
+                                                                    <div key={`eph-${ephemeral_index}`} className="flex items-center gap-2 text-zinc-400 animate-pulse">
+                                                                        <Wrench size={12} />
+                                                                        <span className="text-xs">
+                                                                            Running{' '}
+                                                                            {typeof item.content?.tool_name === 'string'
+                                                                                ? item.content.tool_name
+                                                                                : 'tool'}
+                                                                            ...
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            default:
+                                                                return null;
+                                                        }
+                                                    })}
+                                                </>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ) : null}

@@ -1,8 +1,7 @@
 /**
  * TextBlock — renders plain/regular text content (non-XML or <reply>).
  *
- * Used as the fallback renderer when no recognized tag is found,
- * and also for the raw reply text from action_speak.
+ * Uses theme CSS variables for color — syncs with light/dark/system themes.
  */
 import React from 'react';
 
@@ -11,10 +10,22 @@ export interface TextBlockProps {
 }
 
 export function TextBlock({ text }: TextBlockProps) {
-    if (!text) return <div className="text-zinc-500 italic text-sm">...</div>;
+    if (!text) {
+        return (
+            <div
+                className="text-sm italic"
+                style={{ color: 'var(--ace-chat-label-text)' }}
+            >
+                ...
+            </div>
+        );
+    }
 
     return (
-        <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
+        <div
+            className="text-sm leading-relaxed whitespace-pre-wrap"
+            style={{ color: 'var(--ace-container-first-text)' }}
+        >
             {text}
         </div>
     );

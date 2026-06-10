@@ -113,6 +113,11 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
         // Extract AbortSignal from LangGraph config so LLM calls respect cancellation
         const configSignal = (options.runtime as any)?.signal as AbortSignal | undefined;
 
+        // If already aborted (user stopped thread), don't even try
+        if (configSignal?.aborted) {
+            throw new NetworkLLMError('Thread cancelled by user', options.nodeName);
+        }
+
         // Combine config signal with timeout signal
         let signal: AbortSignal | undefined = configSignal;
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -122,9 +127,18 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
             // If there's also a config signal, combine: abort on whichever fires first
             if (configSignal) {
                 const combined = new AbortController();
-                const onAbort = () => combined.abort();
-                configSignal.addEventListener('abort', onAbort, { once: true });
-                timeoutCtrl.signal.addEventListener('abort', onAbort, { once: true });
+                // If configSignal was aborted between our check and now, abort combined immediately
+                if (configSignal.aborted) {
+                    combined.abort();
+                } else {
+                    const onAbort = () => {
+                        combined.abort();
+                        // Clean up timeout so it doesn't fire after abort
+                        if (timeoutId) clearTimeout(timeoutId);
+                    };
+                    configSignal.addEventListener('abort', onAbort, { once: true });
+                    timeoutCtrl.signal.addEventListener('abort', onAbort, { once: true });
+                }
                 signal = combined.signal;
             } else {
                 signal = timeoutCtrl.signal;

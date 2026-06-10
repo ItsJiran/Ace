@@ -1,10 +1,9 @@
 /**
- * Action: Memory — store, delete, or toggle agent memories.
+ * Action: Memory — extract and store multiple memory operations from a single reason.
  *
- * Flow:
- *   1. Invoke LLM to determine memory action from current context + plan.
- *   2. Execute the action on state.memories (store / delete / toggle).
- *   3. Return updated memories in state.
+ * One action_memory node receives ONE reason (e.g., "Store user_name=Jiran as fact
+ * and pref_framework=Fastify as preference") and the LLM extracts ALL memory-worthy
+ * operations from it — supporting multiple store/delete/toggle in one go.
  */
 
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
@@ -18,43 +17,41 @@ import { setMemory, deleteMemory as deleteStoreMemory } from '#/app-background/l
 import { writeActionOutput, writeActionResult } from '#/app-background/lib/utils/thread-storage';
 import type { AceAgentV3State, MemoryItem } from '../../types';
 
-// ── Structured output ─────────────────────────────────────────────────────
+// ── Structured output — JSON string in XML tag ────────────────────────────
 
+/** Schema for the flat XML output — operations is a JSON string. */
 const MemoryAction = z.object({
-    action: z
-        .enum(['store', 'delete', 'toggle', 'none'])
+    operations: z
+        .string()
         .describe(
-            'What to do with memory:\n' +
-            '- store  — add or update a memory item (provide key, value, type).\n' +
-            '- delete — remove a memory item by key.\n' +
-            '- toggle — flip is_expanded on an existing memory item by key.\n' +
-            '- none   — no memory change needed.',
+            'JSON array of memory operations. Each operation: ' +
+            '{"action":"store|delete|toggle","key":"...","value":"..."?,"type":"insight|fact|preference"?}. ' +
+            'Output ONLY the JSON array — no extra text, no markdown fences. ' +
+            'Example: [{"action":"store","key":"user_name","value":"Jiran","type":"fact"}]. ' +
+            'Empty if nothing to do: [].',
         ),
-    key: z
-        .string()
-        .describe('The memory key, e.g. "user_name", "pref_framework". Required for store/delete/toggle.'),
-    value: z
-        .string()
-        .optional()
-        .describe('The content to store (acts as summary for prompt injection). Required for "store" action.'),
-    type: z
-        .enum(['insight', 'fact', 'preference'])
-        .optional()
-        .describe('Memory type. Default: "insight".'),
 });
+
+/** Sub-schema for validating the parsed JSON array. */
+const MemoryOperationsSchema = z.array(
+    z.object({
+        action: z.enum(['store', 'delete', 'toggle']),
+        key: z.string().min(1),
+        value: z.string().optional(),
+        type: z.enum(['insight', 'fact', 'preference']).optional(),
+    }),
+);
 
 // ── Prompt ────────────────────────────────────────────────────────────────
 
-function memoryPrompt(state: AceAgentV3State): string {
-    const cycle = state.current_cycle;
-    const actionPlan = cycle?.actions?.[0]?.thought ?? 'Manage memory.';
+function memoryPrompt(state: AceAgentV3State, actionReason: string): string {
     const memories = state.memories ?? [];
 
     return [
-        'You are a memory manager. Decide what to do with the agent\'s memory based on the action plan.',
+        'You are a memory manager. Extract ALL memorable information from the given reason.',
         '',
-        '### Action Plan (from thought node)',
-        `"${actionPlan}"`,
+        '### What To Remember',
+        `"${actionReason}"`,
         '',
         '### Current Memories',
         memories.length === 0
@@ -64,11 +61,26 @@ function memoryPrompt(state: AceAgentV3State): string {
             ).join('\n'),
         '',
         '### Guidelines',
-        '- If the plan says to REMEMBER or STORE something → use "store" with a descriptive key and value.',
-        '- If the plan says to FORGET or DELETE something → use "delete" with the exact key.',
-        '- If the plan says to ENABLE or DISABLE a memory → use "toggle" with the key.',
-        '- If nothing needs to change → use "none".',
-        '- Use snake_case keys (e.g. "user_name", "pref_framework").',
+        '- Parse the reason carefully — extract EVERY piece of information worth storing.',
+        '- For each piece, create one operation (store/delete/toggle).',
+        '- If the user mentioned their name → store as "user_name" (type: fact).',
+        '- If the user mentioned a preference → store as "pref_<thing>" (type: preference).',
+        '- If the user mentioned project/environment info → store with descriptive key (type: fact).',
+        '- If the user wants to FORGET something → use "delete" with the exact key.',
+        '- Use snake_case keys (e.g. "user_name", "pref_framework", "proj_database").',
+        '- Values should be concise summaries (1 sentence max).',
+        '- If nothing new or actionable → output [].',
+        '',
+        '### Output Format',
+        'Put the operations as a JSON array inside <operations>...</operations>.',
+        'NO wrapping, NO markdown, NO extra text — just the XML tag with the JSON array.',
+        '',
+        'Examples:',
+        'Reason: "Store user_name=Jiran as fact and pref_editor=VSCode as preference"',
+        '<operations>[{"action":"store","key":"user_name","value":"Jiran","type":"fact"},{"action":"store","key":"pref_editor","value":"VSCode","type":"preference"}]</operations>',
+        '',
+        'Reason: "Delete old_db and update env to Ubuntu 24.04"',
+        '<operations>[{"action":"delete","key":"old_db"},{"action":"store","key":"env_os","value":"Ubuntu 24.04","type":"fact"}]</operations>',
     ].join('\n');
 }
 
@@ -78,50 +90,51 @@ function generateId(): string {
     return `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function applyMemoryAction(
+async function applyMemoryOperations(
     store: any,
     threadUid: string,
     memories: MemoryItem[],
-    action: string,
-    key: string,
-    value?: string,
-    type?: string,
-): Promise<MemoryItem[]> {
-    const list = [...memories];
+    operations: Array<{ action: string; key: string; value?: string; type?: string }>,
+): Promise<{ updated: MemoryItem[]; changed: string[] }> {
+    let list = [...memories];
+    const changed: string[] = [];
 
-    switch (action) {
-        case 'store': {
-            const idx = list.findIndex(m => m.key === key);
-            const item: MemoryItem = {
-                id: idx >= 0 ? list[idx].id : generateId(),
-                key,
-                content: value ?? '',
-                type: (type as MemoryItem['type']) ?? 'insight',
-                is_expanded: idx >= 0 ? list[idx].is_expanded : true,
-            };
-            await setMemory(store, threadUid, item);
-            if (idx >= 0) list[idx] = item;
-            else list.push(item);
-            break;
-        }
-        case 'delete': {
-            await deleteStoreMemory(store, threadUid, key);
-            return list.filter(m => m.key !== key);
-        }
-        case 'toggle': {
-            const target = list.find(m => m.key === key);
-            if (target) {
-                target.is_expanded = !target.is_expanded;
-                await setMemory(store, threadUid, target);
+    for (const op of operations) {
+        switch (op.action) {
+            case 'store': {
+                const idx = list.findIndex(m => m.key === op.key);
+                const item: MemoryItem = {
+                    id: idx >= 0 ? list[idx].id : generateId(),
+                    key: op.key,
+                    content: op.value ?? '',
+                    type: (op.type as MemoryItem['type']) ?? 'fact',
+                    is_expanded: idx >= 0 ? list[idx].is_expanded : true,
+                };
+                await setMemory(store, threadUid, item);
+                if (idx >= 0) list[idx] = item;
+                else list.push(item);
+                changed.push(op.key);
+                break;
             }
-            break;
+            case 'delete': {
+                await deleteStoreMemory(store, threadUid, op.key);
+                list = list.filter(m => m.key !== op.key);
+                changed.push(op.key);
+                break;
+            }
+            case 'toggle': {
+                const target = list.find(m => m.key === op.key);
+                if (target) {
+                    target.is_expanded = !target.is_expanded;
+                    await setMemory(store, threadUid, target);
+                    changed.push(op.key);
+                }
+                break;
+            }
         }
-        case 'none':
-        default:
-            break;
     }
 
-    return list;
+    return { updated: list, changed };
 }
 
 // ── Node ───────────────────────────────────────────────────────────────────
@@ -137,11 +150,17 @@ export function createActionMemory() {
             return new Command({ goto: END });
         }
 
-        // Step 1: Ask LLM what memory action to take
+        const cycle = state.current_cycle;
+
+        // Get the RUNNING action's reason — this tells us WHAT to remember
+        const runningAction = cycle?.actions?.find(a => a.status === 'running');
+        const actionReason = runningAction?.target?.reason ?? '';
+
+        // Step 1: Ask LLM to extract ALL memory operations from the reason
         const { resolved } = await invokeLLM({
             runtime: getConfig() as never,
             structuredOutput: MemoryAction,
-            messages: [new SystemMessage(memoryPrompt(state))],
+            messages: [new SystemMessage(memoryPrompt(state, actionReason))],
             nodeName: 'action_memory',
             graphName: 'ace-v3',
             maxRetries: 0,
@@ -149,44 +168,51 @@ export function createActionMemory() {
             streaming: false,
         });
 
-        const memoryAction = resolved?.action ?? 'none';
-        const key = resolved?.key ?? '';
-        const value = resolved?.value;
-        const memType = resolved?.type;
+        // Step 1b: Parse JSON string → validate with sub-schema
+        let operations: z.infer<typeof MemoryOperationsSchema> = [];
+        const raw = resolved?.operations;
+        if (raw && typeof raw === 'string') {
+            try {
+                const parsed = JSON.parse(raw);
+                const validated = MemoryOperationsSchema.safeParse(parsed);
+                if (validated.success) {
+                    operations = validated.data;
+                } else {
+                    console.warn('[action_memory] operations parse failed:', validated.error.message);
+                }
+            } catch {
+                console.warn('[action_memory] JSON.parse failed for operations:', raw.slice(0, 200));
+            }
+        }
 
-        // Step 2: Apply the action (syncs both state + LangGraph store)
+        // Step 2: Apply all operations (syncs both state + LangGraph store)
         const store = (config as any)?.store;
-        const cycle = state.current_cycle;
-        const updatedMemories = await applyMemoryAction(
+        const { updated: updatedMemories, changed } = await applyMemoryOperations(
             store,
             threadUid ?? 'unknown',
             state.memories ?? [],
-            memoryAction,
-            key,
-            value,
-            memType,
+            operations,
         );
 
         // Write output & result pointers
         const cycleIndex = (state.cycles ?? []).length - 1;
         const runningActionIdx = cycle?.actions?.findIndex((a: any) => a.status === 'running') ?? 0;
-        const runningAction = runningActionIdx >= 0 ? cycle?.actions?.[runningActionIdx] : undefined;
         if (runningAction && threadUid) {
-            runningAction.output = await writeActionOutput(threadUid, cycleIndex, runningActionIdx, { action: memoryAction, key }).catch(() => '');
-            runningAction.result = await writeActionResult(threadUid, cycleIndex, runningActionIdx, { updatedKeys: updatedMemories.map((m: any) => m.key) }).catch(() => '');
+            runningAction.output = await writeActionOutput(threadUid, cycleIndex, runningActionIdx, { operations }).catch(() => '');
+            runningAction.result = await writeActionResult(threadUid, cycleIndex, runningActionIdx, { changed }).catch(() => '');
         }
 
         const output: Partial<AceAgentV3State> = {
             memories: updatedMemories,
             current_cycle: cycle,
-            target_node: 'thought',
+            target_node: 'action_dispatcher',
             from_node: 'action_memory',
         };
 
         if (threadUid)
             emitNodeEnd(threadUid, 'action_memory', 'ace-v3', output, {
-                memoryAction,
-                key,
+                operationCount: operations.length,
+                changedKeys: changed,
             }).catch(() => {});
 
         return output;
@@ -196,4 +222,3 @@ export function createActionMemory() {
         }
     };
 }
-

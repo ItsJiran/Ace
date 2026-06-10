@@ -117,4 +117,12 @@ export interface AgentClientThreadStateType extends Omit<AgentThreadStateType, '
     messages: AgentChatTurn[];
 }
 
+// ── Step Plan ──────────────────────────────────────────────────────────────
+
+export interface ActionStepItem {
+    id: string;
+    goal: string;
+    status: 'pending' | 'active' | 'done';
+}
+
 // future notes : move agent thread here...

@@ -17,7 +17,7 @@ type TagRenderer = React.ComponentType<{ text: string; done?: boolean; isLast?: 
 
 const TAG_RENDERERS: Record<string, TagRenderer> = {
     thought: ThoughtBlock,
-    action_type: ActionTypeBlock,
+    action_types: ActionTypeBlock,
     action_reason: ReasonBlock,
     interrupt: InterruptBlock,
 };
