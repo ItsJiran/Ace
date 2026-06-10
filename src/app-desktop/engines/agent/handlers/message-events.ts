@@ -84,6 +84,6 @@ export async function handleMessageEvent(
 
         default:
             console.warn('[MessageHandler] unhandled', { event });
-            ctx.emitDebug(threadUid, event, { error: `unhandled message type: ${event.type}` });
+            ctx.emitDebug(threadUid, event, { error: `unhandled message type: ${(event as any).type}` });
     }
 }

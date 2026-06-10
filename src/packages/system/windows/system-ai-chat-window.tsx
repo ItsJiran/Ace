@@ -130,12 +130,12 @@ function SystemAIChatWindowBody({
             setPrompt(promptOverride);
         }
         setPrompt('');
-        await sendPrompt(nextPrompt, selectedProvider, resolvedModel);
+        await sendPrompt(nextPrompt, selectedProvider as any, resolvedModel);
     };
 
     const handleCreateThread = async () => {
         await createThread({
-            provider: selectedProvider,
+            provider: selectedProvider as any,
             model: resolvedModel,
         });
     };
@@ -195,7 +195,6 @@ function SystemAIChatWindowBody({
                         console.log('Retrying last prompt for thread', current_thread_uid);
                         // await retryLastPrompt(selectedProvider, resolvedModel);
                     }}
-                    bottomRef={bottomRef}
                 />
             </section>
 

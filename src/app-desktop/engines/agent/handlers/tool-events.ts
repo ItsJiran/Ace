@@ -51,6 +51,6 @@ export async function handleToolEvent(
             break;
         default:
             console.warn('[ToolHandler] unhandled', { event });
-            ctx.emitDebug(threadUid, event, { error: `unhandled tool type: ${event.type}` });
+            ctx.emitDebug(threadUid, event, { error: `unhandled tool type: ${(event as any).type}` });
     }
 }

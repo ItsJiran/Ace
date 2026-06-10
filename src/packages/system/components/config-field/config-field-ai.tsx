@@ -2,18 +2,16 @@ import { useState } from 'react';
 import { Plus, Trash2, Server, Pencil, X, Check } from 'lucide-react';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { DefaultConfigAI } from '#/shared/constants/config';
-import type { InferConfigData } from '#/shared/schemas/config';
 
-type AIConfigType = InferConfigData<typeof DefaultConfigAI>;
-type ProviderDetail = AIConfigType['ai.providers'][string];
+type ProviderDetail = Record<string, any>;
 
 type ConfigFieldAIProps = {
-	config: AIConfigType | undefined;
+	config: Record<string, any> | undefined;
 };
 
 const MODEL_PROVIDER_TYPE_OPTIONS = ['openai', 'anthropic', 'google'] as const;
 
-export function ConfigFieldAI({ config }: ConfigFieldAIProps) {
+export function ConfigFieldAI({ config }: { config: Record<string, any> | undefined }) {
 	const { targets } = useAceTheme();
 
 	const [newProviderName, setNewProviderName] = useState('');
@@ -28,7 +26,7 @@ export function ConfigFieldAI({ config }: ConfigFieldAIProps) {
 	const [editModels, setEditModels] = useState<string[]>([]);
 	const [editNewModel, setEditNewModel] = useState('');
 
-	const providers = config?.['ai.providers'];
+	const providers = config?.['ai.providers'] as Record<string, any> | undefined;
 	const defaultProvider = config?.['ai.default_provider'];
 	const defaultModel = config?.['ai.default_model'];
 

@@ -13,7 +13,7 @@ import type { AIProviderEnvKeyType, AIProviderType } from '#/shared/schemas/ai.t
 export default async function resolveApiKey(providerName: AIProviderType): Promise<string | null> {
     // 1. Config — user-set API key via settings UI
     const providers = ConfigEngine.getConfigItem<Record<string, { api_key?: string }>>('ai', 'ai.providers');
-    const configKey = providers?.[providerName]?.api_key;
+    const configKey = providers?.[providerName]?.api_key ?? null;
 
     return null;
     if (configKey) return configKey;
@@ -27,8 +27,8 @@ export default async function resolveApiKey(providerName: AIProviderType): Promi
 
     for (const envKey of envKeys) {
         const value = await readProcessEnv(envKey);
-        if (typeof value === 'string' && value.trim()) {
-            return value.trim();
+        if (typeof value === 'string' && value?.trim()) {
+            return value?.trim() ?? null;
         }
     }
 

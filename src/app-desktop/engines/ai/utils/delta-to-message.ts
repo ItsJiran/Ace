@@ -115,7 +115,11 @@ export class DeltaToMessageConverter {
     ): void {
         const buffer = this.messageBuffers.get(run_id);
         if (buffer) {
-            buffer.token_usage = usage;
+            buffer.token_usage = {
+                input: usage.input_tokens,
+                output: usage.output_tokens,
+                total: usage.total_tokens,
+            };
         }
     }
 

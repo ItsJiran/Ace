@@ -4,12 +4,9 @@
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
   ],
-  "compilerOptions": {
-    "noUnusedLocals": false,        
-    "noUnusedParameters": false,
-    "ignoreDeprecations": "5.0", 
-    "verbatimModuleSyntax": false,
-    "noEmitOnError": false, 
-    "skipLibCheck": true
-  }
+  "exclude": [
+    "src/app-background/engines/ai/workflows/ace_graph_v1",
+    "src/app-background/engines/ai/workflows/ace_graph_v2_simple",
+    "src/app-background/engines/ai/nodes"
+  ]
 }

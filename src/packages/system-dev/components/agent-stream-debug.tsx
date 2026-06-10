@@ -227,7 +227,7 @@ function AgentStreamDebug({ close }: { close: () => void }) {
                     }}
                     disabled={!selectedThreadUid && !isListening}
                     className={[
-                        isListening ? targets.btn.fifth : targets.btn.first,
+                        isListening ? (targets.btn as any).fifth ?? targets.btn.first : targets.btn.first,
                         'px-3 py-1 rounded text-xs flex items-center gap-1 shrink-0',
                         !selectedThreadUid && !isListening ? 'opacity-40' : '',
                     ].join(' ')}

@@ -5,8 +5,8 @@ import AgentGraphDebug from '../components/agent-graph-debug';
 function AgentGraphDebugWindow({ windowUid }: { windowUid: string }) {
     return (
         <AceWindow windowUid={windowUid}>
-            {({ close }) => {
-                return <AgentGraphDebug close={close} />;
+            {() => {
+                return <AgentGraphDebug />;
             }}
         </AceWindow>
     );

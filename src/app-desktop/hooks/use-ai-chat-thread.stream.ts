@@ -107,10 +107,7 @@ function ensureBackgroundAIStreamListener() {
 
 function startBackgroundThreadRun(threadUid: string, prompt: string) {
 	const session = getThreadTransportSession(threadUid);
-	const runPromise = AgentClientEngine.startThreadPrompt(threadUid, prompt, {
-		provider : selectedProvider,
-		model: selectedModel,
-	}).catch((error) => {
+	const runPromise = AgentClientEngine.startThreadPrompt(threadUid, prompt, {}).catch((error) => {
 		console.error('Error in thread run:', error);
 	}).finally(() => {
 		if (session.activeRun === runPromise) {

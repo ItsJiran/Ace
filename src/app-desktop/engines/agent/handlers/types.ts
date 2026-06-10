@@ -19,5 +19,3 @@ export interface StreamHandlerContext {
     readThreadFromMemory(threadUid: string): any;
     syncCurrentThreadFromBackground(threadUid: string): Promise<any>;
 }
-    syncCurrentThreadFromBackground(threadUid: string): Promise<any>;
-}

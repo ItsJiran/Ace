@@ -18,14 +18,14 @@ import { AI_THREAD_STREAM_EVENT_SLUG, AI_GRAPH_OBSERVE_SLUG } from '#/shared/sch
 import AgentThreadStreamHandlers from './agent/agent-thread-stream-handlers';
 import resolveAgentInvokeContext from './ai/resolve-agent-context';
 import normalizeMessages from './ai/utils/normalize-messages';
-import { AceAgentWorkflowState } from '#/app-background/engines/ai/workflows/ace_graph_v1/types';
+import { AceWorkflowState } from '#/app-background/engines/ai/workflows';
 
 // AgentClientEngine is the desktop-side control plane for AI threads.
 //
 // Architecture (post-refactor):
 // - AgentThread lives purely on the client (KernelEngine memory).
 // - Background only runs the LangGraph workflow and streams events.
-// - Raw AceAgentWorkflowState (BaseMessage[]) is fetched from LangGraph
+// - Raw AceWorkflowState (BaseMessage[]) is fetched from LangGraph
 //   checkpointer when needed and formatted into AgentChatTurn[] locally.
 // - Thread CRUD (create, read, list, delete) is entirely local.
 //
@@ -102,7 +102,7 @@ class AgentClientEngineSingleton extends Engine {
     async listThreads() {
         // Pull known thread IDs + raw states from background checkpointer.
         const bgPayload = (await RPCEngine.invoke('ai.listThreads', {})) as {
-            threads: Array<{ thread_uid: string; state: AceAgentWorkflowState | null }>;
+            threads: Array<{ thread_uid: string; state: AceWorkflowState | null }>;
         } | null;
 
         const bgThreads = bgPayload?.threads ?? [];
@@ -297,20 +297,20 @@ class AgentClientEngineSingleton extends Engine {
      * converting to AgentChatTurn[] — useful for debug tools and
      * inspecting the agent's internal reasoning.
      */
-    async readRawState(threadUid: string): Promise<AceAgentWorkflowState | null> {
+    async readRawState(threadUid: string): Promise<AceWorkflowState | null> {
         return (await RPCEngine.invoke('ai.readThread', {
             thread_uid: threadUid,
-        })) as AceAgentWorkflowState | null;
+        })) as AceWorkflowState | null;
     }
 
     /**
-     * Fetches raw AceAgentWorkflowState from LangGraph checkpointer
+     * Fetches raw AceWorkflowState from LangGraph checkpointer
      * and formats it into AgentChatTurn[], then stores locally.
      */
     async syncCurrentThreadFromBackground(threadUid: string): Promise<AgentThread | null> {
         const rawState = (await RPCEngine.invoke('ai.readThread', {
             thread_uid: threadUid,
-        })) as AceAgentWorkflowState | null;
+        })) as AceWorkflowState | null;
 
         if (!rawState || !Array.isArray(rawState.messages)) {
             return this.readThreadFromMemory(threadUid) ?? null;

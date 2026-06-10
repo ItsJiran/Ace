@@ -7,7 +7,7 @@
   "scripts": {
     "dev:vite": "env VITE_ACE_RUNTIME_MODE=desktop vite --strictPort",
     "dev:electron:main": "env ACE_RUNTIME_MODE=desktop nodemon --watch electron --ext cjs --signal SIGTERM --exec \"electron .\"",
-    "dev:electron": "concurrently -k \"npm run dev:vite -- --host 127.0.0.1 --port 5173\" \"wait-on tcp:5173 && npm run dev:electron:main\"",
+    "dev:electron": "concurrently -k \"tsc -b --watch\" \"npm run dev:vite -- --host 127.0.0.1 --port 5173\" \"wait-on tcp:5173 && npm run dev:electron:main\"",
     "start:electron": "npm run build:vite && env ACE_RUNTIME_MODE=desktop ACE_ELECTRON_FORCE_PROD=true electron . --no-sandbox",
     "build:vite": "tsc -b && vite build",
     "build:electron": "npm run build:vite && electron-builder",

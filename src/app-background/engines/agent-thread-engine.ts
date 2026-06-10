@@ -3,7 +3,6 @@ import { Command } from '@langchain/langgraph';
 import { AIProviders } from '#/shared/constants/ai.ts';
 
 import {
-    AceAgentWorkflowState,
     AgentConfigurableType,
     AgentInvokeContextType,
     AIProviderType,
@@ -15,6 +14,7 @@ import { ConfigEngine } from '#/shared/engines/config-engine';
 import { Engine } from '#/shared/engines/engine';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
+import type { AceWorkflowState } from '#/app-background/engines/ai/workflows';
 import { AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai.ts';
 import { AgentStreamAnyEvent } from '#/shared/schemas/agent-stream-events';
 import { getActiveGraphStructure } from './ai/workflows/ace_graph_v3_simple/graph_structure';
@@ -28,7 +28,7 @@ const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
  * - Fetch & sync available AI models.
  * - Start / stop thread prompt runs against the LangGraph workflow.
  * - Bridge raw stream events to the desktop protocol.
- * - Read raw AceAgentWorkflowState from the LangGraph checkpointer on demand.
+ * - Read raw AceWorkflowState from the LangGraph checkpointer on demand.
  *
  * DOES NOT store AgentThread (that's purely client-side).
  * DOES NOT run the sync-frontend-kernel middleware (dead code removed).
@@ -118,7 +118,7 @@ class AgentThreadEngineSingleton extends Engine {
             { owner: this.constructor.name },
         );
 
-        // --- Raw state RPCs (return AceAgentWorkflowState, not AgentThread) ---
+        // --- Raw state RPCs (return AceWorkflowState, not AgentThread) ---
         await RPCEngine.handle(
             'ai.listThreads',
             async () => {
@@ -265,14 +265,14 @@ class AgentThreadEngineSingleton extends Engine {
     // + ----- Workflow State (from LangGraph checkpointer) --------------------------------------------+
 
     /**
-     * Reads the raw AceAgentWorkflowState from the LangGraph checkpointer.
+     * Reads the raw AceWorkflowState from the LangGraph checkpointer.
      */
-    private async readWorkflowState(thread_uid: string): Promise<AceAgentWorkflowState | null> {
+    private async readWorkflowState(thread_uid: string): Promise<AceWorkflowState | null> {
         try {
             const agent = SingletonAgentInstance.getInstance().value;
             const state = await agent.getState({ configurable: { thread_id: thread_uid } });
             if (!state || !state.values) return null;
-            return state.values as AceAgentWorkflowState;
+            return state.values as AceWorkflowState;
         } catch {
             return null;
         }
@@ -280,10 +280,10 @@ class AgentThreadEngineSingleton extends Engine {
 
     /**
      * Lists all known thread IDs with their raw workflow state.
-     * Returns `{ thread_uid, state: AceAgentWorkflowState | null }[]`.
+     * Returns `{ thread_uid, state: AceWorkflowState | null }[]`.
      */
     public async listThreads() {
-        const threads: Array<{ thread_uid: string; state: AceAgentWorkflowState | null }> = [];
+        const threads: Array<{ thread_uid: string; state: AceWorkflowState | null }> = [];
 
         for (const thread_uid of this.knownThreadIds) {
             const state = await this.readWorkflowState(thread_uid);
@@ -294,9 +294,9 @@ class AgentThreadEngineSingleton extends Engine {
     }
 
     /**
-     * Reads raw AceAgentWorkflowState for a single thread.
+     * Reads raw AceWorkflowState for a single thread.
      */
-    public async readThread(thread_uid: string): Promise<AceAgentWorkflowState | null> {
+    public async readThread(thread_uid: string): Promise<AceWorkflowState | null> {
         if (!thread_uid) return null;
         return await this.readWorkflowState(thread_uid);
     }
@@ -305,7 +305,7 @@ class AgentThreadEngineSingleton extends Engine {
      * Registers a thread_uid and returns its raw workflow state.
      * Pure pass-through — no AgentThread persistence.
      */
-    public async syncThread(thread_uid: string): Promise<AceAgentWorkflowState | null> {
+    public async syncThread(thread_uid: string): Promise<AceWorkflowState | null> {
         if (!thread_uid) return null;
         this.knownThreadIds.add(thread_uid);
         return await this.readWorkflowState(thread_uid);

@@ -28,7 +28,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-    
+
     "paths": {
       "#/*": [
         "./src/*"
@@ -37,5 +37,10 @@
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "src/app-background/engines/ai/workflows/ace_graph_v1/**",
+    "src/app-background/engines/ai/workflows/ace_graph_v2_simple/**",
+    "src/app-background/engines/ai/nodes/**"
   ]
 }

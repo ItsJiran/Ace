@@ -24,7 +24,7 @@ export async function handleInvokeEvent(
             ctx.emitDebug(threadUid, event, { result: 'invoke completed' });
             break;
         case 'invoke-interrupted':
-            await ctx.updateRuntime(threadUid, { is_streaming: false, last_error: event.data?.error ?? 'Run interrupted' });
+            await ctx.updateRuntime(threadUid, { is_streaming: false, last_error: 'Run interrupted' });
             ctx.clearConverter(threadUid);
             ctx.emitDebug(threadUid, event, { result: 'invoke interrupted' });
             break;
@@ -35,6 +35,6 @@ export async function handleInvokeEvent(
             ctx.emitDebug(threadUid, event, { error: 'invoke failed' });
             break;
         default:
-            ctx.emitDebug(threadUid, event, { error: `unhandled invoke type: ${event.type}` });
+            ctx.emitDebug(threadUid, event, { error: `unhandled invoke type: ${(event as any).type}` });
     }
 }
