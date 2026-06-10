@@ -165,3 +165,26 @@ export async function emitNodeProgress(
     }).catch(() => {});
 }
 
+/**
+ * Emit done signal — removes ephemeral progress by uid without sending XML.
+ */
+export async function emitNodeProgressDone(
+    threadUid: string,
+    nodeName: string,
+    graphName: string,
+    progressUid: string,
+) {
+    await RPCEngine.invoke(AI_THREAD_STREAM_EVENT_SLUG, {
+        payload: {
+            thread_uid: threadUid,
+            event: {
+                channel: 'progress-done',
+                type: 'progress-done',
+                seq: null,
+                node: nodeName,
+                data: { _progress_uid: progressUid },
+            },
+        },
+    }).catch(() => {});
+}
+

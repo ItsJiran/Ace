@@ -13,6 +13,7 @@ import { createActionReadFile } from './nodes/action_read_file';
 import { createActionListDirectory } from './nodes/action_list_directory';
 import { createActionStep } from './nodes/action_step';
 import { createActionEnd } from './nodes/action_end';
+import { createActionContext } from './nodes/action_context';
 import { createRecoveryError } from './nodes/recovery_error';
 import { createInterruptGate } from './nodes/interrupt_gate';
 import { createActionDispatcher } from './nodes/action_dispatcher';
@@ -58,6 +59,7 @@ export function compileAceGraphV3(options?: {
         .addNode('action_read_file', createActionReadFile(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_list_directory', createActionListDirectory(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_step', createActionStep(), { ends: ['action_dispatcher', 'recovery_error'] })
+        .addNode('action_context', createActionContext(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_end', createActionEnd(), { ends: [END, 'recovery_error'] })
         .addNode('recovery_error', createRecoveryError())
         .addNode('interrupt_gate', createInterruptGate())
@@ -72,7 +74,7 @@ export function compileAceGraphV3(options?: {
         .addConditionalEdges('action_dispatcher', (s) => (s as any).target_node ?? 'thought', [
             'action_speak', 'action_tool', 'action_memory', 'action_mcp',
             'action_write_file', 'action_shell', 'action_read_file',
-            'action_list_directory', 'action_step', 'action_end', 'thought',
+            'action_list_directory', 'action_step', 'action_context', 'action_end', 'thought',
         ])
 
         // All sub-actions → dispatcher (next in batch)
@@ -85,6 +87,7 @@ export function compileAceGraphV3(options?: {
         .addEdge('action_read_file', 'action_dispatcher')
         .addEdge('action_list_directory', 'action_dispatcher')
         .addEdge('action_step', 'action_dispatcher')
+        .addEdge('action_context', 'action_dispatcher')
 
         // action_end → END
         .addEdge('action_end', END)

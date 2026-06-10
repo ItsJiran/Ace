@@ -81,7 +81,11 @@ export interface ContextItemFile {
     key: string;
     summary: string;
     is_expanded: boolean;
-    /** Inline stored content — injected into prompt when expanded */
+    /**
+     * File pointer path to the persisted content on disk.
+     * Read via readContextContent() from context-storage.
+     * Path: storage/threads/<uid>/context/file/<key>/content.txt
+     */
     content: string;
 }
 
@@ -92,7 +96,11 @@ export interface ContextItemDirectory {
     key: string;
     summary: string;
     is_expanded: boolean;
-    /** Inline stored content — injected into prompt when expanded */
+    /**
+     * File pointer path to the persisted content on disk.
+     * Read via readContextContent() from context-storage.
+     * Path: storage/threads/<uid>/context/directory/<key>/content.txt
+     */
     content: string;
 }
 
@@ -152,6 +160,9 @@ export interface AceAgentV3State {
 
     /** Global cycle counter for gatekeeping. */
     global_cycle: number;
+
+    /** Prompt lifecycle: 'new' (first cycle of new prompt), 'continue' (resumed from interrupt), 'old' (ongoing). */
+    is_prompt_state: 'new' | 'old' | 'continue';
 
     /** Which node produced this state (for tracing). */
     from_node?: string;

@@ -223,6 +223,9 @@ class AgentClientEngineSingleton extends Engine {
         prompt: string,
         overrides: Partial<AgentConfigurableType> = {},
     ) {
+        // Clear stale ephemeral from previous prompt
+        KernelEngine.updateMemory(this.thread_ephemeral_memory_uid(threadUid), []);
+
         // Optimistic: mark streaming before the RPC round-trip so UI reacts instantly.
         KernelEngine.writeMemory(this.thread_runtime_memory_uid(threadUid), {
             is_streaming: true,

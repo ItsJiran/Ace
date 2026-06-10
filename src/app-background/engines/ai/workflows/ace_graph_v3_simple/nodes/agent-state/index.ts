@@ -35,6 +35,10 @@ export const AceAgentV3State = Annotation.Root({
         reducer: (_, next) => next,
         default: () => 0,
     }),
+    is_prompt_state: Annotation<'new' | 'old' | 'continue'>({
+        reducer: (_, next) => next,
+        default: () => 'new',
+    }),
     target_node: Annotation<string | undefined>({
         reducer: (_, next) => next,
         default: () => undefined,

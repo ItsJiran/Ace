@@ -1,14 +1,18 @@
 /**
- * Context Storage — type-specific CRUD for file, directory, and tool contexts.
+ * Context Storage — file-based storage for thread context data.
  *
- * Parsing formats:
- *   file      → string[] (line-by-line text)
- *   directory → { files: string[], directories: string[] }
- *   tool      → { payload: unknown, result: unknown }
+ * ALL context types (file, directory, tool) persist their content to disk
+ * as files under a common path structure. The context item's `content` field
+ * stores a file pointer path instead of inline data — preventing LangGraph
+ * state bloat from large payloads.
  *
- * Path structure (tool only — file/directory are inline on state):
- *   /storage/threads/<threadUid>/context/tool/<key>/payload_context.txt
- *   /storage/threads/<threadUid>/context/tool/<key>/output_context.txt
+ * Path structure:
+ *   storage/threads/<threadUid>/context/<type>/<key>/content.txt
+ *
+ * Usage:
+ *   const ptr = await writeFileContext(threadUid, 'src/main.ts', fileContent);
+ *   // ptr → "storage/threads/abc/context/file/src%2Fmain.ts/content.txt"
+ *   const data = await readContextContent(ptr);
  */
 
 import { FSEngine } from '#/shared/engines/fs-engine';
@@ -20,38 +24,17 @@ import type {
 
 const STORAGE_BASE = 'storage/threads';
 
-// ── Path builders ──────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-function toolContextDir(threadUid: string, key: string): string {
-    return `${STORAGE_BASE}/${threadUid}/context/tool/${key}`;
+function contextDir(threadUid: string, type: string, key: string): string {
+    return `${STORAGE_BASE}/${threadUid}/context/${type}/${encodeURIComponent(key)}`;
 }
-function toolPayloadPath(threadUid: string, key: string): string {
-    return `${toolContextDir(threadUid, key)}/payload_context.txt`;
-}
-function toolOutputPath(threadUid: string, key: string): string {
-    return `${toolContextDir(threadUid, key)}/output_context.txt`;
+function contextContentPath(threadUid: string, type: string, key: string): string {
+    return `${contextDir(threadUid, type, key)}/content.txt`;
 }
 
-// ── Parsers ────────────────────────────────────────────────────────────────
-
-/** File content → string[] (line-by-line). */
-function parseFileContent(raw: string): string[] {
-    return raw.split('\n');
-}
-function serializeFileContent(lines: string[]): string {
-    return lines.join('\n');
-}
-
-/** Directory content → { files, directories }. */
-interface DirectoryData {
-    files: string[];
-    directories: string[];
-}
-function parseDirectoryContent(raw: string): DirectoryData {
-    return JSON.parse(raw) as DirectoryData;
-}
-function serializeDirectoryContent(data: DirectoryData): string {
-    return JSON.stringify(data);
+function generateId(): string {
+    return `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /** Tool result → { payload, result }. */
@@ -70,62 +53,57 @@ function serializeToolOutput(data: ToolOutputData): string {
 //  FILE
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function createContextFile(key: string, summary: string, lines: string[]): ContextItemFile {
+/**
+ * Write file context content to disk and return a ContextItemFile with
+ * `content` pointing to the file path.
+ */
+export async function writeFileContext(
+    threadUid: string,
+    key: string,
+    summary: string,
+    data: string,
+    existingId?: string,
+): Promise<ContextItemFile> {
+    const dir = contextDir(threadUid, 'file', key);
+    const path = contextContentPath(threadUid, 'file', key);
+    await FSEngine.createDirectory(dir);
+    await FSEngine.saveFile(path, data);
     return {
-        id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: existingId ?? generateId(),
         type: 'file',
         key,
         summary,
         is_expanded: true,
-        content: serializeFileContent(lines),
+        content: path,
     };
-}
-
-export function readContextFile(item: ContextItemFile): string[] {
-    return parseFileContent(item.content);
-}
-
-export function updateContextFile(item: ContextItemFile, lines: string[]): ContextItemFile {
-    return { ...item, content: serializeFileContent(lines) };
-}
-
-export function appendContextFile(item: ContextItemFile, line: string): ContextItemFile {
-    const lines = parseFileContent(item.content);
-    lines.push(line);
-    return { ...item, content: serializeFileContent(lines) };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  DIRECTORY
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function createContextDirectory(
+/**
+ * Write directory context content to disk and return a ContextItemDirectory with
+ * `content` pointing to the file path.
+ */
+export async function writeDirectoryContext(
+    threadUid: string,
     key: string,
     summary: string,
-    data: DirectoryData,
-): ContextItemDirectory {
+    data: string,
+    existingId?: string,
+): Promise<ContextItemDirectory> {
+    const dir = contextDir(threadUid, 'directory', key);
+    const path = contextContentPath(threadUid, 'directory', key);
+    await FSEngine.createDirectory(dir);
+    await FSEngine.saveFile(path, data);
     return {
-        id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: existingId ?? generateId(),
         type: 'directory',
         key,
         summary,
         is_expanded: true,
-        content: serializeDirectoryContent(data),
-    };
-}
-
-export function readContextDirectory(item: ContextItemDirectory): DirectoryData {
-    return parseDirectoryContent(item.content);
-}
-
-export function updateContextDirectory(
-    item: ContextItemDirectory,
-    data: Partial<DirectoryData>,
-): ContextItemDirectory {
-    const current = parseDirectoryContent(item.content);
-    return {
-        ...item,
-        content: serializeDirectoryContent({ ...current, ...data }),
+        content: path,
     };
 }
 
@@ -135,7 +113,7 @@ export function updateContextDirectory(
 
 export function createContextTool(key: string, summary: string): ContextItemTool {
     return {
-        id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: generateId(),
         type: 'tool',
         key,
         summary,
@@ -149,10 +127,12 @@ export async function writeContextTool(
     item: ContextItemTool,
     data: ToolOutputData,
 ): Promise<ContextItemTool> {
-    await FSEngine.createDirectory(toolContextDir(threadUid, item.key));
+    const dir = contextDir(threadUid, 'tool', item.key);
+    await FSEngine.createDirectory(dir);
     const serialized = serializeToolOutput(data);
-    await FSEngine.writeFile(toolOutputPath(threadUid, item.key), serialized);
-    return { ...item, output: toolOutputPath(threadUid, item.key) };
+    const path = contextContentPath(threadUid, 'tool', item.key);
+    await FSEngine.saveFile(path, serialized);
+    return { ...item, output: path };
 }
 
 /** Read tool output from disk and parse. */
@@ -160,11 +140,21 @@ export async function readContextTool(item: ContextItemTool): Promise<ToolOutput
     if (!item.output) return null;
     const raw = await FSEngine.readRaw(item.output);
     if (!raw) return null;
-    return parseToolOutput(raw);
+    return parseToolOutput(raw as string);
 }
 
-/** Delete tool output files from disk. */
-export async function deleteContextTool(threadUid: string, item: ContextItemTool): Promise<void> {
-    if (item.payload) await FSEngine.deleteFile(item.payload).catch(() => {});
-    if (item.output) await FSEngine.deleteFile(item.output).catch(() => {});
+// ═══════════════════════════════════════════════════════════════════════════
+//  GENERIC READ / CLEANUP
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Read any context content from a pointer path (works for file, directory, tool). */
+export async function readContextContent(pointer: string): Promise<string | null> {
+    const raw = await FSEngine.readRaw(pointer);
+    return raw as string | null;
+}
+
+/** Delete all context storage for a thread. */
+export async function cleanupContextStorage(threadUid: string): Promise<void> {
+    const base = `${STORAGE_BASE}/${threadUid}/context`;
+    await FSEngine.deleteFile(base).catch(() => {});
 }

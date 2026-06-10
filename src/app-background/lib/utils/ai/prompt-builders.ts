@@ -7,6 +7,7 @@
 
 import type { AceAgentV3State } from '#/app-background/engines/ai/workflows/ace_graph_v3_simple/types';
 import { readActionOutput, readActionResult } from '#/app-background/lib/utils/thread-storage';
+import { readContextContent } from '#/app-background/lib/utils/context-storage';
 
 // ── Expanded data types for inline output/result ──────────────────────────
 
@@ -20,13 +21,24 @@ export type ExpandedCycleMap = Map<number, Map<number, ExpandedActionData>>;
 // ── System Intro ──────────────────────────────────────────────────────────
 
 export function buildSystemIntro(state: AceAgentV3State): string[] {
-    return [
+    const showRequest = state.is_prompt_state === 'new';
+    const base = [
         'You are an AI agent. Observe the current state, then decide the next action.',
         '',
-        '### User Request',
-        `"${state.original_prompt}"`,
-        '',
     ];
+
+    if (showRequest) {
+        base.push('### User Request', `"${state.original_prompt}"`, '');
+    } else {
+        base.push(
+            '### Context',
+            '(The original user request is no longer shown — rely on cycle history,',
+            'memories, and current plan to understand what remains to be done.)',
+            '',
+        );
+    }
+
+    return base;
 }
 
 // ── Memory Section ────────────────────────────────────────────────────────
@@ -43,18 +55,75 @@ export function buildMemorySection(state: AceAgentV3State): string[] {
 
 // ── Context Section ────────────────────────────────────────────────────────
 
-export function buildContextSection(state: AceAgentV3State): string[] {
+export async function buildContextSection(state: AceAgentV3State): Promise<string[]> {
     const ctx = state.contexts ?? [];
     if (ctx.length === 0) return [];
-    const lines: string[] = ['### Active Contexts'];
+
+    const expanded = ctx.filter(c => c.is_expanded);
+    const collapsed = ctx.filter(c => !c.is_expanded);
+
+    const lines: string[] = [
+        '### Active Contexts',
+        '',
+        'Contexts store files, directories, and tool results the agent has gathered.',
+        'Each context item can be toggled via action_context:',
+        '  - collapsed (is_expanded=false): item is listed but its content is NOT injected into the prompt.',
+        '  - expanded  (is_expanded=true):  item is listed AND its full content is injected below.',
+        'Use action_context (not action_read_file / action_list_directory / action_memory) to toggle.',
+        '',
+        `Summary: ${expanded.length} expanded · ${collapsed.length} collapsed · ${ctx.length} total`,
+        '',
+    ];
+
     for (const c of ctx) {
         if (c.type === 'file') {
-            const contentLen = typeof c.content === 'string' ? c.content.length : 0;
-            lines.push(`- [file] ${c.key} (${contentLen} chars)`);
+            lines.push(`\n--- FILE: ${c.key} ---`);
+            lines.push(`summary: ${c.summary}`);
+            lines.push(`status: ${c.is_expanded ? 'expanded' : 'collapsed'}`);
+            if (c.is_expanded && c.content) {
+                const raw = await readContextContent(c.content);
+                if (raw !== null) {
+                    lines.push('```');
+                    lines.push(raw);
+                    lines.push('```');
+                } else {
+                    lines.push('(content file not found on disk)');
+                }
+            } else {
+                lines.push(`pointer: ${c.content}`);
+            }
         } else if (c.type === 'directory') {
-            lines.push(`- [dir] ${c.key}`);
+            lines.push(`\n--- DIRECTORY: ${c.key} ---`);
+            lines.push(`summary: ${c.summary}`);
+            lines.push(`status: ${c.is_expanded ? 'expanded' : 'collapsed'}`);
+            if (c.is_expanded && c.content) {
+                const raw = await readContextContent(c.content);
+                if (raw !== null) {
+                    lines.push('```json');
+                    lines.push(raw);
+                    lines.push('```');
+                } else {
+                    lines.push('(content file not found on disk)');
+                }
+            } else {
+                lines.push(`pointer: ${c.content}`);
+            }
         } else if (c.type === 'tool') {
-            lines.push(`- [tool] ${c.key} (payload: ${c.payload ? 'yes' : 'no'})`);
+            lines.push(`\n--- TOOL: ${c.key} ---`);
+            lines.push(`summary: ${c.summary}`);
+            lines.push(`status: ${c.is_expanded ? 'expanded' : 'collapsed'}`);
+            if (c.is_expanded && c.output) {
+                const raw = await readContextContent(c.output);
+                if (raw !== null) {
+                    lines.push('```json');
+                    lines.push(raw);
+                    lines.push('```');
+                } else {
+                    lines.push('(output file not found on disk)');
+                }
+            } else {
+                lines.push(`payload: ${c.payload ?? 'none'} | output: ${c.output ?? 'none'}`);
+            }
         }
     }
     lines.push('');
@@ -213,8 +282,9 @@ export function buildDecisionRules(cycleNum: number, maxCycles: number): string[
         '  Example: complex task → first cycle: action_step (plan), then execute step by step.',
         '- `action_speak`: MAX 2 per cycle (intro + summary pattern).',
         '- `action_memory`: MAX 1 per cycle. Put ALL memory operations into ONE reason.',
+        '- `action_context`: MAX 1 per cycle. Put ALL context toggle operations into ONE reason.',
         '- Each action type appears AT MOST ONCE per cycle (except action_speak: max 2).',
-        '- Other actions (`action_tool`, `action_read_file`, `action_write_file`, `action_shell`, `action_mcp`):',
+        '- Other actions (`action_tool`, `action_read_file`, `action_write_file`, `action_shell`, `action_mcp`, `action_context`):',
         '  One entry each as needed.',
         '',
         '**Action Selection Guide — WRONG → RIGHT:**',
@@ -226,6 +296,8 @@ export function buildDecisionRules(cycleNum: number, maxCycles: number): string[
         '- User asks "create file x.txt"       → ❌ action_shell  ✅ action_write_file',
         '── Agent-perspective (your internal decisions):',
         '- Agent wants to explore a folder      → ❌ action_read_file  ✅ action_list_directory',
+        '- Agent lists dir: USE EXACT path from plan — do NOT simplify "src/components" to "src"',
+        '- Agent reads file: USE EXACT path from plan — "src/index.ts" not just "index.ts"',
         '- Agent wants to check file contents   → ❌ action_shell      ✅ action_read_file',
         '- Agent needs to run a CLI command     → ❌ action_tool       ✅ action_shell',
         '- Agent needs to do math/computation   → ❌ action_shell      ✅ action_tool',
@@ -237,6 +309,7 @@ export function buildDecisionRules(cycleNum: number, maxCycles: number): string[
         '- If the user shared personal info, batch `action_speak, action_memory`.',
         '- Need to execute code or commands → `action_tool`.',
         '- Need to manage or recall memories → `action_memory`.',
+        '- Need to expand/collapse context items → `action_context`.',
         '- Need to read a file → `action_read_file`.',
         '- Need to list directory contents → `action_list_directory`.',
         '- Need to write/create a file → `action_write_file`.',

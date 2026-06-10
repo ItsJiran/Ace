@@ -10,12 +10,13 @@ import { AIMessage, SystemMessage } from '@langchain/core/messages';
 import { Command, END, getConfig } from '@langchain/langgraph';
 import { z } from 'zod';
 import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
-import { emitNodeStart, emitNodeEnd, emitNodeProgress } from '#/app-background/lib/utils/ai/emit-graph-event';
+import { emitNodeStart, emitNodeEnd, emitNodeProgress, emitNodeProgressDone } from '#/app-background/lib/utils/ai/emit-graph-event';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { buildErrorRecoveryCommand } from '../recovery-error-helper';
 import { writeActionOutput, writeActionResult } from '#/app-background/lib/utils/thread-storage';
+import { writeDirectoryContext } from '#/app-background/lib/utils/context-storage';
 import { FSEngine } from '#/shared/engines/fs-engine';
-import type { AceAgentV3State, ContextItemDirectory } from '../../types';
+import type { AceAgentV3State } from '../../types';
 
 // ── Structured output — JSON string in XML tag ────────────────────────────
 
@@ -53,23 +54,46 @@ function listDirPrompt(state: AceAgentV3State, actionReason: string): string {
             ? existingDirs.map(p => `- ${p}`).join('\n')
             : '(no directories in context yet)',
         '',
+        '### CRITICAL: Preserve the FULL path as written in the reason',
+        '',
         '### Guidelines',
-        '- Extract every directory path mentioned in the reason.',
-        '- Use relative paths when possible (e.g., "src", "src/components").',
+        '- Extract every directory path mentioned in the reason — USE THE EXACT FULL PATH from the reason.',
+        '- Do NOT simplify, shorten, truncate, or guess paths. If the reason says "/home/user/Downloads", use "/home/user/Downloads" — NOT "Downloads" or "user/Downloads".',
+        '- If the reason contains an absolute path (starting with /), preserve it as absolute. Do NOT strip the leading / or drop parent segments.',
+        '- If the reason contains a relative path, keep it relative. Do NOT prepend anything.',
         '- If the reason mentions a file, do NOT include it — only directory paths.',
         '- Skip paths already in context unless the reason explicitly says to re-list.',
         '- If no directory paths found → output [].',
+        '',
+        '### WRONG → RIGHT Examples',
+        'Reason: "List files in src/components/buttons/"',
+        '  ❌ [{"path":"src"}]          — simplified, lost the actual path',
+        '  ❌ [{"path":"components"}]   — lost parent folder',
+        '  ✅ [{"path":"src/components/buttons"}]  — exact path from reason',
+        '',
+        'Reason: "List files in src/ and tests/unit/"',
+        '  ❌ [{"path":"src"},{"path":"tests"}]          — "tests/unit/" simplified to "tests"',
+        '  ✅ [{"path":"src"},{"path":"tests/unit"}]     — exact paths',
+        '',
+        'Reason: "list folder di /home/user/Downloads"',
+        '  ❌ [{"path":"Downloads"}]              — stripped the absolute prefix',
+        '  ❌ [{"path":"user/Downloads"}]         — dropped /home/',
+        '  ✅ [{"path":"/home/user/Downloads"}]   — full absolute path preserved',
+        '',
+        'Reason: "list the contents of /var/log and ~/projects"',
+        '  ❌ [{"path":"log"},{"path":"projects"}]                  — stripped parent segments',
+        '  ✅ [{"path":"/var/log"},{"path":"~/projects"}]           — exact paths as written',
         '',
         '### Output Format',
         'Put the paths as a JSON array inside <dirs>...</dirs>.',
         'NO wrapping, NO markdown, NO extra text — just the XML tag with the JSON array.',
         '',
         'Examples:',
-        'Reason: "List semua file di src/ dan tests/"',
-        '<dirs>[{"path":"src"},{"path":"tests"}]</dirs>',
+        'Reason: "List semua file di /var/log dan /etc/nginx"',
+        '<dirs>[{"path":"/var/log"},{"path":"/etc/nginx"}]</dirs>',
         '',
-        'Reason: "Lihat isi folder components dan utils"',
-        '<dirs>[{"path":"components"},{"path":"utils"}]</dirs>',
+        'Reason: "Lihat isi folder ~/projects/backend dan ./src/components"',
+        '<dirs>[{"path":"~/projects/backend"},{"path":"./src/components"}]</dirs>',
     ].join('\n');
 }
 
@@ -161,16 +185,16 @@ export function createActionListDirectory() {
                     const existingIdx = updatedContexts.findIndex(
                         c => c.type === 'directory' && c.key === d.path,
                     );
-                    const item: ContextItemDirectory = {
-                        id: existingIdx >= 0
-                            ? (updatedContexts[existingIdx] as ContextItemDirectory).id
-                            : `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                        type: 'directory',
-                        key: d.path,
-                        summary: `${d.path}: ${fileCount} files, ${dirCount} dirs`,
-                        is_expanded: true,
-                        content: JSON.stringify(entries),
-                    };
+                    const existingId = existingIdx >= 0
+                        ? (updatedContexts[existingIdx] as any).id
+                        : undefined;
+                    const item = await writeDirectoryContext(
+                        threadUid!,
+                        d.path,
+                        `${d.path}: ${fileCount} files, ${dirCount} dirs`,
+                        JSON.stringify(entries),
+                        existingId,
+                    );
                     if (existingIdx >= 0) {
                         updatedContexts[existingIdx] = item;
                     } else {
@@ -197,22 +221,24 @@ export function createActionListDirectory() {
         // Emit final done progress, then clear ephemeral
         if (threadUid && dirList.length > 0) {
             emitNodeProgress(threadUid, 'action_list_directory', 'ace-v3', progressUid, buildProgressXml()).catch(() => {});
+            emitNodeProgressDone(threadUid, 'action_list_directory', 'ace-v3', progressUid).catch(() => {});
         }
 
-        // Build final XML block for the AIMessage
+        // Build final XML for AIMessage, and simple context refs for output
         const finalXml = buildProgressXml();
+        const contextRefs = updatedContexts
+            .filter((c): c is any => c.type === 'directory' && dirList.some((d: any) => d.path === c.key))
+            .map(c => `[context:directory] ${c.key} → ${c.content}`);
 
-        // Summary only for thought node (stored in output/result, not shown to user)
         const summary = listedCount > 0
-            ? `Listed ${listedCount} director${listedCount > 1 ? 'ies' : 'y'}: ${results.filter(r => r.listed).map(r => `${r.path} (${r.entries} entries)`).join(', ')}` +
-              (failCount > 0 ? `. ${failCount} failed.` : '')
+            ? `Listed ${listedCount} director${listedCount > 1 ? 'ies' : 'y'}. ${failCount > 0 ? `${failCount} failed.` : ''} Results stored in context items.`
             : 'No directories listed.';
 
         const cycleIndex = (state.cycles ?? []).length - 1;
         const runningActionIdx = cycle?.actions?.findIndex((a: any) => a.status === 'running') ?? 0;
         if (runningAction && threadUid) {
-            runningAction.output = await writeActionOutput(threadUid, cycleIndex, runningActionIdx, { summary, dirList }).catch(() => '');
-            runningAction.result = await writeActionResult(threadUid, cycleIndex, runningActionIdx, { summary, results }).catch(() => '');
+            runningAction.output = await writeActionOutput(threadUid, cycleIndex, runningActionIdx, { summary, contextRefs }).catch(() => '');
+            runningAction.result = await writeActionResult(threadUid, cycleIndex, runningActionIdx, { summary, results, contextRefs }).catch(() => '');
         }
 
         const output: Partial<AceAgentV3State> = {

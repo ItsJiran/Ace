@@ -14,8 +14,9 @@ import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-g
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { buildErrorRecoveryCommand } from '../recovery-error-helper';
 import { writeActionOutput, writeActionResult } from '#/app-background/lib/utils/thread-storage';
+import { writeFileContext } from '#/app-background/lib/utils/context-storage';
 import { FSEngine } from '#/shared/engines/fs-engine';
-import type { AceAgentV3State, ContextItemFile } from '../../types';
+import type { AceAgentV3State } from '../../types';
 
 // ── Structured output — JSON string in XML tag ────────────────────────────
 
@@ -135,16 +136,16 @@ export function createActionReadFile() {
                     const existingIdx = updatedContexts.findIndex(
                         c => c.type === 'file' && c.key === f.path,
                     );
-                    const item: ContextItemFile = {
-                        id: existingIdx >= 0
-                            ? (updatedContexts[existingIdx] as ContextItemFile).id
-                            : `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                        type: 'file',
-                        key: f.path,
-                        summary: `File: ${f.path} (${content.length} chars)`,
-                        is_expanded: true,
-                        content,
-                    };
+                    const existingId = existingIdx >= 0
+                        ? (updatedContexts[existingIdx] as any).id
+                        : undefined;
+                    const item = await writeFileContext(
+                        threadUid!,
+                        f.path,
+                        `File: ${f.path} (${content.length} chars)`,
+                        content as string,
+                        existingId,
+                    );
                     if (existingIdx >= 0) {
                         updatedContexts[existingIdx] = item;
                     } else {

@@ -151,15 +151,37 @@ export class AgentThreadStreamHandlers {
                 const data = (event as any).data as Record<string, unknown> | undefined;
                 const xml = (data?.xml as string) ?? '';
                 const uid = (data?._progress_uid as string) ?? `prog-${Date.now()}`;
-                if (!xml) return;
+                if (!xml || !uid) return;
                 const now = Date.now();
-                // Tiban: remove existing progress item with same uid, then append updated
-                await this.removeEphemeralItem(thread_uid, uid, 'messages');
                 const current = this.getEphemeral(thread_uid);
-                await this.updateEphemeral(thread_uid, [
-                    ...current,
-                    { uid, type: 'messages' as const, event: 'progress-update', node: (event as any).node, content: [xml], created_at: now, updated_at: now },
-                ]);
+                const existingIndex = current.findIndex(
+                    (i: any) => i.type === 'messages' && i.uid === uid,
+                );
+                const item = {
+                    uid,
+                    type: 'messages' as const,
+                    event: 'progress-update',
+                    node: (event as any).node,
+                    content: [xml],
+                    created_at: existingIndex >= 0 ? current[existingIndex].created_at : now,
+                    updated_at: now,
+                };
+                const next =
+                    existingIndex >= 0
+                        ? [
+                              ...current.slice(0, existingIndex),
+                              item,
+                              ...current.slice(existingIndex + 1),
+                          ]
+                        : [...current, item];
+                await this.updateEphemeral(thread_uid, next as AgentClientThreadEphemeralItem[]);
+                return;
+            }
+            case 'progress-done': {
+                const data = (event as any).data as Record<string, unknown> | undefined;
+                const uid = (data?._progress_uid as string);
+                if (!uid) return;
+                await this.removeEphemeralItem(thread_uid, uid, 'messages');
                 return;
             }
             default:

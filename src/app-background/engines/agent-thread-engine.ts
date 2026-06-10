@@ -407,7 +407,7 @@ class AgentThreadEngineSingleton extends Engine {
         try {
             await streamEvents(
                 await SingletonAgentInstance.getInstance().stream(
-                    { messages: [new HumanMessage(normalizedPrompt)], original_prompt: normalizedPrompt },
+                    { messages: [new HumanMessage(normalizedPrompt)], original_prompt: normalizedPrompt, is_prompt_state: 'new' as const },
                     streamRuntimeConfig,
                 ),
             );
@@ -613,7 +613,7 @@ class AgentThreadEngineSingleton extends Engine {
         try {
             await streamEvents(
                 await SingletonAgentInstance.getInstance().stream(
-                    new Command({ resume: null }),
+                    new Command({ resume: null, update: { is_prompt_state: 'continue' as const } }),
                     streamRuntimeConfig,
                 ),
             );

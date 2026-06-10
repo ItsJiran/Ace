@@ -9,6 +9,7 @@ import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-g
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { buildErrorRecoveryCommand } from '../recovery-error-helper';
 import { writeActionOutput, writeActionResult } from '#/app-background/lib/utils/thread-storage';
+import { createContextTool, writeContextTool } from '#/app-background/lib/utils/context-storage';
 import type { AceAgentV3State } from '../../types';
 
 export function createActionShell() {
@@ -32,8 +33,16 @@ export function createActionShell() {
             runningAction.output = await writeActionOutput(threadUid, cycleIndex, runningActionIdx, { msg }).catch(() => '');
         }
 
+        // Persist as tool context
+        let toolContext = createContextTool(`shell-${runningActionIdx}-${Date.now()}`, `Shell: ${msg}`);
+        if (threadUid) {
+            toolContext = await writeContextTool(threadUid, toolContext, { payload: { plan: msg }, result: { msg } });
+        }
+        const updatedContexts = [...(state.contexts ?? []), toolContext];
+
         const output: Partial<AceAgentV3State> = {
             messages: [new AIMessage({ content: msg, name: 'ace-v3-shell' })],
+            contexts: updatedContexts,
             current_cycle: state.current_cycle,
             target_node: 'thought',
             from_node: 'action_shell',

@@ -23,6 +23,7 @@ import { buildErrorRecoveryCommand } from '../recovery-error-helper';
 import { ParsingXMLError, serializeAgentError } from '#/shared/lib/agent-errors';
 import {
     buildSystemIntro,
+    buildContextSection,
     buildMemorySection,
     buildStepSection,
     buildFirstCyclePrompt,
@@ -48,7 +49,7 @@ const ThoughtAction = z.object({
             '  "action_types": "Comma-separated list of actions to run in this cycle.\n' +
             'Available: action_speak, action_tool, action_memory, action_mcp,\n' +
             '           action_write_file, action_shell, action_read_file,\n' +
-            '           action_list_directory, action_step, end.\n' +
+            '           action_list_directory, action_step, action_context, end.\n' +
             'RULES:\n' +
             '- action_speak: MAX 2 per cycle (intro + summary pattern).\n' +
             '- action_memory: MAX 1 per cycle. Put ALL memory operations into ONE reason.\n' +
@@ -58,9 +59,11 @@ const ThoughtAction = z.object({
             'Example: \"action_speak, action_memory\" (reply + store facts).\n' +
             'Example: \"action_speak, action_tool, action_speak\" (announce → execute → report).\n' +
             'Example: \"action_step\" (plan only — no other actions in this cycle).\n' +
+            'Example: \"action_context\" (toggle context visibility — expand/collapse).\n' +
             'All actions run sequentially BEFORE the next thought cycle.",\n' +
             '  "action_reason": "Per-action justifications. One reason per action in action_types.\n' +
             'Format: \"action_speak: <reason> | action_memory: <reason>\"\n' +
+            'For file/dir actions: include the EXACT path in the reason — do NOT simplify paths.\n' +
             'Each reason should be specific to THAT action — not a generic batch reason.\n' +
             'For action_speak: match the USER language. If user writes in Indonesian, reason in Indonesian.\n' +
             'Example: \"action_speak: Sapa user dengan hangat dalam Bahasa Indonesia | action_memory: Simpan user_name=Alex sebagai fakta\""\n' +
@@ -80,17 +83,20 @@ const MAX_CYCLES = 20;
 
 // ── Thought Prompt ─────────────────────────────────────────────────────────
 
-function thoughtPrompt(
+async function thoughtPrompt(
     state: AceAgentV3State,
     expandedData: ExpandedCycleMap,
-): string {
+): Promise<string> {
     const cycles = state.cycles ?? [];
     const cycleNum = cycles.length + 1;
+
+    const [contextSection] = await Promise.all([buildContextSection(state)]);
 
     const sections: string[][] = [
         buildSystemIntro(state),
         buildMemorySection(state),
         buildStepSection(state),
+        contextSection,
         cycles.length === 0
             ? buildFirstCyclePrompt()
             : [
@@ -141,7 +147,7 @@ export function createThoughtNode() {
         const { resolved, message, parseError } = await invokeLLM({
             runtime: getConfig() as never,
             structuredOutput: ThoughtAction,
-            messages: [new SystemMessage(thoughtPrompt(state, expandedData))],
+            messages: [new SystemMessage(await thoughtPrompt(state, expandedData))],
             nodeName: 'thought',
             graphName: 'ace-v3',
         });
@@ -227,6 +233,7 @@ export function createThoughtNode() {
             cycles: [cycle],
             current_cycle: cycle,
             global_cycle: cycleNum,
+            is_prompt_state: state.is_prompt_state === 'new' ? 'old' : state.is_prompt_state,
             target_node: targetNode,
             target_node_reason: actionReasonsRaw,
             from_node: 'thought',

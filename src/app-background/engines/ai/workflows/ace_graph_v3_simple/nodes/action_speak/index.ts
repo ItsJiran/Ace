@@ -24,13 +24,13 @@ import type { AceAgentV3State } from '../../types';
 
 // ── Action-Specific Prompt ─────────────────────────────────────────────────
 
-function buildActionSpeakPrompt(
+async function buildActionSpeakPrompt(
     state: AceAgentV3State,
     cycles: AceAgentV3State['cycles'],
     expandedData: ExpandedCycleMap,
     actionReason: string,
-): string {
-    const sections: string[][] = [
+): Promise<string> {
+    const [contextSection] = await Promise.all([buildContextSection(state)]);
         // ── PRIMARY: What to say (put FIRST so agent focuses on this) ──
         [
             '### YOUR ONLY JOB',
@@ -52,7 +52,7 @@ function buildActionSpeakPrompt(
         ],
         // ── Supporting context (helps inform the response) ──
         buildMemorySection(state),
-        buildContextSection(state),
+        contextSection,
         cycles.length > 0
             ? [
                 '### Background — What Happened So Far',
