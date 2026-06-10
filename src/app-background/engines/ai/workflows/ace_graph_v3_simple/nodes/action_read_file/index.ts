@@ -124,23 +124,32 @@ export function createActionReadFile() {
             }
         }
 
-        // Step 2: Read each file, build context items
-        const newContexts: ContextItemFile[] = [];
+        // Step 2: Read each file, build context items (deduplicate by key)
+        const updatedContexts = [...(state.contexts ?? [])];
         const results: Array<{ path: string; read: boolean; size: number; error?: string }> = [];
 
         for (const f of fileList) {
             try {
                 const content = await FSEngine.readRaw(f.path);
                 if (content !== null) {
+                    const existingIdx = updatedContexts.findIndex(
+                        c => c.type === 'file' && c.key === f.path,
+                    );
                     const item: ContextItemFile = {
-                        id: `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                        id: existingIdx >= 0
+                            ? (updatedContexts[existingIdx] as ContextItemFile).id
+                            : `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                         type: 'file',
                         key: f.path,
                         summary: `File: ${f.path} (${content.length} chars)`,
                         is_expanded: true,
                         content,
                     };
-                    newContexts.push(item);
+                    if (existingIdx >= 0) {
+                        updatedContexts[existingIdx] = item;
+                    } else {
+                        updatedContexts.push(item);
+                    }
                     results.push({ path: f.path, read: true, size: content.length });
                 } else {
                     results.push({ path: f.path, read: false, size: 0, error: 'file not found or unreadable' });
@@ -168,7 +177,7 @@ export function createActionReadFile() {
 
         const output: Partial<AceAgentV3State> = {
             messages: [new AIMessage({ content: summary, name: 'ace-v3-read-file' })],
-            contexts: [...(state.contexts ?? []), ...newContexts],
+            contexts: updatedContexts,
             current_cycle: cycle,
             target_node: 'action_dispatcher',
             from_node: 'action_read_file',

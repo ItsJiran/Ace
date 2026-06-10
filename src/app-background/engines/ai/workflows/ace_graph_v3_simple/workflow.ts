@@ -10,6 +10,7 @@ import { createActionMcp } from './nodes/action_mcp';
 import { createActionWriteFile } from './nodes/action_write_file';
 import { createActionShell } from './nodes/action_shell';
 import { createActionReadFile } from './nodes/action_read_file';
+import { createActionListDirectory } from './nodes/action_list_directory';
 import { createActionStep } from './nodes/action_step';
 import { createActionEnd } from './nodes/action_end';
 import { createRecoveryError } from './nodes/recovery_error';
@@ -55,6 +56,7 @@ export function compileAceGraphV3(options?: {
         .addNode('action_write_file', createActionWriteFile(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_shell', createActionShell(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_read_file', createActionReadFile(), { ends: ['action_dispatcher', 'recovery_error'] })
+        .addNode('action_list_directory', createActionListDirectory(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_step', createActionStep(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_end', createActionEnd(), { ends: [END, 'recovery_error'] })
         .addNode('recovery_error', createRecoveryError())
@@ -70,7 +72,7 @@ export function compileAceGraphV3(options?: {
         .addConditionalEdges('action_dispatcher', (s) => (s as any).target_node ?? 'thought', [
             'action_speak', 'action_tool', 'action_memory', 'action_mcp',
             'action_write_file', 'action_shell', 'action_read_file',
-            'action_step', 'action_end', 'thought',
+            'action_list_directory', 'action_step', 'action_end', 'thought',
         ])
 
         // All sub-actions → dispatcher (next in batch)
@@ -81,6 +83,7 @@ export function compileAceGraphV3(options?: {
         .addEdge('action_write_file', 'action_dispatcher')
         .addEdge('action_shell', 'action_dispatcher')
         .addEdge('action_read_file', 'action_dispatcher')
+        .addEdge('action_list_directory', 'action_dispatcher')
         .addEdge('action_step', 'action_dispatcher')
 
         // action_end → END

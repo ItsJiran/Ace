@@ -147,6 +147,21 @@ export class AgentThreadStreamHandlers {
                     result: `raw event: ${String(JSON.stringify((event as any)?.raw_graph_event) ?? '').slice(0, 120)}`,
                 });
                 return;
+            case 'progress': {
+                const data = (event as any).data as Record<string, unknown> | undefined;
+                const xml = (data?.xml as string) ?? '';
+                const uid = (data?._progress_uid as string) ?? `prog-${Date.now()}`;
+                if (!xml) return;
+                const now = Date.now();
+                // Tiban: remove existing progress item with same uid, then append updated
+                await this.removeEphemeralItem(thread_uid, uid, 'messages');
+                const current = this.getEphemeral(thread_uid);
+                await this.updateEphemeral(thread_uid, [
+                    ...current,
+                    { uid, type: 'messages' as const, event: 'progress-update', node: (event as any).node, content: [xml], created_at: now, updated_at: now },
+                ]);
+                return;
+            }
             default:
                 console.warn('[AgentThreadStreamHandlers] unhandled channel', { event });
         }

@@ -1,5 +1,5 @@
 import { RPCEngine } from '#/shared/engines/rpc-engine';
-import { AI_GRAPH_OBSERVE_SLUG } from '#/shared/schemas/ai';
+import { AI_GRAPH_OBSERVE_SLUG, AI_THREAD_STREAM_EVENT_SLUG } from '#/shared/schemas/ai';
 
 function safeClone(value: unknown): unknown {
     try {
@@ -135,5 +135,33 @@ export async function emitLLMRetry(
     info?: Record<string, unknown>,
 ) {
     await emit(threadUid, 'llm-call-retry', nodeName, graphName, undefined, info);
+}
+
+// ── Node progress (ephemeral XML blocks via stream event channel) ─────────
+
+/**
+ * Emits ephemeral XML content that the client renders inline.
+ * Each emit with the same progressUid replaces the previous — the client
+ * treats it like any other ephemeral message block.
+ */
+export async function emitNodeProgress(
+    threadUid: string,
+    nodeName: string,
+    graphName: string,
+    progressUid: string,
+    xml: string,
+) {
+    await RPCEngine.invoke(AI_THREAD_STREAM_EVENT_SLUG, {
+        payload: {
+            thread_uid: threadUid,
+            event: {
+                channel: 'progress',
+                type: 'progress-update',
+                seq: null,
+                node: nodeName,
+                data: { xml, _progress_uid: progressUid },
+            },
+        },
+    }).catch(() => {});
 }
 

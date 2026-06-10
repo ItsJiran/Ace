@@ -18,6 +18,7 @@ type SystemAIChatMessagesHistoryProps = {
 };
 
 import { XmlTagRenderer } from './xml-tag-renderer';
+import { DirResultCard } from './tag-blocks/dir-result-card';
 
 export function SystemAIChatMessagesHistory({
     turns,
@@ -97,6 +98,14 @@ export function SystemAIChatMessagesHistory({
                                             <div className="flex flex-col gap-4">
                                                 {turn.responses.map((response, index) => {
                                                     if (response.type === 'AIMessage') {
+                                                        const c = typeof response.content === 'string' ? response.content : '';
+                                                        if (c.trimStart().startsWith('<dir>')) {
+                                                            return (
+                                                                <div key={`resp-${index}`}>
+                                                                    <DirResultCard text={c} />
+                                                                </div>
+                                                            );
+                                                        }
                                                         return (
                                                             <div key={`resp-${index}`}>
                                                                 <XmlTagRenderer content={response.content} />
@@ -151,6 +160,15 @@ export function SystemAIChatMessagesHistory({
                                         <div className="flex flex-col gap-4">
                                             {turn.responses.map((response, index) => {
                                                 if (response.type === 'AIMessage') {
+                                                    const content = typeof response.content === 'string' ? response.content : '';
+                                                    // Dispatch standalone cards for known tags
+                                                    if (content.trimStart().startsWith('<dir>')) {
+                                                        return (
+                                                            <div key={`resp-${index}`}>
+                                                                <DirResultCard text={content} />
+                                                            </div>
+                                                        );
+                                                    }
                                                     return (
                                                         <div key={`resp-${index}`}>
                                                             <XmlTagRenderer content={response.content} />

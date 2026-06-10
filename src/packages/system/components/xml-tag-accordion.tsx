@@ -9,7 +9,7 @@
  */
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { ThoughtBlock, ActionTypeBlock, ReasonBlock, InterruptBlock } from './tag-blocks';
+import { ThoughtBlock, InterruptBlock, DirProgressBlock } from './tag-blocks';
 import type { TagBlock } from './xml-tag-renderer';
 
 /** Tag → renderer mapping. Each renderer receives {text, done, isLast}. */
@@ -17,9 +17,8 @@ type TagRenderer = React.ComponentType<{ text: string; done?: boolean; isLast?: 
 
 const TAG_RENDERERS: Record<string, TagRenderer> = {
     thought: ThoughtBlock,
-    action_types: ActionTypeBlock,
-    action_reason: ReasonBlock,
     interrupt: InterruptBlock,
+    dir: DirProgressBlock,
 };
 
 /** Truncate text for collapsed preview. */

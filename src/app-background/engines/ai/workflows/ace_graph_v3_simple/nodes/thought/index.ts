@@ -41,36 +41,37 @@ const ThoughtAction = z.object({
     thought: z
         .string()
         .describe(
-            'Concise observation of the current state (1-3 sentences). ' +
-            'What does the user want? What has been done? What remains? ' +
-            'Be specific and reference previous results.',
-        ),
-    action_types: z
-        .string()
-        .describe(
-            'Comma-separated list of actions to run in this cycle.\n' +
+            'JSON object with three keys inside <thought>...</thought>. Output ONLY the JSON.\n' +
+            '{\n' +
+            '  "observation": "Concise observation of the current state (1-3 sentences). ' +
+            'What does the user want? What has been done? What remains? Be specific and reference previous results.",\n' +
+            '  "action_types": "Comma-separated list of actions to run in this cycle.\n' +
             'Available: action_speak, action_tool, action_memory, action_mcp,\n' +
-            '           action_write_file, action_shell, action_read_file, action_step, end.\n' +
+            '           action_write_file, action_shell, action_read_file,\n' +
+            '           action_list_directory, action_step, end.\n' +
             'RULES:\n' +
             '- action_speak: MAX 2 per cycle (intro + summary pattern).\n' +
             '- action_memory: MAX 1 per cycle. Put ALL memory operations into ONE reason.\n' +
             '- action_step: MAX 1 per cycle. Use for step plan CRUD. When using action_step,\n' +
             '  do NOT include other actions in the same cycle — plan first, execute later.\n' +
             '- Each action type appears AT MOST ONCE per cycle (except action_speak: max 2).\n' +
-            'Example: "action_speak, action_memory" (reply + store facts).\n' +
-            'Example: "action_speak, action_tool, action_speak" (announce → execute → report).\n' +
-            'Example: "action_step" (plan only — no other actions in this cycle).\n' +
-            'All actions run sequentially BEFORE the next thought cycle.',
-        ),
-    action_reason: z
-        .string()
-        .describe(
-            'Per-action justifications. One reason per action in action_types.\n' +
-            'Format: "action_speak: <reason> | action_memory: <reason>"\n' +
+            'Example: \"action_speak, action_memory\" (reply + store facts).\n' +
+            'Example: \"action_speak, action_tool, action_speak\" (announce → execute → report).\n' +
+            'Example: \"action_step\" (plan only — no other actions in this cycle).\n' +
+            'All actions run sequentially BEFORE the next thought cycle.",\n' +
+            '  "action_reason": "Per-action justifications. One reason per action in action_types.\n' +
+            'Format: \"action_speak: <reason> | action_memory: <reason>\"\n' +
             'Each reason should be specific to THAT action — not a generic batch reason.\n' +
-            'For action_speak: match the USER\'S language. If user writes in Indonesian, the reason should reflect Indonesian.\n' +
-            'Example: "action_speak: Sapa user dengan hangat dalam Bahasa Indonesia | action_memory: Simpan user_name=Alex sebagai fakta"',
+            'For action_speak: match the USER language. If user writes in Indonesian, reason in Indonesian.\n' +
+            'Example: \"action_speak: Sapa user dengan hangat dalam Bahasa Indonesia | action_memory: Simpan user_name=Alex sebagai fakta\""\n' +
+            '}',
         ),
+});
+
+const ThoughtDataSchema = z.object({
+    observation: z.string(),
+    action_types: z.string(),
+    action_reason: z.string(),
 });
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -162,9 +163,22 @@ export function createThoughtNode() {
             });
         }
 
-        const thoughtStr = resolved?.thought ?? 'No observation.';
-        const actionTypesRaw: string = resolved?.action_types ?? 'action_speak';
-        const actionReasonsRaw: string = resolved?.action_reason ?? '';
+        // Parse JSON thought data
+        let thoughtStr = 'No observation.';
+        let actionTypesRaw = 'action_speak';
+        let actionReasonsRaw = '';
+        const rawThought = resolved?.thought;
+        if (rawThought && typeof rawThought === 'string') {
+            try {
+                const parsed = JSON.parse(rawThought);
+                const validated = ThoughtDataSchema.safeParse(parsed);
+                if (validated.success) {
+                    thoughtStr = validated.data.observation;
+                    actionTypesRaw = validated.data.action_types;
+                    actionReasonsRaw = validated.data.action_reason;
+                }
+            } catch { /* fallback */ }
+        }
 
         // Parse comma-separated action list: "action_speak, action_context" → actions[]
         const actionNames = actionTypesRaw

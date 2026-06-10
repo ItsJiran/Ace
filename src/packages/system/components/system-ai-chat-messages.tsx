@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import type {
     AgentClientThreadEphemeralItem,
     AgentClientThreadRuntimeState,
 } from '#/shared/schemas/agent-client-ephemeral';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
+import { EventBus } from '#/shared/engines/event-engine';
 import { SystemAIChatMessagesEmptyState } from './system-ai-chat-messages-empty-state';
 import { SystemAIChatMessagesHistory } from './system-ai-chat-messages-history';
 import { AgentChatTurn } from '#/shared/schemas/agent-thread-state';
+import { XmlTagRenderer } from './xml-tag-renderer';
 
 type SystemAIChatMessagesProps = {
     messages: AgentChatTurn[];
