@@ -24,7 +24,7 @@ export function createActionSpeak() {
         }
 
         const cycle = state.current_cycle;
-        const actionPlan = cycle?.action?.thought ?? 'Respond to the user.';
+        const actionPlan = cycle?.actions?.[0]?.thought ?? 'Respond to the user.';
         const originalPrompt = state.original_prompt;
         const cycleThought = cycle?.thought ?? '';
         const lastMsg = state.messages?.[state.messages.length - 1];

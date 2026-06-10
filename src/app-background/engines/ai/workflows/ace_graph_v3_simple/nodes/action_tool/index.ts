@@ -22,7 +22,7 @@ export function createActionTool() {
         }
 
         const cycle = state.current_cycle;
-        const actionPlan = cycle?.action?.thought ?? 'Execute tool.';
+        const actionPlan = cycle?.actions?.[0]?.thought ?? 'Execute tool.';
 
         const msg = `⏳ Action Tool sedang dalam tahap pengembangan. Rencana: "${actionPlan}". Silakan coba action lain atau akhiri sesi.`;
 

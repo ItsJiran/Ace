@@ -20,7 +20,7 @@ import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { buildErrorRecoveryCommand } from '../recovery-error-helper';
-import type { AceAgentV3State } from '../../types';
+import type { AceAgentV3State, ThoughtCycle } from '../../types';
 
 // ── Structured output ─────────────────────────────────────────────────────
 
@@ -32,19 +32,18 @@ const ThoughtAction = z.object({
             'What does the user want? What has been done? What remains? ' +
             'Be specific and reference previous results.',
         ),
-    action_type: z
-        .enum(['action_speak', 'action_tool', 'action_context', 'action_mcp', 'end'])
+    action_types: z
+        .string()
         .describe(
-            'The target node to route to:\n' +
-            '- action_speak — respond to the user with a natural message.\n' +
-            '- action_tool — execute code, shell commands, install packages.\n' +
-            '- action_context — read files, inspect config, gather info.\n' +
-            '- action_mcp — external tools via MCP protocol.\n' +
-            '- end — terminate the session (request fully satisfied).',
+            'Comma-separated list of actions to run in this cycle.\n' +
+            'Available: action_speak, action_tool, action_context, action_mcp, end.\n' +
+            'Example: "action_speak, action_memory" (reply AND store info).\n' +
+            'Single action: "action_speak". End: "end".\n' +
+            'All actions run sequentially BEFORE the next thought cycle.',
         ),
     action_reason: z
         .string()
-        .describe('One-sentence justification for why this action_type was chosen.'),
+        .describe('One-sentence justification for why these actions were chosen (covers all actions in the batch).'),
 });
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -88,14 +87,15 @@ function thoughtPrompt(state: AceAgentV3State): string {
         lines.push(
             '',
             '### Cycle History — What Has Already Been Done',
-            'Each line shows one completed cycle: what was analyzed → action taken → reason.',
-            'Use this to avoid repeating work that is already finished.',
+            'Each cycle shows: what was analyzed → actions executed → why.',
+            'Actions in [brackets] ran sequentially within one cycle.',
             '',
-            'Format: [#]. "[subject]" → [action_type] → "[reason]"',
+            'Format: [#]. "[subject]" → [action, action] → "[reason]"',
             '',
             ...cycles.slice(-5).map((c, i) => {
                 const num = cycles.length - 4 + i;
-                return `  ${num}. "${c.subject.slice(0, 100)}" → ${c.action.target.name} → "${c.action.target.reason.slice(0, 100)}"`;
+                const actionList = (c.actions ?? []).map(a => a.target.name).join(', ');
+                return `  ${num}. "${c.subject.slice(0, 100)}" → [${actionList}] → "${(c.actions ?? [])[0]?.target.reason.slice(0, 100) ?? ''}"`;
             }),
         );
 
@@ -114,11 +114,11 @@ function thoughtPrompt(state: AceAgentV3State): string {
             );
         }
 
-        if (lastCycle?.action?.result) {
+        if (lastCycle?.actions?.[0]?.result) {
             lines.push(
                 '',
                 '### Last Action Result',
-                `${JSON.stringify(lastCycle.action.result).slice(0, 300)}`,
+                `${JSON.stringify(lastCycle.actions[0].result).slice(0, 300)}`,
             );
         }
     }
@@ -178,26 +178,34 @@ export function createThoughtNode() {
         });
 
         const thoughtStr = resolved?.thought ?? 'No observation.';
-        const actionType = resolved?.action_type ?? 'action_speak';
+        const actionTypesRaw: string = resolved?.action_types ?? 'action_speak';
         const actionReason = resolved?.action_reason ?? 'Fallback.';
+
+        // Parse comma-separated action list: "action_speak, action_context" → actions[]
+        const actionNames = actionTypesRaw
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 0);
+
+        const actions = actionNames.map((name: string, idx: number) => ({
+            thought: thoughtStr,
+            target: { name, reason: actionReason },
+            status: 'pending' as const,
+        }));
+
+        // Route to action_dispatcher — it will iterate through the actions array
+        const targetNode = 'action_dispatcher';
 
         // Determine subject for this cycle
         const subject = state.target_node_reason
             || lastCycleReview(state)
             || state.original_prompt;
 
-        // Map action type to node name (end → __end__ to go directly to END)
-        const isEnd = actionType === 'end';
-        const targetNode = isEnd ? '__end__' : (TARGET_MAP[actionType] ?? 'action_speak');
-
-        // Build the cycle with all fields filled (no longer deferred to action node)
-        const cycle = {
+        // Build the cycle with batched actions
+        const cycle: ThoughtCycle = {
             subject,
             thought: thoughtStr,
-            action: {
-                thought: thoughtStr,
-                target: { name: actionType, reason: actionReason },
-            },
+            actions,
         };
 
         const output: Partial<AceAgentV3State> = {
@@ -212,7 +220,7 @@ export function createThoughtNode() {
 
         if (threadUid) emitNodeEnd(threadUid, 'thought', 'ace-v3', output, {
             cycle: cycleNum,
-            action: actionType,
+            actions: actionNames,
         }).catch(() => {});
 
         return output;

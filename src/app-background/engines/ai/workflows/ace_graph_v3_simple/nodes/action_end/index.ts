@@ -19,15 +19,12 @@ export function createActionEnd() {
 
         const cycles = state.cycles ?? [];
         const lastCycle = cycles[cycles.length - 1];
-        const lastReview = lastCycle?.action?.target?.reason
-            ?? lastCycle?.action?.result as string | undefined
+        const lastAction = lastCycle?.actions?.[lastCycle.actions.length - 1];
+        const lastReview = lastAction?.target?.reason
+            ?? lastAction?.result as string | undefined
             ?? 'Request completed.';
 
         const output: Partial<AceAgentV3State> = {
-            messages: [new AIMessage({
-                content: `✅ ${lastReview}`,
-                name: 'ace-v3-end',
-            })],
             target_node: '__end__',
             from_node: 'action_end',
         };

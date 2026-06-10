@@ -85,7 +85,7 @@ export type InvokeLLMOptions = InvokeLLMStructured | InvokeLLMTools | InvokeLLMP
 
 export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
     const MAX_RETRIES = options.maxRetries ?? 2;
-    const TIMEOUT_MS = options.timeout ?? 5000;           // 0 = no timeout
+    const TIMEOUT_MS = options.timeout ?? 10000;           // 0 = no timeout
     const STREAMING = options.streaming ?? false;
     const threadUid = (options.runtime as any)?.configurable?.thread_id ?? 'unknown';
     const hasStructuredOutput = !!(options as InvokeLLMStructured).structuredOutput;

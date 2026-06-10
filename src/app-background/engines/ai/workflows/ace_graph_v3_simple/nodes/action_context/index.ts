@@ -22,7 +22,7 @@ export function createActionContext() {
         }
 
         const cycle = state.current_cycle;
-        const actionPlan = cycle?.action?.thought ?? 'Gather context.';
+        const actionPlan = cycle?.actions?.[0]?.thought ?? 'Gather context.';
 
         const msg = `⏳ Action Context sedang dalam tahap pengembangan. Rencana: "${actionPlan}". Silakan coba action lain atau akhiri sesi.`;
 

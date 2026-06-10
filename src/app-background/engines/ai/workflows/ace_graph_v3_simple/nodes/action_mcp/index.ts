@@ -22,7 +22,7 @@ export function createActionMcp() {
         }
 
         const cycle = state.current_cycle;
-        const actionPlan = cycle?.action?.thought ?? 'Execute MCP action.';
+        const actionPlan = cycle?.actions?.[0]?.thought ?? 'Execute MCP action.';
 
         const msg = `⏳ Action MCP sedang dalam tahap pengembangan. Rencana: "${actionPlan}". Silakan coba action lain atau akhiri sesi.`;
 

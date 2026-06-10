@@ -46,19 +46,25 @@ export interface ThoughtCycle {
     subject: string;
     /** Internal monologue: observation + assessment from thought node. */
     thought: string;
-    /** The action decided by the agent (filled directly by thought node's structured output). */
-    action: {
-        /** What the agent intends to do — specific plan. */
-        thought: string;
-        /** Target node and reason. */
-        target: { name: string; reason: string };
-        /** Payload sent to the action sub-node (future: tool args, file paths, etc.). */
-        payload?: Record<string, unknown>;
-        /** Raw result returned by the action sub-node (future: stdout, file content, etc.). */
-        result?: unknown;
-    };
+    /** Batched actions — run sequentially within this cycle. */
+    actions: ThoughtAction[];
     /** Optional metadata (pointers, memory keys, etc.). */
     node_metadata?: Record<string, unknown>;
+}
+
+// ── Action (within a cycle) ────────────────────────────────────────────────
+
+export interface ThoughtAction {
+    /** What the agent intends to do with this specific action. */
+    thought: string;
+    /** Target node and reason. */
+    target: { name: string; reason: string };
+    /** Execution status — dispatcher manages this. */
+    status: 'pending' | 'running' | 'done' | 'failed';
+    /** Payload sent to the action sub-node (future: tool args, file paths, etc.). */
+    payload?: Record<string, unknown>;
+    /** Raw result returned by the action sub-node (future: stdout, file content, etc.). */
+    result?: unknown;
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
