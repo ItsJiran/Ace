@@ -70,8 +70,6 @@ export function InterruptBlock({ text, done, isLast }: InterruptBlockProps) {
                                    bg-amber-500/15 text-amber-300 text-xs font-semibold
                                    hover:bg-amber-500/25 active:scale-[0.97] transition-all"
                         onClick={() => {
-                            // The actual RPC call is handled by the parent component
-                            // that wraps this block. Dispatch a custom event.
                             window.dispatchEvent(
                                 new CustomEvent('ace:interrupt-continue', {
                                     detail: { blockTag: payload.blockTag, code: payload.code },

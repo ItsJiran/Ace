@@ -7,7 +7,7 @@
  *
  * During streaming (any block not done), the accordion auto-expands.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { ThoughtBlock, ActionTypeBlock, ReasonBlock, InterruptBlock } from './tag-blocks';
 import type { TagBlock } from './xml-tag-renderer';
@@ -34,13 +34,7 @@ export interface XmlTagAccordionProps {
 }
 
 export function XmlTagAccordion({ blocks }: XmlTagAccordionProps) {
-    const hasStreaming = blocks.some(b => !b.done);
     const [open, setOpen] = useState(false);
-
-    // Auto-expand while streaming
-    useEffect(() => {
-        if (hasStreaming) setOpen(true);
-    }, [hasStreaming]);
 
     if (blocks.length === 0) return null;
 

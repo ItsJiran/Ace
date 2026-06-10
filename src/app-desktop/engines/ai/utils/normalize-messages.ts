@@ -229,25 +229,38 @@ export default (rawMessages: any[]): AgentChatTurn[] => {
         if (!msg) continue;
 
         const kwargs = msg.kwargs || {};
-        const msgId = kwargs.id || (Array.isArray(msg.id) ? msg.id[msg.id.length - 1] : 'unknown');
-        const className = Array.isArray(msg.id) ? msg.id[msg.id.length - 1] : '';
-        const msgType = msg.type;
+        const msgId = kwargs.id || msg.id || (Array.isArray(msg.id) ? msg.id[msg.id.length - 1] : 'unknown');
+        const idArray = Array.isArray(msg.id) ? msg.id : (typeof msg.id === 'string' ? [msg.id] : []);
+        const className = idArray.length > 0 ? idArray[idArray.length - 1] : '';
+        const msgType = msg.type || msg._type || '';
 
-        if (className === 'HumanMessage' || msgType === 'human') {
-            if (currentTurn) {
-                turns.push(currentTurn);
-            }
+        // Detect v3 AIMessage by name prefix or constructor name
+        const isAIMessage =
+            className === 'AIMessage' ||
+            className === 'ai' ||
+            msgType === 'ai' ||
+            (typeof msg.name === 'string' && msg.name.startsWith('ace-v3'));
+        const isHumanMessage =
+            className === 'HumanMessage' ||
+            className === 'human' ||
+            msgType === 'human';
+        const isToolMessage =
+            className === 'ToolMessage' ||
+            className === 'tool' ||
+            msgType === 'tool';
 
+        if (isHumanMessage) {
+            if (currentTurn) turns.push(currentTurn);
             currentTurn = {
-                turn_id: msgId,
+                turn_id: String(msgId),
                 human: {
-                    uid: msgId,
+                    uid: String(msgId),
                     content: extractTextContent(kwargs.content || msg.content),
                     timestamp: Date.now(),
                 },
                 responses: [],
             };
-        } else if (className === 'AIMessage' || msgType === 'ai') {
+        } else if (isAIMessage) {
             ensureTurn(msgId);
             const usage = kwargs.usage_metadata || {};
 
@@ -270,8 +283,8 @@ export default (rawMessages: any[]): AgentChatTurn[] => {
             };
 
             currentTurn?.responses.push(aiMsg);
-        } else if (className === 'ToolMessage' || msgType === 'tool') {
-            ensureTurn(msgId);
+        } else if (isToolMessage) {
+            ensureTurn(String(msgId));
 
             const toolName = kwargs.name || msg.name || 'unknown_tool';
             const rawContent = kwargs.content ?? msg.content;
@@ -279,7 +292,7 @@ export default (rawMessages: any[]): AgentChatTurn[] => {
 
             const toolMsg: AgentThreadToolMessage = {
                 type: 'ToolMessage',
-                uid: msgId,
+                uid: String(msgId),
                 tool_name: toolName,
                 tool_call_id: kwargs.tool_call_id || msg.tool_call_id || '',
                 content,

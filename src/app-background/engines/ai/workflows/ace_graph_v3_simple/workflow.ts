@@ -5,8 +5,11 @@ import { AceAgentV3State } from './nodes/agent-state';
 import { createThoughtNode } from './nodes/thought';
 import { createActionSpeak } from './nodes/action_speak';
 import { createActionTool } from './nodes/action_tool';
-import { createActionContext } from './nodes/action_context';
+import { createActionMemory } from './nodes/action_memory';
 import { createActionMcp } from './nodes/action_mcp';
+import { createActionWriteFile } from './nodes/action_write_file';
+import { createActionShell } from './nodes/action_shell';
+import { createActionReadFile } from './nodes/action_read_file';
 import { createActionEnd } from './nodes/action_end';
 import { createRecoveryError } from './nodes/recovery_error';
 import { createInterruptGate } from './nodes/interrupt_gate';
@@ -17,7 +20,7 @@ import { createActionDispatcher } from './nodes/action_dispatcher';
  *
  *   START → thought → action_dispatcher ─→ action_speak ─┐
  *                                       ├→ action_tool ──┤
- *                                       ├→ action_context┤→ action_dispatcher (next)
+ *                                       ├→ action_memory─┤→ action_dispatcher (next)
  *                                       ├→ action_mcp ───┤
  *                                       └→ action_end ───┘ → END
  *                                          (all done) → thought (next cycle)
@@ -46,8 +49,11 @@ export function compileAceGraphV3(options?: {
         .addNode('action_dispatcher', createActionDispatcher())
         .addNode('action_speak', createActionSpeak(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_tool', createActionTool(), { ends: ['action_dispatcher', 'recovery_error'] })
-        .addNode('action_context', createActionContext(), { ends: ['action_dispatcher', 'recovery_error'] })
+        .addNode('action_memory', createActionMemory(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_mcp', createActionMcp(), { ends: ['action_dispatcher', 'recovery_error'] })
+        .addNode('action_write_file', createActionWriteFile(), { ends: ['action_dispatcher', 'recovery_error'] })
+        .addNode('action_shell', createActionShell(), { ends: ['action_dispatcher', 'recovery_error'] })
+        .addNode('action_read_file', createActionReadFile(), { ends: ['action_dispatcher', 'recovery_error'] })
         .addNode('action_end', createActionEnd(), { ends: [END, 'recovery_error'] })
         .addNode('recovery_error', createRecoveryError())
         .addNode('interrupt_gate', createInterruptGate())
@@ -60,14 +66,19 @@ export function compileAceGraphV3(options?: {
 
         // dispatcher → next action or back to thought
         .addConditionalEdges('action_dispatcher', (s) => (s as any).target_node ?? 'thought', [
-            'action_speak', 'action_tool', 'action_context', 'action_mcp', 'action_end', 'thought',
+            'action_speak', 'action_tool', 'action_memory', 'action_mcp',
+            'action_write_file', 'action_shell', 'action_read_file',
+            'action_end', 'thought',
         ])
 
         // All sub-actions → dispatcher (next in batch)
         .addEdge('action_speak', 'action_dispatcher')
         .addEdge('action_tool', 'action_dispatcher')
-        .addEdge('action_context', 'action_dispatcher')
+        .addEdge('action_memory', 'action_dispatcher')
         .addEdge('action_mcp', 'action_dispatcher')
+        .addEdge('action_write_file', 'action_dispatcher')
+        .addEdge('action_shell', 'action_dispatcher')
+        .addEdge('action_read_file', 'action_dispatcher')
 
         // action_end → END
         .addEdge('action_end', END)

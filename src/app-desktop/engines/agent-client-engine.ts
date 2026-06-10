@@ -319,14 +319,17 @@ class AgentClientEngineSingleton extends Engine {
         const messages: AgentChatTurn[] = normalizeMessages(rawState.messages);
         const existing = this.readThreadFromMemory(threadUid);
 
+        // In dev mode, inject full workflow state for debugging (but keep normalized messages)
+        const devState: Record<string, unknown> = (import.meta as any).env?.PROD !== true
+            ? { ...rawState, messages }
+            : { messages };
+
         const thread: AgentThread = {
             thread_uid: threadUid,
             checkpoint_id: existing?.checkpoint_id,
             model: existing?.model,
             provider: existing?.provider,
-            state: {
-                messages,
-            },
+            state: devState as any,
             created_at: existing?.created_at ?? Date.now(),
             updated_at: Date.now(),
         };

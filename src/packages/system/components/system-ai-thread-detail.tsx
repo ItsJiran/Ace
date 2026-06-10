@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState } from 'react';
-import { Bot, Braces, Database, MessageSquareText, Workflow, RefreshCw } from 'lucide-react';
+import { Bot, Braces, Database, MessageSquareText, Workflow, RefreshCw, FileText, Folder, Wrench, Brain } from 'lucide-react';
 
 import { useAceMemory } from '#/app-desktop/hooks/use-ace-memory';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
@@ -86,6 +86,102 @@ function MessageCard({ message, index }: { message: SerializedAgentMessage; inde
 	);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  Dev State Prop Renderers
+// ═══════════════════════════════════════════════════════════════════════════
+
+function MemoryItemCard({ item }: { item: Record<string, unknown> }) {
+    const { targets } = useAceTheme();
+    const type = String(item.type ?? '-');
+    const isExpanded = item.is_expanded === true;
+
+    return (
+        <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
+            <div className="flex items-center gap-2">
+                <Brain className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="text-xs font-semibold text-purple-400 font-mono">{String(item.key)}</span>
+                <span className={[targets.btn.secondary, 'rounded-md px-1.5 py-0.5 text-[10px]'].join(' ')}>{type}</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${isExpanded ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+            </div>
+            <div className="mt-2 text-xs text-zinc-400 leading-relaxed">{String(item.content ?? '-')}</div>
+            <div className="mt-1 text-[10px] text-zinc-600 font-mono">id: {String(item.id).slice(0, 8)}</div>
+        </div>
+    );
+}
+
+function ContextItemCard({ item }: { item: Record<string, unknown> }) {
+    const { targets } = useAceTheme();
+    const type = String(item.type ?? 'tool');
+    const isExpanded = item.is_expanded === true;
+
+    const icon = type === 'file' ? <FileText className="w-3.5 h-3.5 text-sky-400" />
+        : type === 'directory' ? <Folder className="w-3.5 h-3.5 text-amber-400" />
+        : <Wrench className="w-3.5 h-3.5 text-rose-400" />;
+
+    const accent = type === 'file' ? 'border-sky-500/20 bg-sky-500/5 text-sky-400'
+        : type === 'directory' ? 'border-amber-500/20 bg-amber-500/5 text-amber-400'
+        : 'border-rose-500/20 bg-rose-500/5 text-rose-400';
+
+    return (
+        <div className={`rounded-xl border ${accent.split(' ')[0]} ${accent.split(' ')[1]} p-3`}>
+            <div className="flex items-center gap-2 flex-wrap">
+                {icon}
+                <span className={`text-xs font-semibold font-mono ${accent.split(' ')[2]}`}>{String(item.key)}</span>
+                <span className={[targets.btn.secondary, 'rounded-md px-1.5 py-0.5 text-[10px]'].join(' ')}>{type}</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${isExpanded ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+            </div>
+            <div className="mt-1 text-xs text-zinc-400">{String(item.summary ?? '-')}</div>
+            {type === 'file' || type === 'directory' ? (
+                <div className="mt-2 rounded-md bg-black/30 p-2 text-[11px] text-zinc-300 font-mono max-h-24 overflow-auto whitespace-pre-wrap">
+                    {String(item.content ?? '-')}
+                </div>
+            ) : (
+                <div className="mt-1 flex gap-3 text-[10px] text-zinc-500">
+                    {item.payload ? <span>payload: {String(item.payload).split('/').pop()}</span> : null}
+                    {item.output ? <span>output: {String(item.output).split('/').pop()}</span> : null}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CycleCard({ cycle, index }: { cycle: Record<string, unknown>; index: number }) {
+    const { targets } = useAceTheme();
+    const actions = Array.isArray(cycle.actions) ? cycle.actions as Record<string, unknown>[] : [];
+
+    return (
+        <div className="rounded-xl border border-zinc-500/20 bg-zinc-500/5 p-3">
+            <div className="flex items-center gap-2">
+                <span className={[targets.btn.first, 'rounded-md px-2 py-0.5 text-[11px] font-semibold'].join(' ')}>#{index + 1}</span>
+                <span className="text-xs text-zinc-300 font-medium truncate">{String(cycle.subject ?? '-').slice(0, 80)}</span>
+            </div>
+            <div className="mt-1 text-xs text-zinc-500 italic">"{String(cycle.thought ?? '-').slice(0, 200)}"</div>
+            {cycle.result_summary ? (
+                <div className="mt-1 text-[11px] text-emerald-400">↳ {String(cycle.result_summary)}</div>
+            ) : null}
+            {actions.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                    {actions.map((a, ai) => (
+                        <span key={ai} className={[
+                            'rounded-md px-2 py-0.5 text-[10px] font-mono',
+                            a.status === 'done' ? 'bg-emerald-500/15 text-emerald-400'
+                                : a.status === 'running' ? 'bg-blue-500/15 text-blue-400'
+                                : a.status === 'failed' ? 'bg-red-500/15 text-red-400'
+                                : 'bg-zinc-500/15 text-zinc-500'
+                        ].join(' ')}>
+                            {String((a.target as any)?.name ?? a.target ?? '-')} · {String(a.status)}
+                        </span>
+                    ))}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Main Component
+// ═══════════════════════════════════════════════════════════════════════════
+
 export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: string; threadUid: string }) {
 	const { targets } = useAceTheme();
 	const payload = useAceMemory<AgentThread>(memoryUid);
@@ -104,6 +200,13 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 		? (payload.state.messages as SerializedAgentMessage[])
 		: [];
 	const stateTokenSummary = useMemo(() => resolveTokenSummary(stateMessages), [stateMessages]);
+
+	// Dev-only: extract full workflow state fields for inspection
+	const devState = payload?.state as Record<string, unknown> | undefined;
+	const stateMemories = Array.isArray(devState?.memories) ? devState.memories : null;
+	const stateContexts = Array.isArray(devState?.contexts) ? devState.contexts : null;
+	const stateCycles = Array.isArray(devState?.cycles) ? devState.cycles : null;
+	const stateCurrentCycle = devState?.current_cycle ?? null;
 
 	return (
 		<div className="flex flex-col gap-4 p-4 overflow-auto">
@@ -190,6 +293,59 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 				</div>
 			</SectionShell>
 
+			{/* ── Dev: Workflow State Props ────────────────────────────────── */}
+			{stateMemories ? (
+				<SectionShell
+					title={`Memories (${(stateMemories as any[]).length})`}
+					description="Active memory items from state.memories (dev mode)."
+					icon={Database}
+				>
+					<div className="flex flex-col gap-2">
+						{(stateMemories as any[]).map((item, i) => (
+							<MemoryItemCard key={i} item={item} />
+						))}
+					</div>
+				</SectionShell>
+			) : null}
+
+			{stateContexts ? (
+				<SectionShell
+					title={`Contexts (${(stateContexts as any[]).length})`}
+					description="File, directory, and tool contexts from state.contexts (dev mode)."
+					icon={Database}
+				>
+					<div className="flex flex-col gap-2">
+						{(stateContexts as any[]).map((item, i) => (
+							<ContextItemCard key={i} item={item} />
+						))}
+					</div>
+				</SectionShell>
+			) : null}
+
+			{stateCycles ? (
+				<SectionShell
+					title={`Cycles (${(stateCycles as any[]).length})`}
+					description="Thought → action cycles from state.cycles (dev mode)."
+					icon={Workflow}
+				>
+					<div className="flex flex-col gap-2">
+						{(stateCycles as any[]).map((cycle, i) => (
+							<CycleCard key={i} cycle={cycle} index={i} />
+						))}
+					</div>
+				</SectionShell>
+			) : null}
+
+			{stateCurrentCycle ? (
+				<SectionShell
+					title="Current Cycle"
+					description="Active cycle from state.current_cycle (dev mode)."
+					icon={Workflow}
+				>
+					<StructuredValueBlock value={stateCurrentCycle} />
+				</SectionShell>
+			) : null}
+
 			<SectionShell
 				title="State Payload"
 				description="Full persisted state object for this thread. The simplified workflow now keeps only messages here by default."
@@ -209,5 +365,4 @@ export function SystemAIThreadDetail({ memoryUid, threadUid }: { memoryUid: stri
 		</div>
 	);
 }
-
 export default SystemAIThreadDetail;

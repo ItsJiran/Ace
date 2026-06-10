@@ -8,6 +8,7 @@ import { invokeLLM } from '#/app-background/lib/utils/ai/invoke-llm';
 import { emitNodeStart, emitNodeEnd } from '#/app-background/lib/utils/ai/emit-graph-event';
 import { KernelEngine } from '#/shared/engines/kernel-engine';
 import { buildErrorRecoveryCommand } from '../recovery-error-helper';
+import { writeActionOutput, writeActionResult } from '#/app-background/lib/utils/thread-storage';
 import type { AceAgentV3State } from '../../types';
 
 export function createActionSpeak() {
@@ -16,7 +17,7 @@ export function createActionSpeak() {
     ): Promise<Partial<AceAgentV3State> | Command> {
         try {
         const config = getConfig();
-        const threadUid = (config as any)?.configurable?.thread_id;
+        const threadUid = (config as any)?.configurable?.thread_id ?? 'unknown';
         if (threadUid) emitNodeStart(threadUid, 'action_speak', 'ace-v3', state).catch(() => {});
 
         if (threadUid && !KernelEngine.readMemory(`thread:active:${threadUid}`)) {
@@ -61,8 +62,18 @@ export function createActionSpeak() {
             graphName: 'ace-v3',
         });
 
+        // Write output & result to thread storage, store pointers on the running action
+        const cycleIndex = (state.cycles ?? []).length - 1;
+        const runningActionIdx = cycle?.actions?.findIndex(a => a.status === 'running') ?? 0;
+        const runningAction = runningActionIdx >= 0 ? cycle?.actions?.[runningActionIdx] : undefined;
+        if (runningAction && threadUid) {
+            runningAction.output = await writeActionOutput(threadUid, cycleIndex, runningActionIdx, { prompt: systemPrompt }).catch(() => '');
+            runningAction.result = await writeActionResult(threadUid, cycleIndex, runningActionIdx, { reply: typeof resolved === 'string' ? resolved : JSON.stringify(resolved) }).catch(() => '');
+        }
+
         const output: Partial<AceAgentV3State> = {
             messages: [message],
+            current_cycle: cycle,
             target_node: 'thought',
             from_node: 'action_speak',
         };

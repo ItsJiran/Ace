@@ -108,7 +108,7 @@ function StateRenderer({ data }: { data: unknown }) {
                             const content = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
                             const name = m.name ? ` [${m.name}]` : '';
                             return (
-                                <div key={i} className="text-[10px] text-zinc-400 bg-zinc-900/50 rounded px-1.5 py-0.5">
+                                <div key={i} className="text-[10px] text-zinc-400 bg-zinc-900/50 rounded px-1.5 py-0.5 whitespace-pre-wrap">
                                     <span className="text-zinc-600">{String(m.type ?? '?')}{name}:</span>{' '}
                                     {content.slice(0, 150)}{content.length > 150 ? '...' : ''}
                                 </div>
@@ -633,16 +633,19 @@ function AgentGraphDebug() {
                                             {ev.info && Object.keys(ev.info).length > 0 ? (
                                                 <table className="w-full border-collapse">
                                                     <tbody>
-                                                        {Object.entries(ev.info).map(([k, v]) => (
-                                                            <tr key={k} className="border-b border-zinc-800/50">
-                                                                <td className="py-0.5 pr-2 text-zinc-500 align-top whitespace-nowrap font-medium">{k}</td>
-                                                                <td className="py-0.5 text-zinc-300 align-top break-all">
-                                                                    {typeof v === 'object' && v !== null
-                                                                        ? JSON.stringify(v)
-                                                                        : String(v)}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
+                                                        {Object.entries(ev.info).map(([k, v]) => {
+                                                            const strVal = typeof v === 'object' && v !== null
+                                                                ? JSON.stringify(v)
+                                                                : String(v ?? '');
+                                                            return (
+                                                                <tr key={k} className="border-b border-zinc-800/50">
+                                                                    <td className="py-0.5 pr-2 text-zinc-500 align-top whitespace-nowrap font-medium">{k}</td>
+                                                                    <td className="py-0.5 text-zinc-300 align-top break-all whitespace-pre-wrap">
+                                                                        {strVal}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
                                                     </tbody>
                                                 </table>
                                             ) : (

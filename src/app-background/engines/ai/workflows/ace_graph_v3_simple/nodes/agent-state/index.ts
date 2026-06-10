@@ -1,6 +1,6 @@
 import type { BaseMessage } from '@langchain/core/messages';
 import { Annotation } from '@langchain/langgraph';
-import type { ThoughtCycle } from '../../types';
+import type { ThoughtCycle, MemoryItem, ContextItem } from '../../types';
 
 export const AceAgentV3State = Annotation.Root({
     messages: Annotation<BaseMessage[]>({
@@ -10,6 +10,14 @@ export const AceAgentV3State = Annotation.Root({
     original_prompt: Annotation<string>({
         reducer: (_, next) => next,
         default: () => '',
+    }),
+    memories: Annotation<MemoryItem[]>({
+        reducer: (_, next) => next,
+        default: () => [],
+    }),
+    contexts: Annotation<ContextItem[]>({
+        reducer: (_, next) => next,
+        default: () => [],
     }),
     cycles: Annotation<ThoughtCycle[]>({
         reducer: (prev, next) => [...(prev ?? []), ...(next ?? [])],

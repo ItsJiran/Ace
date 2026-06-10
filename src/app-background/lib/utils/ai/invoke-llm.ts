@@ -85,8 +85,8 @@ export type InvokeLLMOptions = InvokeLLMStructured | InvokeLLMTools | InvokeLLMP
 
 export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
     const MAX_RETRIES = options.maxRetries ?? 2;
-    const TIMEOUT_MS = options.timeout ?? 10000;           // 0 = no timeout
-    const STREAMING = options.streaming ?? false;
+    const TIMEOUT_MS = options.timeout ?? 10000;
+    const STREAMING = options.streaming ?? true;
     const threadUid = (options.runtime as any)?.configurable?.thread_id ?? 'unknown';
     const hasStructuredOutput = !!(options as InvokeLLMStructured).structuredOutput;
     const schema = (options as InvokeLLMStructured).structuredOutput;
@@ -146,32 +146,15 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
             });
 
             const startTime = Date.now();
-            const result = STREAMING
-                ? await model.stream(messages, signal ? { signal } : {})
-                : await model.invoke(messages, signal ? { signal } : {});
+            const invokeOpts: Record<string, unknown> = {};
+            if (signal) invokeOpts.signal = signal;
+            if (!STREAMING) invokeOpts.callbacks = [];
+            const result = await model.invoke(messages, invokeOpts);
             const durationMs = Date.now() - startTime;
 
             // Clear timeout if it hasn't fired yet
             if (timeoutId) clearTimeout(timeoutId);
 
-            // ── Streaming path (no structured output) ──
-            if (STREAMING) {
-                // Structured output + streaming not supported — structured needs full XML
-                if (hasStructuredOutput) {
-                    throw new Error('Streaming is not supported with structuredOutput. Set streaming: false.');
-                }
-
-                emitLLMEnd(threadUid, options.nodeName, options.graphName, {
-                    attempt,
-                    durationMs,
-                    resultPreview: '[stream]',
-                }).catch(() => {});
-
-                // Return the async iterable directly — caller consumes it
-                return { resolved: null, message: result, stream: result };
-            }
-
-            // ── Non-streaming path ──
             // If plain (no structured output), return content as-is
             if (!hasStructuredOutput) {
                 const resolved = (result as any)?.content ?? result;
@@ -218,17 +201,17 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
                             ].join('\n'),
                         ),
                     ];
+                    await new Promise((r) => setTimeout(r, 500));
+                    continue;
                 }
 
-                if (attempt > MAX_RETRIES) {
-                    throw new ParsingXMLError(
-                        `XML structured output failed after ${attempt} attempts: ${errorMsg}`,
-                        options.nodeName,
-                    );
-                }
-
-                await new Promise((r) => setTimeout(r, 500));
-                continue;
+                // Retries exhausted — resolve with null instead of throwing
+                console.error(`[invokeLLM] XML parse exhausted after ${attempt} attempts (${options.nodeName})`);
+                return {
+                    resolved: null,
+                    message: result,
+                    parseError: `XML structured output failed after ${attempt} attempts: ${errorMsg}`,
+                };
             }
 
             // Success

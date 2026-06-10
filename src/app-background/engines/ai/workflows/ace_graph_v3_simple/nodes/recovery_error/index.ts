@@ -54,7 +54,7 @@ export function createRecoveryError() {
 
         switch (err.code) {
 
-            // ── XML Parse Error: agent can fix the format ───────────────
+            // ── XML Parse Error: route to thought, XML display only ─────
             case 'PARSING_XML_ERROR':
                 targetNode = 'thought';
                 reason = [
@@ -88,10 +88,9 @@ export function createRecoveryError() {
 
         // Build user-visible message
         let userMessage: string;
-        let interruptXml: string | null = null;
 
         if (err.code === 'NETWORK_LLM_ERROR') {
-            interruptXml = [
+            userMessage = [
                 '<interrupt>',
                 JSON.stringify({
                     blockTag: 'network_interrupt_continue',
@@ -102,13 +101,19 @@ export function createRecoveryError() {
                 }),
                 '</interrupt>',
             ].join('');
-            userMessage = interruptXml;
+        } else if (err.code === 'PARSING_XML_ERROR') {
+            // Use <thought> XML tag for nice display — no interrupt, graph → thought
+            userMessage = [
+                '<thought>',
+                `⚠️ Parse Error — Previous XML output from "${err.node}" was invalid.`,
+                err.message,
+                'The agent will re-assess and produce correctly formatted output.',
+                '</thought>',
+            ].join('\n');
         } else {
-            userMessage = err.code === 'PARSING_XML_ERROR'
-                ? `⚠️ Previous output was invalid. Re-assessing...`
-                : err.code === 'API_KEY_NOT_RESOLVED'
-                    ? `🔑 ${err.message}`
-                    : `⚠️ Recovering from an error in "${err.node}". Re-assessing...`;
+            userMessage = err.code === 'API_KEY_NOT_RESOLVED'
+                ? `🔑 ${err.message}`
+                : `⚠️ Recovering from an error in "${err.node}". Re-assessing...`;
         }
 
         const output: Partial<AceAgentV3State> = {

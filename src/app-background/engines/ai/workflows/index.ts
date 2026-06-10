@@ -10,8 +10,8 @@ export { compileAceGraphV3 } from './ace_graph_v3_simple/workflow';
 export { compileAceGraphV3 as compileActiveGraph } from './ace_graph_v3_simple/workflow';
 
 // ── State type (complete, for type-safe consumption) ──────────────
-import type { AceAgentV3State, ThoughtCycle } from './ace_graph_v3_simple/types';
-export type { ThoughtCycle };
+import type { AceAgentV3State, ThoughtCycle, MemoryItem, ContextItemFile, ContextItemDirectory, ContextItemTool, ContextItem } from './ace_graph_v3_simple/types';
+export type { ThoughtCycle, MemoryItem, ContextItemFile, ContextItemDirectory, ContextItemTool, ContextItem };
 
 /**
  * AceWorkflowState — alias for the active workflow's state type.
