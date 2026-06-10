@@ -56,7 +56,12 @@ interface InvokeLLMBase {
     messages: BaseMessage[];
     nodeName: string;
     graphName: string;
+    /** Max retries on parse failure. Default 2. Set 0 for no retries. */
     maxRetries?: number;
+    /** Timeout in ms for the LLM call. */
+    timeout?: number;
+    /** Whether to stream the response (default false = invoke). */
+    streaming?: boolean;
 }
 
 interface InvokeLLMStructured extends InvokeLLMBase {
@@ -80,6 +85,8 @@ export type InvokeLLMOptions = InvokeLLMStructured | InvokeLLMTools | InvokeLLMP
 
 export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
     const MAX_RETRIES = options.maxRetries ?? 2;
+    const TIMEOUT_MS = options.timeout ?? 5000;           // 0 = no timeout
+    const STREAMING = options.streaming ?? false;
     const threadUid = (options.runtime as any)?.configurable?.thread_id ?? 'unknown';
     const hasStructuredOutput = !!(options as InvokeLLMStructured).structuredOutput;
     const schema = (options as InvokeLLMStructured).structuredOutput;
@@ -104,7 +111,25 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
         attempt++;
 
         // Extract AbortSignal from LangGraph config so LLM calls respect cancellation
-        const signal = (options.runtime as any)?.signal as AbortSignal | undefined;
+        const configSignal = (options.runtime as any)?.signal as AbortSignal | undefined;
+
+        // Combine config signal with timeout signal
+        let signal: AbortSignal | undefined = configSignal;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        if (TIMEOUT_MS > 0) {
+            const timeoutCtrl = new AbortController();
+            timeoutId = setTimeout(() => timeoutCtrl.abort(), TIMEOUT_MS);
+            // If there's also a config signal, combine: abort on whichever fires first
+            if (configSignal) {
+                const combined = new AbortController();
+                const onAbort = () => combined.abort();
+                configSignal.addEventListener('abort', onAbort, { once: true });
+                timeoutCtrl.signal.addEventListener('abort', onAbort, { once: true });
+                signal = combined.signal;
+            } else {
+                signal = timeoutCtrl.signal;
+            }
+        }
 
         emitLLMStart(threadUid, options.nodeName, options.graphName, {
             attempt,
@@ -121,9 +146,32 @@ export async function invokeLLM(options: InvokeLLMOptions): Promise<any> {
             });
 
             const startTime = Date.now();
-            const result = await model.invoke(messages, signal ? { signal } : {});
+            const result = STREAMING
+                ? await model.stream(messages, signal ? { signal } : {})
+                : await model.invoke(messages, signal ? { signal } : {});
             const durationMs = Date.now() - startTime;
 
+            // Clear timeout if it hasn't fired yet
+            if (timeoutId) clearTimeout(timeoutId);
+
+            // ── Streaming path (no structured output) ──
+            if (STREAMING) {
+                // Structured output + streaming not supported — structured needs full XML
+                if (hasStructuredOutput) {
+                    throw new Error('Streaming is not supported with structuredOutput. Set streaming: false.');
+                }
+
+                emitLLMEnd(threadUid, options.nodeName, options.graphName, {
+                    attempt,
+                    durationMs,
+                    resultPreview: '[stream]',
+                }).catch(() => {});
+
+                // Return the async iterable directly — caller consumes it
+                return { resolved: null, message: result, stream: result };
+            }
+
+            // ── Non-streaming path ──
             // If plain (no structured output), return content as-is
             if (!hasStructuredOutput) {
                 const resolved = (result as any)?.content ?? result;

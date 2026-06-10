@@ -57,6 +57,7 @@ export async function bootBackgroundRuntime() {
 			await AgentThreadEngine.boot();
 			await AgentThreadEngine._setupRpcRoutes();
 			await AgentThreadEngine._setupEventRoutes();
+            await ConfigEngine._setupEventRoutes();
 
 			console.log('ACE Background Runtime Ready.');
 		} catch (error) {

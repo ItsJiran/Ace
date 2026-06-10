@@ -32,6 +32,7 @@ export function createAIStreamEventBridge(input: {
                 threadUid,
                 channel: normalized_event?.channel,
                 type: normalized_event?.type,
+                raw_event : event,
             });
 
             if (normalized_event) {
