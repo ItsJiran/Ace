@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { TextBlock, ThoughtBlock, DirProgressBlock, InterruptBlock } from './tag-blocks';
+import { TextBlock, ThoughtBlock, DirProgressBlock, FileProgressBlock, ShellProgressBlock, InterruptBlock } from './tag-blocks';
 
 export interface TagBlock {
     tag: string;
@@ -19,6 +19,8 @@ type TagComp = React.ComponentType<{ text: string; done?: boolean; isLast?: bool
 const TAG_COMPONENTS: Record<string, TagComp> = {
     thought: ThoughtBlock,
     dir: DirProgressBlock,
+    files: FileProgressBlock,
+    shell: ShellProgressBlock,
     interrupt: InterruptBlock,
 };
 

@@ -51,10 +51,13 @@ const ThoughtAction = z.object({
             '           action_write_file, action_shell, action_read_file,\n' +
             '           action_list_directory, action_step, action_context, end.\n' +
             'RULES:\n' +
+            '- ⚠️  action_step: When you use action_step, it MUST be the ONLY action in this cycle.\n' +
+            '  Do NOT combine action_step with ANY other action type. Plan first, execute later.\n' +
+            '  Use action_step ONLY when the task is complex AND no plan exists yet.\n' +
+            '  Do NOT use action_step if steps already exist — skip it and execute actions directly.\n' +
             '- action_speak: MAX 2 per cycle (intro + summary pattern).\n' +
             '- action_memory: MAX 1 per cycle. Put ALL memory operations into ONE reason.\n' +
-            '- action_step: MAX 1 per cycle. Use for step plan CRUD. When using action_step,\n' +
-            '  do NOT include other actions in the same cycle — plan first, execute later.\n' +
+            '- action_context: MAX 1 per cycle. Put ALL context toggle operations into ONE reason.\n' +
             '- Each action type appears AT MOST ONCE per cycle (except action_speak: max 2).\n' +
             'Example: \"action_speak, action_memory\" (reply + store facts).\n' +
             'Example: \"action_speak, action_tool, action_speak\" (announce → execute → report).\n' +
@@ -66,7 +69,10 @@ const ThoughtAction = z.object({
             'For file/dir actions: include the EXACT path in the reason — do NOT simplify paths.\n' +
             'Each reason should be specific to THAT action — not a generic batch reason.\n' +
             'For action_speak: match the USER language. If user writes in Indonesian, reason in Indonesian.\n' +
-            'Example: \"action_speak: Sapa user dengan hangat dalam Bahasa Indonesia | action_memory: Simpan user_name=Alex sebagai fakta\""\n' +
+            'For action_step: describe WHY the task needs a plan and WHAT phases are involved.\n' +
+            'Example: \"action_speak: Sapa user dengan hangat dalam Bahasa Indonesia | action_memory: Simpan user_name=Alex sebagai fakta\"\n' +
+            'Example: \"action_step: Butuh plan karena task ini multi-phase: scaffold project → install deps → buat folder structure → report hasil\"\n' +
+            'Example: \"action_context: Expand src/main.ts untuk lihat isinya | action_context: Collapse /home/user/Downloads\"\n' +
             '}',
         ),
 });

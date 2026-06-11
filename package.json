@@ -39,6 +39,7 @@
     "@langchain/quickjs": "^0.4.0",
     "@langchain/react": "^1.0.4",
     "@langchain/tavily": "^1.2.0",
+    "@xenova/transformers": "^2.0.1",
     "@xyflow/react": "^12.10.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

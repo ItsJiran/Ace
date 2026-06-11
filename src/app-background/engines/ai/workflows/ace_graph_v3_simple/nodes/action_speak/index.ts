@@ -31,6 +31,8 @@ async function buildActionSpeakPrompt(
     actionReason: string,
 ): Promise<string> {
     const [contextSection] = await Promise.all([buildContextSection(state)]);
+
+    const sections: string[][] = [
         // ── PRIMARY: What to say (put FIRST so agent focuses on this) ──
         [
             '### YOUR ONLY JOB',
@@ -104,7 +106,7 @@ export function createActionSpeak() {
         const expandedData = await preFetchExpandedData(cycles);
 
         // Build prompt with memory, context, and cycle history
-        const systemPrompt = buildActionSpeakPrompt(
+        const systemPrompt = await buildActionSpeakPrompt(
             state,
             cycles,
             expandedData,

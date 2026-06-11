@@ -10,3 +10,7 @@ export { DirProgressBlock } from './dir-progress-block';
 export type { DirProgressBlockProps } from './dir-progress-block';
 export { DirResultCard } from './dir-result-card';
 export type { DirResultCardProps } from './dir-result-card';
+export { ShellProgressBlock } from './shell-progress-block';
+export type { ShellProgressBlockProps } from './shell-progress-block';
+export { FileProgressBlock } from './file-progress-block';
+export type { FileProgressBlockProps } from './file-progress-block';

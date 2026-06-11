@@ -6,8 +6,9 @@
  *
  * Logic:
  *   1. Mark any currently "running" action as "done" (just returned).
- *   2. Find next "pending" action — mark it "running", route to it.
- *   3. No more pending → all done, invoke LLM for result_summary, then route to thought.
+ *   2. If action set itself to "needs_rethought", route to thought with feedback.
+ *   3. Find next "pending" action — mark it "running", route to it.
+ *   4. No more pending → all done, invoke LLM for result_summary, then route to thought.
  */
 
 import { SystemMessage } from '@langchain/core/messages';
@@ -43,13 +44,33 @@ export function createActionDispatcher() {
             return { target_node: 'thought', from_node: 'action_dispatcher' };
         }
 
-        // Phase 1: Mark any running action as done (just returned from execution)
+        // Phase 1: Collect any needs_rethought feedback (but don't abort)
+        const collectRethoughtFeedback = async (): Promise<string | null> => {
+            const needsRethought = cycle.actions.filter(a => a.status === 'needs_rethought');
+            if (needsRethought.length === 0) return null;
+            const parts: string[] = [];
+            for (const a of needsRethought) {
+                let feedback = '';
+                if (a.output) {
+                    try {
+                        const d = await readActionOutput(a.output!);
+                        feedback = d ? JSON.stringify(d) : '';
+                    } catch { /* ignore */ }
+                }
+                parts.push(
+                    `${a.target.name}: ${feedback || a.target.reason || 'needs re-evaluation'}`,
+                );
+            }
+            return `[needs_rethought] ${parts.join(' | ')}`;
+        };
+
+        // Phase 2: Mark any running action as done (just returned from execution)
         const running = cycle.actions.find(a => a.status === 'running');
         if (running) {
             running.status = 'done';
         }
 
-        // Phase 2: Find next pending action
+        // Phase 3: Find next pending action (skip needs_rethought — they're not pending)
         const next = cycle.actions.find(a => a.status === 'pending');
         if (!next) {
             // All done — summarize results before routing to thought
@@ -158,9 +179,12 @@ export function createActionDispatcher() {
                 }
             }
 
+            const rethoughtFeedback = await collectRethoughtFeedback();
+
             const output: Partial<AceAgentV3State> = {
                 current_cycle: cycle,
                 target_node: 'thought',
+                target_node_reason: rethoughtFeedback ?? undefined,
                 from_node: 'action_dispatcher',
             };
 

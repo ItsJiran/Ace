@@ -55,7 +55,7 @@ export interface ThoughtAction {
     target: { name: string; reason: string };
 
     /** Execution status — dispatcher manages this. */
-    status: 'pending' | 'running' | 'done' | 'failed';
+    status: 'pending' | 'running' | 'done' | 'failed' | 'needs_rethought';
 
     /**
      * File pointer to the action's output data.
