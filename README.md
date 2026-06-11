@@ -254,52 +254,46 @@ flowchart LR
 ### LangGraph Agent Workflow (AceGraph V3)
 
 ```mermaid
-flowchart TB
-    START([Start]) --> THOUGHT
+flowchart TD
+    %% Styling Definitions
+    classDef terminal fill:#4caf50,stroke:#2e7d32,stroke-width:2px,color:#fff
+    classDef core fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#000
+    classDef action fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px,color:#000
+    classDef warning fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
 
-    subgraph CORE[Core Cycle]
-        THOUGHT[Thought Node<br/>LLM plans actions,<br/>selects tools]
-        DISPATCH[Action Dispatcher<br/>Routes each action<br/>to correct handler]
-    end
+    START([Start]):::terminal --> THOUGHT
 
-    subgraph NODES[Action Nodes]
-        RF[action_read_file<br/>Read file contents]
-        WF[action_write_file<br/>Write/create files]
-        LD[action_list_directory<br/>List directory]
-        SH[action_shell<br/>Execute shell commands]
-        TL[action_tool<br/>Run registered ACE tools]
-        MCP[action_mcp<br/>Invoke MCP tools]
-        MEM[action_memory<br/>Manage memories]
-        SPK[action_speak<br/>Emit message to chat]
-        STP[action_step<br/>Step trigger conditions]
-        CTX[action_context<br/>Toggle context items]
-        END(action_end<br/>Signal completion)
+    subgraph CORE [Core Cycle]
+        THOUGHT["Thought Node<br/>(LLM plans & selects)"]:::core
+        DISPATCH{"Action<br/>Dispatcher"}:::core
     end
 
     THOUGHT -->|produces ThoughtAction[]| DISPATCH
-    DISPATCH --> RF
-    DISPATCH --> WF
-    DISPATCH --> LD
-    DISPATCH --> SH
-    DISPATCH --> TL
-    DISPATCH --> MCP
-    DISPATCH --> MEM
-    DISPATCH --> SPK
-    DISPATCH --> STP
-    DISPATCH --> CTX
-    DISPATCH --> END
-
-    RF & WF & LD & SH & TL & MCP & MEM & SPK & STP & CTX -->|result → next thought| THOUGHT
-    END --> DONE([Done])
-
     DISPATCH -.->|needs_rethought| THOUGHT
 
-    style CORE fill:#e1f5fe,stroke:#0288d1
-    style NODES fill:#f3e5f5,stroke:#7b1fa2
-    style THOUGHT fill:#b3e5fc,stroke:#0277bd
-    style DISPATCH fill:#b3e5fc,stroke:#0277bd
-    style END fill:#fff3e0,stroke:#e65100
-    style DONE fill:#4a9,stroke:#262,color:#fff
+    subgraph NODES [Action Nodes]
+        RF("action_read_file"):::action
+        WF("action_write_file"):::action
+        LD("action_list_directory"):::action
+        SH("action_shell"):::action
+        TL("action_tool"):::action
+        MCP("action_mcp"):::action
+        MEM("action_memory"):::action
+        SPK("action_speak"):::action
+        STP("action_step"):::action
+        CTX("action_context"):::action
+    end
+
+    %% Routing actions
+    DISPATCH --> RF & WF & LD & SH & TL & MCP & MEM & SPK & STP & CTX
+    
+    %% Return loop to thought
+    RF & WF & LD & SH & TL & MCP & MEM & SPK & STP & CTX -->|result → next thought| THOUGHT
+
+    %% Completion routing
+    END("action_end<br/>(Signal completion)"):::warning
+    DISPATCH --> END
+    END --> DONE([Done]):::terminal
 ```
 
 The agent workflow follows a structured graph cycle:
