@@ -8,6 +8,10 @@
 ![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-blue)
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Stage](https://img.shields.io/badge/stage-experimental-orange)
+![Warning](https://img.shields.io/badge/status-major_development-red)
+
+> **⚠️ UNDERGOING MAJOR DEVELOPMENT**
+> ACE is currently usable for basic chat and tool execution, but long-running agentic tasks remain unstable. You may encounter noticeable performance issues, incomplete error handling, and breaking changes between commits. Use at your own risk during active sessions.
 
 ---------
 
@@ -19,6 +23,8 @@ The project is designed to help developers work faster by combining:
 - local tool execution inside the app
 - session context, memory, and retrieval pipelines
 - an extensible package ecosystem for custom components, tools, and workflows
+- local speech models for Text-to-Speech and Speech-to-Text (ONNX-based, in background runtime)
+- a schema-driven configuration system with versioned config maps
 
 In practical terms, ACE is an experimental developer assistant platform where the overlay UI, runtime orchestration, package registry, and agent runtime are already usable, but still moving toward cleaner boundaries.
 
@@ -26,8 +32,12 @@ In practical terms, ACE is an experimental developer assistant platform where th
 
 - **🌐 Always-on Overlay:** A seamless UI layer that stays on top of your workflow without interrupting it.
 - **🧠 Local-First Intelligence:** Privacy-centric AI orchestration with an Electron-hosted background LangGraph runtime and live renderer streaming.
+- **⚙️ LangGraph Agent Workflow:** A structured `thought→action_dispatcher→action` cycle with 11+ action nodes (read/write files, shell, MCP tools, memory, speak, step triggers, context toggling), anti-looping rules, and `needs_rethought` recovery.
+- **📁 Disk-Backed Context System:** File, directory, and tool context items are persisted to `storage/threads/<uid>/context/` so the agent can reference large project content without keeping everything in memory.
+- **🗣️ Local Speech Engine:** ONNX-based TTS (Kokoro-82M) and STT (Whisper) running in the background Node.js runtime with progress streaming to the UI. Model caching with auto-detection of on-disk files.
 - **🛠️ Extensible Toolchain:** Registry-loaded tools, package-defined windows/widgets, and runtime-safe bridges for desktop and background capabilities.
-- **📡 Event-Driven Architecture:** Robust communication via a central `EventBus` for decoupled UI and logic.
+- **🔧 Schema-Driven Configuration:** Versioned config maps (`ConfigGeneral`, `ConfigKeybind`, `ConfigAI`, `ConfigSpeech`) with Zod validation and disk-based config storage.
+- **📡 Event-Driven Architecture:** Robust communication via a central `EventBus` for decoupled UI and logic, with cross-runtime targeting (`desktop` / `background`).
 - **📦 Package Ecosystem:** Modular architecture allowing custom widgets, tools, and workflows.
 
 
@@ -123,16 +133,15 @@ flowchart LR
 		APP[app.tsx and main.tsx]
 		HOOKS[hooks/]
 		COMP[components/layout and system UI glue]
-		DENG[engines/window, state, keybind, logger, ai]
+		DENG[engines/window, state, keybind, logger, ai, speech-client]
 	end
 
 	subgraph PACKAGES[src/packages]
 		subgraph SYS[src/packages/system]
-			SYSW[windows/]
-			SYSWD[widgets/dockbar.ts]
+			SYSW[windows/ including settings, chat]
 			SYST[tools/]
-			SYSR[renderers/]
-			SYSC[components/]
+			SYSR[renderers/ and tag-blocks/]
+			SYSC[components/ audio-waveform, config-field]
 		end
 		subgraph SYSDEV[src/packages/system-dev]
 			DEVW[windows/]
@@ -142,9 +151,10 @@ flowchart LR
 	end
 
 	subgraph SHARED[src/shared]
-		SE[engines/config, registry, event, fs, kernel]
-		SS[schemas/]
+		SE[engines/config, registry, event, fs, kernel, rpc]
+		SS[schemas/ including agent-thread-state, config]
 		SL[lib/]
+		SC[constants/ versioned config maps]
 	end
 
 	subgraph ELECTRON[electron]
@@ -159,13 +169,21 @@ flowchart LR
 		BAI[engines/agent-thread-engine.ts]
 		BA[engines/ai/agent-instance.ts]
 		BSE[engines/ai/agent-stream-events.ts]
-		BST[engines/ai/stream/*]
+		
+		subgraph WORKFLOW[LangGraph AceGraph V3]
+			THOUGHT[thought/ planning & action selection]
+			DISPATCH[action_dispatcher/ routes actions]
+			ACTIONS[action nodes: read, write, shell, mcp, memory, speak, step, context, list, tool, end]
+		end
+		
+		BCTX[lib/utils/context-storage.ts]
+		BSPEECH[engines/speech-engine.ts]
 	end
 
 	subgraph PROVIDERS[Provider Layer]
 		OA[OpenAI]
-		GG[Google]
-		AN[Anthropic]
+		GG[Google / Gemini]
+		AN[Anthropic / Claude]
 	end
 
 	subgraph FUTURE[Future Prospect Direction]
@@ -190,10 +208,6 @@ flowchart LR
 	SE --> SS
 	SL --> DENG
 
-	SYSWD --> SYSW
-	SYST --> SYSR
-	SYSC --> SYSW
-
 	DT --> EP
 	EP --> EM
 	EM --> EB
@@ -203,15 +217,25 @@ flowchart LR
 	BM --> BAI
 	BAI --> BA
 	BAI --> BSE
-	BSE --> BST
+	BA --> THOUGHT
+	THOUGHT --> DISPATCH
+	DISPATCH --> ACTIONS
+	ACTIONS --> THOUGHT
 	BA --> HOST
 	BA --> OA
 	BA --> GG
 	BA --> AN
+	BA --> BCTX
+	BA --> BSPEECH
 
 	SE --> BAI
+	SE --> BCTX
 	SS --> BAI
+	SS --> BCTX
 	SE --> BM
+	SE --> BSPEECH
+
+	BSPEECH -->|EventBus speech:tts-progress speech:stt-progress| DENG
 
 	SYS -.-> PKG
 	BA -.-> VISION
@@ -222,13 +246,75 @@ flowchart LR
 ### How The Layers Work Together
 
 - `src/desktop.ts` boots the renderer-side runtime by composing desktop-facing engines such as `WindowEngine`, `StateEngine`, `KeybindEngine`, `LoggerEngine`, and desktop `AgentClientEngine` on top of shared contracts.
-- `src/app-desktop/` owns renderer UI, hooks, window shells, and interaction logic, while package windows and widgets from `src/packages/system/` and `src/packages/system-dev/` provide much of the actual mounted UI surface.
-- `src/shared/engines/` contains the common control-plane layer, especially `KernelEngine`, `RegistryEngine`, `ConfigEngine`, `EventBus`, and filesystem-facing shared runtime contracts.
+- `src/app-desktop/` owns renderer UI, hooks, window shells, and interaction logic, while package windows and widgets from `src/packages/system/` and `src/packages/system-dev/` provide much of the actual mounted UI surface. Speech progress events are consumed directly in React components via `useAceEvent().listen()`.
+- `src/shared/engines/` contains the common control-plane layer, especially `KernelEngine`, `RegistryEngine`, `ConfigEngine`, `EventBus`, and filesystem-facing shared runtime contracts. `src/shared/constants/config.ts` holds versioned Zod-based config schema maps for general, keybind, AI, and speech settings.
 - Electron `main.cjs`, `preload.cjs`, and the background bridge connect the desktop runtime to host capabilities such as environment access, filesystem access, global input, and background IPC.
 - `src/background.ts` and `src/app-background/main.ts` boot the dedicated background runtime, where background `AgentThreadEngine` invokes the LangGraph agent instance and emits protocol stream updates back toward the renderer.
-- LangGraph-specific composition currently lives under `src/app-background/engines/ai/`, including the compiled agent instance, stream-event bridge, typed stream controllers, and tool-facing integration points.
+
+### LangGraph Agent Workflow (AceGraph V3)
+
+The agent workflow follows a structured graph cycle:
+
+1. **Thought Node** — The LLM plans the next actions, selects tools, and produces a structured `ThoughtAction` array with a `status` field (`pending | running | done | failed | needs_rethought`). It also manages `contexts` (file/directory items the agent considers relevant) and `memories` (persistent notes).
+2. **Action Dispatcher** — Routes each action to the correct handler node. If an action is marked `needs_rethought`, the dispatcher collects feedback and routes it back to the thought node for re-planning.
+3. **Action Nodes** (11 total):
+   - `action_read_file` / `action_write_file` — Read/write file content with progress streaming
+   - `action_list_directory` — List directory contents
+   - `action_shell` — Execute shell commands with batched execution and progress XML tags
+   - `action_tool` — Run registered ACE tools
+   - `action_mcp` — Invoke Model Context Protocol tools
+   - `action_memory` — Manage persistent memory entries
+   - `action_speak` — Emit assistant messages to the chat UI
+   - `action_step` — Step trigger conditions for multi-step workflows
+   - `action_context` — Toggle context items (expand/collapse file content references)
+   - `action_end` — Signal workflow completion
+4. **Context System** — File, directory, and tool content are persisted to disk under `storage/threads/<uid>/context/`. The thought node references them by pointer; `action_context` toggles expansion of specific items. `buildContextSection()` reads content from disk on demand to avoid bloating the LLM prompt.
+5. **Anti-Looping & Recovery** — The system tracks cycle counts per action, enforces `MAX_CYCLES = 40`, detects repeated identical actions, and can mark stuck actions as `needs_rethought` for recovery.
+
+### Speech Engine
+
+The `SpeechEngine` runs in the background (Node.js) runtime and provides:
+- **TTS** (Text-to-Speech) via `@huggingface/transformers` v3 using ONNX-optimized Kokoro-82M model (`AutoTokenizer` + `AutoModel` direct inference with speaker/style/speed tensors)
+- **STT** (Speech-to-Text) via Whisper ONNX pipeline (`automatic-speech-recognition` with auto language detection)
+- Model caching with auto-detection of on-disk files under `~/.config/AceAssistant/models/`
+- Progress events streamed to the desktop via `EventBus` (`speech:tts-progress`, `speech:stt-progress`)
+- The UI renders progress bars using `<AudioWaveform>` and download status in the Settings → Speech section
+
+### Schema-Driven Configuration
+
+Configuration is schema-driven with versioned maps:
+- `ConfigGeneral_V0_0_0_SchemaMap` — General app settings
+- `ConfigKeybind_V0_0_0_SchemaMap` — Keybinding settings
+- `ConfigAI_V0_0_0_SchemaMap` / `ConfigAI_V0_0_1_SchemaMap` — AI provider and model config
+- `ConfigSpeech_V0_0_0_SchemaMap` — Speech model paths and settings
+
+Each schema map is validated with Zod and stored via `ConfigEngine` with disk persistence through the kernel space.
+
+### AI Streaming & Thread Sync
+
 - AI streaming and persisted thread synchronization flow through shared kernel state so windows like chat and monitors can reflect both live and durable runtime state.
+- `AgentClientEngine` (desktop) syncs thread state (`steps`, `contexts`, `memories`, `cycles`) periodically with `AgentThreadEngine` (background).
+- Thread state is serialized via `AgentClientThreadStateType` which includes full step history and context items.
 - The architecture already reflects a practical split between desktop, background, shared, electron, and package layers; the main ongoing task is reducing leakage between those real surfaces rather than inventing a new separation model.
+
+## 🛠️ Technology Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Desktop Shell** | Electron 35+ | Cross-platform desktop shell, main/preload IPC, OS integration |
+| **UI Framework** | React 19 + TypeScript | Component-based renderer UI |
+| **Bundler** | Vite 7 | Dev server and build tooling |
+| **Agent Framework** | LangGraph (`@langchain/langgraph` v1.3) | Structured `thought→action` graph workflow with conditional edges, state management, and interrupt gates |
+| **AI Providers** | LangChain (`@langchain/core` + provider SDKs) | OpenAI, Anthropic (Claude), Google (Gemini) integration |
+| **ONNX Inference** | `@huggingface/transformers` v3 | Local TTS (Kokoro-82M) and STT (Whisper) model inference in Node.js |
+| **STT / TTS** | Kokoro-82M-ONNX + Whisper ONNX | Speech-to-text and text-to-speech via ONNX runtime in background |
+| **Streaming** | Server-Sent Events + EventBus | Live agent output and progress streaming to renderer |
+| **Event System** | Custom EventBus | Decoupled cross-runtime communication with `target` routing |
+| **IPC / RPC** | Electron IPC + Custom RPCEngine | Background ↔ Desktop bridge for method invocation |
+| **Config** | Zod schemas + versioned config maps | Type-safe, disk-persisted configuration |
+| **Styling** | Tailwind CSS 4 | Utility-first UI styling |
+| **Packaging** | Custom Registry Engine | Dynamic tool, widget, and window registration |
+| **Testing** | Vitest | Unit and feature testing |
 
 ## Future Prospects
 
