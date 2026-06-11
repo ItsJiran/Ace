@@ -253,6 +253,55 @@ flowchart LR
 
 ### LangGraph Agent Workflow (AceGraph V3)
 
+```mermaid
+flowchart TB
+    START([Start]) --> THOUGHT
+
+    subgraph CORE[Core Cycle]
+        THOUGHT[Thought Node<br/>LLM plans actions,<br/>selects tools]
+        DISPATCH[Action Dispatcher<br/>Routes each action<br/>to correct handler]
+    end
+
+    subgraph NODES[Action Nodes]
+        RF[action_read_file<br/>Read file contents]
+        WF[action_write_file<br/>Write/create files]
+        LD[action_list_directory<br/>List directory]
+        SH[action_shell<br/>Execute shell commands]
+        TL[action_tool<br/>Run registered ACE tools]
+        MCP[action_mcp<br/>Invoke MCP tools]
+        MEM[action_memory<br/>Manage memories]
+        SPK[action_speak<br/>Emit message to chat]
+        STP[action_step<br/>Step trigger conditions]
+        CTX[action_context<br/>Toggle context items]
+        END(action_end<br/>Signal completion)
+    end
+
+    THOUGHT -->|produces ThoughtAction[]| DISPATCH
+    DISPATCH --> RF
+    DISPATCH --> WF
+    DISPATCH --> LD
+    DISPATCH --> SH
+    DISPATCH --> TL
+    DISPATCH --> MCP
+    DISPATCH --> MEM
+    DISPATCH --> SPK
+    DISPATCH --> STP
+    DISPATCH --> CTX
+    DISPATCH --> END
+
+    RF & WF & LD & SH & TL & MCP & MEM & SPK & STP & CTX -->|result → next thought| THOUGHT
+    END --> DONE([Done])
+
+    DISPATCH -.->|needs_rethought| THOUGHT
+
+    style CORE fill:#e1f5fe,stroke:#0288d1
+    style NODES fill:#f3e5f5,stroke:#7b1fa2
+    style THOUGHT fill:#b3e5fc,stroke:#0277bd
+    style DISPATCH fill:#b3e5fc,stroke:#0277bd
+    style END fill:#fff3e0,stroke:#e65100
+    style DONE fill:#4a9,stroke:#262,color:#fff
+```
+
 The agent workflow follows a structured graph cycle:
 
 1. **Thought Node** — The LLM plans the next actions, selects tools, and produces a structured `ThoughtAction` array with a `status` field (`pending | running | done | failed | needs_rethought`). It also manages `contexts` (file/directory items the agent considers relevant) and `memories` (persistent notes).
