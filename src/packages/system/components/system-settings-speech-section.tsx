@@ -2,10 +2,10 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Volume2, Mic, Play, Square, Loader, Download } from 'lucide-react';
 
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
+import { useAceEvent } from '#/app-desktop/hooks/use-ace-event';
 import { ConfigField } from './config-field';
 import { DefaultConfigSpeech } from '#/shared/constants/config';
 import { RPCEngine } from '#/shared/engines/rpc-engine';
-import { EventBus } from '#/shared/engines/event-engine';
 import { AudioWaveform } from './audio-waveform';
 import type { InferConfigData } from '#/shared/schemas/config';
 
@@ -23,17 +23,24 @@ export function SystemSettingsSpeechSection({ config, schema }: SpeechSectionPro
     const [ttsProgress, setTtsProgress] = useState<any>(null);
     const [sttProgress, setSttProgress] = useState<any>(null);
 
+    const { listen } = useAceEvent();
+
     useEffect(() => {
-        const u1 = EventBus.listen('speech:tts-progress', (ctx: any) => {
+        listen('speech:tts-progress', (ctx: any) => {
+            console.log('TTS CLIENT GET : ', ctx.payload);
             setTtsProgress(ctx.payload);
-            if (ctx.payload.status === 'done') setTtsDownloading(false);
+            if (ctx.payload?.status === 'done' || ctx.payload?.status === 'ready' || ctx.payload?.progress >= 100) {
+                setTtsDownloading(false);
+            }
         });
-        const u2 = EventBus.listen('speech:stt-progress', (ctx: any) => {
+        listen('speech:stt-progress', (ctx: any) => {
+            console.log('STT CLIENT GET : ', ctx.payload);
             setSttProgress(ctx.payload);
-            if (ctx.payload.status === 'done') setSttDownloading(false);
+            if (ctx.payload?.status === 'done' || ctx.payload?.status === 'ready' || ctx.payload?.progress >= 100) {
+                setSttDownloading(false);
+            }
         });
-        return () => { u1(); u2(); };
-    }, []);
+    }, [listen]);
 
     const handleDownloadTTS = useCallback(async () => {
         setTtsDownloading(true);
@@ -73,6 +80,8 @@ export function SystemSettingsSpeechSection({ config, schema }: SpeechSectionPro
         try {
             const { audio, sampleRate, modelPath } = await RPCEngine.invoke('speech.testTTS', { text: ttsText }, { timeoutMs: 120000 }) as any;
             setTtsModel(modelPath);
+
+            console.log('Speech Test TTS Triggered');
 
             // audio from RPC is number[], convert back
             const wav = float32ToWav(new Float32Array(audio as any), sampleRate);
@@ -229,7 +238,7 @@ export function SystemSettingsSpeechSection({ config, schema }: SpeechSectionPro
                     </span>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex-1">
+                    <div className="flex-1 flex flex-col">
                         <button
                             className={[targets.btn.secondary, 'w-full px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1.5'].join(' ')}
                             onClick={handleDownloadTTS}
@@ -238,19 +247,19 @@ export function SystemSettingsSpeechSection({ config, schema }: SpeechSectionPro
                             {ttsDownloading ? <Loader size={12} className="animate-spin" /> : <Download size={12} />}
                             {ttsDownloading ? 'Downloading TTS...' : 'Download TTS Model'}
                         </button>
-                        {ttsProgress?.status === 'downloading' && (
+                        {ttsProgress && ttsProgress.status !== 'done' && ttsProgress.progress < 100 && (
                             <div className="mt-1">
                                 <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${ttsProgress.progress}%` }} />
+                                    <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${Math.max(0, Math.min(100, ttsProgress.progress))}%` }} />
                                 </div>
                                 <div className="text-[9px] text-zinc-500 mt-0.5">{ttsProgress.progress}%</div>
                             </div>
                         )}
-                        {ttsProgress?.status === 'done' && (
+                        {(ttsProgress?.status === 'done' || ttsProgress?.progress >= 100) && (
                             <div className="text-[10px] text-emerald-400 mt-1">TTS model ready</div>
                         )}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 flex flex-col">
                         <button
                             className={[targets.btn.secondary, 'w-full px-3 py-1.5 rounded-lg text-xs flex items-center justify-center gap-1.5'].join(' ')}
                             onClick={handleDownloadSTT}
@@ -259,15 +268,15 @@ export function SystemSettingsSpeechSection({ config, schema }: SpeechSectionPro
                             {sttDownloading ? <Loader size={12} className="animate-spin" /> : <Download size={12} />}
                             {sttDownloading ? 'Downloading STT...' : 'Download STT Model'}
                         </button>
-                        {sttProgress?.status === 'downloading' && (
+                        {sttProgress && sttProgress.status !== 'done' && sttProgress.progress < 100 && (
                             <div className="mt-1">
                                 <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${sttProgress.progress}%` }} />
+                                    <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${Math.max(0, Math.min(100, sttProgress.progress))}%` }} />
                                 </div>
                                 <div className="text-[9px] text-zinc-500 mt-0.5">{sttProgress.progress}%</div>
                             </div>
                         )}
-                        {sttProgress?.status === 'done' && (
+                        {(sttProgress?.status === 'done' || sttProgress?.progress >= 100) && (
                             <div className="text-[10px] text-blue-400 mt-1">STT model ready</div>
                         )}
                     </div>
