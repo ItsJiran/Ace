@@ -7,6 +7,7 @@ import { StateEngine } from './app-desktop/engines/state-engine';
 import { LoggerEngine } from './app-desktop/engines/logger-engine';
 import { KernelEngine } from './shared/engines/kernel-engine';
 import { AgentClientEngine } from './app-desktop/engines/agent-client-engine';
+import { SpeechClientEngine } from './app-desktop/engines/speech-client-engine';
 import { RPCEngine } from './shared/engines/rpc-engine';
 
 let bootPromise: Promise<void> | null = null;
@@ -157,6 +158,7 @@ async function initEngineEventRoutesStep() {
 	if (typeof aiEngineWithSetup._setupEventRoutes === 'function') {
 		await aiEngineWithSetup._setupEventRoutes();
 	}
+	await SpeechClientEngine._setupEventRoutes();
 
 	console.log(
 		'[Boot] Phase 7: Engine event routes registered (window, keybind, ai_gateway, tool, ai_context, parser).',

@@ -35,7 +35,7 @@ export function createActionWriteFile() {
         const output: Partial<AceAgentV3State> = {
             messages: [new AIMessage({ content: msg, name: 'ace-v3-write-file' })],
             current_cycle: state.current_cycle,
-            target_node: 'thought',
+            target_node: 'action_dispatcher',
             from_node: 'action_write_file',
         };
 

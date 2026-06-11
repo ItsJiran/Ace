@@ -202,3 +202,35 @@ export const DefaultConfigAI: ConfigStorageType<typeof CONFIG_AI_VERSIONS> = {
     config: ConfigAI_V0_0_1_SchemaMap,
 };
 export type DefaultConfigAIType = typeof DefaultConfigAI;
+
+/**
+ * Default Speech Configuration
+ * Configures Text-to-Speech (TTS) and Speech-to-Text (STT) models.
+ * Both use the @xenova/transformers ONNX pipeline under the hood.
+ * Users can customize model paths through the UI.
+ */
+
+export const ConfigSpeech_V0_0_0_SchemaMap: ConfigSchemaMapType = {
+    'speech.tts_model': z
+        .string()
+        .default('onnx-community/Kokoro-82M-ONNX')
+        .describe('HuggingFace ONNX model path for Text-to-Speech (TTS). Uses AutoTokenizer + AutoModel.'),
+
+    'speech.stt_model': z
+        .string()
+        .default('onnx-community/whisper-base')
+        .describe('HuggingFace ONNX model path for Speech-to-Text (STT / transcription).'),
+};
+
+export const ConfigSpeech_V0_0_0_Schema = z.object(ConfigSpeech_V0_0_0_SchemaMap);
+export type ConfigSpeech_V0_0_0_Type = z.infer<typeof ConfigSpeech_V0_0_0_Schema>;
+
+export const CONFIG_SPEECH_VERSIONS = ['0.0.0'] as const;
+
+export const DefaultConfigSpeech: ConfigStorageType<typeof CONFIG_SPEECH_VERSIONS> = {
+    memory_uid: 'system:config:speech',
+    file_name: 'ace.speech.json',
+    version: '0.0.0',
+    config: ConfigSpeech_V0_0_0_SchemaMap,
+};
+export type DefaultConfigSpeechType = typeof DefaultConfigSpeech;

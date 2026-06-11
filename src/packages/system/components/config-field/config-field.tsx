@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 
-export type SectionStorageKey = 'general' | 'keybinds' | 'ai';
+export type SectionStorageKey = 'general' | 'keybinds' | 'ai' | 'speech';
 
 function parseInputValue(rawValue: string, currentValue: unknown): unknown {
 	if (typeof currentValue === 'number') {

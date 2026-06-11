@@ -5,6 +5,7 @@ import { RegistryEngine } from './shared/engines/registry-engine';
 import { RPCEngine } from './shared/engines/rpc-engine';
 import { AgentThreadEngine } from './app-background/engines/agent-thread-engine';
 import { BackgroundLogRelayEngine } from './app-background/engines/background-log-relay-engine';
+import { SpeechEngine } from './app-background/engines/speech-engine';
 
 let backgroundBootPromise: Promise<void> | null = null;
 
@@ -58,6 +59,7 @@ export async function bootBackgroundRuntime() {
 			await AgentThreadEngine._setupRpcRoutes();
 			await AgentThreadEngine._setupEventRoutes();
             await ConfigEngine._setupEventRoutes();
+            await SpeechEngine.getInstance().registerRPC();
 
 			console.log('ACE Background Runtime Ready.');
 		} catch (error) {

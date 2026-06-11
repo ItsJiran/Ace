@@ -1,7 +1,7 @@
 import { FSEngine } from './fs-engine';
 import { KernelEngine } from './kernel-engine';
 import { RPCEngine } from './rpc-engine';
-import { DefaultConfigGeneral, DefaultConfigKeybinds, DefaultConfigAI } from '#/shared/constants/config';
+import { DefaultConfigGeneral, DefaultConfigKeybinds, DefaultConfigAI, DefaultConfigSpeech } from '#/shared/constants/config';
 import { EventBus } from './event-engine';
 import type {
     ConfigFileType,
@@ -36,6 +36,7 @@ class ConfigEngineSingleton extends Engine {
         general: DefaultConfigGeneral,
         keybinds: DefaultConfigKeybinds,
         ai: DefaultConfigAI,
+        speech: DefaultConfigSpeech,
     };
 
     // + ----- Abstract Methods ---------------------------------------------------------------+
@@ -76,6 +77,10 @@ class ConfigEngineSingleton extends Engine {
         KernelEngine.registerSystemMemory(
             DefaultConfigAI.memory_uid,
             this.resolveDefaultConfig(DefaultConfigAI),
+        );
+        KernelEngine.registerSystemMemory(
+            DefaultConfigSpeech.memory_uid,
+            this.resolveDefaultConfig(DefaultConfigSpeech),
         );
     }
 

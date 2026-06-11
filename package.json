@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
+    "@huggingface/transformers": "^4.2.0",
     "@langchain/anthropic": "^1.4.0",
     "@langchain/core": "^1.1.46",
     "@langchain/deepseek": "^1.0.27",
@@ -39,7 +40,6 @@
     "@langchain/quickjs": "^0.4.0",
     "@langchain/react": "^1.0.4",
     "@langchain/tavily": "^1.2.0",
-    "@xenova/transformers": "^2.0.1",
     "@xyflow/react": "^12.10.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

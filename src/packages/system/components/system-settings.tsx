@@ -15,7 +15,9 @@ import { defineComponent } from '#/lib/define-registry';
 import { SystemSettingsGeneralSection } from './system-settings-general-section';
 import { SystemSettingsKeybindsSection } from './system-settings-keybinds-section';
 import { SystemSettingsAISection } from './system-settings-ai-section';
+import { SystemSettingsSpeechSection } from './system-settings-speech-section';
 import { SettingsSidebar, type SettingsSectionId } from './system-settings-sidebar';
+import { DefaultConfigSpeech } from '#/shared/constants/config';
 
 function SystemSettings() {
 	const { targets } = useAceTheme();
@@ -24,6 +26,7 @@ function SystemSettings() {
 	const generalConfig = useAceMemory<InferConfigData<typeof DefaultConfigGeneral>>(DefaultConfigGeneral.memory_uid);
 	const keybindConfig = useAceMemory<InferConfigData<typeof DefaultConfigKeybinds>>(DefaultConfigKeybinds.memory_uid);
 	const aiConfig = useAceMemory<InferConfigData<typeof DefaultConfigAI>>(DefaultConfigAI.memory_uid);
+	const speechConfig = useAceMemory<InferConfigData<typeof DefaultConfigSpeech>>(DefaultConfigSpeech.memory_uid);
 
 	return (
 		<div className="flex h-full min-h-0 flex-col text-zinc-100 border-none">
@@ -64,6 +67,12 @@ function SystemSettings() {
 						<SystemSettingsAISection
 							config={aiConfig}
 							schema={DefaultConfigAI.config}
+						/>
+					)}
+					{activeSection === 'speech' && (
+						<SystemSettingsSpeechSection
+							config={speechConfig}
+							schema={DefaultConfigSpeech.config}
 						/>
 					)}
 				</div>

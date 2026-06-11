@@ -354,6 +354,7 @@ class AgentThreadEngineSingleton extends Engine {
 
         return {
             version: 'v3' as const,
+            recursionLimit: 10000,
             ...(context ? { context: context as unknown as AgentInvokeContextType } : {}),
             configurable: {
                 ...sanitizedOverrides,

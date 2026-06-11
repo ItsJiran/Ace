@@ -1,8 +1,8 @@
-import { SlidersHorizontal, Keyboard, Bot } from 'lucide-react';
+import { SlidersHorizontal, Keyboard, Bot, Volume2 } from 'lucide-react';
 
 import { useAceTheme } from '#/app-desktop/hooks/use-ace-theme';
 
-export type SettingsSectionId = 'general' | 'keybinds' | 'ai';
+export type SettingsSectionId = 'general' | 'keybinds' | 'ai' | 'speech';
 
 type SettingsSidebarItem = {
     id: SettingsSectionId;
@@ -14,6 +14,7 @@ const SIDEBAR_ITEMS: SettingsSidebarItem[] = [
     { id: 'general', label: 'General', icon: SlidersHorizontal },
     { id: 'keybinds', label: 'Keybinds', icon: Keyboard },
     { id: 'ai', label: 'AI', icon: Bot },
+    { id: 'speech', label: 'Speech', icon: Volume2 },
 ];
 
 type SettingsSidebarProps = {

@@ -193,6 +193,11 @@ class AgentClientEngineSingleton extends Engine {
             provider: payload.provider ?? existing?.provider,
             state: {
                 messages: payload.state?.messages ?? existing?.state?.messages ?? [],
+                steps: payload.state?.steps ?? existing?.state?.steps ?? [],
+                contexts: payload.state?.contexts ?? existing?.state?.contexts ?? [],
+                memories: payload.state?.memories ?? existing?.state?.memories ?? [],
+                cycles: payload.state?.cycles ?? existing?.state?.cycles ?? [],
+                global_cycle: payload.state?.global_cycle ?? existing?.state?.global_cycle ?? 0,
             },
             created_at: existing?.created_at ?? payload.created_at ?? now,
             updated_at: payload.updated_at ?? now,

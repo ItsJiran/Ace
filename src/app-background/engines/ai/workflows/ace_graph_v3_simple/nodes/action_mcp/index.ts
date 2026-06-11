@@ -48,7 +48,7 @@ export function createActionMcp() {
             messages: [new AIMessage({ content: msg, name: 'ace-v3-mcp' })],
             contexts: updatedContexts,
             current_cycle: cycle,
-            target_node: 'thought',
+            target_node: 'action_dispatcher',
             from_node: 'action_mcp',
         };
 

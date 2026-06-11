@@ -115,6 +115,9 @@ export interface AgentChatTurn {
 
 export interface AgentClientThreadStateType extends Omit<AgentThreadStateType, 'messages'> {
     messages: AgentChatTurn[];
+    steps?: ActionStepItem[];
+    contexts?: unknown[];
+    memories?: unknown[];
 }
 
 // ── Step Plan ──────────────────────────────────────────────────────────────
