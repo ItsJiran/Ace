@@ -268,7 +268,7 @@ flowchart TD
         DISPATCH{"Action<br/>Dispatcher"}:::core
     end
 
-    THOUGHT -->|produces ThoughtAction[]| DISPATCH
+    THOUGHT -->|"produces ThoughtAction[]"| DISPATCH
     DISPATCH -.->|needs_rethought| THOUGHT
 
     subgraph NODES [Action Nodes]
