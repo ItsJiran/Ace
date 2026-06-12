@@ -94,6 +94,8 @@ export GOOGLE_API_KEY="your-key"
 
 Then restart your terminal and Electron dev process.
 
+Alternatively, you can configure provider keys and model selection directly from the **System Settings → AI Providers** panel inside the ACE overlay UI — no shell environment required. Changes made through the UI are persisted to disk and take effect immediately.
+
 
 ### Run The App
 
